@@ -1,0 +1,17 @@
+name: 'Legacy artifact upload (disabled)'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migration-required:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain why this workflow is disabled
+        run: |
+          echo "The inherited upload workflow targets Amnezia-owned release paths."
+          echo "Configure a Nexa-owned repository, storage bucket and signed release policy first."
+          exit 1

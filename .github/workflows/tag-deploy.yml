@@ -1,0 +1,17 @@
+name: 'Legacy release build (disabled)'
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  migration-required:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain why this workflow is disabled
+        run: |
+          echo "The inherited tag workflow used obsolete Qt/Android tooling and missing scripts."
+          echo "Create a Nexa-owned signed release pipeline from docs/BUILDING.md before publishing."
+          exit 1

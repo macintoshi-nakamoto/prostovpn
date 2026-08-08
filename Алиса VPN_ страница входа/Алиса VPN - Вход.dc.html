@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0e0b0c;font-family:'Manrope',system-ui,sans-serif}
+a{color:#ff7a8a;text-decoration:none} a:hover{color:#ffa3ae}
+@keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(30px,-40px) scale(1.15)}}
+@keyframes orbFloat2{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-40px,30px) scale(1.1)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+input::placeholder{color:rgba(235,240,255,.32)}
+input{caret-color:#ff5a6e}
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px;background:radial-gradient(1200px 800px at 70% -10%, #1f1116 0%, #0e0b0c 60%)">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="390px,844px">
+<div style="position:relative;min-height:100%;display:flex;flex-direction:column;background:linear-gradient(180deg,#170e12 0%,#100a0c 100%);overflow:hidden">
+  <div style="position:absolute;top:-120px;left:-80px;width:340px;height:340px;border-radius:50%;background:radial-gradient(circle,rgba(255,90,110,.20),transparent 70%);filter:blur(30px);animation:orbFloat 9s ease-in-out infinite"></div>
+  <div style="position:absolute;bottom:60px;right:-100px;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(255,120,80,.14),transparent 70%);filter:blur(30px);animation:orbFloat2 11s ease-in-out infinite"></div>
+  <div style="position:relative;flex:1;display:flex;flex-direction:column;padding:24px 28px 40px">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;margin-top:44px;animation:fadeUp .55s ease both">
+      <img src="assets/logo.png" alt="Алиса VPN" style="width:190px;height:127px;object-fit:contain;filter:drop-shadow(0 0 24px rgba(255,110,130,.35))">
+      <div style="font-size:28px;font-weight:800;color:#eef2ff;letter-spacing:.5px;margin-top:-8px">Алиса VPN</div>
+      <div style="font-size:14px;font-weight:500;color:rgba(235,240,255,.45)">Свободный и безопасный интернет</div>
+    </div>
+    <div style="flex:1"></div>
+    <div style="display:flex;flex-direction:column;gap:12px;animation:fadeUp .55s ease .12s both">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="{{ loginWrapStyle }}">
+          <span style="display:flex;width:20px;color:rgba(235,240,255,.4)">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5"></path></svg>
+          </span>
+          <input type="text" placeholder="Логин" value="{{ login }}" onChange="{{ onLogin }}" onFocus="{{ focusLogin }}" onBlur="{{ blurField }}" style="flex:1;background:none;border:none;outline:none;font-family:'Manrope',sans-serif;font-size:16px;font-weight:500;color:#eef2ff;min-width:0">
+        </div>
+        <div style="height:1px;background:rgba(255,255,255,.06);margin:0 4px"></div>
+        <div style="{{ passWrapStyle }}">
+          <span style="display:flex;width:20px;color:rgba(235,240,255,.4)">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="10" width="14" height="10" rx="3"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>
+          </span>
+          <input type="{{ passType }}" placeholder="Пароль" value="{{ password }}" onChange="{{ onPassword }}" onFocus="{{ focusPass }}" onBlur="{{ blurField }}" style="flex:1;background:none;border:none;outline:none;font-family:'Manrope',sans-serif;font-size:16px;font-weight:500;color:#eef2ff;min-width:0">
+          <span onClick="{{ toggleEye }}" style="display:flex;width:22px;color:rgba(235,240,255,.4);cursor:pointer" style-hover="color:rgba(235,240,255,.75)">
+            <sc-if value="{{ showPass }}" hint-placeholder-val="{{ false }}">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"></path><circle cx="12" cy="12" r="2.6"></circle></svg>
+            </sc-if>
+            <sc-if value="{{ hidePass }}" hint-placeholder-val="{{ true }}">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"></path><circle cx="12" cy="12" r="2.6"></circle><path d="M4 4l16 16"></path></svg>
+            </sc-if>
+          </span>
+        </div>
+      </div>
+      <sc-if value="{{ error }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:13px;font-weight:600;color:#ff7a8a;padding:0 8px">{{ error }}</div>
+      </sc-if>
+      <button onClick="{{ submit }}" style="{{ buttonStyle }}" style-hover="filter:brightness(1.1)" style-active="transform:scale(.98)">{{ buttonLabel }}</button>
+    </div>
+    <div style="text-align:center;font-size:12px;color:rgba(235,240,255,.28);margin-top:28px;animation:fadeUp .55s ease .22s both">Продолжая, вы принимаете <a href="#" style="color:rgba(235,240,255,.5)">условия сервиса</a></div>
+  </div>
+</div>
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;460px&quot;,&quot;height&quot;:&quot;960px&quot;}}">
+class Component extends DCLogic {
+  state = { login: "", password: "", showPass: false, focus: null, error: "", loading: false, done: false };
+  wrapStyle(active) {
+    return {
+      display: "flex", alignItems: "center", gap: "12px", padding: "14px 14px",
+      borderRadius: "14px", transition: "background .2s, box-shadow .2s",
+      background: active ? "rgba(255,110,130,.08)" : "transparent",
+      boxShadow: active ? "0 0 0 1.5px rgba(255,110,130,.5)" : "none"
+    };
+  }
+  renderVals() {
+    const s = this.state;
+    return {
+      login: s.login, password: s.password, showPass: s.showPass, hidePass: !s.showPass,
+      error: s.error, passType: s.showPass ? "text" : "password",
+      onLogin: e => this.setState({ login: e.target.value, error: "" }),
+      onPassword: e => this.setState({ password: e.target.value, error: "" }),
+      focusLogin: () => this.setState({ focus: "login" }),
+      focusPass: () => this.setState({ focus: "pass" }),
+      blurField: () => this.setState({ focus: null }),
+      toggleEye: () => this.setState({ showPass: !s.showPass }),
+      loginWrapStyle: this.wrapStyle(s.focus === "login"),
+      passWrapStyle: this.wrapStyle(s.focus === "pass"),
+      buttonLabel: s.loading ? "Подключение…" : (s.done ? "✓ Готово" : "Войти"),
+      buttonStyle: {
+        border: "none", cursor: "pointer", borderRadius: "18px", padding: "17px",
+        fontFamily: "'Manrope',sans-serif", fontSize: "17px", fontWeight: 700, color: "#fff",
+        background: s.done ? "linear-gradient(135deg,#2ec27e,#27a06a)" : "linear-gradient(135deg,#ff4d5e,#e0284f)",
+        boxShadow: "0 8px 28px rgba(255,77,94,.35), inset 0 1px 0 rgba(255,255,255,.25)",
+        transition: "transform .1s, filter .2s, background .3s",
+        opacity: s.loading ? .7 : 1
+      },
+      submit: () => {
+        if (s.loading || s.done) return;
+        if (!s.login.trim()) return this.setState({ error: "Введите логин" });
+        if (s.password.length < 4) return this.setState({ error: "Пароль слишком короткий" });
+        this.setState({ loading: true, error: "" });
+        setTimeout(() => this.setState({ loading: false, done: true }), 1200);
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

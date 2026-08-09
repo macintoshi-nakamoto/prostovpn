@@ -19,7 +19,31 @@ class WindowsTunnel {
     /** Что пошло не так — для показа пользователю понятным текстом. */
     sealed class Result {
         data object Success : Result()
-        data class Failure(val reason: Reason, val detail: String = "") : Result()
+        data class Failure(
+            val reason: Reason,
+            val detail: String = "",
+            val diag: HandshakeDiag? = null,
+        ) : Result()
+    }
+
+    /**
+     * Почему не состоялось рукопожатие — по журналу движка.
+     *
+     * «Сервер не отвечает» — это четыре разные беды с разным лечением,
+     * и без журнала они неотличимы друг от друга.
+     */
+    enum class HandshakeDiag {
+        /** Ни одного пакета в ответ: сервер выключен или сеть блокирует. */
+        SILENCE,
+
+        /** Пришёл ICMP «порт закрыт»: машина жива, VPN на порту не слушает. */
+        PORT_CLOSED,
+
+        /** Ответы приходят, но заголовок не распознан: маскировка не совпадает. */
+        HEADER_MISMATCH,
+
+        /** Ответы распознаны, но не проходят криптопроверку: ключ не от сервера. */
+        REJECTED,
     }
 
     enum class Reason {
@@ -186,7 +210,43 @@ class WindowsTunnel {
         }
 
         disconnect()
-        return Result.Failure(Reason.NoHandshake)
+        return Result.Failure(Reason.NoHandshake, diag = classifyHandshakeFailure())
+    }
+
+    /**
+     * Ставит диагноз по журналу движка после неудачного рукопожатия.
+     *
+     * Журнал выкладывает служба при остановке — она только что остановлена
+     * из [disconnect], поэтому файл дожидаемся с небольшим запасом.
+     */
+    private fun classifyHandshakeFailure(): HandshakeDiag? {
+        val logFile = File(dataDir(), "tunnel.log")
+        var log: String? = null
+        repeat(12) {
+            log = logFile.takeIf { it.isFile }?.readTextSafely()
+            if (log != null) return@repeat
+            Thread.sleep(300)
+        }
+        val text = log ?: return null
+
+        return when {
+            // Ответы дошли, но не прошли криптопроверку — ключ не подходит
+            listOf("invalid mac1", "invalid response message", "invalid initiation message")
+                .any { text.contains(it, ignoreCase = true) } -> HandshakeDiag.REJECTED
+
+            // Пакеты приходят, но заголовок не наш — маскировка не совпадает
+            text.contains("Received message with unknown type", ignoreCase = true) ->
+                HandshakeDiag.HEADER_MISMATCH
+
+            // Windows превращает ICMP «порт недоступен» в ошибку чтения сокета
+            listOf("forcibly closed", "connection reset", "refused")
+                .any { text.contains(it, ignoreCase = true) } -> HandshakeDiag.PORT_CLOSED
+
+            // Инициации уходили, ответа не было ни одного
+            text.contains("Sending handshake initiation") -> HandshakeDiag.SILENCE
+
+            else -> null
+        }
     }
 
     /**

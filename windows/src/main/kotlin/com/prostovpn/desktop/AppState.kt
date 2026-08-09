@@ -438,10 +438,16 @@ class AppState(private val scope: CoroutineScope) {
                         WindowsTunnel.Reason.ElevationDenied -> s.errElevation
                         WindowsTunnel.Reason.UnsupportedOs -> s.errUnsupportedOs
                         WindowsTunnel.Reason.NoHandshake ->
-                            // Сервер мог ждать маскировку, которую движок не умеет —
-                            // без подсказки это выглядит как «просто не работает»
+                            // Журнал движка различает четыре разные беды — без
+                            // этого все они выглядят как «просто не работает»
                             listOfNotNull(
-                                s.errNoHandshake,
+                                when (result.diag) {
+                                    WindowsTunnel.HandshakeDiag.SILENCE -> s.errHsSilence
+                                    WindowsTunnel.HandshakeDiag.PORT_CLOSED -> s.errHsPortClosed
+                                    WindowsTunnel.HandshakeDiag.HEADER_MISMATCH -> s.errHsHeader
+                                    WindowsTunnel.HandshakeDiag.REJECTED -> s.errHsRejected
+                                    null -> s.errNoHandshake
+                                },
                                 WgConfig.unsupportedKeys(config)
                                     .takeIf { it.isNotEmpty() }
                                     ?.let { s.errUnsupportedObfuscation + " " + it.joinToString(", ") },

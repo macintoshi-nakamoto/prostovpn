@@ -69,6 +69,15 @@ fun main() {
         }
     }
 
+    // Открытая шторка файлов туннелирования — проверка вёрстки и стекла
+    snap("07-files-sheet") {
+        Frame { state ->
+            state.previewAs(guest = true, previewPhase = Phase.OFF)
+            state.previewOpenFileSheet()
+            SettingsScreen(state, onBack = {}, windowControls = { Controls() }, drag = { it() })
+        }
+    }
+
     // Открытая шторка серверов — проверка скруглений и стекла
     snap("06-servers-sheet") {
         Frame { state ->

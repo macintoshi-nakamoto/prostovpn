@@ -506,6 +506,17 @@ class AppState(private val scope: CoroutineScope) {
         seconds = previewSeconds
     }
 
+    /** Скриншот шторки файлов: подкладываем второй файл в список. */
+    internal var previewFileSheetOpen by mutableStateOf(false)
+        private set
+
+    internal fun previewOpenFileSheet() {
+        if (tunnelFiles.none { !it.isDefault }) {
+            tunnelFiles.add(TunnelFile("preview", "my-sites.json", 42))
+        }
+        previewFileSheetOpen = true
+    }
+
     private fun fetchGeo(host: String, lang: String): JSONObject? = runCatching {
         val url = URL("http://ip-api.com/json/$host?fields=status,country,countryCode,city&lang=$lang")
         val connection = url.openConnection() as HttpURLConnection

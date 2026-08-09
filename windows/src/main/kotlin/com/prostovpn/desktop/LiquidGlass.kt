@@ -20,20 +20,22 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import org.jetbrains.skia.ColorMatrix
 import org.jetbrains.skia.FilterTileMode
 import org.jetbrains.skia.ImageFilter
+import org.jetbrains.skia.Paint as SkiaPaint
+import org.jetbrains.skia.Rect as SkiaRect
 import org.jetbrains.skia.RuntimeEffect
 import org.jetbrains.skia.RuntimeShaderBuilder
 import kotlin.math.ceil
@@ -139,10 +141,8 @@ private fun saturationMatrix(s: Float): ColorMatrix {
 }
 
 private fun buildGlassFilter(
-    paddedWidth: Float,
-    paddedHeight: Float,
-    halfWidth: Float,
-    halfHeight: Float,
+    width: Float,
+    height: Float,
     cornerRadiusPx: Float,
     blurPx: Float,
     saturation: Float,
@@ -159,8 +159,8 @@ private fun buildGlassFilter(
         filter = ImageFilter.makeBlur(blurPx * 0.5f, blurPx * 0.5f, FilterTileMode.CLAMP, filter, null)
     }
     val builder = RuntimeShaderBuilder(glassEffect).apply {
-        uniform("uSize", paddedWidth, paddedHeight)
-        uniform("uHalf", halfWidth, halfHeight)
+        uniform("uSize", width, height)
+        uniform("uHalf", width / 2f, height / 2f)
         uniform("uRadius", cornerRadiusPx)
         uniform("uBand", refractionBandPx)
         uniform("uAmount", refractionAmountPx)
@@ -198,25 +198,19 @@ fun Modifier.liquidGlass(
             val bandPx = min(refractionHeight.toPx(), size.minDimension / 2f)
             val amountPx = refractionAmount.toPx()
             val padPx = ceil(blurPx * 2f + amountPx)
-            val paddedSize = IntSize(
-                (size.width + padPx * 2f).toInt(),
-                (size.height + padPx * 2f).toInt(),
+
+            // Фильтр работает в координатах элемента: начало отсчёта холста
+            // внутри узла — его левый верхний угол.
+            val filter = buildGlassFilter(
+                width = size.width,
+                height = size.height,
+                cornerRadiusPx = radiusPx,
+                blurPx = blurPx,
+                saturation = saturation,
+                refractionBandPx = bandPx,
+                refractionAmountPx = amountPx,
+                dispersion = dispersion,
             )
-            val glassLayer = obtainGraphicsLayer().apply {
-                clip = true
-                renderEffect = buildGlassFilter(
-                    paddedWidth = paddedSize.width.toFloat(),
-                    paddedHeight = paddedSize.height.toFloat(),
-                    halfWidth = size.width / 2f,
-                    halfHeight = size.height / 2f,
-                    cornerRadiusPx = radiusPx,
-                    blurPx = blurPx,
-                    saturation = saturation,
-                    refractionBandPx = bandPx,
-                    refractionAmountPx = amountPx,
-                    dispersion = dispersion,
-                )?.asComposeRenderEffect()
-            }
 
             val corner = CornerRadius(radiusPx, radiusPx)
             val highlightBrush = Brush.verticalGradient(
@@ -227,27 +221,40 @@ fun Modifier.liquidGlass(
 
             onDrawWithContent {
                 val src = backdrop.layer
-                if (src != null) {
+                if (src != null && filter != null) {
                     val d = delta.value
-                    glassLayer.record(size = paddedSize) {
-                        translate(padPx + d.x, padPx + d.y) {
+                    drawIntoCanvas { canvas ->
+                        val native = canvas.nativeCanvas
+                        val paint = SkiaPaint().apply { imageFilter = filter }
+                        // saveLayer с запасом по краям: размытию нужны пиксели
+                        // за границей элемента, иначе кромка «сереет»
+                        native.saveLayer(
+                            SkiaRect.makeLTRB(
+                                -padPx,
+                                -padPx,
+                                size.width + padPx,
+                                size.height + padPx,
+                            ),
+                            paint,
+                        )
+                        translate(d.x, d.y) {
                             drawLayer(src)
                         }
-                    }
-                    translate(-padPx, -padPx) {
-                        drawLayer(glassLayer)
+                        native.restore()
                     }
                     drawRoundRect(
                         color = Color.White.copy(alpha = tintAlpha),
                         cornerRadius = corner,
                     )
                 } else {
+                    // Фон недоступен — рисуем непрозрачный материал, чтобы
+                    // сквозь панель никогда не просвечивал контент под ней
                     drawRoundRect(
-                        color = Color(0xFF241710).copy(alpha = 0.55f),
+                        color = Color(0xFF241710),
                         cornerRadius = corner,
                     )
                     drawRoundRect(
-                        color = Color.White.copy(alpha = 0.07f),
+                        color = Color.White.copy(alpha = 0.06f),
                         cornerRadius = corner,
                     )
                 }

@@ -49,7 +49,7 @@ fun SettingsScreen(
 ) {
     val s = state.s
     var showLogoutConfirm by remember { mutableStateOf(false) }
-    var showFileSheet by remember { mutableStateOf(false) }
+    var showFileSheet by remember { mutableStateOf(state.previewFileSheetOpen) }
 
     val backdrop = rememberBackdropState()
 

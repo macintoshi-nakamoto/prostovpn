@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.AlisaVPN" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#100A0C</item>
-        <item name="android:statusBarColor">#170E12</item>
-        <item name="android:navigationBarColor">#100A0C</item>
+    <style name="Theme.ProstoVPN" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#1A110B</item>
+        <item name="android:statusBarColor">#1A110B</item>
+        <item name="android:navigationBarColor">#120C08</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
 </resources>

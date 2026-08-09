@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AlisaVPN"
+rootProject.name = "ProstoVPN"
 include(":app")

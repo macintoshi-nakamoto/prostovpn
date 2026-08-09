@@ -214,6 +214,9 @@ func (service *tunnelService) Execute(args []string, r <-chan svc.ChangeRequest,
 	log.Println("Bringing peers up")
 	dev.Up()
 
+	// Приложению нужно отличать «служба запущена» от «сервер ответил»
+	go watchState(dev, service.Path)
+
 	watcher.Configure(bind.(conn.BindSocketToInterface), config, nativeTun)
 
 	log.Println("Listening for UAPI requests")

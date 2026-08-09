@@ -286,13 +286,20 @@ class AppState(private val scope: CoroutineScope) {
         if (autoConnectTried) return
         autoConnectTried = true
         scope.launch {
-            // Туннель мог пережить закрытие окна — тогда показываем его
-            // состояние, а не предлагаем подключиться заново.
-            val alreadyUp = withContext(Dispatchers.IO) { runCatching { tunnel.isUp() }.getOrDefault(false) }
-            if (alreadyUp) {
-                phase = Phase.ON
-                startTimer()
-                return@launch
+            // Туннель мог пережить закрытие окна. Подхватываем только живой:
+            // поднятый, но без единого рукопожатия он лишь забирает на себя
+            // весь трафик — такой снимаем, чтобы вернуть сеть.
+            val existing = withContext(Dispatchers.IO) {
+                runCatching { if (tunnel.isUp()) tunnel.live() ?: WindowsTunnel.Live(0, 0, 0, 0) else null }
+                    .getOrNull()
+            }
+            if (existing != null) {
+                if (existing.handshakeAt > 0) {
+                    phase = Phase.ON
+                    startTimer()
+                    return@launch
+                }
+                withContext(Dispatchers.IO) { runCatching { tunnel.disconnect() } }
             }
             if (autoConnect && isLoggedIn && phase == Phase.OFF) {
                 toggleConnection()
@@ -430,6 +437,7 @@ class AppState(private val scope: CoroutineScope) {
                         WindowsTunnel.Reason.NoBackend -> s.errNoBackend
                         WindowsTunnel.Reason.ElevationDenied -> s.errElevation
                         WindowsTunnel.Reason.UnsupportedOs -> s.errUnsupportedOs
+                        WindowsTunnel.Reason.NoHandshake -> s.errNoHandshake
                         WindowsTunnel.Reason.TunnelFailed ->
                             listOfNotNull(s.errTunnel, result.detail.takeIf { it.isNotBlank() })
                                 .joinToString(" · ")
@@ -463,6 +471,7 @@ class AppState(private val scope: CoroutineScope) {
         timerJob = scope.launch {
             var misses = 0
             var nextCheck = 5
+            var lastRx = -1L
             while (true) {
                 delay(500)
                 val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
@@ -474,14 +483,24 @@ class AppState(private val scope: CoroutineScope) {
                 // задержки.
                 if (elapsed >= nextCheck) {
                     nextCheck = elapsed + 5
-                    val up = withContext(Dispatchers.IO) {
-                        runCatching { tunnel.isUp() }.getOrDefault(true)
+                    val alive = withContext(Dispatchers.IO) {
+                        runCatching {
+                            if (!tunnel.isUp()) return@runCatching false
+                            val live = tunnel.live() ?: return@runCatching true
+                            // Рукопожатие обновляется не чаще раза в две минуты,
+                            // а на простое может и вовсе не повторяться — поэтому
+                            // растущий приём считаем доказательством связи.
+                            val moving = live.rx > lastRx
+                            lastRx = live.rx
+                            live.isHealthy(staleSeconds = 300) || moving
+                        }.getOrDefault(true)
                     }
-                    misses = if (up) 0 else misses + 1
+                    misses = if (alive) 0 else misses + 1
                     if (misses >= 2) {
                         phase = Phase.OFF
                         connectionError = s.errTunnelDropped
                         timerJob = null
+                        scope.launch(Dispatchers.IO) { runCatching { tunnel.disconnect() } }
                         return@launch
                     }
                 }

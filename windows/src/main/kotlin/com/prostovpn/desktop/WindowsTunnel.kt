@@ -32,6 +32,9 @@ class WindowsTunnel {
         /** Служба не поднялась: неверный конфиг, занятый адаптер, блокировка. */
         TunnelFailed,
 
+        /** Туннель поднят, но сервер не отвечает на рукопожатие. */
+        NoHandshake,
+
         /** Не Windows. */
         UnsupportedOs,
     }
@@ -77,10 +80,47 @@ class WindowsTunnel {
         }
     }
 
+    /**
+     * Что движок сообщает о живом туннеле.
+     *
+     * [handshakeAt] — время последнего рукопожатия (unix-секунды), 0 —
+     * сервер ещё ни разу не ответил.
+     */
+    data class Live(val handshakeAt: Long, val rx: Long, val tx: Long, val updatedAt: Long) {
+        /** Рукопожатие есть и не протухло: WireGuard обновляет его чаще двух минут. */
+        fun isHealthy(staleSeconds: Long = 180): Boolean =
+            handshakeAt > 0 && (System.currentTimeMillis() / 1000 - handshakeAt) < staleSeconds
+    }
+
     private var backend: File? = null
 
     /** Служба туннеля запущена? */
     fun isUp(): Boolean = state() == "RUNNING"
+
+    /**
+     * Состояние живого туннеля; null — движок его ещё не выложил.
+     * Файл пишет служба: приложению управляющий канал движка недоступен.
+     */
+    fun live(): Live? {
+        val file = File(dataDir(), "state.txt")
+        if (!file.isFile) return null
+        val values = runCatching {
+            file.readLines().mapNotNull { line ->
+                val (key, value) = line.split('=', limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
+                key.trim() to (value.trim().toLongOrNull() ?: return@mapNotNull null)
+            }.toMap()
+        }.getOrNull() ?: return null
+
+        return Live(
+            handshakeAt = values["handshake"] ?: return null,
+            rx = values["rx"] ?: 0,
+            tx = values["tx"] ?: 0,
+            updatedAt = values["updated"] ?: 0,
+        )
+    }
+
+    /** Туннель поднят и сервер отвечает. */
+    fun isHealthy(): Boolean = isUp() && live()?.isHealthy() == true
 
     /**
      * Поднимает туннель по конфигу AmneziaWG/WireGuard.
@@ -103,6 +143,8 @@ class WindowsTunnel {
         val report = File(dataDir(), "install.log")
         report.delete()
         File(dataDir(), "tunnel.log").delete()
+        // Чужое состояние от прошлого подключения приняли бы за своё
+        File(dataDir(), "state.txt").delete()
 
         // 60 секунд: на чистой машине первое подключение ещё ставит драйвер Wintun
         val install = runElevated(
@@ -115,15 +157,36 @@ class WindowsTunnel {
         }
 
         val deadline = System.currentTimeMillis() + 20_000
-        while (System.currentTimeMillis() < deadline) {
+        var running = false
+        while (!running && System.currentTimeMillis() < deadline) {
             when (state()) {
-                "RUNNING" -> return Result.Success
+                "RUNNING" -> running = true
                 // Служба стартовала и сразу умерла либо не создалась вовсе
                 "STOPPED", "ABSENT" -> return Result.Failure(Reason.TunnelFailed, lastTunnelError())
+                else -> Thread.sleep(400)
             }
-            Thread.sleep(400)
         }
-        return Result.Failure(Reason.TunnelFailed, lastTunnelError())
+        if (!running) {
+            return Result.Failure(Reason.TunnelFailed, lastTunnelError())
+        }
+
+        /*
+        Служба поднялась — но это ещё не связь. Адаптер и маршруты уже стоят,
+        и если сервер не ответит, весь трафик уйдёт в мёртвый туннель: со
+        стороны это выглядит как «подключено, а интернета нет». Поэтому ждём
+        рукопожатие, а не дождавшись — снимаем туннель, чтобы вернуть сеть.
+        */
+        val handshakeDeadline = System.currentTimeMillis() + 20_000
+        while (System.currentTimeMillis() < handshakeDeadline) {
+            if (live()?.handshakeAt?.let { it > 0 } == true) return Result.Success
+            if (state() != "RUNNING") {
+                return Result.Failure(Reason.TunnelFailed, lastTunnelError())
+            }
+            Thread.sleep(500)
+        }
+
+        disconnect()
+        return Result.Failure(Reason.NoHandshake)
     }
 
     /**

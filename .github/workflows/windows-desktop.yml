@@ -120,6 +120,28 @@ jobs:
             throw "движок туннеля не поднялся"
           }
 
+          # Приложение отличает «служба запущена» от «сервер ответил» по
+          # этому файлу — без него экран снова врал бы про подключение
+          $statePath = "$work\state.txt"
+          $seen = $false
+          foreach ($i in 1..15) {
+            if (Test-Path $statePath) { $seen = $true; break }
+            Start-Sleep -Milliseconds 400
+          }
+          if (-not $seen) {
+            Invoke-Engine @('/uninstalltunnelservice', 'prostovpn') | Out-Null
+            throw "движок не выложил состояние туннеля"
+          }
+          Write-Host "--- состояние туннеля ---"
+          $stateText = Get-Content $statePath -Raw
+          Write-Host $stateText
+          # Пир недоступен, поэтому рукопожатия быть не должно: именно этот
+          # случай раньше показывался как «подключено»
+          if ($stateText -notmatch 'handshake=0') {
+            Invoke-Engine @('/uninstalltunnelservice', 'prostovpn') | Out-Null
+            throw "ожидали отсутствие рукопожатия с недоступным пиром"
+          }
+
           # Отключение без повышения прав: служба должна остановиться сама
           Invoke-Engine @('/stop', 'prostovpn') | Out-Null
           foreach ($i in 1..25) {

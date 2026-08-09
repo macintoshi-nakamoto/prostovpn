@@ -46,6 +46,14 @@ class WindowsTunnel {
         REJECTED,
 
         /**
+         * Сервер молчал при взведённом kill-switch. Блокирующие правила
+         * конфликтуют с обходами на WinDivert (zapret): переинжектированные
+         * пакеты теряют привязку к процессу, и брандмауэр глушит наше же
+         * рукопожатие.
+         */
+        KILLSWITCH,
+
+        /**
          * Windows не дал движку исходящий адаптер и он ушёл в «чёрную дыру»:
          * пакеты не покидают машину вообще.
          */
@@ -276,6 +284,13 @@ class WindowsTunnel {
             // Windows превращает ICMP «порт недоступен» в ошибку чтения сокета
             listOf("forcibly closed", "connection reset", "refused")
                 .any { text.contains(it, ignoreCase = true) } -> HandshakeDiag.PORT_CLOSED
+
+            // Молчание при взведённом kill-switch — почти наверняка сам
+            // kill-switch: с WinDivert-обходами (zapret) blockAll глушит
+            // собственное рукопожатие. Совет «выключите Kill Switch»
+            // полезнее диагноза «сервер молчит».
+            text.contains("restrictive kill switch: true") &&
+                text.contains("Sending handshake initiation") -> HandshakeDiag.KILLSWITCH
 
             // Инициации уходили, ответа не было ни одного
             text.contains("Sending handshake initiation") -> HandshakeDiag.SILENCE

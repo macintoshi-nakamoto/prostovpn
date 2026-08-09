@@ -104,6 +104,9 @@ func (conf *Config) ToWgQuick() string {
 	if conf.Interface.TableOff {
 		output.WriteString("Table = off\n")
 	}
+	if conf.Interface.KillSwitchOff {
+		output.WriteString("KillSwitch = off\n")
+	}
 
 	for _, peer := range conf.Peers {
 		output.WriteString("\n[Peer]\n")

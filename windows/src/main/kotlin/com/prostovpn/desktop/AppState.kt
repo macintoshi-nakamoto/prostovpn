@@ -422,8 +422,16 @@ class AppState(private val scope: CoroutineScope) {
         connectJob = scope.launch {
             val prepared = withContext(Dispatchers.Default) {
                 // Приводим к тому, что принимает туннель Windows: мобильные
-                // ключи он отвергает целиком, без Address не будет маршрутов
-                WgConfig.sanitize(buildConfigForConnect(config))
+                // ключи он отвергает целиком, без Address не будет маршрутов.
+                //
+                // Kill switch — по настройке, но при раздельном туннелировании
+                // всегда выключен: blockAll движка пропускает только туннель,
+                // то есть глушил бы ровно тот трафик, который сплит должен
+                // вести мимо VPN.
+                WgConfig.sanitize(
+                    buildConfigForConnect(config),
+                    killSwitchOn = killSwitch && !splitTunnelEnabled,
+                )
             }
             if (prepared == null) {
                 phase = Phase.OFF
@@ -454,6 +462,7 @@ class AppState(private val scope: CoroutineScope) {
                                     WindowsTunnel.HandshakeDiag.HEADER_MISMATCH -> s.errHsHeader
                                     WindowsTunnel.HandshakeDiag.REJECTED -> s.errHsRejected
                                     WindowsTunnel.HandshakeDiag.BLACKHOLE -> s.errHsBlackhole
+                                    WindowsTunnel.HandshakeDiag.KILLSWITCH -> s.errHsKillSwitch
                                     null -> s.errNoHandshake
                                 },
                                 WgConfig.unsupportedKeys(config)

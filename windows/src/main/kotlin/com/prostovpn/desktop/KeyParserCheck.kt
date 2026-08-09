@@ -91,8 +91,30 @@ fun main() {
 
     checkServerStaysOutsideTunnel(config)
     checkAddressConflict()
+    checkKillSwitchKey(config)
 
     println("ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ")
+}
+
+/**
+ * KillSwitch в конфиге решает настройка приложения, не содержимое ключа.
+ *
+ * «off» отключает blockAll движка — он конфликтует с обходами блокировок
+ * на WinDivert (zapret): их переинжектированные пакеты теряют привязку
+ * к процессу, и брандмауэр глушит собственное рукопожатие туннеля.
+ */
+private fun checkKillSwitchKey(config: String) {
+    val off = WgConfig.sanitize(config, killSwitchOn = false)!!
+    check("KillSwitch = off" in off) { "KillSwitch = off не записан" }
+
+    val on = WgConfig.sanitize(config, killSwitchOn = true)!!
+    check("KillSwitch" !in on) { "KillSwitch попал в конфиг при включённом режиме" }
+
+    // Ключ из входного текста не должен перебивать настройку приложения
+    val foreign = config.replace("[Interface]", "[Interface]\nKillSwitch = banana")
+    val cleaned = WgConfig.sanitize(foreign, killSwitchOn = true)!!
+    check("KillSwitch" !in cleaned) { "чужой KillSwitch из ключа не отсеян" }
+    println("killswitch: off пишется, on — по умолчанию, чужой отсеивается")
 }
 
 /**

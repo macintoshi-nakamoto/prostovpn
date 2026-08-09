@@ -182,6 +182,16 @@ func parseTableOff(s string) (bool, error) {
 	return false, err
 }
 
+func parseKillSwitchOff(s string) (bool, error) {
+	switch strings.ToLower(s) {
+	case "off", "false", "0":
+		return true, nil
+	case "on", "true", "1":
+		return false, nil
+	}
+	return false, &ParseError{l18n.Sprintf("Invalid kill switch value"), s}
+}
+
 func parseKeyBase64(s string) (*Key, error) {
 	k, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
@@ -414,6 +424,12 @@ func FromWgQuick(s string, name string) (*Config, error) {
 					return nil, err
 				}
 				conf.Interface.TableOff = tableOff
+			case "killswitch":
+				killSwitchOff, err := parseKillSwitchOff(val)
+				if err != nil {
+					return nil, err
+				}
+				conf.Interface.KillSwitchOff = killSwitchOff
 			default:
 				return nil, &ParseError{l18n.Sprintf("Invalid key for [Interface] section"), key}
 			}

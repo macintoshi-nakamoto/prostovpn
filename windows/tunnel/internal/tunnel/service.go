@@ -12,6 +12,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/amnezia-vpn/amneziawg-go/conn"
@@ -197,7 +198,20 @@ func (service *tunnelService) Execute(args []string, r <-chan svc.ChangeRequest,
 
 	log.Println("Creating interface instance")
 	bind := conn.NewDefaultBind()
-	dev = device.NewDevice(wintun, bind, &device.Logger{log.Printf, log.Printf})
+	/*
+	Раздельное туннелирование разворачивается в ~2000 записей AllowedIPs,
+	и движок пишет строку журнала на каждую. Кольцевой журнал держит 2048
+	строк — потоп вытеснял всё, что было до него: создание адаптера, режим
+	брандмауэра, привязку сокета. Именно этих строк не хватало при разборе
+	молчащих рукопожатий, поэтому потоп гасим у источника.
+	*/
+	verbosef := func(format string, args ...any) {
+		if strings.Contains(format, "UAPI: Adding allowedip") {
+			return
+		}
+		log.Printf(format, args...)
+	}
+	dev = device.NewDevice(wintun, bind, &device.Logger{Verbosef: verbosef, Errorf: log.Printf})
 
 	log.Println("Setting interface configuration")
 	uapi, err = ipc.UAPIListen(config.Name)

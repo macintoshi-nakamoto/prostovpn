@@ -55,6 +55,12 @@ type Interface struct {
 	PostDown   string
 	TableOff   bool
 
+	// KillSwitch = off: не взводить блокирующие правила брандмауэра при
+	// AllowedIPs с /0. Обход трафика в обвязках вроде zapret (WinDivert)
+	// переинжектирует пакеты, и они теряют привязку к процессу — наш же
+	// blockAll убивает собственное рукопожатие.
+	KillSwitchOff bool
+
 	JunkPacketCount            uint16
 	JunkPacketMinSize          uint16
 	JunkPacketMaxSize          uint16

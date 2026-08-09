@@ -118,6 +118,44 @@ func TestUAPIKeysAreAcceptedByDevice(t *testing.T) {
 	}
 }
 
+/*
+KillSwitch = off приложение пишет по настройке пользователя и при
+раздельном туннелировании: blockAll движка конфликтует с обвязками на
+WinDivert (zapret) — их переинжектированные пакеты теряют привязку к
+процессу, и брандмауэр глушит наше же рукопожатие.
+*/
+func TestKillSwitchKeyParses(t *testing.T) {
+	c, err := conf.FromWgQuick(amneziaConfig, "prostovpn")
+	if err != nil {
+		t.Fatalf("конфиг не разобран: %v", err)
+	}
+	if c.Interface.KillSwitchOff {
+		t.Fatal("без ключа kill switch должен остаться включённым")
+	}
+
+	withOff := strings.Replace(amneziaConfig, "MTU = 1376", "MTU = 1376\nKillSwitch = off", 1)
+	c, err = conf.FromWgQuick(withOff, "prostovpn")
+	if err != nil {
+		t.Fatalf("KillSwitch = off не разобран: %v", err)
+	}
+	if !c.Interface.KillSwitchOff {
+		t.Fatal("KillSwitch = off потерян при разборе")
+	}
+	// Значение — не для UAPI: это указание службе, а не движку протокола
+	uapi, err := c.ToUAPI()
+	if err != nil {
+		t.Fatalf("UAPI не собран: %v", err)
+	}
+	if strings.Contains(strings.ToLower(uapi), "killswitch") {
+		t.Fatal("KillSwitch просочился в UAPI")
+	}
+
+	if _, err := conf.FromWgQuick(strings.Replace(amneziaConfig,
+		"MTU = 1376", "MTU = 1376\nKillSwitch = banana", 1), "prostovpn"); err == nil {
+		t.Fatal("мусорное значение KillSwitch принято")
+	}
+}
+
 func TestUnknownKeyIsRejected(t *testing.T) {
 	// Мобильные ключи приложение обязано отсеивать: движок на них падает
 	broken := strings.Replace(amneziaConfig, "[Peer]", "ExcludedApplications = com.foo\n\n[Peer]", 1)

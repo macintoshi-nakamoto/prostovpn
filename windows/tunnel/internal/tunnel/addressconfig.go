@@ -217,7 +217,7 @@ func configureInterface(family winipcfg.AddressFamily, conf *conf.Config, tun *t
 
 func enableFirewall(conf *conf.Config, tun *tun.NativeTun) error {
 	doNotRestrict := true
-	if len(conf.Peers) == 1 && !conf.Interface.TableOff {
+	if len(conf.Peers) == 1 && !conf.Interface.TableOff && !conf.Interface.KillSwitchOff {
 	nextallowedip:
 		for _, allowedip := range conf.Peers[0].AllowedIPs {
 			if allowedip.Cidr == 0 {
@@ -231,6 +231,10 @@ func enableFirewall(conf *conf.Config, tun *tun.NativeTun) error {
 			}
 		}
 	}
-	log.Println("Enabling firewall rules")
+	// Решение попадает в журнал: блокирующий режим конфликтует с обвязками
+	// на WinDivert (zapret и подобные) — их переинжектированные пакеты
+	// теряют привязку к процессу, и blockAll глушит наше же рукопожатие.
+	// Без этой строки такой отказ неотличим от молчащего сервера.
+	log.Printf("Enabling firewall rules (restrictive kill switch: %v)", !doNotRestrict)
 	return firewall.EnableFirewall(tun.LUID(), doNotRestrict, conf.Interface.DNS)
 }

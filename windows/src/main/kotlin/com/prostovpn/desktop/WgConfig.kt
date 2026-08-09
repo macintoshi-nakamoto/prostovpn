@@ -63,8 +63,12 @@ object WgConfig {
     /**
      * Оставляет только понятные Windows ключи и добивает обязательные поля.
      * Возвращает null, если конфиг непригоден (нет ключа или пира).
+     *
+     * [killSwitchOn] — взводить ли блокирующие правила брандмауэра при
+     * полном туннеле. Ключ «KillSwitch» из входного текста всегда
+     * выбрасывается: решает настройка приложения, а не содержимое ключа.
      */
-    fun sanitize(configText: String): String? {
+    fun sanitize(configText: String, killSwitchOn: Boolean = true): String? {
         var section = ""
         var hasAddress = false
         var hasMtu = false
@@ -111,6 +115,8 @@ object WgConfig {
 
         if (!hasPrivateKey || !hasPeer || !hasEndpoint || !hasAddress) return null
         if (!hasMtu) interfaceLines += "MTU = $DEFAULT_MTU"
+        // «off» пишем явно, «on» — поведение движка по умолчанию
+        if (!killSwitchOn) interfaceLines += "KillSwitch = off"
 
         return buildString {
             appendLine("[Interface]")

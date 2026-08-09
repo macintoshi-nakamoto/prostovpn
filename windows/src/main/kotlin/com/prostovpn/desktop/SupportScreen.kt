@@ -27,8 +27,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun SupportScreen(
     state: AppState,
+    backdrop: BackdropState,
     onBack: () -> Unit,
-    windowControls: @Composable () -> Unit,
     drag: @Composable (@Composable () -> Unit) -> Unit,
 ) {
     val s = state.s
@@ -38,22 +38,7 @@ fun SupportScreen(
         runCatching { uriHandler.openUri(url) }
     }
 
-    val backdrop = rememberBackdropState()
-
     Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .backdropSource(backdrop)
-        ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Theme.background)
-            )
-            SoftTopOrb()
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -69,7 +54,6 @@ fun SupportScreen(
                 ) {
                     GlassBackButton(backdrop = backdrop, onBack = onBack)
                     Spacer(Modifier.weight(1f))
-                    windowControls()
                 }
             }
 

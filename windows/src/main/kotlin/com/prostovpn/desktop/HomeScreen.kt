@@ -63,16 +63,15 @@ import androidx.compose.ui.util.lerp
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
-private enum class HomePage { MAIN, SETTINGS, SUPPORT }
-
 @Composable
 fun HomeScreen(
     state: AppState,
-    windowControls: @Composable () -> Unit,
+    backdrop: BackdropState,
+    page: Page,
+    onPage: (Page) -> Unit,
     drag: @Composable (@Composable () -> Unit) -> Unit,
+    onPowerCenter: (Offset) -> Unit,
 ) {
-    var page by remember { mutableStateOf(HomePage.MAIN) }
-
     AnimatedContent(
         targetState = page,
         label = "home",
@@ -83,7 +82,7 @@ fun HomeScreen(
                 stiffness = 300f,
                 visibilityThreshold = IntOffset.VisibilityThreshold,
             )
-            if (targetState != HomePage.MAIN) {
+            if (targetState != Page.MAIN) {
                 (slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, slideSpring) + fadeIn(tween(220)))
                     .togetherWith(
                         slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Start, slideSpring, targetOffset = { it / 3 }) + fadeOut(tween(420))
@@ -97,23 +96,23 @@ fun HomeScreen(
         },
     ) { current ->
         when (current) {
-            HomePage.MAIN -> MainPage(
+            Page.MAIN -> MainPage(
                 state = state,
-                onOpenSettings = { page = HomePage.SETTINGS },
-                onOpenSupport = { page = HomePage.SUPPORT },
-                windowControls = windowControls,
+                backdrop = backdrop,
+                onOpenSupport = { onPage(Page.SUPPORT) },
+                drag = drag,
+                onPowerCenter = onPowerCenter,
+            )
+            Page.SETTINGS -> SettingsScreen(
+                state = state,
+                backdrop = backdrop,
+                onBack = { onPage(Page.MAIN) },
                 drag = drag,
             )
-            HomePage.SETTINGS -> SettingsScreen(
+            Page.SUPPORT -> SupportScreen(
                 state = state,
-                onBack = { page = HomePage.MAIN },
-                windowControls = windowControls,
-                drag = drag,
-            )
-            HomePage.SUPPORT -> SupportScreen(
-                state = state,
-                onBack = { page = HomePage.MAIN },
-                windowControls = windowControls,
+                backdrop = backdrop,
+                onBack = { onPage(Page.MAIN) },
                 drag = drag,
             )
         }
@@ -123,33 +122,14 @@ fun HomeScreen(
 @Composable
 private fun MainPage(
     state: AppState,
-    onOpenSettings: () -> Unit,
+    backdrop: BackdropState,
     onOpenSupport: () -> Unit,
-    windowControls: @Composable () -> Unit,
     drag: @Composable (@Composable () -> Unit) -> Unit,
+    onPowerCenter: (Offset) -> Unit,
 ) {
-    val s = state.s
-    val backdrop = rememberBackdropState()
-    var showServers by remember { mutableStateOf(false) }
-    var powerCenter by remember { mutableStateOf(Offset.Zero) }
+    var showServers by remember { mutableStateOf(state.previewServerSheetOpen) }
 
     Box(Modifier.fillMaxSize()) {
-        // Фон, который сэмплируют стеклянные элементы: градиент, верхний ореол
-        // и свечение вокруг кнопки питания.
-        Box(
-            Modifier
-                .fillMaxSize()
-                .backdropSource(backdrop)
-        ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Theme.background)
-            )
-            TopOrb()
-            PowerGlow(state, backdrop, powerCenter)
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -158,9 +138,7 @@ private fun MainPage(
         ) {
             Header(
                 backdrop = backdrop,
-                onOpenSettings = onOpenSettings,
                 onOpenSupport = onOpenSupport,
-                windowControls = windowControls,
                 drag = drag,
                 modifier = Modifier.fadeUp(),
             )
@@ -174,7 +152,7 @@ private fun MainPage(
                 PowerButton(
                     state = state,
                     backdrop = backdrop,
-                    onCenterChange = { powerCenter = it },
+                    onCenterChange = onPowerCenter,
                 )
 
                 Spacer(Modifier.height(28.dp))
@@ -215,14 +193,11 @@ private fun MainPage(
 @Composable
 private fun Header(
     backdrop: BackdropState,
-    onOpenSettings: () -> Unit,
     onOpenSupport: () -> Unit,
-    windowControls: @Composable () -> Unit,
     drag: @Composable (@Composable () -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Отступ сверху равен боковому — шапка «дышит» одинаково со всех сторон,
-    // кнопки окна стоят в том же ряду и ничего не перекрывают.
+    // Логотип слева; настройки и кнопки окна — в капсуле справа, её рисует AppRoot
     drag {
         Row(
             modifier = modifier
@@ -239,19 +214,6 @@ private fun Header(
             }
 
             Spacer(Modifier.weight(1f))
-
-            GlassCircleButton(backdrop = backdrop, onClick = onOpenSettings) {
-                Icon(
-                    imageVector = Icons.gear,
-                    contentDescription = null,
-                    tint = Theme.text.copy(alpha = 0.75f),
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            windowControls()
         }
     }
 }
@@ -316,24 +278,7 @@ private fun StatusBlock(state: AppState) {
 }
 
 @Composable
-private fun TopOrb() {
-    Canvas(Modifier.fillMaxSize()) {
-        val center = Offset(size.width / 2f, -140.dp.toPx() + 200.dp.toPx())
-        val radius = 200.dp.toPx()
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(Theme.accent.copy(alpha = 0.14f), Color.Transparent),
-                center = center,
-                radius = radius,
-            ),
-            radius = radius,
-            center = center,
-        )
-    }
-}
-
-@Composable
-private fun PowerGlow(state: AppState, backdrop: BackdropState, center: Offset) {
+fun PowerGlow(state: AppState, center: Offset) {
     val glowAlpha by animateFloatAsState(
         targetValue = if (state.phase == Phase.ON) 1f else 0f,
         animationSpec = tween(450),
@@ -342,9 +287,7 @@ private fun PowerGlow(state: AppState, backdrop: BackdropState, center: Offset) 
     if (center == Offset.Zero) return
     Canvas(Modifier.fillMaxSize()) {
         if (glowAlpha > 0f) {
-            // центр кнопки переводим из оконных координат в локальные координаты фона,
-            // чтобы glow не съезжал во время слайд-переходов между экранами
-            val local = center - backdrop.positionInWindow
+            val local = center
             val radius = 165.dp.toPx()
             drawCircle(
                 brush = Brush.radialGradient(

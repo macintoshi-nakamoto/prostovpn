@@ -12,31 +12,24 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.hoverable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.pointer.PointerIcon
-import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -68,6 +61,10 @@ fun main() = application {
     }
 }
 
+/** Экраны приложения — навигация живёт здесь, чтобы капсула управления
+ *  переживала переходы и анимировалась непрерывно. */
+enum class Page { MAIN, SETTINGS, SUPPORT }
+
 /** Корень приложения: окно-«квадратик» со скруглёнными углами и своим хромом. */
 @Composable
 fun AppRoot(
@@ -78,17 +75,37 @@ fun AppRoot(
     val scope = rememberCoroutineScope()
     val state = remember { AppState(scope) }
 
+    var page by remember { mutableStateOf(Page.MAIN) }
+    var powerCenter by remember { mutableStateOf(Offset.Zero) }
+
+    // Один общий фон на всё окно: его сэмплируют все стеклянные элементы,
+    // включая капсулу управления, которая живёт поверх экранов.
+    val backdrop = rememberBackdropState()
+
     LaunchedEffect(state.isLoggedIn) {
-        if (state.isLoggedIn) state.maybeAutoConnect()
+        if (state.isLoggedIn) {
+            state.maybeAutoConnect()
+        } else {
+            page = Page.MAIN
+        }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(Layout.windowCorner))
-            .background(Theme.background)
             .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(Layout.windowCorner)),
     ) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .backdropSource(backdrop)
+        ) {
+            Box(Modifier.fillMaxSize().background(Theme.background))
+            BackgroundOrb(page)
+            PowerGlow(state, powerCenter)
+        }
+
         AnimatedContent(
             targetState = state.isLoggedIn,
             label = "root",
@@ -113,89 +130,54 @@ fun AppRoot(
             if (loggedIn) {
                 HomeScreen(
                     state = state,
-                    windowControls = { WindowControls(onMinimize, onClose) },
+                    backdrop = backdrop,
+                    page = page,
+                    onPage = { page = it },
                     drag = drag,
+                    onPowerCenter = { powerCenter = it },
                 )
             } else {
-                LoginScreen(
-                    state = state,
-                    windowControls = { WindowControls(onMinimize, onClose) },
-                    drag = drag,
-                )
+                LoginScreen(state = state, drag = drag)
             }
         }
+
+        // Капсула управления живёт над экранами: при переходе в настройки
+        // шестерёнка тонет, а капсула укорачивается — без разрыва анимации.
+        GlassControlBar(
+            backdrop = backdrop,
+            showSettings = state.isLoggedIn && page == Page.MAIN,
+            onSettings = { page = Page.SETTINGS },
+            onMinimize = onMinimize,
+            onClose = onClose,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(horizontal = Layout.screenPadding)
+                .padding(top = Layout.topPadding),
+        )
     }
 }
 
-/**
- * Кнопки окна: свернуть и закрыть. Встраиваются в шапку экрана
- * в один ряд с остальными кнопками, чтобы ничего не перекрывать.
- */
+/** Тёплый ореол в фоне: на главном сверху по центру, на остальных — сбоку. */
 @Composable
-fun WindowControls(
-    onMinimize: () -> Unit,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        ControlDot(close = false, onClick = onMinimize)
-        ControlDot(close = true, onClick = onClose)
-    }
-}
-
-@Composable
-private fun ControlDot(close: Boolean, onClick: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    val hoverProgress by animateFloatAsState(
-        targetValue = if (hovered) 1f else 0f,
-        animationSpec = tween(160),
-        label = "dotHover",
+private fun BackgroundOrb(page: Page) {
+    val toCenter by animateFloatAsState(
+        targetValue = if (page == Page.MAIN) 1f else 0f,
+        animationSpec = tween(450),
+        label = "orb",
     )
-    val hoverColor = if (close) Theme.accentDeep else Color.White.copy(alpha = 0.18f)
-    val glyphColor = Theme.text.copy(alpha = 0.45f + 0.5f * hoverProgress)
-
-    Box(
-        modifier = Modifier
-            .size(26.dp)
-            .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.06f))
-            .background(hoverColor.copy(alpha = hoverColor.alpha * hoverProgress))
-            .pointerHoverIcon(PointerIcon.Hand)
-            .hoverable(interaction)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.size(9.dp)) {
-            val stroke = 1.6.dp.toPx()
-            if (close) {
-                drawLine(
-                    color = glyphColor,
-                    start = Offset(0f, 0f),
-                    end = Offset(size.width, size.height),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
-                drawLine(
-                    color = glyphColor,
-                    start = Offset(size.width, 0f),
-                    end = Offset(0f, size.height),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
-            } else {
-                drawLine(
-                    color = glyphColor,
-                    start = Offset(0f, size.height / 2f),
-                    end = Offset(size.width, size.height / 2f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
-            }
-        }
+    Canvas(Modifier.fillMaxSize()) {
+        val x = androidx.compose.ui.util.lerp(size.width * 0.72f, size.width * 0.5f, toCenter)
+        val y = androidx.compose.ui.util.lerp(40.dp.toPx(), 60.dp.toPx(), toCenter)
+        val radius = androidx.compose.ui.util.lerp(260.dp.toPx(), 300.dp.toPx(), toCenter)
+        val alpha = androidx.compose.ui.util.lerp(0.10f, 0.14f, toCenter)
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(Theme.accent.copy(alpha = alpha), Color.Transparent),
+                center = Offset(x, y),
+                radius = radius,
+            ),
+            radius = radius,
+            center = Offset(x, y),
+        )
     }
 }

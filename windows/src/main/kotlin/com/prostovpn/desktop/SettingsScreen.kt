@@ -43,30 +43,15 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun SettingsScreen(
     state: AppState,
+    backdrop: BackdropState,
     onBack: () -> Unit,
-    windowControls: @Composable () -> Unit,
     drag: @Composable (@Composable () -> Unit) -> Unit,
 ) {
     val s = state.s
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showFileSheet by remember { mutableStateOf(state.previewFileSheetOpen) }
 
-    val backdrop = rememberBackdropState()
-
     Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .backdropSource(backdrop)
-        ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Theme.background)
-            )
-            SoftTopOrb()
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -82,7 +67,6 @@ fun SettingsScreen(
                 ) {
                     GlassBackButton(backdrop = backdrop, onBack = onBack)
                     Spacer(Modifier.weight(1f))
-                    windowControls()
                 }
             }
 
@@ -287,23 +271,6 @@ private fun ToggleRow(
     }
 }
 
-/** Мягкий тёплый ореол сверху — даёт стеклу, что преломлять. */
-@Composable
-fun SoftTopOrb() {
-    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-        val center = Offset(size.width * 0.7f, 40.dp.toPx())
-        val radius = 260.dp.toPx()
-        drawCircle(
-            brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                colors = listOf(Theme.accent.copy(alpha = 0.10f), Color.Transparent),
-                center = center,
-                radius = radius,
-            ),
-            radius = radius,
-            center = center,
-        )
-    }
-}
 
 // --- Шторка «Файл туннелирования» ---
 

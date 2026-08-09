@@ -522,6 +522,14 @@ class AppState(private val scope: CoroutineScope) {
     internal var previewFileSheetOpen by mutableStateOf(false)
         private set
 
+    /** Скриншот шторки серверов. */
+    internal var previewServerSheetOpen by mutableStateOf(false)
+        private set
+
+    internal fun previewOpenServerSheet() {
+        previewServerSheetOpen = true
+    }
+
     internal fun previewOpenFileSheet() {
         if (tunnelFiles.none { !it.isDefault }) {
             tunnelFiles.add(TunnelFile("preview", "my-sites.json", 42))

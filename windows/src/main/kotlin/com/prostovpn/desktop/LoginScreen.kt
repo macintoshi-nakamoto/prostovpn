@@ -75,7 +75,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun LoginScreen(
     state: AppState,
-    windowControls: @Composable () -> Unit,
     drag: @Composable (@Composable () -> Unit) -> Unit,
 ) {
     var login by rememberSaveable { mutableStateOf("") }
@@ -131,19 +130,6 @@ fun LoginScreen(
 
         FloatingOrbs()
 
-        // Кнопки окна поверх экрана входа, с тем же отступом, что и поля
-        drag {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Layout.screenPadding)
-                    .padding(top = Layout.topPadding),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                windowControls()
-            }
-        }
 
         Column(
             modifier = Modifier

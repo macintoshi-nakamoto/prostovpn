@@ -31,7 +31,9 @@ compose.desktop {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Prosto VPN"
             packageVersion = "1.0.0"
-            description = "Prosto VPN — свободный и безопасный интернет"
+            // Только ASCII: WiX собирает MSI в кодовой странице 1252,
+            // кириллица в метаданных валит light.exe с ошибкой LGHT0311
+            description = "Prosto VPN - free and secure internet"
             vendor = "Prosto VPN"
 
             windows {

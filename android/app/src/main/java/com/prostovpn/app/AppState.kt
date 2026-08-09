@@ -476,7 +476,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
             runCatching { tunnel.disconnect() }
         }
         phase = Phase.OFF
-        seconds = 0
+        // seconds не обнуляем здесь: уходящий таймер должен дофейдиться
+        // с последним значением, а не прокрутиться в 00:00; сброс — в startTimer()
     }
 
     val formattedDuration: String

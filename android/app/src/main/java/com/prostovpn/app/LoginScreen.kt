@@ -9,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +24,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -57,7 +57,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -212,11 +211,11 @@ fun LoginScreen(state: AppState) {
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(40.dp)
-                            .clip(RoundedCornerShape(12.dp))
                             .scaleClickable(0.98f, enabled = !isLoading && !isDone) {
                                 focusManager.clearFocus()
                                 state.loginAsGuest()
-                            },
+                            }
+                            .clip(RoundedCornerShape(12.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -433,10 +432,13 @@ private fun SubmitButton(
         label = "loading",
     )
 
+    val interaction = remember { MutableInteractionSource() }
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp)
+            // масштаб — в начале цепочки, чтобы сжималась вся кнопка с тенью
+            .pressScale(interaction, 0.98f)
             .softShadow(Theme.accent.copy(alpha = 0.35f), 14.dp, 18.dp, yOffset = 8.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(Theme.accentGradient)
@@ -461,7 +463,12 @@ private fun SubmitButton(
                     style = Stroke(width = strokeW),
                 )
             }
-            .scaleClickable(0.98f, enabled = !isLoading && !isDone, onClick = onClick),
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = !isLoading && !isDone,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.animation.AnimatedContent(

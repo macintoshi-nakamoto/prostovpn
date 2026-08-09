@@ -184,6 +184,13 @@ fun Modifier.liquidGlass(
     highlightAlpha: Float = 0.20f,
 ): Modifier = composed {
     val position = remember { mutableStateOf(Offset.Zero) }
+    // Относительный сдвиг фон→элемент: во время слайд-переходов обе позиции меняются
+    // синхронно, delta не меняется — стекло не перерисовывает blur+шейдер каждый кадр.
+    val delta = remember {
+        androidx.compose.runtime.derivedStateOf {
+            backdrop.positionInWindow - position.value
+        }
+    }
     this
         .onGloballyPositioned { position.value = it.positionInWindow() }
         .drawWithCache {
@@ -227,13 +234,9 @@ fun Modifier.liquidGlass(
             onDrawWithContent {
                 val src = backdrop.layer
                 if (glassLayer != null && src != null) {
-                    val srcPos = backdrop.positionInWindow
-                    val myPos = position.value
+                    val d = delta.value
                     glassLayer.record(size = paddedSize) {
-                        translate(
-                            padPx + (srcPos.x - myPos.x),
-                            padPx + (srcPos.y - myPos.y),
-                        ) {
+                        translate(padPx + d.x, padPx + d.y) {
                             drawLayer(src)
                         }
                     }

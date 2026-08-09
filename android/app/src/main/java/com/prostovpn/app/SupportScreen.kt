@@ -153,8 +153,8 @@ private fun LinkRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
             .scaleClickable(0.98f, onClick = onClick)
+            .clip(RoundedCornerShape(14.dp))
             .padding(vertical = 12.dp, horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

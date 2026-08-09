@@ -44,10 +44,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.lerp
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 private enum class HomePage { MAIN, SETTINGS, SUPPORT }
@@ -343,21 +344,31 @@ private fun PowerButton(
     val popScale = remember { Animatable(1f) }
     val bloom = remember { Animatable(0f) }
 
-    LaunchedEffect(state.phase) {
-        if (state.phase == Phase.ON) {
-            haptics.success()
-            // Кольцо-вспышка расходится от кнопки в момент подключения
-            launch {
-                bloom.snapTo(0.001f)
-                bloom.animateTo(1f, tween(750, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+    // «Салют» только на реальном переходе в ON (не при возврате на экран,
+    // когда VPN уже подключён); при обрыве соединения анимации сбрасываются.
+    LaunchedEffect(Unit) {
+        var previous: Phase? = null
+        snapshotFlow { state.phase }.collectLatest { phase ->
+            val was = previous
+            previous = phase
+            if (phase == Phase.ON && was != null && was != Phase.ON) {
+                haptics.success()
+                // Кольцо-вспышка расходится от кнопки в момент подключения
+                launch {
+                    bloom.snapTo(0.001f)
+                    bloom.animateTo(1f, tween(750, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+                    bloom.snapTo(0f)
+                }
+                popScale.snapTo(0.92f)
+                popScale.animateTo(
+                    1.03f,
+                    spring(dampingRatio = 0.55f, stiffness = 440f),
+                )
+                popScale.animateTo(1f, tween(180))
+            } else if (phase != Phase.ON) {
                 bloom.snapTo(0f)
+                popScale.snapTo(1f)
             }
-            popScale.snapTo(0.92f)
-            popScale.animateTo(
-                1.03f,
-                spring(dampingRatio = 0.55f, stiffness = 440f),
-            )
-            popScale.animateTo(1f, tween(180))
         }
     }
 
@@ -421,6 +432,8 @@ private fun PowerButton(
                     refractionHeight = 22.dp,
                     refractionAmount = 20.dp,
                 )
+                // отдельный слой: подсветка/кайма/глиф не пересчитывают blur стекла
+                .graphicsLayer()
                 .pressHighlight(interaction, 0.05f)
                 .border(1.5.dp, borderColor, CircleShape)
                 .clickable(interactionSource = interaction, indication = null) {

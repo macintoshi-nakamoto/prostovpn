@@ -119,13 +119,13 @@ fun ServerListSheet(state: AppState, onDismiss: () -> Unit) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (isActive) Theme.accent.copy(alpha = 0.07f) else Color.Transparent)
                             .scaleClickable(0.98f) {
                                 haptics.selection()
                                 state.selectServer(index)
                                 scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
                             }
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isActive) Theme.accent.copy(alpha = 0.07f) else Color.Transparent)
                             .padding(vertical = 12.dp, horizontal = 8.dp),
                     ) {
                         ServerRow(server = server) {

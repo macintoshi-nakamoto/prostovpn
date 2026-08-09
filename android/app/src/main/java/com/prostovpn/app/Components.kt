@@ -40,7 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -128,25 +130,59 @@ fun Modifier.softShadow(
     cornerRadius: Dp,
     yOffset: Dp = 0.dp,
     spread: Dp = 0.dp,
-): Modifier = drawBehind {
-    val paint = Paint()
-    val frameworkPaint = paint.asFrameworkPaint()
-    frameworkPaint.color = color.toArgb()
-    frameworkPaint.maskFilter = BlurMaskFilter(blurRadius.toPx(), BlurMaskFilter.Blur.NORMAL)
+): Modifier = drawWithCache {
+    val blurPx = blurRadius.toPx()
     val spreadPx = spread.toPx()
-    drawIntoCanvas { canvas ->
-        canvas.save()
-        canvas.translate(0f, yOffset.toPx())
-        canvas.drawRoundRect(
-            -spreadPx,
-            -spreadPx,
-            size.width + spreadPx,
-            size.height + spreadPx,
-            cornerRadius.toPx() + spreadPx,
-            cornerRadius.toPx() + spreadPx,
+    val yPx = yOffset.toPx()
+    val radiusPx = cornerRadius.toPx() + spreadPx
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        // Аппаратный канвас поддерживает BlurMaskFilter с API 28
+        val paint = Paint()
+        val frameworkPaint = paint.asFrameworkPaint()
+        frameworkPaint.color = color.toArgb()
+        frameworkPaint.maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+        onDrawBehind {
+            drawIntoCanvas { canvas ->
+                canvas.save()
+                canvas.translate(0f, yPx)
+                canvas.drawRoundRect(
+                    -spreadPx,
+                    -spreadPx,
+                    size.width + spreadPx,
+                    size.height + spreadPx,
+                    radiusPx,
+                    radiusPx,
+                    paint,
+                )
+                canvas.restore()
+            }
+        }
+    } else {
+        // API 26–27: maskFilter игнорируется аппаратным канвасом —
+        // рендерим тень программно в bitmap (кэшируется по размеру)
+        val pad = kotlin.math.ceil(blurPx * 1.5f + spreadPx).toInt().coerceAtLeast(1)
+        val w = (size.width + 2 * pad).toInt().coerceAtLeast(1)
+        val h = (size.height + 2 * pad).toInt().coerceAtLeast(1)
+        val bitmap = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val softwareCanvas = android.graphics.Canvas(bitmap)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color.toArgb()
+            maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+        }
+        softwareCanvas.drawRoundRect(
+            pad - spreadPx,
+            pad - spreadPx,
+            pad + size.width + spreadPx,
+            pad + size.height + spreadPx,
+            radiusPx,
+            radiusPx,
             paint,
         )
-        canvas.restore()
+        val image = bitmap.asImageBitmap()
+        onDrawBehind {
+            drawImage(image, topLeft = Offset(-pad.toFloat(), -pad.toFloat() + yPx))
+        }
     }
 }
 
@@ -194,6 +230,8 @@ fun GlassCircleButton(
             .pressScale(interaction, 0.92f)
             .clip(CircleShape)
             .liquidGlass(backdrop)
+            // отдельный слой: подсветка и контент не заставляют стекло пересчитывать blur
+            .graphicsLayer()
             .pressHighlight(interaction)
             .clickable(interactionSource = interaction, indication = null) {
                 haptics.tap()
@@ -232,8 +270,12 @@ fun RollingText(
     modifier: Modifier = Modifier,
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        val length = text.length
         text.forEachIndexed { index, char ->
-            androidx.compose.animation.AnimatedContent(
+            // ключ — позиция с конца строки: при смене формата 59:59 → 1:00:00
+            // существующие разряды сохраняют идентичность, новые входят слева
+            androidx.compose.runtime.key(length - index) {
+                androidx.compose.animation.AnimatedContent(
                 targetState = char,
                 transitionSpec = {
                     (androidx.compose.animation.slideInVertically(
@@ -255,8 +297,9 @@ fun RollingText(
                     )
                 },
                 label = "roll$index",
-            ) { c ->
-                Text(text = c.toString(), style = style)
+                ) { c ->
+                    Text(text = c.toString(), style = style)
+                }
             }
         }
     }

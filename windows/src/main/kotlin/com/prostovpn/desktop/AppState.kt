@@ -285,8 +285,18 @@ class AppState(private val scope: CoroutineScope) {
     fun maybeAutoConnect() {
         if (autoConnectTried) return
         autoConnectTried = true
-        if (autoConnect && isLoggedIn && phase == Phase.OFF) {
-            toggleConnection()
+        scope.launch {
+            // Туннель мог пережить закрытие окна — тогда показываем его
+            // состояние, а не предлагаем подключиться заново.
+            val alreadyUp = withContext(Dispatchers.IO) { runCatching { tunnel.isUp() }.getOrDefault(false) }
+            if (alreadyUp) {
+                phase = Phase.ON
+                startTimer()
+                return@launch
+            }
+            if (autoConnect && isLoggedIn && phase == Phase.OFF) {
+                toggleConnection()
+            }
         }
     }
 
@@ -451,10 +461,30 @@ class AppState(private val scope: CoroutineScope) {
         seconds = 0
         val startedAt = System.currentTimeMillis()
         timerJob = scope.launch {
+            var misses = 0
+            var nextCheck = 5
             while (true) {
                 delay(500)
                 val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
                 if (elapsed != seconds) seconds = elapsed
+
+                // Туннель мог оборваться сам — экран не должен врать, что
+                // соединение есть. Одиночный промах не считаем: опрос службы
+                // изредка не проходит, а ложное отключение хуже секунды
+                // задержки.
+                if (elapsed >= nextCheck) {
+                    nextCheck = elapsed + 5
+                    val up = withContext(Dispatchers.IO) {
+                        runCatching { tunnel.isUp() }.getOrDefault(true)
+                    }
+                    misses = if (up) 0 else misses + 1
+                    if (misses >= 2) {
+                        phase = Phase.OFF
+                        connectionError = s.errTunnelDropped
+                        timerJob = null
+                        return@launch
+                    }
+                }
             }
         }
     }

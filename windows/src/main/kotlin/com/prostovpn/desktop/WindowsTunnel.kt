@@ -10,10 +10,8 @@ import java.util.concurrent.TimeUnit
  * `amneziawg.exe /installtunnelservice <config.conf>` ставит и запускает
  * службу туннеля, `/uninstalltunnelservice <name>` — снимает её. Служба
  * требует прав администратора, поэтому команда запускается с повышением
- * (UAC), а состояние читается через `sc query`.
- *
- * Обычный WireGuard-конфиг (без обфускации Amnezia) поддерживается тем же
- * способом через wireguard.exe, если он установлен.
+ * (UAC), а состояние читается через PowerShell Get-Service — вывод `sc query`
+ * локализован и на русской Windows не разбирается.
  */
 class WindowsTunnel {
 
@@ -89,10 +87,7 @@ class WindowsTunnel {
     private var backend: File? = null
 
     /** Служба туннеля запущена? */
-    fun isUp(): Boolean {
-        val exe = backend ?: findBackend() ?: return false
-        return queryServiceState(serviceName()) == "RUNNING"
-    }
+    fun isUp(): Boolean = queryServiceState(serviceName()) == "RUNNING"
 
     /**
      * Поднимает туннель по конфигу AmneziaWG/WireGuard.
@@ -113,38 +108,78 @@ class WindowsTunnel {
         runCatching { configFile.writeText(configText.normalizeNewlines()) }
             .getOrElse { return Result.Failure(Reason.TunnelFailed, "Не удалось записать конфиг: ${it.message}") }
 
-        // Снимаем прошлую службу, если осталась с прошлого запуска
-        runElevated(exe, listOf("/uninstalltunnelservice", TUNNEL_NAME), waitSeconds = 10)
+        // Снимаем прошлую службу — но только если она есть. amneziawg.exe
+        // собран как оконное приложение и на попытку снять несуществующую
+        // службу показывает модальное окно с ошибкой, которое ждёт клика,
+        // да ещё и просит права зря.
+        if (queryServiceState(serviceName()) != null) {
+            runElevated(exe, listOf("/uninstalltunnelservice", TUNNEL_NAME), waitSeconds = 15)
+        }
 
+        // 60 секунд: на чистой машине первое подключение ещё ставит драйвер Wintun
         val install = runElevated(
             exe,
             listOf("/installtunnelservice", configFile.absolutePath),
-            waitSeconds = 30,
+            waitSeconds = 60,
         )
         if (install == ElevationResult.Denied) {
             return Result.Failure(Reason.ElevationDenied)
         }
+        // Ненулевой код здесь не означает провал: Start-Process -Verb RunAs
+        // умеет возвращать ошибку в сеансах, где туннель всё же поднялся.
+        // Верим только состоянию службы.
 
-        // Служба поднимается асинхронно — ждём появления RUNNING
         val service = serviceName()
-        val deadline = System.currentTimeMillis() + 15_000
+        val deadline = System.currentTimeMillis() + 20_000
         while (System.currentTimeMillis() < deadline) {
             when (queryServiceState(service)) {
                 "RUNNING" -> return Result.Success
                 "STOPPED" -> {
-                    // служба стартовала и сразу умерла — конфиг не принят
-                    return Result.Failure(Reason.TunnelFailed, "Служба туннеля остановилась")
+                    // Служба стартовала и сразу умерла — конфиг не принят
+                    return Result.Failure(Reason.TunnelFailed, lastTunnelError(exe))
                 }
             }
             Thread.sleep(400)
         }
-        return Result.Failure(Reason.TunnelFailed, "Туннель не поднялся за 15 секунд")
+        return Result.Failure(Reason.TunnelFailed, lastTunnelError(exe))
+    }
+
+    /**
+     * Достаёт настоящую причину падения из журнала туннеля (`/dumplog`) —
+     * без неё все отказы выглядят одинаково. Журнал целиком кладём рядом
+     * с конфигом, наружу отдаём последнюю содержательную строку.
+     */
+    private fun lastTunnelError(exe: File): String {
+        val log = runCatching {
+            val process = ProcessBuilder(exe.absolutePath, "/dumplog")
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor(15, TimeUnit.SECONDS)
+            output
+        }.getOrNull()
+
+        if (log.isNullOrBlank()) return ""
+
+        runCatching { File(dataDir(), "last-error.log").writeText(log) }
+
+        // Ищем строку с описанием ошибки разбора или запуска
+        val meaningful = log.lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .lastOrNull { line ->
+                listOf("error", "invalid", "must", "unable", "failed", "cannot")
+                    .any { line.contains(it, ignoreCase = true) }
+            }
+        return meaningful?.substringAfterLast("] ")?.take(160).orEmpty()
     }
 
     /** Снимает туннель. Блокирующий вызов. */
     fun disconnect() {
         if (!isWindows) return
         val exe = backend ?: findBackend() ?: return
+        // Службы нет — ничего не делаем: иначе всплывёт модальная ошибка
+        if (queryServiceState(serviceName()) == null) return
         runElevated(exe, listOf("/uninstalltunnelservice", TUNNEL_NAME), waitSeconds = 15)
     }
 
@@ -166,15 +201,22 @@ class WindowsTunnel {
         fun psQuote(value: String) = "'" + value.replace("'", "''") + "'"
         val argList = args.joinToString(",") { psQuote(it) }
 
+        // Отказ в UAC приходит как Win32Exception, но PowerShell 5.1 при
+        // ErrorActionPreference=Stop заворачивает её в ActionPreferenceStop-
+        // Exception — поэтому разворачиваем цепочку InnerException, иначе
+        // отказ пользователя выглядел бы как «туннель не поднялся».
         val script = """
             ${'$'}ErrorActionPreference = 'Stop'
             try {
-                ${'$'}p = Start-Process -FilePath ${psQuote(exe.absolutePath)} -ArgumentList $argList -Verb RunAs -Wait -PassThru
+                ${'$'}p = Start-Process -FilePath ${psQuote(exe.absolutePath)} -ArgumentList $argList -Verb RunAs -WindowStyle Hidden -Wait -PassThru
                 exit ${'$'}p.ExitCode
-            } catch [System.ComponentModel.Win32Exception] {
-                exit ${'$'}_.Exception.NativeErrorCode
             } catch {
-                exit 1
+                ${'$'}e = ${'$'}_.Exception
+                while (${'$'}e -ne ${'$'}null -and -not (${'$'}e -is [System.ComponentModel.Win32Exception])) {
+                    ${'$'}e = ${'$'}e.InnerException
+                }
+                if (${'$'}e -is [System.ComponentModel.Win32Exception]) { exit ${'$'}e.NativeErrorCode }
+                exit $GENERIC_FAILURE
             }
         """.trimIndent()
 
@@ -229,6 +271,9 @@ class WindowsTunnel {
 
 /** Win32 ERROR_CANCELLED — пользователь отклонил запрос UAC. */
 private const val ERROR_CANCELLED = 1223
+
+/** Наш код для «сорвалось не из-за Windows» — не пересекается с кодами Win32. */
+private const val GENERIC_FAILURE = 9009
 
 /** Windows-служба туннеля требует CRLF и завершающего перевода строки. */
 private fun String.normalizeNewlines(): String =

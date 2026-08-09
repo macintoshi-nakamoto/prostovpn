@@ -111,6 +111,7 @@ class AppState(private val scope: CoroutineScope) {
     fun changeSplitTunnel(enabled: Boolean) {
         splitTunnelEnabled = enabled
         prefs.putBoolean("split.enabled", enabled)
+        cachedAllowedIps = null
     }
 
     fun changeKillSwitch(enabled: Boolean) {
@@ -141,6 +142,21 @@ class AppState(private val scope: CoroutineScope) {
 
     private fun tunnelDir(): File =
         File(System.getProperty("user.home"), ".prostovpn/tunneling").apply { mkdirs() }
+
+    /** Кэш вычисленных AllowedIPs — пересчёт списка исключений недёшев. */
+    private var cachedAllowedIps: String? = null
+
+    /** Содержимое активного списка исключений (свой файл или встроенный). */
+    private fun activeListContent(): String? {
+        val active = tunnelFiles.firstOrNull { it.id == activeTunnelFileId }
+        if (active == null || active.isDefault) {
+            return javaClass.getResourceAsStream("/ru-split-tunnel.json")
+                ?.bufferedReader()?.use { it.readText() }
+        }
+        return runCatching { File(tunnelDir(), active.name).readText() }.getOrNull()
+            ?: javaClass.getResourceAsStream("/ru-split-tunnel.json")
+                ?.bufferedReader()?.use { it.readText() }
+    }
 
     private fun loadTunnelFiles() {
         tunnelFiles.clear()
@@ -191,6 +207,7 @@ class AppState(private val scope: CoroutineScope) {
     fun selectTunnelFile(file: TunnelFile) {
         activeTunnelFileId = file.id
         prefs.put("tunnel.active", file.id)
+        cachedAllowedIps = null
     }
 
     fun addTunnelFile(originalName: String, content: String): Boolean {
@@ -341,7 +358,17 @@ class AppState(private val scope: CoroutineScope) {
         current.config?.let { prefs.put("server.config", it) }
     }
 
-    // --- Подключение (тестовая сборка: симуляция) ---
+    // --- Подключение ---
+
+    private val tunnel = WindowsTunnel()
+
+    /** Текст последней ошибки подключения — показывается на главном экране. */
+    var connectionError by mutableStateOf<String?>(null)
+        private set
+
+    fun dismissConnectionError() {
+        connectionError = null
+    }
 
     fun toggleConnection() {
         when (phase) {
@@ -351,12 +378,61 @@ class AppState(private val scope: CoroutineScope) {
     }
 
     private fun startConnect() {
+        val config = server?.config
+        connectionError = null
+
+        // Гостевой режим и демо-серверы: реального конфига нет, показываем
+        // интерфейс как есть — подключаться нечем.
+        if (config.isNullOrBlank()) {
+            phase = Phase.CONNECTING
+            connectJob = scope.launch {
+                delay(1200)
+                phase = Phase.OFF
+                connectionError = s.errNoKey
+            }
+            return
+        }
+
         phase = Phase.CONNECTING
         connectJob = scope.launch {
-            delay(1600)
-            phase = Phase.ON
-            startTimer()
+            val prepared = withContext(Dispatchers.Default) { buildConfigForConnect(config) }
+            val result = withContext(Dispatchers.IO) { tunnel.connect(prepared) }
+            when (result) {
+                is WindowsTunnel.Result.Success -> {
+                    phase = Phase.ON
+                    startTimer()
+                }
+                is WindowsTunnel.Result.Failure -> {
+                    phase = Phase.OFF
+                    connectionError = when (result.reason) {
+                        WindowsTunnel.Reason.NoBackend -> s.errNoBackend
+                        WindowsTunnel.Reason.ElevationDenied -> s.errElevation
+                        WindowsTunnel.Reason.UnsupportedOs -> s.errUnsupportedOs
+                        WindowsTunnel.Reason.TunnelFailed ->
+                            listOfNotNull(s.errTunnel, result.detail.takeIf { it.isNotBlank() })
+                                .joinToString(" · ")
+                    }
+                }
+            }
         }
+    }
+
+    /**
+     * Готовит конфиг под раздельное туннелирование: без него весь трафик
+     * идёт в VPN, с ним — всё, кроме подсетей из активного списка.
+     */
+    private fun buildConfigForConnect(base: String): String {
+        if (!splitTunnelEnabled) {
+            return SplitTunnel.applyToConfig(base, "0.0.0.0/0, ::/0")
+        }
+        val cached = cachedAllowedIps
+        if (cached != null) return SplitTunnel.applyToConfig(base, cached)
+
+        val content = activeListContent()
+        val excluded = if (content == null) emptyList() else SplitTunnel.parseCidrList(content)
+        val allowed = SplitTunnel.allowedIpsExcept(excluded)
+        cachedAllowedIps = allowed
+        return SplitTunnel.applyToConfig(base, allowed)
     }
 
     private fun startTimer() {
@@ -378,6 +454,9 @@ class AppState(private val scope: CoroutineScope) {
         timerJob = null
         phase = Phase.OFF
         // seconds не обнуляем: уходящий таймер дофейдится с последним значением
+        scope.launch(Dispatchers.IO) {
+            runCatching { tunnel.disconnect() }
+        }
     }
 
     val formattedDuration: String

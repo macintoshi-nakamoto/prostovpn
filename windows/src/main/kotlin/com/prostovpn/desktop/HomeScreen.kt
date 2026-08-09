@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -182,6 +183,14 @@ private fun MainPage(
             }
 
             Spacer(Modifier.weight(1f).heightIn(min = 12.dp))
+
+            ConnectionErrorBanner(
+                message = state.connectionError,
+                onDismiss = { state.dismissConnectionError() },
+                modifier = Modifier
+                    .padding(horizontal = Layout.screenPadding)
+                    .padding(bottom = 10.dp),
+            )
 
             CurrentServerCard(
                 state = state,
@@ -507,6 +516,43 @@ private fun SpinnerRing(modifier: Modifier = Modifier) {
                 sweepAngle = 340f,
                 useCenter = false,
                 style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round),
+            )
+        }
+    }
+}
+
+/** Баннер ошибки подключения — появляется над карточкой сервера. */
+@Composable
+private fun ConnectionErrorBanner(
+    message: String?,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Текст держим и на время анимации скрытия
+    var shown by remember { mutableStateOf(message.orEmpty()) }
+    if (!message.isNullOrEmpty()) shown = message
+
+    androidx.compose.animation.AnimatedVisibility(
+        visible = !message.isNullOrEmpty(),
+        enter = androidx.compose.animation.expandVertically(Theme.spring(300)) +
+            fadeIn(tween(240)),
+        exit = androidx.compose.animation.shrinkVertically(Theme.spring(240)) +
+            fadeOut(tween(160)),
+        modifier = modifier,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(Theme.accent.copy(alpha = 0.12f))
+                .noRippleClickable(onClick = onDismiss)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = shown,
+                style = manrope(12.5.sp, W.semibold, Theme.accentSoft).copy(lineHeight = 17.sp),
+                modifier = Modifier.weight(1f),
             )
         }
     }

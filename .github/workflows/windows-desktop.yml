@@ -20,8 +20,26 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # jpackage (JDK 21) собирает MSI через WiX 3.x — ставим и добавляем в PATH
+      - name: Install WiX Toolset 3
+        working-directory: .
+        run: choco install wixtoolset --no-progress -y
+      - name: Add WiX to PATH
+        working-directory: .
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "${env:ProgramFiles(x86)}\WiX Toolset v3.14\bin"
+
       - name: Build installers (MSI + EXE)
         run: ./gradlew packageMsi packageExe --no-daemon
+
+      - name: Print jpackage logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse build/compose/logs -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
+            Write-Host "===== $($_.FullName) ====="
+            Get-Content $_.FullName
+          }
 
       - name: Upload MSI
         uses: actions/upload-artifact@v4

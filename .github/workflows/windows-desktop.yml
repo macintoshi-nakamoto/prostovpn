@@ -20,6 +20,114 @@ jobs:
           distribution: temurin
           java-version: '21'
 
+      # Движок туннеля (windows/tunnel) собирается из исходников на Go
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: windows/tunnel/go.sum
+
+      - name: Test tunnel engine
+        working-directory: windows/tunnel
+        run: go test ./...
+
+      # Раннер — настоящая Windows с правами администратора: поднимаем на нём
+      # туннель по-настоящему. Это единственное место, где проверяется, что
+      # движок создаёт адаптер, живёт службой и снимается.
+      - name: Smoke test tunnel engine on real Windows
+        shell: pwsh
+        timeout-minutes: 10
+        working-directory: windows
+        run: |
+          ./gradlew buildTunnel fetchWintun --no-daemon
+
+          $work = "$env:RUNNER_TEMP\tunneltest"
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          # Движок грузит wintun.dll из своего каталога — кладём рядом
+          Copy-Item "$PWD\resources\windows\prostovpn-tunnel.exe" $work
+          Copy-Item "$PWD\resources\windows\wintun.dll" $work
+          $engine = "$work\prostovpn-tunnel.exe"
+
+          # Движок собран как оконное приложение (чтобы приложению не мигала
+          # консоль), поэтому вывод забираем через файл, а не через конвейер.
+          function Invoke-Engine {
+            param([string[]]$EngineArgs)
+            $out = "$work\out.txt"
+            $err = "$work\err.txt"
+            $p = Start-Process -FilePath $engine -ArgumentList $EngineArgs -Wait -PassThru `
+              -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+            $text = (Get-Content $out -Raw -ErrorAction SilentlyContinue)
+            if ($null -ne $p.ExitCode -and $p.ExitCode -ne 0) {
+              Write-Host "движок вернул $($p.ExitCode): $(Get-Content $err -Raw -ErrorAction SilentlyContinue)"
+            }
+            return "$text".Trim()
+          }
+
+          $state = Invoke-Engine @('/status', 'prostovpn')
+          Write-Host "исходное состояние: $state"
+          if ($state -ne 'ABSENT') { throw "служба уже существует: $state" }
+
+          # Пир недоступен, рукопожатия не будет — проверяем, что адаптер
+          # поднимается, служба живёт и снимается штатно
+          $conf = @(
+            '[Interface]'
+            'Address = 10.8.1.5/32'
+            'PrivateKey = AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='
+            'Jc = 4'
+            'Jmin = 40'
+            'Jmax = 70'
+            'S1 = 84'
+            'S2 = 43'
+            'H1 = 1234567891'
+            'H2 = 1234567892'
+            'H3 = 1234567893'
+            'H4 = 1234567894'
+            'MTU = 1376'
+            ''
+            '[Peer]'
+            'PublicKey = 1m8v/lROKRSJTeZbV81vZNZi2NZZX4BGU3OcLWqbvxE='
+            'AllowedIPs = 10.9.0.0/24'
+            'Endpoint = 203.0.113.77:41820'
+            'PersistentKeepalive = 25'
+          ) -join "`r`n"
+          # Без BOM: разбор конфига начинается с «[Interface]»
+          [IO.File]::WriteAllText("$work\prostovpn.conf", $conf + "`r`n", (New-Object Text.UTF8Encoding $false))
+
+          Invoke-Engine @('/installtunnelservice', "$work\prostovpn.conf", "$work\install.log") | Out-Null
+          Write-Host "--- отчёт установки ---"
+          Get-Content "$work\install.log" -ErrorAction SilentlyContinue
+
+          $up = $false
+          foreach ($i in 1..25) {
+            $state = Invoke-Engine @('/status', 'prostovpn')
+            if ($state -eq 'RUNNING') { $up = $true; break }
+            if ($state -eq 'STOPPED' -or $state -eq 'ABSENT') { break }
+            Start-Sleep -Milliseconds 400
+          }
+          Write-Host "состояние после запуска: $state"
+
+          if (-not $up) {
+            Write-Host "--- журнал туннеля ---"
+            Get-Content "$work\tunnel.log" -ErrorAction SilentlyContinue
+            Invoke-Engine @('/uninstalltunnelservice', 'prostovpn') | Out-Null
+            throw "движок туннеля не поднялся"
+          }
+
+          # Отключение без повышения прав: служба должна остановиться сама
+          Invoke-Engine @('/stop', 'prostovpn') | Out-Null
+          foreach ($i in 1..25) {
+            $state = Invoke-Engine @('/status', 'prostovpn')
+            if ($state -eq 'STOPPED' -or $state -eq 'ABSENT') { break }
+            Start-Sleep -Milliseconds 400
+          }
+          Write-Host "состояние после /stop: $state"
+          Write-Host "--- журнал туннеля ---"
+          Get-Content "$work\tunnel.log" -ErrorAction SilentlyContinue
+          Invoke-Engine @('/uninstalltunnelservice', 'prostovpn') | Out-Null
+          if ($state -ne 'STOPPED' -and $state -ne 'ABSENT') {
+            throw "служба не остановилась по сигналу: $state"
+          }
+          Write-Host "движок туннеля работает"
+
       - name: Build installers (MSI + EXE)
         # Номер запуска как номер сборки: checkout в CI неглубокий, поэтому
         # счётчик коммитов там всегда 1 и версия установщика не росла бы

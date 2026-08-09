@@ -28,9 +28,10 @@ java {
 }
 
 /**
- * Кладём сюда движок туннеля (amneziawg.exe + wintun.dll) — jpackage
+ * Кладём сюда движок туннеля (prostovpn-tunnel.exe + wintun.dll) — jpackage
  * копирует содержимое в <install>\app\, приложение находит его там.
- * Скачивается задачей fetchTunnelBinaries, в репозиторий не коммитится.
+ * Движок собирается из windows/tunnel, wintun скачивается; в репозиторий
+ * ни то, ни другое не коммитится.
  */
 val tunnelResourcesDir = layout.projectDirectory.dir("resources/windows")
 
@@ -87,81 +88,87 @@ tasks.register<JavaExec>("screenshots") {
 }
 
 /**
- * Скачивает движок туннеля AmneziaWG (MIT) и Wintun для сборки установщика.
- * Бинарники не хранятся в репозитории — их тянет CI перед packageMsi.
+ * Собирает наш движок туннеля из windows/tunnel.
+ *
+ * Это отдельный исполняемый файл: JVM не умеет ни поднимать драйвер Wintun,
+ * ни работать службой Windows. Нужен Go 1.24+ на PATH.
  */
-tasks.register("fetchTunnelBinaries") {
+tasks.register<Exec>("buildTunnel") {
     group = "distribution"
-    description = "Скачивает amneziawg.exe и wintun.dll в resources/windows"
+    description = "Собирает prostovpn-tunnel.exe в resources/windows"
+
+    val tunnelDir = layout.projectDirectory.dir("tunnel")
+    val output = tunnelResourcesDir.file("prostovpn-tunnel.exe").asFile
+
+    inputs.dir(tunnelDir)
+    outputs.file(output)
+
+    workingDir = tunnelDir.asFile
+    environment("GOOS", "windows")
+    environment("GOARCH", "amd64")
+    environment("CGO_ENABLED", "0")
+    // -H=windowsgui: движок вызывается из приложения, консольное окно
+    // мелькать не должно; -trimpath убирает пути сборки из бинаря.
+    commandLine(
+        "go", "build",
+        "-ldflags", "-s -w -H=windowsgui",
+        "-trimpath",
+        "-o", output.absolutePath,
+        ".",
+    )
+
+    doFirst { output.parentFile.mkdirs() }
+}
+
+/**
+ * Скачивает драйвер Wintun — движок туннеля грузит его из своего каталога.
+ * В репозитории не хранится, контрольная сумма проверяется перед упаковкой.
+ */
+tasks.register("fetchWintun") {
+    group = "distribution"
+    description = "Скачивает wintun.dll в resources/windows"
 
     val outDir = tunnelResourcesDir.asFile
-    outputs.dir(outDir)
+    val target = File(outDir, "wintun.dll")
+    outputs.file(target)
 
     doLast {
         outDir.mkdirs()
 
-        val awgZipUrl = "https://github.com/spvkgn/amneziawg-windows-client/releases/download/2.0.0-win7/amneziawg-amd64.zip"
         val wintunZipUrl = "https://www.wintun.net/builds/wintun-0.14.1.zip"
-
-        // Контрольные суммы распакованных файлов: в установщик уходит чужой
-        // бинарь, поэтому его подмену ловим до сборки, а не после.
-        val expectedSha = mapOf(
-            "amneziawg.exe" to "75392f89bc52cd04ae0a4c313ecd9f5c8a8d479baa40853b277bb252a106235b",
-            "wintun.dll" to "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce",
-        )
-
-        fun verify(file: File) {
-            val expected = expectedSha[file.name] ?: return
-            val digest = MessageDigest.getInstance("SHA-256")
-                .digest(file.readBytes())
-                .joinToString("") { "%02x".format(it) }
-            check(digest == expected) {
-                "Контрольная сумма ${file.name} не совпала:\n  ожидали $expected\n  получили $digest"
-            }
-            logger.lifecycle("${file.name}: контрольная сумма совпала")
-        }
-
-        fun download(url: String, target: File) {
-            logger.lifecycle("Скачиваю $url")
-            URI(url).toURL().openStream().use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
-            }
-        }
-
-        fun extract(zip: File, entrySuffix: String, target: File) {
-            ZipFile(zip).use { archive ->
-                val entry = archive.entries().asSequence()
-                    .firstOrNull { !it.isDirectory && it.name.endsWith(entrySuffix, ignoreCase = true) }
-                    ?: error("В $zip нет $entrySuffix")
-                archive.getInputStream(entry).use { input ->
-                    target.outputStream().use { output -> input.copyTo(output) }
-                }
-            }
-            logger.lifecycle("Распаковал ${target.name} (${target.length()} байт)")
-        }
+        val expectedSha = "e5da8447dc2c320edc0fc52fa01885c103de8c118481f683643cacc3220dafce"
 
         val tmp = File(outDir, "tmp").apply { mkdirs() }
-
-        val awgZip = File(tmp, "amneziawg.zip")
-        download(awgZipUrl, awgZip)
-        extract(awgZip, "amneziawg.exe", File(outDir, "amneziawg.exe"))
-        verify(File(outDir, "amneziawg.exe"))
-
         val wintunZip = File(tmp, "wintun.zip")
-        download(wintunZipUrl, wintunZip)
+
+        logger.lifecycle("Скачиваю $wintunZipUrl")
+        URI(wintunZipUrl).toURL().openStream().use { input ->
+            wintunZip.outputStream().use { output -> input.copyTo(output) }
+        }
+
         // в архиве несколько архитектур — берём amd64
         ZipFile(wintunZip).use { archive ->
             val entry = archive.entries().asSequence()
                 .firstOrNull { !it.isDirectory && it.name.replace('\\', '/').endsWith("bin/amd64/wintun.dll") }
                 ?: error("В $wintunZip нет bin/amd64/wintun.dll")
             archive.getInputStream(entry).use { input ->
-                File(outDir, "wintun.dll").outputStream().use { output -> input.copyTo(output) }
+                target.outputStream().use { output -> input.copyTo(output) }
             }
         }
-        logger.lifecycle("Распаковал wintun.dll")
-        verify(File(outDir, "wintun.dll"))
+
+        // В установщик уходит чужой бинарь, поэтому его подмену ловим
+        // до сборки, а не после.
+        val digest = MessageDigest.getInstance("SHA-256")
+            .digest(target.readBytes())
+            .joinToString("") { "%02x".format(it) }
+        check(digest == expectedSha) {
+            "Контрольная сумма wintun.dll не совпала:\n  ожидали $expectedSha\n  получили $digest"
+        }
+        logger.lifecycle("wintun.dll: контрольная сумма совпала")
 
         tmp.deleteRecursively()
+        // Остатки прежней поставки: движок Amnezia больше не используется
+        File(outDir, "amneziawg.exe").delete()
     }
 }
 
@@ -177,7 +184,7 @@ listOf(
     "runDistributable",
 ).forEach { name ->
     tasks.matching { it.name == name }.configureEach {
-        dependsOn("fetchTunnelBinaries")
+        dependsOn("buildTunnel", "fetchWintun")
     }
 }
 

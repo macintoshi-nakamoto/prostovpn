@@ -11,9 +11,14 @@ package com.prostovpn.desktop
  */
 object WgConfig {
 
-    /** Ключи [Interface], которые понимает туннель Windows (AWG 2.x). */
+    /**
+     * Ключи [Interface], которые понимает наш движок туннеля.
+     * Список должен совпадать с разбором в
+     * `windows/tunnel/internal/conf/parser.go`: незнакомый ключ там —
+     * ошибка всего конфига, а не пропуск строки.
+     */
     private val interfaceKeys = setOf(
-        "privatekey", "address", "dns", "dnssearch", "mtu", "table",
+        "privatekey", "listenport", "address", "dns", "mtu", "table",
         // обфускация AmneziaWG
         "jc", "jmin", "jmax", "s1", "s2", "s3", "s4",
         "h1", "h2", "h3", "h4",

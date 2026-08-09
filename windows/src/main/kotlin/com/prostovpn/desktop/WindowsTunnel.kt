@@ -6,12 +6,13 @@ import java.util.concurrent.TimeUnit
 /**
  * Реальный VPN-туннель на Windows.
  *
- * AmneziaWG для Windows — форк wireguard-windows и повторяет его контракт:
- * `amneziawg.exe /installtunnelservice <config.conf>` ставит и запускает
- * службу туннеля, `/uninstalltunnelservice <name>` — снимает её. Служба
- * требует прав администратора, поэтому команда запускается с повышением
- * (UAC), а состояние читается через PowerShell Get-Service — вывод `sc query`
- * локализован и на русской Windows не разбирается.
+ * Движок — наш собственный `prostovpn-tunnel.exe` (каталог `windows/tunnel`):
+ * он поднимает адаптер Wintun, регистрирует службу `ProstoVPNTunnel$prostovpn`
+ * и пишет журнал. Отдельный клиент Amnezia не нужен и не используется.
+ *
+ * Права администратора нужны один раз — на подключение: создать службу и
+ * загрузить драйвер обычный пользователь не может. Отключение идёт без UAC:
+ * служба сама слушает событие остановки.
  */
 class WindowsTunnel {
 
@@ -22,7 +23,7 @@ class WindowsTunnel {
     }
 
     enum class Reason {
-        /** Не нашли amneziawg.exe / wireguard.exe ни в поставке, ни в системе. */
+        /** Движок туннеля не найден рядом с приложением. */
         NoBackend,
 
         /** Пользователь отклонил запрос прав администратора. */
@@ -38,56 +39,48 @@ class WindowsTunnel {
     companion object {
         const val TUNNEL_NAME = "prostovpn"
 
+        private const val ENGINE = "prostovpn-tunnel.exe"
+
         val isWindows: Boolean =
             System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
 
-        /** Каталог для конфига: %LOCALAPPDATA%\ProstoVPN (или ~/.prostovpn). */
-        private fun dataDir(): File {
+        /** Каталог для конфига и журналов: %LOCALAPPDATA%\ProstoVPN. */
+        fun dataDir(): File {
             val base = System.getenv("LOCALAPPDATA")
                 ?: System.getProperty("user.home")
             return File(base, "ProstoVPN").apply { mkdirs() }
         }
 
         /**
-         * Ищем бинарь туннеля: сначала рядом с приложением (jpackage кладёт
-         * ресурсы в <install>\app\), затем в стандартных местах установки
-         * AmneziaWG и WireGuard.
+         * Ищем движок: jpackage кладёт содержимое appResourcesRootDir
+         * в <install>\app\ и отдаёт путь системным свойством. Рядом с jar —
+         * запасной вариант для запуска из исходников.
          */
         fun findBackend(): File? {
             val candidates = mutableListOf<File>()
 
-            // Положенный рядом с приложением: jpackage кладёт содержимое
-            // appResourcesRootDir в <install>\app\ и отдаёт путь этим свойством
             System.getProperty("compose.application.resources.dir")?.let { dir ->
-                candidates += File(dir, "amneziawg.exe")
+                candidates += File(dir, ENGINE)
             }
-            // Рядом с jar — на случай запуска из исходников
             runCatching {
                 val here = File(
                     WindowsTunnel::class.java.protectionDomain.codeSource.location.toURI()
                 ).parentFile
-                candidates += File(here, "amneziawg.exe")
-                candidates += File(here.parentFile, "app\\amneziawg.exe")
+                candidates += File(here, ENGINE)
+                candidates += File(here.parentFile, "app\\$ENGINE")
             }
-
-            // Установленный отдельно официальный клиент AmneziaWG
-            val programFiles = System.getenv("ProgramFiles") ?: "C:\\Program Files"
-            candidates += File(programFiles, "AmneziaWG\\amneziawg.exe")
+            // Запуск из исходников: собранный движок лежит в ресурсах проекта
+            candidates += File("resources/windows/$ENGINE")
+            candidates += File("windows/resources/windows/$ENGINE")
 
             return candidates.firstOrNull { it.isFile }
         }
-
-        /**
-         * Имя службы туннеля: amneziawg.exe собирает его из имени conf-файла
-         * без расширения — `AmneziaWGTunnel$<имя>`.
-         */
-        private fun serviceName(): String = "AmneziaWGTunnel\$$TUNNEL_NAME"
     }
 
     private var backend: File? = null
 
     /** Служба туннеля запущена? */
-    fun isUp(): Boolean = queryServiceState(serviceName()) == "RUNNING"
+    fun isUp(): Boolean = state() == "RUNNING"
 
     /**
      * Поднимает туннель по конфигу AmneziaWG/WireGuard.
@@ -98,89 +91,91 @@ class WindowsTunnel {
             return Result.Failure(Reason.UnsupportedOs, "Туннель поддерживается только на Windows")
         }
 
-        val exe = findBackend()
-            ?: return Result.Failure(Reason.NoBackend)
+        val exe = findBackend() ?: return Result.Failure(Reason.NoBackend)
         backend = exe
 
-        // Файл конфигурации должен называться так же, как туннель:
-        // именно из имени файла служба берёт имя туннеля.
+        // Имя файла задаёт имя туннеля и имя службы — менять нельзя.
         val configFile = File(dataDir(), "$TUNNEL_NAME.conf")
         runCatching { configFile.writeText(configText.normalizeNewlines()) }
             .getOrElse { return Result.Failure(Reason.TunnelFailed, "Не удалось записать конфиг: ${it.message}") }
 
-        // Снимаем прошлую службу — но только если она есть. amneziawg.exe
-        // собран как оконное приложение и на попытку снять несуществующую
-        // службу показывает модальное окно с ошибкой, которое ждёт клика,
-        // да ещё и просит права зря.
-        if (queryServiceState(serviceName()) != null) {
-            runElevated(exe, listOf("/uninstalltunnelservice", TUNNEL_NAME), waitSeconds = 15)
-        }
+        // Прошлую службу движок снимает сам — второй запрос UAC не нужен.
+        val report = File(dataDir(), "install.log")
+        report.delete()
+        File(dataDir(), "tunnel.log").delete()
 
         // 60 секунд: на чистой машине первое подключение ещё ставит драйвер Wintun
         val install = runElevated(
             exe,
-            listOf("/installtunnelservice", configFile.absolutePath),
+            listOf("/installtunnelservice", configFile.absolutePath, report.absolutePath),
             waitSeconds = 60,
         )
         if (install == ElevationResult.Denied) {
             return Result.Failure(Reason.ElevationDenied)
         }
-        // Ненулевой код здесь не означает провал: Start-Process -Verb RunAs
-        // умеет возвращать ошибку в сеансах, где туннель всё же поднялся.
-        // Верим только состоянию службы.
 
-        val service = serviceName()
         val deadline = System.currentTimeMillis() + 20_000
         while (System.currentTimeMillis() < deadline) {
-            when (queryServiceState(service)) {
+            when (state()) {
                 "RUNNING" -> return Result.Success
-                "STOPPED" -> {
-                    // Служба стартовала и сразу умерла — конфиг не принят
-                    return Result.Failure(Reason.TunnelFailed, lastTunnelError(exe))
-                }
+                // Служба стартовала и сразу умерла либо не создалась вовсе
+                "STOPPED", "ABSENT" -> return Result.Failure(Reason.TunnelFailed, lastTunnelError())
             }
             Thread.sleep(400)
         }
-        return Result.Failure(Reason.TunnelFailed, lastTunnelError(exe))
+        return Result.Failure(Reason.TunnelFailed, lastTunnelError())
     }
 
     /**
-     * Достаёт настоящую причину падения из журнала туннеля (`/dumplog`) —
-     * без неё все отказы выглядят одинаково. Журнал целиком кладём рядом
-     * с конфигом, наружу отдаём последнюю содержательную строку.
+     * Настоящая причина отказа: отчёт установки пишет наш повышенный процесс,
+     * журнал туннеля выкладывает сама служба (кольцевой журнал движка лежит
+     * там, куда пускают только SYSTEM и администраторов).
      */
-    private fun lastTunnelError(exe: File): String {
-        val log = runCatching {
-            val process = ProcessBuilder(exe.absolutePath, "/dumplog")
-                .redirectErrorStream(true)
-                .start()
-            val output = process.inputStream.bufferedReader().use { it.readText() }
-            process.waitFor(15, TimeUnit.SECONDS)
-            output
-        }.getOrNull()
+    private fun lastTunnelError(): String {
+        val tunnelLog = File(dataDir(), "tunnel.log").takeIf { it.isFile }?.readTextSafely()
+        val installLog = File(dataDir(), "install.log").takeIf { it.isFile }?.readTextSafely()
 
-        if (log.isNullOrBlank()) return ""
+        // Строка «РЕЗУЛЬТАТ: ОШИБКА — …» из отчёта установки самая точная
+        installLog?.lineSequence()
+            ?.map { it.trim() }
+            ?.lastOrNull { it.startsWith("РЕЗУЛЬТАТ: ОШИБКА") }
+            ?.let { return it.substringAfter("— ").take(200) }
 
-        runCatching { File(dataDir(), "last-error.log").writeText(log) }
-
-        // Ищем строку с описанием ошибки разбора или запуска
-        val meaningful = log.lineSequence()
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .lastOrNull { line ->
-                listOf("error", "invalid", "must", "unable", "failed", "cannot")
+        val meaningful = tunnelLog
+            ?.lineSequence()
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            ?.lastOrNull { line ->
+                listOf("error", "invalid", "must", "unable", "failed", "cannot", "ошибка")
                     .any { line.contains(it, ignoreCase = true) }
             }
-        return meaningful?.substringAfterLast("] ")?.take(160).orEmpty()
+        return meaningful?.substringAfterLast("] ")?.take(200).orEmpty()
     }
 
-    /** Снимает туннель. Блокирующий вызов. */
+    /**
+     * Снимает туннель. Блокирующий вызов.
+     *
+     * Сначала просим службу остановиться сама — это не требует прав и не
+     * дёргает UAC. Мёртвую (остановленную) службу удалит следующее
+     * подключение. Если событие не сработало, снимаем с повышением прав.
+     */
     fun disconnect() {
         if (!isWindows) return
         val exe = backend ?: findBackend() ?: return
-        // Службы нет — ничего не делаем: иначе всплывёт модальная ошибка
-        if (queryServiceState(serviceName()) == null) return
-        runElevated(exe, listOf("/uninstalltunnelservice", TUNNEL_NAME), waitSeconds = 15)
+        // Службы нет или она уже мертва — снимет следующее подключение,
+        // ради этого не стоит показывать запрос прав.
+        if (state() in setOf("ABSENT", "STOPPED")) return
+
+        if (run(exe, "/stop", TUNNEL_NAME) != null) {
+            val deadline = System.currentTimeMillis() + 8_000
+            while (System.currentTimeMillis() < deadline) {
+                val current = state()
+                if (current == "STOPPED" || current == "ABSENT") return
+                Thread.sleep(300)
+            }
+        }
+
+        runElevated(exe, listOf("/uninstalltunnelservice", TUNNEL_NAME), waitSeconds = 20)
     }
 
     // --- Служебное ---
@@ -188,7 +183,7 @@ class WindowsTunnel {
     private enum class ElevationResult { Ok, Denied, Error }
 
     /**
-     * Запускает бинарь с правами администратора.
+     * Запускает движок с правами администратора.
      *
      * Поднять права внутри JVM нельзя — UAC срабатывает только через
      * ShellExecuteEx с глаголом runas, поэтому идём через PowerShell.
@@ -241,31 +236,28 @@ class WindowsTunnel {
     }
 
     /**
-     * Состояние службы: RUNNING / STOPPED / null (службы нет).
+     * Состояние службы: RUNNING / STARTING / STOPPED / ABSENT.
      *
-     * Берём из PowerShell, а не из `sc query`: тот печатает
-     * локализованные подписи (на русской Windows — «РАБОТАЕТ»),
-     * а Get-Service отдаёт значение перечисления .NET на английском.
+     * Спрашиваем движок, а не PowerShell: `sc query` печатает локализованные
+     * подписи, а запуск PowerShell на каждый опрос — лишние сотни миллисекунд.
      */
-    private fun queryServiceState(service: String): String? = runCatching {
-        val script =
-            "(Get-Service -Name '${service.replace("'", "''")}' -ErrorAction SilentlyContinue).Status"
-        val encoded = java.util.Base64.getEncoder()
-            .encodeToString(script.toByteArray(Charsets.UTF_16LE))
+    private fun state(): String {
+        if (!isWindows) return "ABSENT"
+        val exe = backend ?: findBackend() ?: return "ABSENT"
+        return run(exe, "/status", TUNNEL_NAME)?.trim()?.uppercase() ?: "ABSENT"
+    }
 
-        val process = ProcessBuilder(
-            "powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded,
-        ).redirectErrorStream(true).start()
-
-        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-        process.waitFor(10, TimeUnit.SECONDS)
-
-        when {
-            output.equals("Running", ignoreCase = true) -> "RUNNING"
-            output.equals("Stopped", ignoreCase = true) -> "STOPPED"
-            output.equals("StartPending", ignoreCase = true) -> "START_PENDING"
-            else -> null
+    /** Запуск движка без повышения прав; null — не удалось выполнить. */
+    private fun run(exe: File, vararg args: String): String? = runCatching {
+        val process = ProcessBuilder(listOf(exe.absolutePath) + args)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }
+        if (!process.waitFor(15, TimeUnit.SECONDS)) {
+            process.destroyForcibly()
+            return null
         }
+        if (process.exitValue() != 0) null else output
     }.getOrNull()
 }
 
@@ -278,3 +270,5 @@ private const val GENERIC_FAILURE = 9009
 /** Windows-служба туннеля требует CRLF и завершающего перевода строки. */
 private fun String.normalizeNewlines(): String =
     replace("\r\n", "\n").trimEnd().replace("\n", "\r\n") + "\r\n"
+
+private fun File.readTextSafely(): String? = runCatching { readText() }.getOrNull()

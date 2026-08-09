@@ -24,12 +24,12 @@ import java.io.File
 fun main() {
     val out = File("screenshots").apply { mkdirs() }
 
-    fun snap(name: String, content: @Composable () -> Unit) {
-        ImageComposeScene(width = 800, height = 1280, density = Density(2f), content = content).use { scene ->
-            // прогоняем ~3 секунды кадров по 16.6 мс, как при реальных 60 fps,
-            // чтобы все входные анимации (fadeUp и т.п.) дошли до конца
+    fun snap(name: String, frames: Int = 180, content: @Composable () -> Unit) {
+        ImageComposeScene(width = 800, height = 1320, density = Density(2f), content = content).use { scene ->
+            // прогоняем кадры по 16.6 мс, как при реальных 60 fps,
+            // чтобы все входные анимации дошли до конца
             var image = scene.render(0L)
-            for (frame in 1..180) {
+            for (frame in 1..frames) {
                 image = scene.render(frame * 16_666_667L)
             }
             File(out, "$name.png").writeBytes(image.encodeToData()!!.bytes)
@@ -38,36 +38,61 @@ fun main() {
     }
 
     snap("01-login") {
-        Frame { state -> LoginScreen(state) }
+        Frame { state -> LoginScreen(state, windowControls = { Controls() }, drag = { it() }) }
     }
 
     snap("02-home-off") {
         Frame { state ->
             state.previewAs(guest = true, previewPhase = Phase.OFF)
-            HomeScreen(state)
+            HomeScreen(state, windowControls = { Controls() }, drag = { it() })
         }
     }
 
     snap("03-home-on") {
         Frame { state ->
             state.previewAs(guest = true, previewPhase = Phase.ON)
-            HomeScreen(state)
+            HomeScreen(state, windowControls = { Controls() }, drag = { it() })
         }
     }
 
     snap("04-settings") {
         Frame { state ->
             state.previewAs(guest = true, previewPhase = Phase.OFF)
-            SettingsScreen(state, onBack = {})
+            SettingsScreen(state, onBack = {}, windowControls = { Controls() }, drag = { it() })
         }
     }
 
     snap("05-support") {
         Frame { state ->
             state.previewAs(guest = true, previewPhase = Phase.OFF)
-            SupportScreen(state, onBack = {})
+            SupportScreen(state, onBack = {}, windowControls = { Controls() }, drag = { it() })
         }
     }
+
+    // Открытая шторка серверов — проверка скруглений и стекла
+    snap("06-servers-sheet") {
+        Frame { state ->
+            state.previewAs(guest = true, previewPhase = Phase.ON)
+            val backdrop = rememberBackdropState()
+            Box(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize().backdropSource(backdrop)) {
+                    Box(Modifier.fillMaxSize().background(Theme.background))
+                    SoftTopOrb()
+                }
+                ServerListSheet(
+                    state = state,
+                    visible = true,
+                    backdrop = backdrop,
+                    onDismiss = {},
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Controls() {
+    WindowControls(onMinimize = {}, onClose = {})
 }
 
 @Composable
@@ -77,9 +102,9 @@ private fun Frame(content: @Composable (AppState) -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(Layout.windowCorner))
             .background(Theme.background)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(26.dp)),
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(Layout.windowCorner)),
     ) {
         content(state)
     }

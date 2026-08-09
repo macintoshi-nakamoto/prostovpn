@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.platform.Font
 import androidx.compose.ui.unit.TextUnit
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 object Theme {
@@ -64,6 +65,20 @@ val ManropeFamily = FontFamily(
     Font(resource = "fonts/manrope_bold.ttf", weight = FontWeight.Bold),
     Font(resource = "fonts/manrope_extrabold.ttf", weight = FontWeight.ExtraBold),
 )
+
+/**
+ * Цветной эмодзи-шрифт для флагов стран: Windows своим шрифтом флаги
+ * не рисует (показывает буквы кода страны), Twemoji рисует их везде одинаково.
+ */
+val EmojiFamily = FontFamily(Font(resource = "fonts/twemoji_mozilla.ttf"))
+
+/** Единая сетка отступов — поля экрана и вертикальные ритмы. */
+object Layout {
+    val screenPadding = 22.dp
+    val topPadding = 22.dp
+    val windowCorner = 26.dp
+    val sheetCorner = 26.dp
+}
 
 fun manrope(
     size: TextUnit,

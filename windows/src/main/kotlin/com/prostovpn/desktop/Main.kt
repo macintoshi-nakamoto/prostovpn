@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,7 +35,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.res.painterResource
@@ -49,7 +47,7 @@ import androidx.compose.ui.window.rememberWindowState
 
 fun main() = application {
     val windowState = rememberWindowState(
-        size = DpSize(400.dp, 640.dp),
+        size = DpSize(400.dp, 660.dp),
         position = WindowPosition(Alignment.Center),
     )
 
@@ -62,12 +60,11 @@ fun main() = application {
         resizable = false,
         icon = painterResource("logo.png"),
     ) {
-        WindowDraggableArea {
-            AppRoot(
-                onMinimize = { windowState.isMinimized = true },
-                onClose = ::exitApplication,
-            )
-        }
+        AppRoot(
+            onMinimize = { windowState.isMinimized = true },
+            onClose = ::exitApplication,
+            drag = { content -> WindowDraggableArea(content = content) },
+        )
     }
 }
 
@@ -76,6 +73,7 @@ fun main() = application {
 fun AppRoot(
     onMinimize: () -> Unit,
     onClose: () -> Unit,
+    drag: @Composable (@Composable () -> Unit) -> Unit = { it() },
 ) {
     val scope = rememberCoroutineScope()
     val state = remember { AppState(scope) }
@@ -87,9 +85,9 @@ fun AppRoot(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(26.dp))
+            .clip(RoundedCornerShape(Layout.windowCorner))
             .background(Theme.background)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(26.dp)),
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(Layout.windowCorner)),
     ) {
         AnimatedContent(
             targetState = state.isLoggedIn,
@@ -113,30 +111,36 @@ fun AppRoot(
             },
         ) { loggedIn ->
             if (loggedIn) {
-                HomeScreen(state)
+                HomeScreen(
+                    state = state,
+                    windowControls = { WindowControls(onMinimize, onClose) },
+                    drag = drag,
+                )
             } else {
-                LoginScreen(state)
+                LoginScreen(
+                    state = state,
+                    windowControls = { WindowControls(onMinimize, onClose) },
+                    drag = drag,
+                )
             }
         }
-
-        WindowControls(
-            onMinimize = onMinimize,
-            onClose = onClose,
-            modifier = Modifier.align(Alignment.TopEnd),
-        )
     }
 }
 
-/** Кнопки окна: свернуть и закрыть. */
+/**
+ * Кнопки окна: свернуть и закрыть. Встраиваются в шапку экрана
+ * в один ряд с остальными кнопками, чтобы ничего не перекрывать.
+ */
 @Composable
-private fun WindowControls(
+fun WindowControls(
     onMinimize: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.padding(top = 12.dp, end = 12.dp),
+        modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         ControlDot(close = false, onClick = onMinimize)
         ControlDot(close = true, onClick = onClose)
@@ -147,27 +151,27 @@ private fun WindowControls(
 private fun ControlDot(close: Boolean, onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
-    val bgAlpha by animateFloatAsState(
+    val hoverProgress by animateFloatAsState(
         targetValue = if (hovered) 1f else 0f,
         animationSpec = tween(160),
         label = "dotHover",
     )
-    val hoverColor = if (close) Theme.accentDeep else Color.White.copy(alpha = 0.16f)
-    val glyphColor = Theme.text.copy(alpha = if (hovered) 0.95f else 0.45f)
+    val hoverColor = if (close) Theme.accentDeep else Color.White.copy(alpha = 0.18f)
+    val glyphColor = Theme.text.copy(alpha = 0.45f + 0.5f * hoverProgress)
 
     Box(
         modifier = Modifier
-            .size(24.dp)
+            .size(26.dp)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.06f))
-            .background(hoverColor.copy(alpha = hoverColor.alpha * bgAlpha))
+            .background(hoverColor.copy(alpha = hoverColor.alpha * hoverProgress))
             .pointerHoverIcon(PointerIcon.Hand)
             .hoverable(interaction)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.size(9.dp)) {
-            val stroke = Stroke(width = 1.6.dp.toPx(), cap = StrokeCap.Round).width
+            val stroke = 1.6.dp.toPx()
             if (close) {
                 drawLine(
                     color = glyphColor,

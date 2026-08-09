@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -64,7 +65,11 @@ import kotlinx.coroutines.launch
 private enum class HomePage { MAIN, SETTINGS, SUPPORT }
 
 @Composable
-fun HomeScreen(state: AppState) {
+fun HomeScreen(
+    state: AppState,
+    windowControls: @Composable () -> Unit,
+    drag: @Composable (@Composable () -> Unit) -> Unit,
+) {
     var page by remember { mutableStateOf(HomePage.MAIN) }
 
     AnimatedContent(
@@ -95,9 +100,21 @@ fun HomeScreen(state: AppState) {
                 state = state,
                 onOpenSettings = { page = HomePage.SETTINGS },
                 onOpenSupport = { page = HomePage.SUPPORT },
+                windowControls = windowControls,
+                drag = drag,
             )
-            HomePage.SETTINGS -> SettingsScreen(state, onBack = { page = HomePage.MAIN })
-            HomePage.SUPPORT -> SupportScreen(state, onBack = { page = HomePage.MAIN })
+            HomePage.SETTINGS -> SettingsScreen(
+                state = state,
+                onBack = { page = HomePage.MAIN },
+                windowControls = windowControls,
+                drag = drag,
+            )
+            HomePage.SUPPORT -> SupportScreen(
+                state = state,
+                onBack = { page = HomePage.MAIN },
+                windowControls = windowControls,
+                drag = drag,
+            )
         }
     }
 }
@@ -107,6 +124,8 @@ private fun MainPage(
     state: AppState,
     onOpenSettings: () -> Unit,
     onOpenSupport: () -> Unit,
+    windowControls: @Composable () -> Unit,
+    drag: @Composable (@Composable () -> Unit) -> Unit,
 ) {
     val s = state.s
     val backdrop = rememberBackdropState()
@@ -140,6 +159,8 @@ private fun MainPage(
                 backdrop = backdrop,
                 onOpenSettings = onOpenSettings,
                 onOpenSupport = onOpenSupport,
+                windowControls = windowControls,
+                drag = drag,
                 modifier = Modifier.fadeUp(),
             )
 
@@ -168,15 +189,17 @@ private fun MainPage(
                 onOpen = { showServers = true },
                 modifier = Modifier
                     .fadeUp(160)
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 8.dp),
+                    .padding(horizontal = Layout.screenPadding)
+                    .padding(bottom = Layout.screenPadding),
             )
-
         }
-    }
 
-    if (showServers) {
-        ServerListSheet(state = state, onDismiss = { showServers = false })
+        ServerListSheet(
+            state = state,
+            visible = showServers,
+            backdrop = backdrop,
+            onDismiss = { showServers = false },
+        )
     }
 }
 
@@ -185,31 +208,41 @@ private fun Header(
     backdrop: BackdropState,
     onOpenSettings: () -> Unit,
     onOpenSupport: () -> Unit,
+    windowControls: @Composable () -> Unit,
+    drag: @Composable (@Composable () -> Unit) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        GlassCircleButton(backdrop = backdrop, onClick = onOpenSupport) {
-            LogoImage(
-                modifier = Modifier.size(27.dp),
-                glowAlpha = 0.45f,
-            )
-        }
+    // Отступ сверху равен боковому — шапка «дышит» одинаково со всех сторон,
+    // кнопки окна стоят в том же ряду и ничего не перекрывают.
+    drag {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = Layout.screenPadding)
+                .padding(top = Layout.topPadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            GlassCircleButton(backdrop = backdrop, onClick = onOpenSupport) {
+                LogoImage(
+                    modifier = Modifier.size(26.dp),
+                    glowAlpha = 0.45f,
+                )
+            }
 
-        Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
 
-        GlassCircleButton(backdrop = backdrop, onClick = onOpenSettings) {
-            Icon(
-                imageVector = Icons.gear,
-                contentDescription = null,
-                tint = Theme.text.copy(alpha = 0.75f),
-                modifier = Modifier.size(23.dp),
-            )
+            GlassCircleButton(backdrop = backdrop, onClick = onOpenSettings) {
+                Icon(
+                    imageVector = Icons.gear,
+                    contentDescription = null,
+                    tint = Theme.text.copy(alpha = 0.75f),
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+
+            Spacer(Modifier.width(12.dp))
+
+            windowControls()
         }
     }
 }

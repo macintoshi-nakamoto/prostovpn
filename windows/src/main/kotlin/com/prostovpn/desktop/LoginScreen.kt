@@ -73,7 +73,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
-fun LoginScreen(state: AppState) {
+fun LoginScreen(
+    state: AppState,
+    windowControls: @Composable () -> Unit,
+    drag: @Composable (@Composable () -> Unit) -> Unit,
+) {
     var login by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var showPassword by rememberSaveable { mutableStateOf(false) }
@@ -127,6 +131,20 @@ fun LoginScreen(state: AppState) {
 
         FloatingOrbs()
 
+        // Кнопки окна поверх экрана входа, с тем же отступом, что и поля
+        drag {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Layout.screenPadding)
+                    .padding(top = Layout.topPadding),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                windowControls()
+            }
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -139,13 +157,13 @@ fun LoginScreen(state: AppState) {
                     .heightIn(min = viewportHeight)
                     .height(IntrinsicSize.Min)
                     .padding(horizontal = 28.dp)
-                    .padding(top = 24.dp, bottom = 40.dp),
+                    .padding(top = 56.dp, bottom = 36.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Header(
                     tagline = s.tagline,
                     modifier = Modifier
-                        .padding(top = 44.dp)
+                        .padding(top = 20.dp)
                         .fadeUp(),
                 )
 

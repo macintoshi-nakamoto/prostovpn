@@ -47,6 +47,7 @@ data class Strings(
     val chooseFile: String,
     val del: String,
     val holdHint: String,
+    val rightClickHint: String,
     val importError: String,
 
     val version: String,
@@ -106,6 +107,7 @@ private val RU = Strings(
     chooseFile = "Выбрать файл",
     del = "Удалить",
     holdHint = "Удерживайте файл, чтобы удалить его",
+    rightClickHint = "Правый клик по файлу — удалить",
     importError = "Не удалось прочитать файл",
     version = "Версия 1.0.0",
     tgTitle = "Поддержка в Telegram",
@@ -163,6 +165,7 @@ private val EN = Strings(
     chooseFile = "Choose file",
     del = "Delete",
     holdHint = "Press and hold a file to delete it",
+    rightClickHint = "Right-click a file to delete it",
     importError = "Couldn't read the file",
     version = "Version 1.0.0",
     tgTitle = "Telegram support",

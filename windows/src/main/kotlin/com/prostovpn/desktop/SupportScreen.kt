@@ -25,7 +25,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun SupportScreen(state: AppState, onBack: () -> Unit) {
+fun SupportScreen(
+    state: AppState,
+    onBack: () -> Unit,
+    windowControls: @Composable () -> Unit,
+    drag: @Composable (@Composable () -> Unit) -> Unit,
+) {
     val s = state.s
     val uriHandler = LocalUriHandler.current
 
@@ -52,15 +57,20 @@ fun SupportScreen(state: AppState, onBack: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 16.dp),
+                .padding(horizontal = Layout.screenPadding)
+                .padding(bottom = Layout.screenPadding),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-            ) {
-                GlassBackButton(backdrop = backdrop, onBack = onBack)
+            drag {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = Layout.topPadding),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    GlassBackButton(backdrop = backdrop, onBack = onBack)
+                    Spacer(Modifier.weight(1f))
+                    windowControls()
+                }
             }
 
             Column(

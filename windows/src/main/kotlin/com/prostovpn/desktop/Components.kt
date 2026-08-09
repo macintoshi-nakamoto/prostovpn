@@ -303,10 +303,13 @@ fun CardDivider() {
     )
 }
 
-/** Квадратик с флагом — iOS FlagChip. */
+/**
+ * Квадратик с флагом — iOS FlagChip.
+ * Флаг рисуется цветным Twemoji: системный шрифт Windows флаги не поддерживает.
+ */
 @Composable
 fun FlagChip(flag: String, size: Dp = 40.dp) {
-    val fontSize = with(LocalDensity.current) { (size * 0.5f).toSp() }
+    val fontSize = with(LocalDensity.current) { (size * 0.62f).toSp() }
     Box(
         modifier = Modifier
             .size(size)
@@ -314,7 +317,13 @@ fun FlagChip(flag: String, size: Dp = 40.dp) {
             .background(Theme.accentTint12),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = flag, fontSize = fontSize)
+        Text(
+            text = flag,
+            style = TextStyle(
+                fontFamily = EmojiFamily,
+                fontSize = fontSize,
+            ),
+        )
     }
 }
 

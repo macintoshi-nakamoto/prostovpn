@@ -69,6 +69,54 @@ jobs:
           Write-Host "исходное состояние: $state"
           if ($state -ne 'ABSENT') { throw "служба уже существует: $state" }
 
+          # --- Живое рукопожатие: локальный пир с маскировкой Amnezia 2.x ---
+          # Пир — userspace-узел AmneziaWG на loopback с диапазонами H1-H4 и
+          # S1-S4 из реальных ключей. Служба должна дойти до рукопожатия
+          # по-настоящему: сокеты Windows, junk-пакеты, паддинг, диапазоны.
+          go build -C tunnel -o "$work\testpeer.exe" ./testpeer
+          $peer = Start-Process -FilePath "$work\testpeer.exe" `
+            -ArgumentList @('-port','39999','-conf-out',"$work\live.conf") `
+            -PassThru -NoNewWindow -RedirectStandardOutput "$work\peer.log" -RedirectStandardError "$work\peer.err"
+          $ready = $false
+          foreach ($i in 1..50) {
+            if ((Get-Content "$work\peer.log" -Raw -ErrorAction SilentlyContinue) -match 'PEER READY') { $ready = $true; break }
+            if ($peer.HasExited) { break }
+            Start-Sleep -Milliseconds 200
+          }
+          if (-not $ready) {
+            Get-Content "$work\peer.err" -ErrorAction SilentlyContinue
+            throw "локальный пир не поднялся"
+          }
+
+          Invoke-Engine @('/installtunnelservice', "$work\live.conf", "$work\install-live.log") | Out-Null
+          $liveState = "$work\state.txt"
+          $handshake = $false
+          foreach ($i in 1..60) {
+            $stateText = Get-Content $liveState -Raw -ErrorAction SilentlyContinue
+            if ($stateText -match 'handshake=([1-9][0-9]*)') { $handshake = $true; break }
+            Start-Sleep -Milliseconds 500
+          }
+          Invoke-Engine @('/stop', 'live') | Out-Null
+          foreach ($i in 1..25) {
+            $s = Invoke-Engine @('/status', 'live')
+            if ($s -eq 'STOPPED' -or $s -eq 'ABSENT') { break }
+            Start-Sleep -Milliseconds 400
+          }
+          Invoke-Engine @('/uninstalltunnelservice', 'live') | Out-Null
+          Stop-Process -Id $peer.Id -Force -ErrorAction SilentlyContinue
+          if (-not $handshake) {
+            Write-Host "--- отчёт установки ---"
+            Get-Content "$work\install-live.log" -ErrorAction SilentlyContinue
+            Write-Host "--- журнал туннеля ---"
+            Get-Content "$work\tunnel.log" -ErrorAction SilentlyContinue
+            Write-Host "--- журнал пира ---"
+            Get-Content "$work\peer.log" -ErrorAction SilentlyContinue
+            throw "живое рукопожатие с маскировкой не состоялось"
+          }
+          Write-Host "живое рукопожатие с маскировкой Amnezia 2.x состоялось"
+          Remove-Item $liveState -Force -ErrorAction SilentlyContinue
+          Remove-Item "$work\tunnel.log" -Force -ErrorAction SilentlyContinue
+
           # Пир недоступен, рукопожатия не будет — проверяем, что адаптер
           # поднимается, служба живёт и снимается штатно
           $conf = @(

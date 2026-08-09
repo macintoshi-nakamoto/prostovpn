@@ -153,3 +153,9 @@ listOf("packageMsi", "packageExe", "packageDistributionForCurrentOS").forEach { 
         dependsOn("fetchTunnelBinaries")
     }
 }
+
+tasks.register<JavaExec>("keycheck") {
+    group = "verification"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.prostovpn.desktop.KeyParserCheckKt")
+}

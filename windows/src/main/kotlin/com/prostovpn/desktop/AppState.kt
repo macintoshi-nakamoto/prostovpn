@@ -95,7 +95,10 @@ class AppState(private val scope: CoroutineScope) {
 
     // --- Настройки ---
 
-    var splitTunnelEnabled by mutableStateOf(prefs.getBoolean("split.enabled", true))
+    // На Windows раздельное туннелирование выключено по умолчанию: список
+    // исключений превращается в ~2000 маршрутов, а kill-switch системного
+    // туннеля включается только при AllowedIPs = 0.0.0.0/0
+    var splitTunnelEnabled by mutableStateOf(prefs.getBoolean("split.enabled", false))
         private set
     var killSwitch by mutableStateOf(prefs.getBoolean("killSwitch", true))
         private set
@@ -395,7 +398,16 @@ class AppState(private val scope: CoroutineScope) {
 
         phase = Phase.CONNECTING
         connectJob = scope.launch {
-            val prepared = withContext(Dispatchers.Default) { buildConfigForConnect(config) }
+            val prepared = withContext(Dispatchers.Default) {
+                // Приводим к тому, что принимает туннель Windows: мобильные
+                // ключи он отвергает целиком, без Address не будет маршрутов
+                WgConfig.sanitize(buildConfigForConnect(config))
+            }
+            if (prepared == null) {
+                phase = Phase.OFF
+                connectionError = s.errBadConfig
+                return@launch
+            }
             val result = withContext(Dispatchers.IO) { tunnel.connect(prepared) }
             when (result) {
                 is WindowsTunnel.Result.Success -> {
@@ -551,32 +563,58 @@ object KeyParser {
     fun extractServer(key: String): ServerInfo? {
         val payload = key.removePrefix("vpn://")
         val data = decodeBase64Flexible(payload) ?: return null
-
         val text = runCatching { String(data, Charsets.UTF_8) }.getOrNull()
-        if (text != null && (text.contains("[Interface]") || text.contains("[Peer]"))) {
+
+        // 1) Ключ — сам по себе wg-quick конфиг.
+        //    Проверяем именно секцию с начала строки: JSON Amnezia тоже
+        //    содержит подстроку «[Interface]» внутри поля, и наивная проверка
+        //    возвращала всю JSON-обёртку вместо конфига.
+        if (text != null && isWgQuick(text)) {
             return ServerInfo(host = endpointHost(text) ?: "", config = text)
         }
 
-        decodeQCompressedJson(data)?.let { json ->
-            return ServerInfo(host = findHost(json) ?: "", config = findConfig(json))
-        }
+        // 2) JSON, сжатый qCompress (формат Amnezia)
+        decodeQCompressedJson(data)?.let { json -> return fromJson(json) }
 
-        runCatching { JSONObject(String(data, Charsets.UTF_8)) }.getOrNull()?.let { json ->
-            return ServerInfo(host = findHost(json) ?: "", config = findConfig(json))
+        // 3) Обычный JSON
+        if (text != null) {
+            parseJson(text)?.let { json -> return fromJson(json) }
         }
 
         return null
     }
 
+    /** Собирает сервер из JSON ключа: хост и текст конфига. */
+    private fun fromJson(json: Any): ServerInfo {
+        val config = findConfig(json)
+        val host = findHost(json)
+            ?: config?.let { endpointHost(it) }
+            ?: ""
+        return ServerInfo(host = host, config = config)
+    }
+
+    /**
+     * Достаёт из ключа текст wg-quick конфига.
+     *
+     * Amnezia кладёт конфиг вглубь JSON: containers[].awg.last_config — это
+     * JSON-*строка*, внутри которой объект с ключом config, и уже там лежит
+     * INI-текст. Наивная проверка «строка содержит [Interface] и [Peer]»
+     * срабатывала на самой JSON-обёртке и возвращала `{"config":"..."}`,
+     * который туннель отвергает («Line must occur in a section»). Поэтому
+     * строку сначала пробуем разобрать как JSON и спускаемся внутрь.
+     */
     private fun findConfig(node: Any?): String? {
         when (node) {
             is JSONObject -> {
+                // Явные ключи Amnezia — самый надёжный путь
+                node.optString("last_config").takeIf { it.isNotEmpty() }?.let { raw ->
+                    findConfig(parseJson(raw) ?: raw)?.let { return it }
+                }
+                node.optString("config").takeIf { it.isNotEmpty() }?.let { raw ->
+                    findConfig(raw)?.let { return it }
+                }
                 for (key in node.keys()) {
-                    val value = node.opt(key)
-                    if (value is String && (value.contains("[Interface]") && value.contains("[Peer]"))) {
-                        return value
-                    }
-                    findConfig(value)?.let { return it }
+                    findConfig(node.opt(key))?.let { return it }
                 }
             }
             is JSONArray -> {
@@ -585,17 +623,34 @@ object KeyParser {
                 }
             }
             is String -> {
-                if (node.contains("[Interface]") && node.contains("[Peer]")) return node
+                // JSON, завёрнутый в строку
+                if (looksLikeJson(node)) {
+                    parseJson(node)?.let { inner -> findConfig(inner)?.let { return it } }
+                } else if (isWgQuick(node)) {
+                    return node
+                }
                 decodeBase64Flexible(node)?.let { bytes ->
                     val inner = runCatching { String(bytes, Charsets.UTF_8) }.getOrNull()
-                    if (inner != null && inner.contains("[Interface]") && inner.contains("[Peer]")) {
-                        return inner
+                    if (inner != null && inner != node) {
+                        findConfig(inner)?.let { return it }
                     }
                 }
             }
         }
         return null
     }
+
+    /** Похоже на JSON, а не на INI-конфиг. */
+    private fun looksLikeJson(text: String): Boolean {
+        val trimmed = text.trimStart()
+        return trimmed.startsWith("{") || trimmed.startsWith("[\"")
+    }
+
+    /** Настоящий wg-quick конфиг: секция [Interface] с начала строки. */
+    private fun isWgQuick(text: String): Boolean =
+        text.contains("[Interface]") &&
+            text.contains("[Peer]") &&
+            text.lineSequence().any { it.trim().equals("[Interface]", ignoreCase = true) }
 
     private fun decodeBase64Flexible(payload: String): ByteArray? {
         val normalized = payload.replace('-', '+').replace('_', '/')

@@ -59,11 +59,22 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showFileSheet by remember { mutableStateOf(false) }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Theme.background)
-    ) {
+    val backdrop = rememberBackdropState()
+
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .backdropSource(backdrop)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Theme.background)
+            )
+            SoftTopOrb()
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -72,7 +83,13 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
                 .navigationBarsPadding()
                 .padding(bottom = 16.dp),
         ) {
-            BackRow(onBack)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            ) {
+                GlassBackButton(backdrop = backdrop, onBack = onBack)
+            }
 
             Text(
                 text = s.settings,
@@ -194,16 +211,45 @@ private fun LanguageCard(state: AppState) {
 
 @Composable
 private fun LangButton(title: String, active: Boolean, onClick: () -> Unit) {
+    val haptics = rememberHaptics()
+    val bg by androidx.compose.animation.animateColorAsState(
+        targetValue = if (active) Theme.accent else Color.Transparent,
+        animationSpec = androidx.compose.animation.core.tween(220),
+        label = "langBg",
+    )
+    val fg by androidx.compose.animation.animateColorAsState(
+        targetValue = if (active) Color.White else Theme.text.copy(alpha = 0.5f),
+        animationSpec = androidx.compose.animation.core.tween(220),
+        label = "langFg",
+    )
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(9.dp))
-            .background(if (active) Theme.accent else Color.Transparent)
-            .noRippleClickable(onClick = onClick)
+            .background(bg)
+            .noRippleClickable {
+                haptics.selection()
+                onClick()
+            }
             .padding(horizontal = 17.dp, vertical = 6.dp),
     ) {
-        Text(
-            text = title,
-            style = manrope(13.sp, W.bold, if (active) Color.White else Theme.text.copy(alpha = 0.5f)),
+        Text(text = title, style = manrope(13.sp, W.bold, fg))
+    }
+}
+
+/** Мягкий тёплый ореол сверху — даёт стеклу, что преломлять. */
+@Composable
+fun SoftTopOrb() {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val center = androidx.compose.ui.geometry.Offset(size.width * 0.7f, 40.dp.toPx())
+        val radius = 260.dp.toPx()
+        drawCircle(
+            brush = androidx.compose.ui.graphics.Brush.radialGradient(
+                colors = listOf(Theme.accent.copy(alpha = 0.10f), Color.Transparent),
+                center = center,
+                radius = radius,
+            ),
+            radius = radius,
+            center = center,
         )
     }
 }
@@ -229,32 +275,6 @@ private fun ToggleRow(
         Spacer(Modifier.width(14.dp))
 
         OrangeToggle(checked = checked, onChange = onChange)
-    }
-}
-
-@Composable
-fun BackRow(onBack: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .clip(CircleShape)
-                .noRippleClickable(onClick = onBack)
-                .padding(vertical = 6.dp, horizontal = 4.dp),
-        ) {
-            Icon(
-                imageVector = Icons.chevronRight,
-                contentDescription = null,
-                tint = Theme.link,
-                modifier = Modifier
-                    .size(24.dp)
-                    .rotate(180f),
-            )
-        }
     }
 }
 

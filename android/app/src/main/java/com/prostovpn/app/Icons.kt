@@ -110,6 +110,10 @@ object Icons {
         strokeIcon("chevronRight", "M9 6l6 6-6 6", strokeWidth = 2f)
     }
 
+    val chevronLeft: ImageVector by lazy {
+        strokeIcon("chevronLeft", "M15 6l-6 6 6 6", strokeWidth = 2.2f)
+    }
+
     val globe: ImageVector by lazy {
         strokeIcon(
             "globe",

@@ -8,8 +8,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -52,10 +58,27 @@ fun RootView(state: AppState = viewModel()) {
             .fillMaxSize()
             .background(Theme.background)
     ) {
-        Crossfade(
+        AnimatedContent(
             targetState = state.isLoggedIn,
-            animationSpec = tween(450),
             label = "root",
+            transitionSpec = {
+                // Плавный «зум-переход» между входом и главным экраном, как в iOS
+                if (targetState) {
+                    (fadeIn(tween(400)) + scaleIn(
+                        initialScale = 0.92f,
+                        animationSpec = spring(dampingRatio = 0.85f, stiffness = 280f),
+                    )).togetherWith(
+                        fadeOut(tween(280)) + scaleOut(targetScale = 1.06f, animationSpec = tween(400))
+                    )
+                } else {
+                    (fadeIn(tween(400)) + scaleIn(
+                        initialScale = 1.06f,
+                        animationSpec = tween(400),
+                    )).togetherWith(
+                        fadeOut(tween(280)) + scaleOut(targetScale = 0.94f, animationSpec = tween(400))
+                    )
+                }
+            },
         ) { loggedIn ->
             if (loggedIn) {
                 HomeScreen(state)

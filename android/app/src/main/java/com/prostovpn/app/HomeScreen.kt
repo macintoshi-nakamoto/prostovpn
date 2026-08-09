@@ -4,7 +4,9 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -52,10 +54,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp
+import kotlinx.coroutines.launch
 
 private enum class HomePage { MAIN, SETTINGS, SUPPORT }
 
@@ -69,16 +75,21 @@ fun HomeScreen(state: AppState) {
         targetState = page,
         label = "home",
         transitionSpec = {
+            // push/pop, как в iOS NavigationStack: пружинный слайд с параллаксом
+            val slideSpring = spring(
+                dampingRatio = 0.92f,
+                stiffness = 300f,
+                visibilityThreshold = IntOffset.VisibilityThreshold,
+            )
             if (targetState != HomePage.MAIN) {
-                // push: экран въезжает справа, как в iOS NavigationStack
-                (slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(380, easing = Theme.springEasing)) + fadeIn(tween(200)))
+                (slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Start, slideSpring) + fadeIn(tween(220)))
                     .togetherWith(
-                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Start, tween(380, easing = Theme.springEasing), targetOffset = { it / 3 }) + fadeOut(tween(380))
+                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Start, slideSpring, targetOffset = { it / 3 }) + fadeOut(tween(420))
                     )
             } else {
-                (slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(380, easing = Theme.springEasing), initialOffset = { it / 3 }) + fadeIn(tween(380)))
+                (slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.End, slideSpring, initialOffset = { it / 3 }) + fadeIn(tween(420)))
                     .togetherWith(
-                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, tween(380, easing = Theme.springEasing)) + fadeOut(tween(200))
+                        slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.End, slideSpring) + fadeOut(tween(220))
                     )
             }
         },
@@ -120,7 +131,7 @@ private fun MainPage(
                     .background(Theme.background)
             )
             TopOrb()
-            PowerGlow(state, powerCenter)
+            PowerGlow(state, backdrop, powerCenter)
         }
 
         Column(
@@ -249,13 +260,24 @@ private fun StatusBlock(state: AppState) {
 
         Spacer(Modifier.height(4.dp))
 
+        val subStyle = manrope(14.sp, W.medium, Theme.textMuted).copy(
+            fontFeatureSettings = "tnum",
+        )
         Box(Modifier.height(20.dp), contentAlignment = Alignment.Center) {
-            Text(
-                text = subText,
-                style = manrope(14.sp, W.medium, Theme.textMuted).copy(
-                    fontFeatureSettings = "tnum",
-                ),
-            )
+            AnimatedContent(
+                targetState = state.phase,
+                label = "sub",
+                transitionSpec = {
+                    fadeIn(tween(280)).togetherWith(fadeOut(tween(180)))
+                },
+            ) { phase ->
+                when (phase) {
+                    Phase.OFF -> Text(text = subText, style = subStyle)
+                    Phase.CONNECTING -> Text(text = "", style = subStyle)
+                    // Цифры таймера «прокручиваются» — как numericText() в iOS
+                    Phase.ON -> RollingText(text = state.formattedDuration, style = subStyle)
+                }
+            }
         }
     }
 }
@@ -278,7 +300,7 @@ private fun TopOrb() {
 }
 
 @Composable
-private fun PowerGlow(state: AppState, center: Offset) {
+private fun PowerGlow(state: AppState, backdrop: BackdropState, center: Offset) {
     val glowAlpha by animateFloatAsState(
         targetValue = if (state.phase == Phase.ON) 1f else 0f,
         animationSpec = tween(450),
@@ -287,6 +309,9 @@ private fun PowerGlow(state: AppState, center: Offset) {
     if (center == Offset.Zero) return
     Canvas(Modifier.fillMaxSize()) {
         if (glowAlpha > 0f) {
+            // центр кнопки переводим из оконных координат в локальные координаты фона,
+            // чтобы glow не съезжал во время слайд-переходов между экранами
+            val local = center - backdrop.positionInWindow
             val radius = 165.dp.toPx()
             drawCircle(
                 brush = Brush.radialGradient(
@@ -294,11 +319,11 @@ private fun PowerGlow(state: AppState, center: Offset) {
                         0.24f to Theme.accent.copy(alpha = 0.25f * glowAlpha),
                         1f to Color.Transparent,
                     ),
-                    center = center,
+                    center = local,
                     radius = radius,
                 ),
                 radius = radius,
-                center = center,
+                center = local,
             )
         }
     }
@@ -316,10 +341,17 @@ private fun PowerButton(
 
     val interaction = remember { MutableInteractionSource() }
     val popScale = remember { Animatable(1f) }
+    val bloom = remember { Animatable(0f) }
 
     LaunchedEffect(state.phase) {
         if (state.phase == Phase.ON) {
             haptics.success()
+            // Кольцо-вспышка расходится от кнопки в момент подключения
+            launch {
+                bloom.snapTo(0.001f)
+                bloom.animateTo(1f, tween(750, easing = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)))
+                bloom.snapTo(0f)
+            }
             popScale.snapTo(0.92f)
             popScale.animateTo(
                 1.03f,
@@ -344,6 +376,20 @@ private fun PowerButton(
         modifier = Modifier.size(200.dp),
         contentAlignment = Alignment.Center,
     ) {
+        // bloom.value читается только в фазе рисования — без рекомпозиций на каждый кадр
+        Canvas(Modifier.fillMaxSize()) {
+            val t = bloom.value
+            if (t > 0f && t < 1f) {
+                val radius = lerp(88.dp.toPx(), 168.dp.toPx(), t)
+                drawCircle(
+                    color = Theme.accent.copy(alpha = (1f - t) * 0.38f),
+                    radius = radius,
+                    center = center,
+                    style = Stroke(width = lerp(2.5.dp.toPx(), 1.dp.toPx(), t)),
+                )
+            }
+        }
+
         // Стеклянный диск
         Box(
             modifier = Modifier
@@ -357,7 +403,11 @@ private fun PowerButton(
                         )
                     )
                 }
-                .scale(popScale.value)
+                .graphicsLayer {
+                    // чтение в graphicsLayer-блоке — без рекомпозиции на кадрах пружины
+                    scaleX = popScale.value
+                    scaleY = popScale.value
+                }
                 .pressScale(interaction, 0.96f)
                 .softShadow(
                     color = Color.Black.copy(alpha = 0.30f),
@@ -371,6 +421,7 @@ private fun PowerButton(
                     refractionHeight = 22.dp,
                     refractionAmount = 20.dp,
                 )
+                .pressHighlight(interaction, 0.05f)
                 .border(1.5.dp, borderColor, CircleShape)
                 .clickable(interactionSource = interaction, indication = null) {
                     haptics.tap()
@@ -386,7 +437,11 @@ private fun PowerButton(
             )
         }
 
-        if (isBusy) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = isBusy,
+            enter = fadeIn(tween(220)),
+            exit = fadeOut(tween(180)),
+        ) {
             SpinnerRing(Modifier.size(176.dp))
         }
     }

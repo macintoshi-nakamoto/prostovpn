@@ -8,6 +8,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -193,6 +194,7 @@ fun GlassCircleButton(
             .pressScale(interaction, 0.92f)
             .clip(CircleShape)
             .liquidGlass(backdrop)
+            .pressHighlight(interaction)
             .clickable(interactionSource = interaction, indication = null) {
                 haptics.tap()
                 onClick()
@@ -200,6 +202,63 @@ fun GlassCircleButton(
         contentAlignment = Alignment.Center,
     ) {
         content()
+    }
+}
+
+/** Стеклянная кнопка «Назад» — chevron в круге liquid glass. */
+@Composable
+fun GlassBackButton(
+    backdrop: BackdropState,
+    onBack: () -> Unit,
+) {
+    GlassCircleButton(backdrop = backdrop, size = 44.dp, onClick = onBack) {
+        androidx.compose.material3.Icon(
+            imageVector = Icons.chevronLeft,
+            contentDescription = null,
+            tint = Theme.text.copy(alpha = 0.85f),
+            modifier = Modifier.size(20.dp).offset(x = (-1).dp),
+        )
+    }
+}
+
+/**
+ * Текст с «прокруткой» цифр при смене значения —
+ * аналог iOS contentTransition(.numericText()).
+ */
+@Composable
+fun RollingText(
+    text: String,
+    style: androidx.compose.ui.text.TextStyle,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        text.forEachIndexed { index, char ->
+            androidx.compose.animation.AnimatedContent(
+                targetState = char,
+                transitionSpec = {
+                    (androidx.compose.animation.slideInVertically(
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = 0.9f,
+                            stiffness = 650f,
+                        ),
+                    ) { height -> height } + androidx.compose.animation.fadeIn(
+                        androidx.compose.animation.core.tween(140)
+                    )).togetherWith(
+                        androidx.compose.animation.slideOutVertically(
+                            animationSpec = androidx.compose.animation.core.spring(
+                                dampingRatio = 0.9f,
+                                stiffness = 650f,
+                            ),
+                        ) { height -> -height } + androidx.compose.animation.fadeOut(
+                            androidx.compose.animation.core.tween(100)
+                        )
+                    )
+                },
+                label = "roll$index",
+            ) { c ->
+                Text(text = c.toString(), style = style)
+            }
+        }
     }
 }
 
@@ -276,9 +335,13 @@ fun ProtocolBadge() {
 /** Оранжевый тумблер — iOS OrangeToggleStyle. */
 @Composable
 fun OrangeToggle(checked: Boolean, onChange: (Boolean) -> Unit) {
+    val haptics = rememberHaptics()
     val thumbOffset by animateDpAsState(
         targetValue = if (checked) 21.5.dp else 2.5.dp,
-        animationSpec = Theme.spring(250),
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = 0.72f,
+            stiffness = 520f,
+        ),
         label = "thumb",
     )
     val fillAlpha by animateFloatAsState(
@@ -298,7 +361,10 @@ fun OrangeToggle(checked: Boolean, onChange: (Boolean) -> Unit) {
                     alpha = fillAlpha,
                 )
             }
-            .noRippleClickable { onChange(!checked) },
+            .noRippleClickable {
+                haptics.selection()
+                onChange(!checked)
+            },
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(

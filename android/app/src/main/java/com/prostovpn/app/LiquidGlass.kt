@@ -268,7 +268,10 @@ fun Modifier.liquidGlass(
         }
 }
 
-/** Масштаб при нажатии — аналог iOS ScaleButtonStyle / interactive glass. */
+/**
+ * Масштаб при нажатии — аналог iOS ScaleButtonStyle / interactive glass:
+ * мгновенный отклик на касание, упругий возврат с лёгким овершутом.
+ */
 fun Modifier.pressScale(
     interactionSource: InteractionSource,
     pressedScale: Float = 0.96f,
@@ -276,8 +279,41 @@ fun Modifier.pressScale(
     val pressed by interactionSource.collectIsPressedAsState()
     val scaleValue by animateFloatAsState(
         targetValue = if (pressed) pressedScale else 1f,
-        animationSpec = Theme.spring(250),
+        animationSpec = if (pressed) {
+            androidx.compose.animation.core.tween(
+                durationMillis = 110,
+                easing = androidx.compose.animation.core.CubicBezierEasing(0.2f, 0f, 0.4f, 1f),
+            )
+        } else {
+            androidx.compose.animation.core.spring(
+                dampingRatio = 0.55f,
+                stiffness = 420f,
+            )
+        },
         label = "pressScale",
     )
     this.scale(scaleValue)
+}
+
+/** Подсветка стекла при нажатии — как у интерактивного glass в iOS 26. */
+fun Modifier.pressHighlight(
+    interactionSource: InteractionSource,
+    maxAlpha: Float = 0.07f,
+): Modifier = composed {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val highlight by animateFloatAsState(
+        targetValue = if (pressed) 1f else 0f,
+        animationSpec = if (pressed) {
+            androidx.compose.animation.core.tween(80)
+        } else {
+            androidx.compose.animation.core.tween(350)
+        },
+        label = "pressHighlight",
+    )
+    drawWithContent {
+        drawContent()
+        if (highlight > 0.01f) {
+            drawRect(Color.White.copy(alpha = maxAlpha * highlight))
+        }
+    }
 }

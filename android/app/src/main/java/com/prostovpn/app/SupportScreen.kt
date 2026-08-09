@@ -35,11 +35,22 @@ fun SupportScreen(state: AppState, onBack: () -> Unit) {
         runCatching { uriHandler.openUri(url) }
     }
 
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(Theme.background)
-    ) {
+    val backdrop = rememberBackdropState()
+
+    Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .backdropSource(backdrop)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Theme.background)
+            )
+            SoftTopOrb()
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -48,7 +59,13 @@ fun SupportScreen(state: AppState, onBack: () -> Unit) {
                 .navigationBarsPadding()
                 .padding(bottom = 16.dp),
         ) {
-            BackRow(onBack)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+            ) {
+                GlassBackButton(backdrop = backdrop, onBack = onBack)
+            }
 
             Column(
                 modifier = Modifier

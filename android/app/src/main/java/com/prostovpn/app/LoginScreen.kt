@@ -2,6 +2,7 @@ package com.prostovpn.app
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -176,9 +177,19 @@ fun LoginScreen(state: AppState) {
                         onSubmit = ::submit,
                     )
 
-                    if (errorText.isNotEmpty()) {
+                    // Текст ошибки держим и во время анимации скрытия
+                    val displayedError = remember { mutableStateOf("") }
+                    if (errorText.isNotEmpty()) displayedError.value = errorText
+
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = errorText.isNotEmpty(),
+                        enter = androidx.compose.animation.expandVertically(Theme.spring(280)) +
+                            androidx.compose.animation.fadeIn(tween(220)),
+                        exit = androidx.compose.animation.shrinkVertically(Theme.spring(220)) +
+                            androidx.compose.animation.fadeOut(tween(150)),
+                    ) {
                         Text(
-                            text = errorText,
+                            text = displayedError.value,
                             style = manrope(13.sp, W.semibold, Theme.accentSoft),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -235,14 +246,15 @@ private fun Header(tagline: String, modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         LogoImage(
-            modifier = Modifier.size(width = 190.dp, height = 127.dp),
-            glowAlpha = 0.35f,
+            modifier = Modifier.size(width = 132.dp, height = 88.dp),
+            glowAlpha = 0.28f,
         )
+
+        Spacer(Modifier.height(10.dp))
 
         Text(
             text = "Prosto VPN",
             style = manrope(28.sp, W.extraBold, Theme.text, letterSpacing = 0.5.sp),
-            modifier = Modifier.offset(y = (-8).dp),
         )
 
         Spacer(Modifier.height(4.dp))
@@ -250,7 +262,6 @@ private fun Header(tagline: String, modifier: Modifier = Modifier) {
         Text(
             text = tagline,
             style = manrope(14.sp, W.medium, Theme.textSecondary),
-            modifier = Modifier.offset(y = (-8).dp),
         )
     }
 }
@@ -453,11 +464,28 @@ private fun SubmitButton(
             .scaleClickable(0.98f, enabled = !isLoading && !isDone, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = text,
-            style = manrope(17.sp, W.bold, Color.White),
-            modifier = Modifier.alpha(contentAlpha),
-        )
+        androidx.compose.animation.AnimatedContent(
+            targetState = text,
+            label = "submitText",
+            transitionSpec = {
+                (androidx.compose.animation.scaleIn(
+                    initialScale = 0.88f,
+                    animationSpec = androidx.compose.animation.core.spring(
+                        dampingRatio = 0.6f,
+                        stiffness = 600f,
+                    ),
+                ) + androidx.compose.animation.fadeIn(tween(160))).togetherWith(
+                    androidx.compose.animation.scaleOut(targetScale = 0.9f, animationSpec = tween(140)) +
+                        androidx.compose.animation.fadeOut(tween(120))
+                )
+            },
+        ) { label ->
+            Text(
+                text = label,
+                style = manrope(17.sp, W.bold, Color.White),
+                modifier = Modifier.alpha(contentAlpha),
+            )
+        }
     }
 }
 

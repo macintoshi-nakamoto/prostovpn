@@ -31,6 +31,7 @@ import (
 
 const usage = `Prosto VPN tunnel engine
 
+  prostovpn-tunnel /start <config.conf>      (без прав, служба уже стоит)
   prostovpn-tunnel /installtunnelservice <config.conf> [report.log]
   prostovpn-tunnel /uninstalltunnelservice <name>
   prostovpn-tunnel /stop <name>
@@ -76,6 +77,13 @@ func main() {
 			fail(1, "не удалось снять туннель: %v", err)
 		}
 
+	case "/start":
+		// Обычное подключение: служба уже стоит, прав не требуется
+		requireArgs(3)
+		if err := startInstalledTunnel(os.Args[2]); err != nil {
+			fail(1, "%v", err)
+		}
+
 	case "/stop":
 		// Мягкая остановка без прав администратора
 		requireArgs(3)
@@ -99,6 +107,83 @@ func main() {
 /** Имя службы туннеля — вынесено ради проверки в тестах. */
 func tunnelServiceName(name string) (string, error) {
 	return services.ServiceNameOfTunnel(name)
+}
+
+/*
+Запускает уже установленную службу туннеля без прав администратора.
+
+Служба остаётся в системе между подключениями, а право на её запуск
+выдано интерактивному пользователю при установке — поэтому обычное
+подключение обходится без UAC. Возврат ошибки означает «так не вышло,
+ставь заново с правами»: службы нет, она от другой сборки или от другого
+конфига.
+*/
+func startInstalledTunnel(configPath string) error {
+	name, err := conf.NameFromPath(configPath)
+	if err != nil {
+		return err
+	}
+	serviceName, err := services.ServiceNameOfTunnel(name)
+	if err != nil {
+		return err
+	}
+	exePath, err := os.Executable()
+	if err != nil {
+		return err
+	}
+
+	/*
+	Права запрашиваем минимальные. mgr.Connect() просит у диспетчера служб
+	полный доступ, которого обычному пользователю не дают, — отказ наступил бы
+	раньше, чем мы дошли до самой службы, и подключение всегда падало бы
+	в запрос администратора.
+	*/
+	serviceName16, err := windows.UTF16PtrFromString(serviceName)
+	if err != nil {
+		return err
+	}
+	scm, err := windows.OpenSCManager(nil, nil, windows.SC_MANAGER_CONNECT)
+	if err != nil {
+		return fmt.Errorf("нет доступа к диспетчеру служб: %w", err)
+	}
+	defer windows.CloseServiceHandle(scm)
+
+	const access = windows.SERVICE_START |
+		windows.SERVICE_QUERY_STATUS |
+		windows.SERVICE_QUERY_CONFIG
+	handle, err := windows.OpenService(scm, serviceName16, access)
+	if err != nil {
+		return fmt.Errorf("служба не установлена или запуск не разрешён: %w", err)
+	}
+	defer windows.CloseServiceHandle(handle)
+	service := &mgr.Service{Name: serviceName, Handle: handle}
+
+	/*
+	Служба могла остаться от прошлой версии приложения или от другого
+	конфига — тогда её нужно пересоздать, а не запускать. Сверяем всю
+	командную строку: в ней и путь к движку, и путь к конфигу.
+	*/
+	cfg, err := service.Config()
+	if err != nil {
+		return fmt.Errorf("не прочитать настройки службы: %w", err)
+	}
+	want := fmt.Sprintf("%q /service %s", exePath, configPath)
+	if !strings.EqualFold(strings.TrimSpace(cfg.BinaryPathName), want) {
+		return fmt.Errorf("служба от другой сборки или конфига")
+	}
+
+	status, err := service.Query()
+	if err != nil {
+		return fmt.Errorf("не опросить службу: %w", err)
+	}
+	if status.State == svc.Running || status.State == svc.StartPending {
+		return nil
+	}
+
+	if err := service.Start(); err != nil {
+		return fmt.Errorf("служба не запустилась: %w", err)
+	}
+	return nil
 }
 
 func requireArgs(n int) {
@@ -310,6 +395,18 @@ func installTunnel(configPath, reportPath string) (err error) {
 	}
 	defer service.Close()
 	step("служба создана")
+
+	/*
+	Пускаем к службе того, кто сидит за машиной. Дальше подключение идёт
+	простым стартом службы, без запроса прав: UAC остаётся только на этой
+	установке. Право не критично — если не выдалось, следующий запуск
+	просто снова спросит администратора.
+	*/
+	if permErr := allowInteractiveUserToStart(windows.Handle(service.Handle)); permErr != nil {
+		step("права на запуск не выданы: %v (подключение будет спрашивать администратора)", permErr)
+	} else {
+		step("запуск без прав администратора разрешён")
+	}
 
 	if err = service.Start(); err != nil {
 		// Не оставляем за собой мёртвую службу — иначе следующая попытка

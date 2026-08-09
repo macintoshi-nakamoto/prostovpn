@@ -85,9 +85,6 @@ func (service *tunnelService) Execute(args []string, r <-chan svc.ChangeRequest,
 			}
 		}()
 
-		if logErr == nil && dev != nil && config != nil {
-			logErr = runScriptCommand(config.Interface.PreDown, config.Name)
-		}
 		if watcher != nil {
 			watcher.Destroy()
 		}
@@ -96,9 +93,6 @@ func (service *tunnelService) Execute(args []string, r <-chan svc.ChangeRequest,
 		}
 		if dev != nil {
 			dev.Close()
-		}
-		if logErr == nil && dev != nil && config != nil {
-			_ = runScriptCommand(config.Interface.PostDown, config.Name)
 		}
 		stopIt <- true
 		log.Println("Shutting down")
@@ -177,12 +171,6 @@ func (service *tunnelService) Execute(args []string, r <-chan svc.ChangeRequest,
 		log.Printf("Using Wintun/%d.%d", (wintunVersion>>16)&0xffff, wintunVersion&0xffff)
 	}
 
-	err = runScriptCommand(config.Interface.PreUp, config.Name)
-	if err != nil {
-		serviceError = services.ErrorRunScript
-		return
-	}
-
 	err = enableFirewall(config, nativeTun)
 	if err != nil {
 		serviceError = services.ErrorFirewall
@@ -243,12 +231,6 @@ func (service *tunnelService) Execute(args []string, r <-chan svc.ChangeRequest,
 			go dev.IpcHandle(conn)
 		}
 	}()
-
-	err = runScriptCommand(config.Interface.PostUp, config.Name)
-	if err != nil {
-		serviceError = services.ErrorRunScript
-		return
-	}
 
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 	log.Println("Startup complete")

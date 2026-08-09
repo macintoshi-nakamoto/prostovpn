@@ -49,10 +49,6 @@ type Interface struct {
 	MTU        uint16
 	DNS        []net.IP
 	DNSSearch  []string
-	PreUp      string
-	PostUp     string
-	PreDown    string
-	PostDown   string
 	TableOff   bool
 
 	// KillSwitch = off: не взводить блокирующие правила брандмауэра при

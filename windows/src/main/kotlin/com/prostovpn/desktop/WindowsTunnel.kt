@@ -200,14 +200,25 @@ class WindowsTunnel {
         // Чужое состояние от прошлого подключения приняли бы за своё
         File(dataDir(), "state.txt").delete()
 
-        // 60 секунд: на чистой машине первое подключение ещё ставит драйвер Wintun
-        val install = runElevated(
-            exe,
-            listOf("/installtunnelservice", configFile.absolutePath, report.absolutePath),
-            waitSeconds = 60,
-        )
-        if (install == ElevationResult.Denied) {
-            return Result.Failure(Reason.ElevationDenied)
+        /*
+        Служба туннеля остаётся в системе между подключениями, а право её
+        запускать выдано тому, кто сидит за машиной. Поэтому обычное
+        подключение — это просто старт службы, без запроса прав.
+
+        Права нужны, только когда службы ещё нет или она от прошлой сборки:
+        тогда ставим заново. Так UAC остаётся ровно на первом подключении
+        и после обновления приложения.
+        */
+        if (run(exe, "/start", configFile.absolutePath) == null) {
+            // 60 секунд: на чистой машине первое подключение ещё ставит драйвер Wintun
+            val install = runElevated(
+                exe,
+                listOf("/installtunnelservice", configFile.absolutePath, report.absolutePath),
+                waitSeconds = 60,
+            )
+            if (install == ElevationResult.Denied) {
+                return Result.Failure(Reason.ElevationDenied)
+            }
         }
 
         val deadline = System.currentTimeMillis() + 20_000
@@ -328,15 +339,16 @@ class WindowsTunnel {
     /**
      * Снимает туннель. Блокирующий вызов.
      *
-     * Сначала просим службу остановиться сама — это не требует прав и не
-     * дёргает UAC. Мёртвую (остановленную) службу удалит следующее
-     * подключение. Если событие не сработало, снимаем с повышением прав.
+     * Служба останавливается по событию — это не требует прав и не дёргает
+     * UAC. Саму службу оставляем установленной: следующее подключение её
+     * просто запустит, и запрос прав больше не понадобится.
+     *
+     * Удаляем только если остановиться она отказалась: висящая служба
+     * держит адаптер, и это хуже одного запроса прав.
      */
     fun disconnect() {
         if (!isWindows) return
         val exe = backend ?: findBackend() ?: return
-        // Службы нет или она уже мертва — снимет следующее подключение,
-        // ради этого не стоит показывать запрос прав.
         if (state() in setOf("ABSENT", "STOPPED")) return
 
         if (run(exe, "/stop", TUNNEL_NAME) != null) {

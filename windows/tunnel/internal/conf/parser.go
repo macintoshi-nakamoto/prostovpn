@@ -410,14 +410,17 @@ func FromWgQuick(s string, name string) (*Config, error) {
 						conf.Interface.DNS = append(conf.Interface.DNS, a)
 					}
 				}
-			case "preup":
-				conf.Interface.PreUp = val
-			case "postup":
-				conf.Interface.PostUp = val
-			case "predown":
-				conf.Interface.PreDown = val
-			case "postdown":
-				conf.Interface.PostDown = val
+			case "preup", "postup", "predown", "postdown":
+				/*
+				Скрипты не поддерживаем принципиально, а не «по умолчанию
+				выключены». Служба туннеля живёт постоянно и запускается
+				обычным пользователем без запроса прав, а конфиг лежит в
+				его же профиле — с этими ключами любой, кто сидит за
+				машиной, выполнил бы команду от имени SYSTEM.
+				*/
+				return nil, &ParseError{
+					l18n.Sprintf("Script keys are not supported"), key,
+				}
 			case "table":
 				tableOff, err := parseTableOff(val)
 				if err != nil {
@@ -516,11 +519,8 @@ func FromUAPI(reader io.Reader, existingConfig *Config) (*Config, error) {
 			DNS:                        existingConfig.Interface.DNS,
 			DNSSearch:                  existingConfig.Interface.DNSSearch,
 			MTU:                        existingConfig.Interface.MTU,
-			PreUp:                      existingConfig.Interface.PreUp,
-			PostUp:                     existingConfig.Interface.PostUp,
-			PreDown:                    existingConfig.Interface.PreDown,
-			PostDown:                   existingConfig.Interface.PostDown,
 			TableOff:                   existingConfig.Interface.TableOff,
+			KillSwitchOff:              existingConfig.Interface.KillSwitchOff,
 			JunkPacketCount:            existingConfig.Interface.JunkPacketCount,
 			JunkPacketMinSize:          existingConfig.Interface.JunkPacketMinSize,
 			JunkPacketMaxSize:          existingConfig.Interface.JunkPacketMaxSize,

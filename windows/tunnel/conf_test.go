@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"golang.org/x/sys/windows"
+
 	"github.com/prostovpn/prostovpn-tunnel/internal/conf"
 )
 
@@ -156,11 +158,66 @@ func TestKillSwitchKeyParses(t *testing.T) {
 	}
 }
 
+/*
+Скрипты обязаны отвергаться разбором, а не «выключаться по умолчанию».
+
+Служба туннеля остаётся установленной и запускается обычным пользователем
+без прав, а конфиг лежит в его профиле. Поддержи движок PreUp/PostUp — и
+любой, кто сидит за машиной, выполнил бы команду от имени SYSTEM.
+*/
+func TestScriptKeysAreRejected(t *testing.T) {
+	for _, key := range []string{"PreUp", "PostUp", "PreDown", "PostDown"} {
+		broken := strings.Replace(amneziaConfig, "MTU = 1376",
+			"MTU = 1376\n"+key+" = calc.exe", 1)
+		if _, err := conf.FromWgQuick(broken, "prostovpn"); err == nil {
+			t.Errorf("движок принял %s — это выполнение команд от имени SYSTEM", key)
+		}
+	}
+}
+
 func TestUnknownKeyIsRejected(t *testing.T) {
 	// Мобильные ключи приложение обязано отсеивать: движок на них падает
 	broken := strings.Replace(amneziaConfig, "[Peer]", "ExcludedApplications = com.foo\n\n[Peer]", 1)
 	if _, err := conf.FromWgQuick(broken, "prostovpn"); err == nil {
 		t.Fatal("движок принял незнакомый ключ — проверка санитайзера потеряла смысл")
+	}
+}
+
+/*
+Права на службу должны разбираться Windows и давать интерактивному
+пользователю запуск и остановку — на этом держится подключение без UAC.
+
+Опечатка в SDDL иначе всплыла бы только на живой машине: выдача прав
+не критична и лишь пишется в отчёт установки.
+*/
+func TestTunnelServiceSDDLIsValid(t *testing.T) {
+	sd, err := windows.SecurityDescriptorFromString(tunnelServiceSDDL)
+	if err != nil {
+		t.Fatalf("Windows не понимает права службы: %v", err)
+	}
+	dacl, _, err := sd.DACL()
+	if err != nil {
+		t.Fatalf("список прав не читается: %v", err)
+	}
+	if dacl == nil {
+		t.Fatal("список прав пуст — служба осталась бы без ограничений")
+	}
+
+	back := sd.String()
+	for _, want := range []string{
+		";;;SY)", // SYSTEM
+		";;;BA)", // администраторы
+		";;;IU)", // тот, кто сидит за машиной
+	} {
+		if !strings.Contains(back, want) {
+			t.Errorf("в правах нет %s: %s", want, back)
+		}
+	}
+	// Всем подряд права давать нельзя: службу запускают и по сети
+	for _, forbidden := range []string{";;;AU)", ";;;WD)", ";;;BU)"} {
+		if strings.Contains(back, forbidden) {
+			t.Errorf("права выданы слишком широко (%s): %s", forbidden, back)
+		}
 	}
 }
 

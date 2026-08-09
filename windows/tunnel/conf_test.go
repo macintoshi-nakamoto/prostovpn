@@ -7,6 +7,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/prostovpn/prostovpn-tunnel/internal/conf"
+	"github.com/prostovpn/prostovpn-tunnel/internal/tunnel/winipcfg"
 )
 
 /*
@@ -244,6 +245,41 @@ func TestServiceCommandLineMatchesWindows(t *testing.T) {
 	}
 	if strings.Contains(got, `\\`) {
 		t.Errorf("обратные слэши экранированы — сверка пути не совпадёт: %s", got)
+	}
+}
+
+/*
+Кэш DNS должен чиститься при отключении и без прав администратора.
+
+Пока туннель поднят, имена разрешаются через DNS провайдера VPN и оседают
+в кэше на своё время жизни — обычно минуты. Не почистив его, после
+отключения браузер продолжает ходить по адресам из VPN, и это выглядит
+так, будто туннель ещё работает.
+*/
+func TestDNSCacheFlushWorksWithoutAdmin(t *testing.T) {
+	if err := flushDNSCache(); err != nil {
+		t.Fatalf("кэш DNS не чистится: %v", err)
+	}
+}
+
+/*
+Проверка адаптера — то, по чему отключение понимает, что туннель снят.
+Маршруты уходят вместе с адаптером, поэтому ждать надо именно его.
+*/
+func TestTunnelAdapterLookup(t *testing.T) {
+	if tunnelAdapterPresent("заведомо-несуществующий-адаптер-9f3a") {
+		t.Fatal("найден адаптер, которого нет")
+	}
+	// Хотя бы один адаптер в системе есть всегда — значит перебор работает
+	interfaces, err := winipcfg.GetAdaptersAddresses(windows.AF_UNSPEC, winipcfg.GAAFlagDefault)
+	if err != nil {
+		t.Skipf("список адаптеров недоступен: %v", err)
+	}
+	if len(interfaces) == 0 {
+		t.Skip("в системе нет адаптеров")
+	}
+	if !tunnelAdapterPresent(interfaces[0].FriendlyName()) {
+		t.Errorf("существующий адаптер %q не найден", interfaces[0].FriendlyName())
 	}
 }
 

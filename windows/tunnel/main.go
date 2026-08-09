@@ -33,6 +33,7 @@ const usage = `Prosto VPN tunnel engine
 
   prostovpn-tunnel /start <config.conf>      (без прав, служба уже стоит)
   prostovpn-tunnel /installtunnelservice <config.conf> [report.log]
+  prostovpn-tunnel /down <name>              (снять туннель целиком, без прав)
   prostovpn-tunnel /uninstalltunnelservice <name>
   prostovpn-tunnel /stop <name>
   prostovpn-tunnel /status <name>
@@ -81,6 +82,13 @@ func main() {
 		// Обычное подключение: служба уже стоит, прав не требуется
 		requireArgs(3)
 		if err := startInstalledTunnel(os.Args[2]); err != nil {
+			fail(1, "%v", err)
+		}
+
+	case "/down":
+		// Отключение целиком: сигнал, ожидание, проверка, чистка кэша DNS
+		requireArgs(3)
+		if err := downTunnel(os.Args[2]); err != nil {
 			fail(1, "%v", err)
 		}
 

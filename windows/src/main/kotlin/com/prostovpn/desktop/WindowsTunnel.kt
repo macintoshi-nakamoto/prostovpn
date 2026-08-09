@@ -337,30 +337,32 @@ class WindowsTunnel {
     }
 
     /**
-     * Снимает туннель. Блокирующий вызов.
+     * Снимает туннель. Возвращается, только когда он действительно снят.
      *
-     * Служба останавливается по событию — это не требует прав и не дёргает
-     * UAC. Саму службу оставляем установленной: следующее подключение её
-     * просто запустит, и запрос прав больше не понадобится.
+     * Вся работа — один вызов движка: он останавливает службу, дожидается
+     * исчезновения адаптера и чистит кэш DNS. Прав не требует.
      *
-     * Удаляем только если остановиться она отказалась: висящая служба
-     * держит адаптер, и это хуже одного запроса прав.
+     * Раньше здесь была цепочка запусков — спросить состояние, послать
+     * сигнал, снова спросить, — и всё это время приложение уже показывало
+     * «отключено», хотя адаптер жил и уводил трафик в VPN.
+     *
+     * Ждём именно исчезновения адаптера, а не остановки службы: маршруты
+     * снимаются вместе с ним, и до этого момента трафик идёт в туннель.
+     *
+     * @return снят ли туннель на самом деле
      */
-    fun disconnect() {
-        if (!isWindows) return
-        val exe = backend ?: findBackend() ?: return
-        if (state() in setOf("ABSENT", "STOPPED")) return
+    fun disconnect(): Boolean {
+        if (!isWindows) return true
+        val exe = backend ?: findBackend() ?: return false
 
-        if (run(exe, "/stop", TUNNEL_NAME) != null) {
-            val deadline = System.currentTimeMillis() + 8_000
-            while (System.currentTimeMillis() < deadline) {
-                val current = state()
-                if (current == "STOPPED" || current == "ABSENT") return
-                Thread.sleep(300)
-            }
-        }
+        if (run(exe, "/down", TUNNEL_NAME, timeoutSeconds = 30) != null) return true
 
+        /*
+        Не снялся сам. Висящий туннель держит адаптер и маршруты — это
+        хуже запроса прав, поэтому сносим службу принудительно.
+        */
         runElevated(exe, listOf("/uninstalltunnelservice", TUNNEL_NAME), waitSeconds = 20)
+        return state() in setOf("ABSENT", "STOPPED")
     }
 
     // --- Служебное ---
@@ -433,12 +435,12 @@ class WindowsTunnel {
     }
 
     /** Запуск движка без повышения прав; null — не удалось выполнить. */
-    private fun run(exe: File, vararg args: String): String? = runCatching {
+    private fun run(exe: File, vararg args: String, timeoutSeconds: Long = 15): String? = runCatching {
         val process = ProcessBuilder(listOf(exe.absolutePath) + args)
             .redirectErrorStream(true)
             .start()
         val output = process.inputStream.bufferedReader().use { it.readText() }
-        if (!process.waitFor(15, TimeUnit.SECONDS)) {
+        if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
             process.destroyForcibly()
             return null
         }

@@ -59,7 +59,12 @@ data class TunnelFile(
     val isDefault: Boolean = false,
 )
 
-enum class Phase { OFF, CONNECTING, ON }
+/**
+ * DISCONNECTING — не косметика. Снятие туннеля занимает секунды: пока не
+ * исчез адаптер, трафик всё ещё идёт в VPN. Показывать в это время
+ * «отключено» — врать пользователю о том, куда уходят его пакеты.
+ */
+enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
 
 /**
  * Состояние приложения. Подключение в тестовой сборке для Windows —
@@ -398,6 +403,8 @@ class AppState(private val scope: CoroutineScope) {
     fun toggleConnection() {
         when (phase) {
             Phase.CONNECTING, Phase.ON -> disconnect()
+            // Снятие уже идёт — повторное нажатие не должно его перебивать
+            Phase.DISCONNECTING -> Unit
             Phase.OFF -> startConnect()
         }
     }
@@ -556,10 +563,21 @@ class AppState(private val scope: CoroutineScope) {
         timerJob?.cancel()
         connectJob = null
         timerJob = null
-        phase = Phase.OFF
+        /*
+        Держим DISCONNECTING, пока туннель действительно не снят. Раньше
+        здесь сразу ставилось OFF, а снятие уходило в фон: несколько секунд
+        интерфейс показывал «отключено», хотя адаптер жил и весь трафик
+        по-прежнему шёл через VPN.
+        */
+        phase = Phase.DISCONNECTING
         // seconds не обнуляем: уходящий таймер дофейдится с последним значением
-        scope.launch(Dispatchers.IO) {
-            runCatching { tunnel.disconnect() }
+        connectJob = scope.launch {
+            val down = withContext(Dispatchers.IO) {
+                runCatching { tunnel.disconnect() }.getOrDefault(false)
+            }
+            phase = Phase.OFF
+            connectJob = null
+            if (!down) connectionError = s.errDisconnectStuck
         }
     }
 

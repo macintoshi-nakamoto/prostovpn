@@ -7,6 +7,7 @@ package tunnel
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"net"
 	"sort"
@@ -55,6 +56,33 @@ func cleanupAddressesOnDisconnectedInterfaces(family winipcfg.AddressFamily, add
 			}
 		}
 	}
+}
+
+/*
+Имя работающего адаптера, который уже держит один из наших адресов.
+
+Пустая строка — виновник не найден: значит адрес занят не адаптером,
+и общая ошибка Windows точнее нашей догадки.
+*/
+func adapterHoldingAddress(family winipcfg.AddressFamily, addresses []net.IPNet) string {
+	interfaces, err := winipcfg.GetAdaptersAddresses(family, winipcfg.GAAFlagDefault)
+	if err != nil {
+		return ""
+	}
+	for _, iface := range interfaces {
+		if iface.OperStatus != winipcfg.IfOperStatusUp {
+			continue
+		}
+		for address := iface.FirstUnicastAddress; address != nil; address = address.Next {
+			ip := address.Address.IP()
+			for _, want := range addresses {
+				if want.IP.Equal(ip) {
+					return iface.FriendlyName()
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func configureInterface(family winipcfg.AddressFamily, conf *conf.Config, tun *tun.NativeTun) error {
@@ -107,6 +135,19 @@ func configureInterface(family winipcfg.AddressFamily, conf *conf.Config, tun *t
 	if err == windows.ERROR_OBJECT_ALREADY_EXISTS {
 		cleanupAddressesOnDisconnectedInterfaces(family, addresses)
 		err = luid.SetIPAddressesForFamily(family, addresses)
+	}
+	if err == windows.ERROR_OBJECT_ALREADY_EXISTS {
+		/*
+		Адрес держит живой адаптер: очистка выше трогает только отключённые
+		интерфейсы, а тут почти всегда другой VPN, поднятый на том же ключе.
+		Отобрать адрес у чужого работающего соединения нельзя, но и молчать
+		нельзя: без этого в журнале Windows остаётся одно лишь
+		«The object already exists», по которому ничего не понять.
+		*/
+		if holder := adapterHoldingAddress(family, addresses); holder != "" {
+			return fmt.Errorf(
+				"адрес туннеля занят адаптером «%s» — отключите другой VPN", holder)
+		}
 	}
 	if err != nil {
 		return err

@@ -121,6 +121,40 @@ object SplitTunnel {
     fun allowedIpsExcept(excludeCidrs: List<String>): String =
         (complement(excludeCidrs) + "::/0").joinToString(", ")
 
+    /**
+     * Адрес VPN-сервера из `Endpoint` в виде `/32` — его нельзя загонять
+     * в туннель.
+     *
+     * При раздельном туннелировании список исключений разворачивается в
+     * тысячи подсетей, и сервер запросто попадает в одну из них: для
+     * 89.125.138.227 это была 89.120.0.0/13. Тогда маршрут до сервера ведёт
+     * в сам туннель, то есть пакеты рукопожатия должны выйти через
+     * соединение, которого ещё нет.
+     *
+     * Возвращает null, если Endpoint задан именем, а не адресом IPv4:
+     * имя резолвит уже движок, и подсети для него мы не знаем.
+     */
+    fun endpointCidr(configText: String): String? {
+        var section = ""
+        for (rawLine in configText.lineSequence()) {
+            val line = rawLine.substringBefore('#').trim()
+            if (line.isEmpty()) continue
+            if (line.startsWith("[") && line.endsWith("]")) {
+                section = line.trim('[', ']').lowercase()
+                continue
+            }
+            if (section != "peer") continue
+            val key = line.substringBefore('=', "").trim()
+            if (!key.equals("endpoint", ignoreCase = true)) continue
+
+            val value = line.substringAfter('=').trim()
+            // IPv6-эндпоинт пишут как [::1]:51820 — порт отделяем по последнему ':'
+            val host = value.substringBeforeLast(':', value).trim().trim('[', ']')
+            return if (ipToLong(host) != null) "$host/32" else null
+        }
+        return null
+    }
+
     fun applyToConfig(configText: String, allowedIps: String): String {
         val regex = Regex("(?im)^[ \\t]*AllowedIPs[ \\t]*=.*(?:\\r?\\n)?")
         var replaced = false

@@ -149,6 +149,9 @@ class AppState(private val scope: CoroutineScope) {
     /** Кэш вычисленных AllowedIPs — пересчёт списка исключений недёшев. */
     private var cachedAllowedIps: String? = null
 
+    /** Для какого адреса сервера посчитан [cachedAllowedIps]. */
+    private var cachedAllowedIpsKey: String? = null
+
     /** Содержимое активного списка исключений (свой файл или встроенный). */
     private fun activeListContent(): String? {
         val active = tunnelFiles.firstOrNull { it.id == activeTunnelFileId }
@@ -359,7 +362,9 @@ class AppState(private val scope: CoroutineScope) {
         val language = lang
         runCatching { prefs.clear() }
         prefs.put("lang", language)
-        splitTunnelEnabled = true
+        // Как и при первом запуске: список исключений разворачивается в
+        // ~2000 маршрутов, поэтому по умолчанию выключено (см. split.enabled)
+        splitTunnelEnabled = false
         killSwitch = true
         autoStart = false
         autoConnect = false
@@ -437,6 +442,8 @@ class AppState(private val scope: CoroutineScope) {
                         WindowsTunnel.Reason.NoBackend -> s.errNoBackend
                         WindowsTunnel.Reason.ElevationDenied -> s.errElevation
                         WindowsTunnel.Reason.UnsupportedOs -> s.errUnsupportedOs
+                        WindowsTunnel.Reason.AddressInUse ->
+                            s.errAddressInUse + " «" + result.detail + "»"
                         WindowsTunnel.Reason.NoHandshake ->
                             // Журнал движка различает четыре разные беды — без
                             // этого все они выглядят как «просто не работает»
@@ -471,13 +478,24 @@ class AppState(private val scope: CoroutineScope) {
         if (!splitTunnelEnabled) {
             return SplitTunnel.applyToConfig(base, "0.0.0.0/0, ::/0")
         }
+        /*
+        Сам VPN-сервер в туннель не заворачиваем: список исключений
+        разворачивается в тысячи подсетей, и адрес сервера легко попадает
+        в одну из них — тогда маршрут до него ведёт в туннель, которого ещё
+        нет. Адрес зависит от выбранного сервера, поэтому он часть ключа кэша.
+        */
+        val endpoint = SplitTunnel.endpointCidr(base)
         val cached = cachedAllowedIps
-        if (cached != null) return SplitTunnel.applyToConfig(base, cached)
+        if (cached != null && cachedAllowedIpsKey == endpoint) {
+            return SplitTunnel.applyToConfig(base, cached)
+        }
 
         val content = activeListContent()
-        val excluded = if (content == null) emptyList() else SplitTunnel.parseCidrList(content)
+        val fromList = if (content == null) emptyList() else SplitTunnel.parseCidrList(content)
+        val excluded = fromList + listOfNotNull(endpoint)
         val allowed = SplitTunnel.allowedIpsExcept(excluded)
         cachedAllowedIps = allowed
+        cachedAllowedIpsKey = endpoint
         return SplitTunnel.applyToConfig(base, allowed)
     }
 

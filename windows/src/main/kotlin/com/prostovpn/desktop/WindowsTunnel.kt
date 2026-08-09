@@ -62,6 +62,12 @@ class WindowsTunnel {
         /** Служба не поднялась: неверный конфиг, занятый адаптер, блокировка. */
         TunnelFailed,
 
+        /**
+         * Адрес туннеля уже занят другим работающим VPN — Windows не отдаёт
+         * один адрес двум адаптерам. В [Result.Failure.detail] имя виновника.
+         */
+        AddressInUse,
+
         /** Туннель поднят, но сервер не отвечает на рукопожатие. */
         NoHandshake,
 
@@ -164,6 +170,16 @@ class WindowsTunnel {
         val exe = findBackend() ?: return Result.Failure(Reason.NoBackend)
         backend = exe
 
+        /*
+        Ключ задаёт клиенту фиксированный адрес. Если тем же ключом уже поднят
+        другой VPN, адрес занят его адаптером, и служба всё равно умрёт с
+        «The object already exists». Ловим это до UAC: незачем спрашивать
+        права ради заведомо провального запуска.
+        */
+        AdapterConflict.holderOf(configText)?.let { holder ->
+            return Result.Failure(Reason.AddressInUse, holder)
+        }
+
         // Имя файла задаёт имя туннеля и имя службы — менять нельзя.
         val configFile = File(dataDir(), "$TUNNEL_NAME.conf")
         runCatching { configFile.writeText(configText.normalizeNewlines()) }
@@ -241,8 +257,13 @@ class WindowsTunnel {
             бывает, когда маршрут по умолчанию уводит в сам туннель: тогда
             сокет привязывается к «чёрной дыре» и наружу не уходит ничего.
             Проверяем первым — иначе это выглядит как молчащий сервер.
+
+            Только про IPv4: без IPv6 наружу движок штатно глушит v6-сокет
+            («Binding v6 socket to interface 0 (blackhole=true)»), и это не
+            беда, а норма. Раньше проверка ловила именно эту строку и ставила
+            ложный диагноз на каждом обычном отказе.
             */
-            text.contains("blackhole=true", ignoreCase = true) -> HandshakeDiag.BLACKHOLE
+            BLACKHOLE_V4.containsMatchIn(text) -> HandshakeDiag.BLACKHOLE
 
             // Ответы дошли, но не прошли криптопроверку — ключ не подходит
             listOf("invalid mac1", "invalid response message", "invalid initiation message")
@@ -397,6 +418,12 @@ class WindowsTunnel {
         if (process.exitValue() != 0) null else output
     }.getOrNull()
 }
+
+/**
+ * «Чёрная дыра» именно на IPv4-сокете. Глушение IPv6 — штатное поведение
+ * на сетях без IPv6 и о неисправности не говорит.
+ */
+private val BLACKHOLE_V4 = Regex("""Binding v4 socket to interface \d+ \(blackhole=true\)""")
 
 /** Win32 ERROR_CANCELLED — пользователь отклонил запрос UAC. */
 private const val ERROR_CANCELLED = 1223

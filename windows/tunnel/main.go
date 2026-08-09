@@ -110,6 +110,18 @@ func tunnelServiceName(name string) (string, error) {
 }
 
 /*
+Командная строка службы туннеля — ровно в том виде, в каком её вернёт
+Windows в BinaryPathName.
+
+Собирается вручную, а не через %q: тот экранирует обратные слэши
+(C:\\Program Files\\…), сверка с настоящим путём никогда не совпадала,
+и подключение каждый раз уходило в установку с правами администратора.
+*/
+func serviceCommandLine(exePath, configPath string) string {
+	return `"` + exePath + `" /service ` + configPath
+}
+
+/*
 Запускает уже установленную службу туннеля без прав администратора.
 
 Служба остаётся в системе между подключениями, а право на её запуск
@@ -167,7 +179,7 @@ func startInstalledTunnel(configPath string) error {
 	if err != nil {
 		return fmt.Errorf("не прочитать настройки службы: %w", err)
 	}
-	want := fmt.Sprintf("%q /service %s", exePath, configPath)
+	want := serviceCommandLine(exePath, configPath)
 	if !strings.EqualFold(strings.TrimSpace(cfg.BinaryPathName), want) {
 		return fmt.Errorf("служба от другой сборки или конфига")
 	}

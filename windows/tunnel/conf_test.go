@@ -221,6 +221,32 @@ func TestTunnelServiceSDDLIsValid(t *testing.T) {
 	}
 }
 
+/*
+Командная строка должна совпадать с тем, что Windows отдаёт в
+BinaryPathName, байт в байт.
+
+По ней решается, можно ли просто запустить уже установленную службу.
+Не совпало — приложение считает службу чужой и лезет за правами
+администратора. Так и было: %q экранировал обратные слэши, сверка не
+совпадала никогда, и UAC появлялся на каждом подключении.
+*/
+func TestServiceCommandLineMatchesWindows(t *testing.T) {
+	const exe = `C:\Program Files\Prosto VPN\app\resources\prostovpn-tunnel.exe`
+	const cfg = `C:\Users\Egorik\AppData\Local\ProstoVPN\prostovpn.conf`
+
+	// Ровно эта строка лежит в PathName живой службы
+	const fromWindows = `"C:\Program Files\Prosto VPN\app\resources\prostovpn-tunnel.exe"` +
+		` /service C:\Users\Egorik\AppData\Local\ProstoVPN\prostovpn.conf`
+
+	got := serviceCommandLine(exe, cfg)
+	if got != fromWindows {
+		t.Errorf("не совпадает с Windows:\n  собрали: %s\n  Windows: %s", got, fromWindows)
+	}
+	if strings.Contains(got, `\\`) {
+		t.Errorf("обратные слэши экранированы — сверка пути не совпадёт: %s", got)
+	}
+}
+
 func TestServiceNameIsOurs(t *testing.T) {
 	name, err := tunnelServiceName("prostovpn")
 	if err != nil {

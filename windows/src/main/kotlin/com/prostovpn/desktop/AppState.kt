@@ -437,7 +437,15 @@ class AppState(private val scope: CoroutineScope) {
                         WindowsTunnel.Reason.NoBackend -> s.errNoBackend
                         WindowsTunnel.Reason.ElevationDenied -> s.errElevation
                         WindowsTunnel.Reason.UnsupportedOs -> s.errUnsupportedOs
-                        WindowsTunnel.Reason.NoHandshake -> s.errNoHandshake
+                        WindowsTunnel.Reason.NoHandshake ->
+                            // Сервер мог ждать маскировку, которую движок не умеет —
+                            // без подсказки это выглядит как «просто не работает»
+                            listOfNotNull(
+                                s.errNoHandshake,
+                                WgConfig.unsupportedKeys(config)
+                                    .takeIf { it.isNotEmpty() }
+                                    ?.let { s.errUnsupportedObfuscation + " " + it.joinToString(", ") },
+                            ).joinToString(" · ")
                         WindowsTunnel.Reason.TunnelFailed ->
                             listOfNotNull(s.errTunnel, result.detail.takeIf { it.isNotBlank() })
                                 .joinToString(" · ")

@@ -30,6 +30,33 @@ object WgConfig {
         "publickey", "presharedkey", "allowedips", "endpoint", "persistentkeepalive",
     )
 
+    /**
+     * Параметры маскировки из AmneziaWG 2.x, которых наш движок не знает.
+     *
+     * Их приходится выбрасывать: движок отвергает конфиг целиком из-за
+     * незнакомого ключа. Но если сервер их ждёт, рукопожатия не будет —
+     * молчать об этом нельзя, поэтому список отдаём наружу для подсказки.
+     */
+    private val unsupportedObfuscation = setOf("j1", "j2", "j3", "itime")
+
+    /** Параметры маскировки из ключа, которые движок не поддерживает. */
+    fun unsupportedKeys(configText: String): List<String> {
+        val found = linkedSetOf<String>()
+        var section = ""
+        for (rawLine in configText.lineSequence()) {
+            val line = rawLine.substringBefore('#').trim()
+            if (line.isEmpty()) continue
+            if (line.startsWith("[") && line.endsWith("]")) {
+                section = line.trim('[', ']').lowercase()
+                continue
+            }
+            if (section != "interface") continue
+            val key = line.substringBefore('=', "").trim()
+            if (key.lowercase() in unsupportedObfuscation) found += key
+        }
+        return found.toList()
+    }
+
     /** MTU по умолчанию для десктопа — как в клиенте Amnezia. */
     private const val DEFAULT_MTU = 1376
 

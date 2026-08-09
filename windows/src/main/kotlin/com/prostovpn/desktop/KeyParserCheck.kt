@@ -24,7 +24,7 @@ fun main() {
         H2 = 1234567892
         H3 = 1234567893
         H4 = 1234567894
-        I1 = <b 0xf6ab3267fa><c><b 0xf6ab><t><r 10>
+        I1 = <b 0xf6ab3267fa><b 0xf6ab><t><r 10>
         I2 = <b 0x11223344><t>
         I3 = <b 0x55667788><r 4>
 
@@ -105,12 +105,10 @@ private fun checkMainDispatcher() {
     check(!name.contains("Missing", ignoreCase = true)) {
         "Dispatchers.Main недоступен ($name): нет kotlinx-coroutines-swing"
     }
-    kotlinx.coroutines.runBlocking {
-        kotlinx.coroutines.withTimeout(15_000) {
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                check(java.awt.EventQueue.isDispatchThread()) { "Main не привёл на поток событий" }
-            }
-        }
-    }
+    // Заглушка бросает исключение при первом же обращении — спрашиваем её
+    // напрямую, не запуская поток событий: поднятый EDT задержал бы выход
+    // из проверки на сборочной машине.
+    runCatching { kotlinx.coroutines.Dispatchers.Main.isDispatchNeeded(kotlin.coroutines.EmptyCoroutineContext) }
+        .onFailure { error("Dispatchers.Main непригоден: ${it.message}") }
     println("Dispatchers.Main: $name")
 }

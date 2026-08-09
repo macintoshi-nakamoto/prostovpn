@@ -95,12 +95,18 @@ half4 main(float2 coord) {
     float2 center = uSize * 0.5;
     float2 p = coord - center;
     float d = sdBox(p, uHalf, uRadius);
-    if (d >= 0.0) {
-        return content.eval(coord);
+
+    // Форма линзы задаётся здесь, а не внешним клипом: иначе на реальном
+    // окне стекло проступало прямоугольником поверх скруглённой формы.
+    float coverage = clamp(0.5 - d, 0.0, 1.0);
+    if (coverage <= 0.0) {
+        return half4(0.0);
     }
+
     float t = clamp(1.0 + d / uBand, 0.0, 1.0);
     if (t <= 0.001) {
-        return content.eval(coord);
+        half4 flat = content.eval(coord);
+        return half4(flat.rgb * coverage, flat.a * coverage);
     }
     float e = 1.0;
     float gx = sdBox(p + float2(e, 0.0), uHalf, uRadius) - sdBox(p - float2(e, 0.0), uHalf, uRadius);
@@ -119,7 +125,8 @@ half4 main(float2 coord) {
     half4 sB = content.eval(coord + offB);
     float4 col = float4(sR.r, sG.g, sB.b, sG.a);
     col.rgb = clamp(col.rgb + 0.045 * curve, 0.0, 1.0);
-    return half4(col);
+    // Премультиплицируем на покрытие — край линзы получается сглаженным
+    return half4(col.rgb * coverage, col.a * coverage);
 }
 """
 
@@ -305,10 +312,15 @@ fun Modifier.pressScale(
     this.scale(scaleValue)
 }
 
-/** Подсветка стекла при нажатии/наведении — как у интерактивного glass в iOS 26. */
+/**
+ * Подсветка стекла при нажатии/наведении — как у интерактивного glass в iOS 26.
+ * [cornerRadius] = null — круг/капсула. Подсветка рисуется по форме элемента,
+ * а не прямоугольником: иначе при наведении поверх стекла проступает квадрат.
+ */
 fun Modifier.pressHighlight(
     interactionSource: InteractionSource,
     maxAlpha: Float = 0.07f,
+    cornerRadius: Dp? = null,
 ): Modifier = composed {
     val pressed by interactionSource.collectIsPressedAsState()
     val hovered by interactionSource.collectIsHoveredAsState()
@@ -329,7 +341,11 @@ fun Modifier.pressHighlight(
     drawWithContent {
         drawContent()
         if (highlight > 0.01f) {
-            drawRect(Color.White.copy(alpha = maxAlpha * highlight))
+            val r = cornerRadius?.toPx() ?: (size.minDimension / 2f)
+            drawRoundRect(
+                color = Color.White.copy(alpha = maxAlpha * highlight),
+                cornerRadius = CornerRadius(r, r),
+            )
         }
     }
 }

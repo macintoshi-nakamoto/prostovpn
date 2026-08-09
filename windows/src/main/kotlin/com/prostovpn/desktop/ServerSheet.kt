@@ -42,7 +42,7 @@ fun CurrentServerCard(
             .pressScale(interaction, 0.98f)
             .clip(RoundedCornerShape(26.dp))
             .liquidGlass(backdrop, cornerRadius = 26.dp)
-            .pressHighlight(interaction, 0.05f)
+            .pressHighlight(interaction, 0.05f, cornerRadius = 26.dp)
             .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
             .padding(vertical = 13.dp, horizontal = 16.dp),
     ) {

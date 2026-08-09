@@ -1,0 +1,36 @@
+name: windows-desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['windows/**', '.github/workflows/windows-desktop.yml']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build installers (MSI + EXE)
+        run: ./gradlew packageMsi packageExe --no-daemon
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProstoVPN-windows-msi
+          path: windows/build/compose/binaries/main/msi/*.msi
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProstoVPN-windows-exe
+          path: windows/build/compose/binaries/main/exe/*.exe

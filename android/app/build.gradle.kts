@@ -12,8 +12,10 @@ android {
         applicationId = "com.prostovpn.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.0.0"
+        // Растёт с каждой выкладкой: с прежним versionCode установщик
+        // Android может отказаться ставить сборку поверх старой
+        versionCode = 3
+        versionName = "1.0.1"
     }
 
     buildTypes {
@@ -54,4 +56,9 @@ dependencies {
     implementation(files("libs/awg-tunnel.aar"))
     implementation("androidx.annotation:annotation:1.9.1")
     implementation("androidx.collection:collection:1.5.0")
+
+    testImplementation("junit:junit:4.13.2")
+    // В unit-тестах android.jar заглушен, а SplitTunnel разбирает список
+    // исключений через org.json — берём настоящую реализацию.
+    testImplementation("org.json:json:20240303")
 }

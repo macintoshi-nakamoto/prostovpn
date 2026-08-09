@@ -16,6 +16,7 @@ data class Strings(
 
     val connected: String,
     val connectingTxt: String,
+    val disconnectingTxt: String,
     val disconnected: String,
     val tapToConnect: String,
     val chooseServer: String,
@@ -77,6 +78,7 @@ private val RU = Strings(
     termsLink = "условия сервиса",
     connected = "Подключено",
     connectingTxt = "Подключение…",
+    disconnectingTxt = "Отключение…",
     disconnected = "Отключено",
     tapToConnect = "Нажмите, чтобы подключиться",
     chooseServer = "ВЫБЕРИТЕ СЕРВЕР",
@@ -134,6 +136,7 @@ private val EN = Strings(
     termsLink = "terms of service",
     connected = "Connected",
     connectingTxt = "Connecting…",
+    disconnectingTxt = "Disconnecting…",
     disconnected = "Disconnected",
     tapToConnect = "Tap to connect",
     chooseServer = "CHOOSE A SERVER",

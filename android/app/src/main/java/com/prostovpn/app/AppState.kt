@@ -62,7 +62,12 @@ data class TunnelFile(
     val isDefault: Boolean = false,
 )
 
-enum class Phase { OFF, CONNECTING, ON }
+/**
+ * DISCONNECTING — не косметика. Пока интерфейс VpnService не снят, весь
+ * трафик идёт через него. Показывать в это время «отключено» — врать
+ * пользователю о том, куда уходят его пакеты.
+ */
+enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
 
 class AppState(application: Application) : AndroidViewModel(application) {
 
@@ -406,6 +411,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
     fun toggleConnection() {
         when (phase) {
             Phase.CONNECTING, Phase.ON -> disconnect()
+            // Снятие уже идёт — повторное нажатие не должно его перебивать
+            Phase.DISCONNECTING -> Unit
             Phase.OFF -> {
                 val config = server?.config
                 if (config.isNullOrBlank()) {
@@ -470,14 +477,21 @@ class AppState(application: Application) : AndroidViewModel(application) {
     fun disconnect() {
         connectJob?.cancel()
         timerJob?.cancel()
-        connectJob = null
         timerJob = null
-        viewModelScope.launch(tunnelDispatcher) {
-            runCatching { tunnel.disconnect() }
-        }
-        phase = Phase.OFF
+        /*
+        Держим DISCONNECTING, пока интерфейс VpnService не снят. Раньше
+        здесь сразу ставилось OFF, а снятие уходило в фон: пока туннель
+        доживал, экран уже показывал «отключено», хотя весь трафик
+        по-прежнему шёл через VPN.
+        */
+        phase = Phase.DISCONNECTING
         // seconds не обнуляем здесь: уходящий таймер должен дофейдиться
         // с последним значением, а не прокрутиться в 00:00; сброс — в startTimer()
+        connectJob = viewModelScope.launch {
+            withContext(tunnelDispatcher) { runCatching { tunnel.disconnect() } }
+            phase = Phase.OFF
+            connectJob = null
+        }
     }
 
     val formattedDuration: String

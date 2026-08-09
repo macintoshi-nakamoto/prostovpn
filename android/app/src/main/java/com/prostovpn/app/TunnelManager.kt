@@ -30,9 +30,17 @@ class TunnelManager(context: Context) {
         backend.getState(tunnel) == Tunnel.State.UP
     }.getOrElse { false }
 
-    fun disconnect() {
-        runCatching { backend.setState(tunnel, Tunnel.State.DOWN, null) }
-    }
+    /**
+     * Снимает туннель и отвечает, снят ли он на самом деле.
+     *
+     * Пока интерфейс VpnService жив, весь трафик идёт через него, поэтому
+     * показывать «отключено» до этого момента — врать о том, куда уходят
+     * пакеты. Ответ нужен интерфейсу, чтобы дождаться.
+     */
+    fun disconnect(): Boolean = runCatching {
+        backend.setState(tunnel, Tunnel.State.DOWN, null)
+        backend.getState(tunnel) != Tunnel.State.UP
+    }.getOrElse { false }
 
     val isUp: Boolean
         get() = runCatching { backend.getState(tunnel) == Tunnel.State.UP }.getOrDefault(false)

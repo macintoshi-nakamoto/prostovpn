@@ -230,11 +230,12 @@ private fun StatusBlock(state: AppState) {
     val statusText = when (state.phase) {
         Phase.OFF -> s.disconnected
         Phase.CONNECTING -> s.connectingTxt
+        Phase.DISCONNECTING -> s.disconnectingTxt
         Phase.ON -> s.connected
     }
     val subText = when (state.phase) {
         Phase.OFF -> s.tapToConnect
-        Phase.CONNECTING -> ""
+        Phase.CONNECTING, Phase.DISCONNECTING -> ""
         Phase.ON -> state.formattedDuration
     }
 
@@ -274,7 +275,7 @@ private fun StatusBlock(state: AppState) {
             ) { phase ->
                 when (phase) {
                     Phase.OFF -> Text(text = subText, style = subStyle)
-                    Phase.CONNECTING -> Text(text = "", style = subStyle)
+                    Phase.CONNECTING, Phase.DISCONNECTING -> Text(text = "", style = subStyle)
                     // Цифры таймера «прокручиваются» — как numericText() в iOS
                     Phase.ON -> RollingText(text = state.formattedDuration, style = subStyle)
                 }
@@ -337,7 +338,8 @@ private fun PowerButton(
     onCenterChange: (Offset) -> Unit,
 ) {
     val isOn = state.phase == Phase.ON
-    val isBusy = state.phase == Phase.CONNECTING
+    // Снятие туннеля тоже занятость: пока интерфейс жив, нажимать нечего
+    val isBusy = state.phase == Phase.CONNECTING || state.phase == Phase.DISCONNECTING
     val haptics = rememberHaptics()
 
     val interaction = remember { MutableInteractionSource() }

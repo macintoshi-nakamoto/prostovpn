@@ -21,6 +21,10 @@ jobs:
           java-version: '21'
 
       - name: Build installers (MSI + EXE)
+        # Номер запуска как номер сборки: checkout в CI неглубокий, поэтому
+        # счётчик коммитов там всегда 1 и версия установщика не росла бы
+        env:
+          PROSTO_BUILD: ${{ github.run_number }}
         run: ./gradlew packageMsi packageExe --no-daemon
 
       - name: Print jpackage logs on failure

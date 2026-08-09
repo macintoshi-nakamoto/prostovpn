@@ -92,6 +92,7 @@ fun main() {
     checkServerStaysOutsideTunnel(config)
     checkAddressConflict()
     checkKillSwitchKey(config)
+    checkNothingFallsOutOfTunnel()
 
     println("ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ")
 }
@@ -140,6 +141,122 @@ private fun checkServerStaysOutsideTunnel(config: String) {
     check(!covers(excluded, "203.0.113.77")) { "сервер остался внутри туннеля: $endpoint" }
     check(covers(excluded, "203.0.113.78")) { "исключили лишнее, не только сервер" }
     println("сервер вне туннеля: да")
+}
+
+/**
+ * Свойство, которое обязано держаться всегда: раздельное туннелирование
+ * может **оставить** лишнюю подсеть в VPN, но не может **выкинуть** из VPN
+ * адрес, которого нет в списке исключений.
+ *
+ * Так сломался Telegram: огрубление раздувало российские куски
+ * 149.154.64-143 до целого 149.154.0.0/16 и уносило с собой
+ * 149.154.160.0/20 — дата-центр Telegram, в списке не значившийся.
+ * Проверка ловит любое такое огрубление на настоящем списке.
+ */
+private fun checkNothingFallsOutOfTunnel() {
+    val content = object {}.javaClass.getResourceAsStream("/ru-split-tunnel.json")
+        ?.bufferedReader()?.use { it.readText() }
+    check(content != null) { "встроенный список исключений не найден" }
+
+    val excluded = SplitTunnel.parseCidrList(content)
+    val allowedList = SplitTunnel.complement(excluded)
+    check(excluded.size > 1000) { "список подозрительно мал: ${excluded.size}" }
+
+    // Отсортированные диапазоны + бинарный поиск: перебор строками по
+    // 8629 записям на каждый адрес считался бы минутами.
+    val excludedRanges = toSortedRanges(excluded)
+    val allowedRanges = toSortedRanges(allowedList)
+
+    // Живые адреса, которых в списке нет, — они обязаны идти через VPN
+    val mustTunnel = mapOf(
+        "Telegram DC 149.154.167.51" to "149.154.167.51",
+        "Telegram DC 149.154.175.50" to "149.154.175.50",
+        "Telegram 91.108.56.130" to "91.108.56.130",
+        "Cloudflare 1.1.1.1" to "1.1.1.1",
+        "Google DNS 8.8.8.8" to "8.8.8.8",
+        "GitHub 140.82.121.3" to "140.82.121.3",
+    )
+    val lost = mustTunnel.filter { (_, ip) ->
+        val v = ipToLong(ip)!!
+        !inRanges(excludedRanges, v) && !inRanges(allowedRanges, v)
+    }
+    check(lost.isEmpty()) {
+        "выкинуты из VPN, хотя не исключены: " + lost.keys.joinToString(", ")
+    }
+
+    // Общее правило, а не список любимчиков: огрубление обязано только
+    // сокращать исключения. Пробегаем сетку адресов по всему IPv4.
+    var checked = 0
+    var violations = 0
+    var firstBad = ""
+    var probe = 1L
+    while (probe < 0xFFFFFFFFL) {
+        if (!inRanges(excludedRanges, probe) && !inRanges(allowedRanges, probe)) {
+            violations++
+            if (firstBad.isEmpty()) {
+                firstBad = "${(probe shr 24) and 255}.${(probe shr 16) and 255}." +
+                    "${(probe shr 8) and 255}.${probe and 255}"
+            }
+        }
+        checked++
+        probe += 997 // простой шаг — не попадаем в кратности сетки
+    }
+    check(violations == 0) {
+        "огрубление вытолкнуло из VPN $violations адресов из $checked (первый: $firstBad)"
+    }
+    println("маршрутов в туннеле: ${allowedList.size}; проверено адресов: $checked, потерянных нет")
+}
+
+private fun ipToLong(text: String): Long? {
+    val parts = text.split(".")
+    if (parts.size != 4) return null
+    var value = 0L
+    for (part in parts) {
+        val n = part.toIntOrNull() ?: return null
+        if (n !in 0..255) return null
+        value = (value shl 8) or n.toLong()
+    }
+    return value
+}
+
+/** CIDR-список -> непересекающиеся диапазоны, отсортированные по началу. */
+private fun toSortedRanges(cidrs: List<String>): List<LongRange> {
+    val parsed = cidrs.mapNotNull { cidr ->
+        val base = ipToLong(cidr.substringBefore('/')) ?: return@mapNotNull null
+        val prefix = cidr.substringAfter('/', "32").toIntOrNull() ?: return@mapNotNull null
+        if (prefix == 0) 0L..0xFFFFFFFFL
+        else {
+            val mask = (0xFFFFFFFFL shl (32 - prefix)) and 0xFFFFFFFFL
+            val start = base and mask
+            start..(start or ((1L shl (32 - prefix)) - 1))
+        }
+    }.sortedBy { it.first }
+
+    val merged = ArrayList<LongRange>(parsed.size)
+    for (r in parsed) {
+        val last = merged.lastOrNull()
+        if (last != null && r.first <= last.last + 1) {
+            merged[merged.size - 1] = last.first..maxOf(last.last, r.last)
+        } else {
+            merged.add(r)
+        }
+    }
+    return merged
+}
+
+private fun inRanges(ranges: List<LongRange>, value: Long): Boolean {
+    var low = 0
+    var high = ranges.size - 1
+    while (low <= high) {
+        val mid = (low + high) ushr 1
+        val r = ranges[mid]
+        when {
+            value < r.first -> high = mid - 1
+            value > r.last -> low = mid + 1
+            else -> return true
+        }
+    }
+    return false
 }
 
 /** Входит ли адрес в список подсетей вида «a.b.c.d/n, …». */

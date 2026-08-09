@@ -76,22 +76,47 @@ object SplitTunnel {
 
     private const val MAX_ROUTES = 2500
 
+    /**
+     * Точное дополнение списка — это ~21000 подсетей, столько маршрутов
+     * системе давать нельзя. Поэтому исключения огрубляем по сетке, пока
+     * их дополнение не влезет в [MAX_ROUTES].
+     *
+     * Огрубление идёт строго **внутрь**: границы поджимаются к сетке, а
+     * куски меньше клетки исчезают. Тогда любая ошибка огрубления уводит
+     * подсеть в VPN — медленнее, но работает. Наружу округлять нельзя:
+     * так из VPN вылетают чужие адреса. Именно это ломало Telegram —
+     * российские куски 149.154.64-143 раздувались до целого 149.154.0.0/16
+     * и выносили из туннеля 149.154.160.0/20, дата-центр Telegram, который
+     * в списке исключений не значился.
+     */
     fun complement(excludeCidrs: List<String>): List<String> {
         val ranges = excludeCidrs.mapNotNull { cidrToRange(it) }.sortedBy { it.start }
         if (ranges.isEmpty()) return listOf("0.0.0.0/0")
 
-        for (gridPrefix in intArrayOf(32, 16, 14, 12, 10, 8)) {
-            val out = complementOf(mergeRanges(alignToGrid(ranges, gridPrefix)))
+        for (gridPrefix in intArrayOf(32, 24, 22, 20, 18, 16, 14, 12)) {
+            val aligned = alignToGrid(ranges, gridPrefix)
+            if (aligned.isEmpty()) break
+            val out = complementOf(mergeRanges(aligned))
             if (out.isEmpty()) break
-            if (out.size <= MAX_ROUTES || gridPrefix == 8) return out
+            if (out.size <= MAX_ROUTES) return out
         }
+        // Огрубить до бюджета не вышло — честнее увести весь трафик в VPN,
+        // чем оставить дыры: раздельное туннелирование не важнее связи.
         return listOf("0.0.0.0/0")
     }
 
+    /**
+     * Поджимает диапазоны к сетке /[gridPrefix] внутрь. Диапазоны, целиком
+     * умещающиеся внутри клетки, пропадают — они уйдут в VPN.
+     */
     private fun alignToGrid(ranges: List<Range>, gridPrefix: Int): List<Range> {
         if (gridPrefix >= 32) return ranges
         val grid = 1L shl (32 - gridPrefix)
-        return ranges.map { Range(it.start / grid * grid, (it.end / grid + 1) * grid - 1) }
+        return ranges.mapNotNull {
+            val start = (it.start + grid - 1) / grid * grid
+            val end = (it.end + 1) / grid * grid - 1
+            if (start <= end) Range(start, end) else null
+        }
     }
 
     private fun mergeRanges(ranges: List<Range>): List<Range> {

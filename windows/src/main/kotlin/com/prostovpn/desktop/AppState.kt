@@ -446,11 +446,13 @@ class AppState(private val scope: CoroutineScope) {
                                     WindowsTunnel.HandshakeDiag.PORT_CLOSED -> s.errHsPortClosed
                                     WindowsTunnel.HandshakeDiag.HEADER_MISMATCH -> s.errHsHeader
                                     WindowsTunnel.HandshakeDiag.REJECTED -> s.errHsRejected
+                                    WindowsTunnel.HandshakeDiag.BLACKHOLE -> s.errHsBlackhole
                                     null -> s.errNoHandshake
                                 },
                                 WgConfig.unsupportedKeys(config)
                                     .takeIf { it.isNotEmpty() }
                                     ?.let { s.errUnsupportedObfuscation + " " + it.joinToString(", ") },
+                                s.errLogHint,
                             ).joinToString(" · ")
                         WindowsTunnel.Reason.TunnelFailed ->
                             listOfNotNull(s.errTunnel, result.detail.takeIf { it.isNotBlank() })

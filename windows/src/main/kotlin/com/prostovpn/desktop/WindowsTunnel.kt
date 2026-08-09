@@ -44,6 +44,12 @@ class WindowsTunnel {
 
         /** Ответы распознаны, но не проходят криптопроверку: ключ не от сервера. */
         REJECTED,
+
+        /**
+         * Windows не дал движку исходящий адаптер и он ушёл в «чёрную дыру»:
+         * пакеты не покидают машину вообще.
+         */
+        BLACKHOLE,
     }
 
     enum class Reason {
@@ -230,6 +236,14 @@ class WindowsTunnel {
         val text = log ?: return null
 
         return when {
+            /*
+            Движок сам сообщает, что остался без исходящего адаптера. Так
+            бывает, когда маршрут по умолчанию уводит в сам туннель: тогда
+            сокет привязывается к «чёрной дыре» и наружу не уходит ничего.
+            Проверяем первым — иначе это выглядит как молчащий сервер.
+            */
+            text.contains("blackhole=true", ignoreCase = true) -> HandshakeDiag.BLACKHOLE
+
             // Ответы дошли, но не прошли криптопроверку — ключ не подходит
             listOf("invalid mac1", "invalid response message", "invalid initiation message")
                 .any { text.contains(it, ignoreCase = true) } -> HandshakeDiag.REJECTED

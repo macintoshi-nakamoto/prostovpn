@@ -198,3 +198,13 @@ tasks.register<JavaExec>("keycheck") {
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.prostovpn.desktop.KeyParserCheckKt")
 }
+
+/**
+ * Прогон ключа через путь приложения: gradlew keyprobe --args="<файл с ключом>".
+ * Ключ читается из файла и в репозиторий не попадает.
+ */
+tasks.register<JavaExec>("keyprobe") {
+    group = "verification"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.prostovpn.desktop.DevKeyProbeKt")
+}

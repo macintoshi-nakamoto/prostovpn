@@ -34,6 +34,21 @@ java {
  */
 val tunnelResourcesDir = layout.projectDirectory.dir("resources/windows")
 
+/**
+ * Номер сборки для версии установщика: число коммитов в истории.
+ * MSI разрешает 0..65535 в третьем поле версии.
+ */
+val buildNumber: Int = (System.getenv("PROSTO_BUILD")?.toIntOrNull()
+    ?: runCatching {
+        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
+            .directory(rootDir)
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+        process.waitFor()
+        output.toInt()
+    }.getOrDefault(1)).coerceIn(1, 65535)
+
 compose.desktop {
     application {
         mainClass = "com.prostovpn.desktop.MainKt"
@@ -42,7 +57,10 @@ compose.desktop {
             appResourcesRootDir.set(layout.projectDirectory.dir("resources"))
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Prosto VPN"
-            packageVersion = "1.0.0"
+            // Номер сборки растёт с каждым коммитом: MSI отказывается ставиться
+            // поверх той же версии («Another version is already installed»),
+            // а с большей версией штатно обновляет установленную.
+            packageVersion = "1.0.$buildNumber"
             // Только ASCII: WiX собирает MSI в кодовой странице 1252,
             // кириллица в метаданных валит light.exe с ошибкой LGHT0311
             description = "Prosto VPN - free and secure internet"

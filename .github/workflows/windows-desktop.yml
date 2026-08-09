@@ -30,6 +30,9 @@ jobs:
         working-directory: windows/tunnel
         run: go test ./...
 
+      - name: Check key parsing and coroutine dispatchers
+        run: ./gradlew keycheck --no-daemon
+
       # Раннер — настоящая Windows с правами администратора: поднимаем на нём
       # туннель по-настоящему. Это единственное место, где проверяется, что
       # движок создаёт адаптер, живёт службой и снимается.
@@ -77,6 +80,11 @@ jobs:
             'Jmax = 70'
             'S1 = 84'
             'S2 = 43'
+            'S3 = 20'
+            'S4 = 15'
+            'I1 = <b 0xf6ab3267fa><c><b 0xf6ab><t><r 10>'
+            'I2 = <b 0x11223344><t>'
+            'I3 = <b 0x55667788><r 4>'
             'H1 = 1234567891'
             'H2 = 1234567892'
             'H3 = 1234567893'

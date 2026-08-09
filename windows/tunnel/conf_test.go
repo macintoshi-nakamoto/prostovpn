@@ -31,8 +31,7 @@ H3 = 1234567893
 H4 = 1234567894
 I1 = <b 0xf6ab3267fa><c><b 0xf6ab><t><r 10>
 I2 = <b 0x11223344><t>
-J1 = <b 0xaabb><r 8>
-Itime = 30
+I3 = <b 0x55667788><r 4>
 MTU = 1376
 
 [Peer]
@@ -68,12 +67,53 @@ func TestAmneziaConfigParses(t *testing.T) {
 		"jc=4", "jmin=40", "jmax=70",
 		"s1=84", "s2=43", "s3=20", "s4=15",
 		"h1=1234567891", "h4=1234567894",
-		"i1=<b 0xf6ab3267fa>", "j1=<b 0xaabb>", "itime=30",
+		"i1=<b 0xf6ab3267fa>", "i2=<b 0x11223344>", "i3=<b 0x55667788>",
 		"allowed_ip=0.0.0.0/0", "allowed_ip=::/0",
 		"persistent_keepalive_interval=25",
 	} {
 		if !strings.Contains(uapi, want) {
 			t.Errorf("в UAPI нет %q", want)
+		}
+	}
+}
+
+/*
+Ключи из конфига должны совпадать с тем, что принимает движок протокола:
+UAPI отвергает весь набор целиком («invalid UAPI device key»), поэтому
+лишний ключ ломает подключение так же надёжно, как отсутствующий.
+*/
+func TestUAPIKeysAreAcceptedByDevice(t *testing.T) {
+	accepted := map[string]bool{
+		"private_key": true, "listen_port": true, "fwmark": true,
+		"replace_peers": true, "jc": true, "jmin": true, "jmax": true,
+		"s1": true, "s2": true, "s3": true, "s4": true,
+		"h1": true, "h2": true, "h3": true, "h4": true,
+		"i1": true, "i2": true, "i3": true, "i4": true, "i5": true,
+		// секция пира
+		"public_key": true, "preshared_key": true, "endpoint": true,
+		"persistent_keepalive_interval": true, "replace_allowed_ips": true,
+		"allowed_ip": true, "protocol_version": true, "update_only": true,
+		"remove": true,
+	}
+
+	c, err := conf.FromWgQuick(amneziaConfig, "prostovpn")
+	if err != nil {
+		t.Fatalf("конфиг не разобран: %v", err)
+	}
+	uapi, err := c.ToUAPI()
+	if err != nil {
+		t.Fatalf("UAPI не собран: %v", err)
+	}
+	for _, line := range strings.Split(uapi, "\n") {
+		if line == "" {
+			continue
+		}
+		key, _, ok := strings.Cut(line, "=")
+		if !ok {
+			t.Fatalf("строка UAPI без «=»: %q", line)
+		}
+		if !accepted[key] {
+			t.Errorf("движок не примет ключ %q (строка %q)", key, line)
 		}
 	}
 }

@@ -4,8 +4,10 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Base64
 
-/** Проверка разбора ключа Amnezia: gradle keycheck */
+/** Проверка разбора ключа Amnezia и окружения: gradle keycheck */
 fun main() {
+    checkMainDispatcher()
+
     val ini = """
         [Interface]
         Address = 10.8.1.5/32
@@ -24,8 +26,7 @@ fun main() {
         H4 = 1234567894
         I1 = <b 0xf6ab3267fa><c><b 0xf6ab><t><r 10>
         I2 = <b 0x11223344><t>
-        J1 = <b 0xaabb><r 8>
-        Itime = 30
+        I3 = <b 0x55667788><r 4>
 
         [Peer]
         PublicKey = 1m8v/lROKRSJTeZbV81vZNZi2NZZX4BGU3OcLWqbvxE=
@@ -65,7 +66,7 @@ fun main() {
     val sanitized = WgConfig.sanitize(config)
     check(sanitized != null) { "санитайзер отверг конфиг" }
     check("Jc = 4" in sanitized) { "потеряны параметры обфускации" }
-    check("Itime = 30" in sanitized) { "потеряны параметры AWG 2.x" }
+    check("S3 = 20" in sanitized && "I1 = " in sanitized) { "потеряны параметры AWG 2.x" }
     check("MTU" in sanitized) { "не добавлен MTU" }
     println("--- итоговый конфиг для Windows ---")
     println(sanitized)
@@ -89,4 +90,27 @@ fun main() {
     println("конфиги для проверки движком: build/keycheck-full.conf, build/keycheck-split.conf")
 
     println("ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ")
+}
+
+/**
+ * Главный поток должен быть доступен из корутин.
+ *
+ * На десктопе фабрику Dispatchers.Main даёт kotlinx-coroutines-swing.
+ * Без неё приложение падало окном «Module with the Main dispatcher is
+ * missing» — но только на том экране, где до Main доходило дело, поэтому
+ * проверяем наличие явно, а не ждём отчёта от пользователя.
+ */
+private fun checkMainDispatcher() {
+    val name = kotlinx.coroutines.Dispatchers.Main.toString()
+    check(!name.contains("Missing", ignoreCase = true)) {
+        "Dispatchers.Main недоступен ($name): нет kotlinx-coroutines-swing"
+    }
+    kotlinx.coroutines.runBlocking {
+        kotlinx.coroutines.withTimeout(15_000) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                check(java.awt.EventQueue.isDispatchThread()) { "Main не привёл на поток событий" }
+            }
+        }
+    }
+    println("Dispatchers.Main: $name")
 }

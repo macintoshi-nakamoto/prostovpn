@@ -14,6 +14,11 @@ dependencies {
     implementation(compose.desktop.currentOs)
     implementation(compose.material3)
     implementation("org.json:json:20240303")
+    // Dispatchers.Main на десктопе живёт здесь: без этой зависимости
+    // ServiceLoader не находит фабрику и любой переход на главный поток
+    // падает окном «Module with the Main dispatcher is missing».
+    // Версия должна совпадать с kotlinx-coroutines-core из Compose.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.0")
 }
 
 kotlin {

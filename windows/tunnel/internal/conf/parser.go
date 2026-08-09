@@ -361,9 +361,7 @@ func FromWgQuick(s string, name string) (*Config, error) {
 				conf.Interface.UnderloadPacketMagicHeader = val
 			case "h4":
 				conf.Interface.TransportPacketMagicHeader = val
-			// J1-J3 и Itime — обфускация AmneziaWG 2.x. Движок принимает их
-			// через UAPI теми же именами, поэтому кладём в ту же карту.
-			case "i1", "i2", "i3", "i4", "i5", "j1", "j2", "j3", "itime":
+			case "i1", "i2", "i3", "i4", "i5":
 				if len(val) == 0 {
 					continue
 				}

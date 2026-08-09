@@ -147,8 +147,17 @@ tasks.register("fetchTunnelBinaries") {
     }
 }
 
-// Установщик собираем только с движком туннеля внутри
-listOf("packageMsi", "packageExe", "packageDistributionForCurrentOS").forEach { name ->
+// Движок туннеля должен лежать в resources/windows до того, как Compose
+// соберёт ресурсы приложения: prepareAppResources читает этот каталог,
+// и без явной связи Gradle отказывается собирать (implicit dependency).
+listOf(
+    "prepareAppResources",
+    "packageMsi",
+    "packageExe",
+    "packageDistributionForCurrentOS",
+    "createDistributable",
+    "runDistributable",
+).forEach { name ->
     tasks.matching { it.name == name }.configureEach {
         dependsOn("fetchTunnelBinaries")
     }

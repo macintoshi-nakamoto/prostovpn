@@ -9,8 +9,18 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import sessionmaker
 
 from .config import settings
-from .models import Admin, Base
+from .models import GB, Admin, Base, Plan
 from .security import hash_password
+
+# Тарифы «из коробки»: панель без единого тарифа не даёт завести человека,
+# а придумывать их в первый день никто не хочет.
+DEFAULT_PLANS = [
+    # code, название, цена, дней, лимит трафика (None — безлимит), порядок
+    ("trial", "Пробный", 0, 7, 5 * GB, 0),
+    ("basic", "Базовый", 199, 30, 100 * GB, 1),
+    ("pro", "Про", 349, 30, None, 2),
+    ("year", "Годовой", 2990, 365, None, 3),
+]
 
 _url = settings().database_url
 _connect_args = {"check_same_thread": False} if _url.startswith("sqlite") else {}
@@ -41,7 +51,7 @@ def get_db() -> Iterator[OrmSession]:
 
 
 def init_db() -> None:
-    """Создаёт таблицы и первого администратора, если админов ещё нет."""
+    """Создаёт таблицы, первого администратора и базовые тарифы."""
     Base.metadata.create_all(engine)
 
     config = settings()
@@ -54,4 +64,22 @@ def init_db() -> None:
                     password_hash=hash_password(config.admin_password),
                 )
             )
+            db.commit()
+
+        # Тарифы досоздаём по коду, а не «если таблица пуста»: удалённый
+        # администратором тариф не должен возвращаться, а новый в обновлении —
+        # должен появиться.
+        if db.scalar(select(Plan).limit(1)) is None:
+            for code, name, price, days, limit, order in DEFAULT_PLANS:
+                db.add(
+                    Plan(
+                        code=code,
+                        name=name,
+                        price=price,
+                        currency=config.currency,
+                        period_days=days,
+                        traffic_limit_bytes=limit,
+                        sort_order=order,
+                    )
+                )
             db.commit()

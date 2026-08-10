@@ -80,10 +80,27 @@ class AppState(private val scope: CoroutineScope) {
         private set
     var server by mutableStateOf<ServerInfo?>(null)
         private set
-    var isGuest by mutableStateOf(prefs.getBoolean("guest", false))
+    /** Токен сессии в панели. Пусто — человек не вошёл. */
+    var panelToken by mutableStateOf(prefs.get("panelToken", "") ?: "")
+        private set
+    var accountName by mutableStateOf(prefs.get("accountName", "") ?: "")
+        private set
+    var accountPublicId by mutableStateOf(prefs.get("accountPublicId", "") ?: "")
+        private set
+    var subscriptionDaysLeft by mutableIntStateOf(prefs.getInt("daysLeft", 0))
+        private set
+    var trafficUsedBytes by mutableStateOf(prefs.getLong("trafficUsed", 0L))
+        private set
+    /** -1 — безлимит. */
+    var trafficLimitBytes by mutableStateOf(prefs.getLong("trafficLimit", -1L))
         private set
 
-    val isLoggedIn get() = server != null || isGuest
+    /** Страны, выданные панелью. Пусто — подписка кончилась. */
+    var panelServers by mutableStateOf<List<ServerInfo>>(emptyList())
+        private set
+
+    // Вход только по аккаунту: гостевого режима нет, страны выдаёт панель.
+    val isLoggedIn get() = panelToken.isNotEmpty()
 
     private var connectJob: Job? = null
     private var timerJob: Job? = null
@@ -262,10 +279,26 @@ class AppState(private val scope: CoroutineScope) {
     fun selectServer(index: Int) {
         selectedServerIndex = index
         prefs.putInt("selectedServer", index)
+        // Переключение страны меняет и конфиг, который уйдёт в туннель.
+        panelServers.getOrNull(index)?.let {
+            server = it
+            persistServer()
+        }
     }
 
     fun displayServers(): List<DisplayServer> {
         val t = s
+        // Страны из панели: их может быть несколько, и выбирает человек.
+        if (panelServers.isNotEmpty()) {
+            return panelServers.map { item ->
+                val flag = item.countryCode?.takeIf { it.isNotEmpty() }?.let { flagEmoji(it) } ?: "🌐"
+                DisplayServer(
+                    flag = flag,
+                    name = item.countryFor(lang).orEmpty(),
+                    sub = item.cityFor(lang).orEmpty(),
+                )
+            }
+        }
         server?.let { imported ->
             val flag = imported.countryCode
                 ?.takeIf { it.isNotEmpty() }
@@ -332,37 +365,85 @@ class AppState(private val scope: CoroutineScope) {
         if (selectedServerIndex >= displayServers().size) {
             selectServer(0)
         }
+        // Сессия могла протухнуть, а список стран — измениться, пока
+        // приложение было закрыто.
+        refreshPanelServers()
     }
 
     // --- Вход ---
 
-    fun login(credentials: String): Boolean {
-        val joined = credentials.filterNot { it.isWhitespace() }
+    /**
+     * Вход по логину и паролю из панели.
+     *
+     * Пароль проверяет сервер: страны выдаются только оплаченной учётной
+     * записи, и обойти это, вставив чужой ключ, нельзя.
+     */
+    suspend fun login(login: String, password: String): Result<Unit> =
+        PanelApi.login(login, password).map { applySession(it) }
 
-        if (joined.startsWith("vpn://")) {
-            val info = KeyParser.extractServer(joined) ?: return false
-            prefs.put("accessKey", joined)
-            server = info
-            selectServer(0)
-            persistServer()
-            refreshGeo()
-            return true
-        }
+    private fun applySession(session: PanelApi.Session) {
+        panelToken = session.token
+        accountName = session.name ?: session.login
+        accountPublicId = session.publicId
+        subscriptionDaysLeft = session.daysLeft
+        trafficUsedBytes = session.trafficUsedBytes
+        trafficLimitBytes = session.trafficLimitBytes ?: -1L
 
-        isGuest = true
-        prefs.putBoolean("guest", true)
-        return true
+        prefs.put("panelToken", session.token)
+        prefs.put("accountName", accountName)
+        prefs.put("accountPublicId", accountPublicId)
+        prefs.putInt("daysLeft", session.daysLeft)
+        prefs.putLong("trafficUsed", session.trafficUsedBytes)
+        prefs.putLong("trafficLimit", trafficLimitBytes)
+
+        applyPanelServers(session.servers)
     }
 
-    fun loginAsGuest() {
-        isGuest = true
-        prefs.putBoolean("guest", true)
+    private fun applyPanelServers(list: List<ServerInfo>) {
+        panelServers = list
+        if (list.isEmpty()) {
+            server = null
+            return
+        }
+        if (selectedServerIndex !in list.indices) selectServer(0)
+        server = list[selectedServerIndex.coerceIn(list.indices)]
+        persistServer()
+    }
+
+    /** Перечитывает страны: подписку могли продлить или закрыть. */
+    fun refreshPanelServers() {
+        val token = panelToken
+        if (token.isEmpty()) return
+        scope.launch {
+            PanelApi.servers(token)
+                .onSuccess { session ->
+                    subscriptionDaysLeft = session.daysLeft
+                    trafficUsedBytes = session.trafficUsedBytes
+                    trafficLimitBytes = session.trafficLimitBytes ?: -1L
+                    applyPanelServers(session.servers)
+                }
+                .onFailure { error ->
+                    // Сессию погасили в панели — просим войти заново.
+                    if (error is PanelApi.PanelException) logout()
+                }
+        }
     }
 
     fun logout() {
         disconnect()
+        // Гасим сессию и на стороне панели: иначе она останется висеть
+        // в списке устройств администратора.
+        panelToken.takeIf { it.isNotEmpty() }?.let { token ->
+            scope.launch { PanelApi.logout(token) }
+        }
         server = null
-        isGuest = false
+        panelServers = emptyList()
+        panelToken = ""
+        accountName = ""
+        accountPublicId = ""
+        subscriptionDaysLeft = 0
+        trafficUsedBytes = 0L
+        trafficLimitBytes = -1L
         selectedServerIndex = 0
         val language = lang
         runCatching { prefs.clear() }
@@ -622,8 +703,8 @@ class AppState(private val scope: CoroutineScope) {
     }
 
     /** Только для офскрин-скриншотов (задача gradle screenshots). */
-    internal fun previewAs(guest: Boolean, previewPhase: Phase, previewSeconds: Int = 754) {
-        isGuest = guest
+    internal fun previewAs(loggedIn: Boolean, previewPhase: Phase, previewSeconds: Int = 754) {
+        panelToken = if (loggedIn) "preview" else ""
         phase = previewPhase
         seconds = previewSeconds
     }

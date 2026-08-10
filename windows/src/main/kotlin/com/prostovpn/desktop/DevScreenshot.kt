@@ -66,7 +66,7 @@ private fun Shell(
 ) {
     val scope = rememberCoroutineScope()
     val state = remember { AppState(scope) }
-    state.previewAs(guest = loggedIn, previewPhase = phase)
+    state.previewAs(loggedIn = loggedIn, previewPhase = phase)
     if (openFiles) state.previewOpenFileSheet()
     if (openServers) state.previewOpenServerSheet()
 

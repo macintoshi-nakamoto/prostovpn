@@ -111,6 +111,10 @@ def config_for(server: Server, key: UserKey | None) -> str | None:
 
 # --- SSH: создание пира на своём сервере -------------------------------------
 
+# Сколько ждём сервер. Держим коротким: раздача ключей идёт по всем серверам
+# подряд внутри одного запроса, и каждый недоступный добавляет эту задержку.
+CONNECT_TIMEOUT = 6
+
 _PEER_BLOCK = """
 [Peer]
 PublicKey = {public_key}
@@ -163,6 +167,20 @@ def remove_peer_over_ssh(server: Server, public_key: str) -> None:
         client.close()
 
 
+def run_over_ssh(server: Server, command: str) -> str:
+    """
+    Выполняет команду на сервере и возвращает вывод.
+
+    Нужна учёту трафика: тот читает счётчики пиров, а собственного канала к
+    серверу у него нет — весь SSH живёт здесь.
+    """
+    client = _ssh_connect(server)
+    try:
+        return _run(client, command)
+    finally:
+        client.close()
+
+
 def _ssh_connect(server: Server):
     try:
         import paramiko
@@ -178,12 +196,20 @@ def _ssh_connect(server: Server):
     # Ключ хоста запоминаем при первом подключении: панель ходит на свои
     # серверы, адреса которых задаёт администратор.
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    if server.ssh_key:
-        import io
 
-        pkey = paramiko.RSAKey.from_private_key(io.StringIO(server.ssh_key))
+    # Все три таймаута заданы явно и коротко. Одного `timeout` мало: он
+    # ограничивает только установку TCP, а на адресе, где TCP принимают, но
+    # SSH не отвечает, подключение висит на ожидании баннера — и вместе с ним
+    # висит запрос администратора.
+    common = {
+        "timeout": CONNECT_TIMEOUT,
+        "banner_timeout": CONNECT_TIMEOUT,
+        "auth_timeout": CONNECT_TIMEOUT,
+    }
+    if server.ssh_key:
+        pkey = _load_private_key(paramiko, server.ssh_key)
         client.connect(
-            server.ssh_host, port=server.ssh_port, username=server.ssh_user, pkey=pkey, timeout=15
+            server.ssh_host, port=server.ssh_port, username=server.ssh_user, pkey=pkey, **common
         )
     else:
         client.connect(
@@ -191,9 +217,29 @@ def _ssh_connect(server: Server):
             port=server.ssh_port,
             username=server.ssh_user,
             password=server.ssh_password,
-            timeout=15,
+            **common,
         )
     return client
+
+
+def _load_private_key(paramiko, material: str):
+    """
+    Приватный ключ любого распространённого типа.
+
+    Тип по тексту ключа не определить надёжно: OpenSSH с версии 7.8 пишет
+    все ключи под одним заголовком `BEGIN OPENSSH PRIVATE KEY`. Поэтому
+    перебираем классы по очереди — начиная с ed25519, которым сейчас
+    генерируются новые ключи.
+    """
+    import io
+
+    errors: list[str] = []
+    for key_class in (paramiko.Ed25519Key, paramiko.ECDSAKey, paramiko.RSAKey):
+        try:
+            return key_class.from_private_key(io.StringIO(material))
+        except Exception as exc:  # не тот тип либо ключ под паролем
+            errors.append(f"{key_class.__name__}: {exc}")
+    raise ValueError("не удалось прочитать приватный ключ SSH — " + "; ".join(errors))
 
 
 def _run(client, command: str) -> str:

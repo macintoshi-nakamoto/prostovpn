@@ -31,6 +31,12 @@ android {
         // Android может отказаться ставить сборку поверх старой
         versionCode = 9
         versionName = "1.0.7"
+
+        // Адрес панели: вход по логину и паролю и проверка обновлений идут
+        // туда. Для своей сборки перебивается через -PpanelUrl=...
+        val panelUrl = (project.findProperty("panelUrl") as String?)
+            ?: "https://45.151.106.253"
+        buildConfigField("String", "PANEL_URL", "\"$panelUrl\"")
     }
 
     signingConfigs {

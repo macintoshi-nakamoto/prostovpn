@@ -4,20 +4,25 @@ API для приложений: вход по логину и паролю, с�
 Список серверов отдаётся целиком при каждом запросе, поэтому добавленный
 в панели сервер появляется у всех при следующем открытии приложения —
 раздавать его вручную не нужно.
+
+Наружу не уходит ничего, что приложению нечего показывать: ни адреса
+сервера, ни публичного ключа, ни выданного адреса в подсети. Остаётся
+страна с городом — то, из чего человек выбирает, — и сам конфиг, который
+приложение отдаёт туннелю, но не рисует на экране.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as OrmSession
 
 from . import services
 from .db import get_db
-from .models import Session, User
-from .provisioning import build_vpn_key, config_for
+from .models import Provisioning, Session, User
+from .provisioning import config_for
 
 router = APIRouter(prefix="/api/v1", tags=["client"])
 
@@ -30,6 +35,14 @@ class LoginRequest(BaseModel):
 
 
 class ServerOut(BaseModel):
+    """
+    Точка подключения глазами приложения.
+
+    `config` — единственное техническое поле: его отдают туннелю как есть.
+    Показывать его пользователю нельзя, и показывать нечего — всё, что
+    нужно на экране, лежит в стране и городе.
+    """
+
     id: int
     name: str
     country: str | None = None
@@ -37,12 +50,7 @@ class ServerOut(BaseModel):
     city: str | None = None
     city_en: str | None = None
     country_code: str | None = None
-    host: str
-    port: int
-    # wg-quick для туннеля и та же конфигурация ссылкой — приложению удобно
-    # первое, ручной вставке и клиенту Amnezia второе.
     config: str
-    key: str
 
 
 class SubscriptionOut(BaseModel):
@@ -50,12 +58,21 @@ class SubscriptionOut(BaseModel):
     plan: str | None = None
     expires_at: dt.datetime | None = None
     days_left: int | None = None
+    # Трафик в байтах: лимит None — безлимит.
+    traffic_used_bytes: int = 0
+    traffic_limit_bytes: int | None = None
+
+
+class AccountOut(BaseModel):
+    public_id: str
+    login: str
+    name: str | None = None
 
 
 class LoginResponse(BaseModel):
     token: str
     expires_at: dt.datetime
-    login: str
+    account: AccountOut
     subscription: SubscriptionOut
     servers: list[ServerOut]
 
@@ -87,18 +104,43 @@ def current_session(
 
 def _subscription_out(user: User) -> SubscriptionOut:
     sub = user.active_subscription()
+    limit = user.effective_traffic_limit()
     if sub is None:
-        return SubscriptionOut(active=False)
+        return SubscriptionOut(
+            active=False,
+            traffic_used_bytes=user.traffic_used_bytes,
+            traffic_limit_bytes=limit,
+        )
     left = sub.expires_at - services.utcnow()
     return SubscriptionOut(
         active=True,
         plan=sub.plan,
         expires_at=sub.expires_at,
         days_left=max(0, left.days),
+        traffic_used_bytes=user.traffic_used_bytes,
+        traffic_limit_bytes=limit,
     )
 
 
-def _servers_out(db: OrmSession, user: User) -> list[ServerOut]:
+def _provision_missing_keys(user_id: int) -> None:
+    """
+    Досоздаёт недостающие ключи в фоне, уже после ответа приложению.
+
+    Раньше это делалось прямо в запросе, и вход занимал столько, сколько
+    тупит самый медленный сервер: недоступный узел добавляет секунды
+    ожидания на каждого. Ключи обычно уже есть — их выдают при создании
+    пользователя, — а те, что появились из-за нового сервера, подтянутся
+    к следующему запросу списка.
+    """
+    from .db import SessionLocal
+
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        if user is not None and user.has_access():
+            services.ensure_keys(db, user)
+
+
+def _servers_out(db: OrmSession, user: User, background: BackgroundTasks | None = None) -> list[ServerOut]:
     """
     Серверы, доступные пользователю прямо сейчас.
 
@@ -108,9 +150,16 @@ def _servers_out(db: OrmSession, user: User) -> list[ServerOut]:
     if not user.has_access():
         return []
 
-    services.ensure_keys(db, user)
-    db.refresh(user)
     by_server = {key.server_id: key for key in user.keys if key.revoked_at is None}
+
+    # Чего-то не хватает — досоздадим после ответа, не задерживая человека.
+    if background is not None:
+        missing = any(
+            server.id not in by_server and server.provisioning != Provisioning.SHARED
+            for server in services.active_servers(db)
+        )
+        if missing:
+            background.add_task(_provision_missing_keys, user.id)
 
     out: list[ServerOut] = []
     for server in services.active_servers(db):
@@ -122,23 +171,27 @@ def _servers_out(db: OrmSession, user: User) -> list[ServerOut]:
         out.append(
             ServerOut(
                 id=server.id,
-                name=server.name,
+                # Имя для списка — страна, а не внутреннее название сервера:
+                # «Нидерланды» человеку понятнее, чем «nl-ams-01».
+                name=server.country or server.name,
                 country=server.country,
                 country_en=server.country_en,
                 city=server.city,
                 city_en=server.city_en,
                 country_code=server.country_code,
-                host=server.host,
-                port=server.port,
                 config=config,
-                key=build_vpn_key(server.host, config, server.port),
             )
         )
     return out
 
 
 @router.post("/login", response_model=LoginResponse)
-def login(body: LoginRequest, request: Request, db: OrmSession = Depends(get_db)) -> LoginResponse:
+def login(
+    body: LoginRequest,
+    request: Request,
+    background: BackgroundTasks,
+    db: OrmSession = Depends(get_db),
+) -> LoginResponse:
     try:
         user, token = services.authenticate(
             db,
@@ -156,21 +209,24 @@ def login(body: LoginRequest, request: Request, db: OrmSession = Depends(get_db)
     return LoginResponse(
         token=token,
         expires_at=session.expires_at,
-        login=user.login,
+        account=AccountOut(public_id=user.public_id, login=user.login, name=user.name),
         subscription=_subscription_out(user),
-        servers=_servers_out(db, user),
+        servers=_servers_out(db, user, background),
     )
 
 
 @router.get("/servers", response_model=ServersResponse)
 def servers(
     request: Request,
+    background: BackgroundTasks,
     session: Session = Depends(current_session),
     db: OrmSession = Depends(get_db),
 ) -> ServersResponse:
     services.touch(db, session, _client_ip(request))
     user = session.user
-    return ServersResponse(subscription=_subscription_out(user), servers=_servers_out(db, user))
+    return ServersResponse(
+        subscription=_subscription_out(user), servers=_servers_out(db, user, background)
+    )
 
 
 @router.post("/heartbeat")
@@ -181,7 +237,37 @@ def heartbeat(
 ) -> dict[str, object]:
     """Приложение отмечается, пока подключено — из этого видно живые сессии."""
     services.touch(db, session, _client_ip(request))
-    return {"ok": True, "active": session.user.has_access()}
+    user = session.user
+    return {"ok": True, "active": user.has_access(), "subscription": _subscription_out(user).model_dump()}
+
+
+class UpdateOut(BaseModel):
+    """Что приложение показывает на кнопке обновления."""
+
+    update_available: bool
+    version: str | None = None
+    url: str | None = None
+    changelog: str | None = None
+    released_at: dt.datetime | None = None
+    size_bytes: int | None = None
+    sha256: str | None = None
+    # Обязательное обновление: без него сервис не работает.
+    mandatory: bool = False
+
+
+@router.get("/version", response_model=UpdateOut)
+def version(
+    platform: str,
+    current: str | None = None,
+    db: OrmSession = Depends(get_db),
+) -> UpdateOut:
+    """
+    Есть ли версия новее установленной.
+
+    Без токена: приложение спрашивает это и на экране входа, когда сессии
+    ещё нет, а обязательное обновление должно дойти и до тех, кто не вошёл.
+    """
+    return UpdateOut(**services.check_update(db, platform, current))
 
 
 @router.post("/logout")

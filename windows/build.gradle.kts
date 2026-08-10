@@ -55,6 +55,39 @@ val buildNumber: Int = (System.getenv("PROSTO_BUILD")?.toIntOrNull()
         output.toInt()
     }.getOrDefault(1)).coerceIn(1, 65535)
 
+/*
+ * Версия и адрес панели, доступные из кода.
+ *
+ * В десктопном проекте нет BuildConfig — это понятие Android. Генерируем
+ * крошечный файл на этапе сборки, иначе версию пришлось бы держать
+ * строкой в двух местах, и она разъезжалась бы с установщиком.
+ */
+val panelUrl: String = (project.findProperty("panelUrl") as String?) ?: "https://45.151.106.253"
+
+val generateBuildInfo = tasks.register("generateBuildInfo") {
+    val outputDir = layout.buildDirectory.dir("generated/buildinfo")
+    val version = "1.0.$buildNumber"
+    val url = panelUrl
+    outputs.dir(outputDir)
+    doLast {
+        val dir = outputDir.get().asFile.resolve("com/prostovpn/desktop")
+        dir.mkdirs()
+        dir.resolve("BuildInfo.kt").writeText(
+            """
+            package com.prostovpn.desktop
+
+            /** Создаётся сборкой. Руками не править. */
+            object BuildInfo {
+                const val VERSION = "$version"
+                const val PANEL_URL = "$url"
+            }
+            """.trimIndent() + System.lineSeparator()
+        )
+    }
+}
+
+kotlin.sourceSets["main"].kotlin.srcDir(generateBuildInfo)
+
 compose.desktop {
     application {
         mainClass = "com.prostovpn.desktop.MainKt"
@@ -213,4 +246,16 @@ tasks.register<JavaExec>("keyprobe") {
     group = "verification"
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.prostovpn.desktop.DevKeyProbeKt")
+}
+
+tasks.register<JavaExec>("panelcheck") {
+    group = "verification"
+    description = "Проверяет вход в панель без запуска окна"
+    mainClass.set("com.prostovpn.desktop.PanelCheck")
+    classpath = sourceSets["main"].runtimeClasspath
+    args = listOf(
+        (project.findProperty("panel") as String?) ?: panelUrl,
+        (project.findProperty("login") as String?) ?: "",
+        (project.findProperty("pass") as String?) ?: "",
+    )
 }

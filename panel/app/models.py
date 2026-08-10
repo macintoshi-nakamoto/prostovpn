@@ -1,17 +1,24 @@
 """
-Схема базы: пользователи, серверы, ключи, подписки, платежи, сессии.
+Схема базы: пользователи, тарифы, серверы, ключи, подписки, платежи, сессии.
 
 Ключ живёт отдельной таблицей, а не полем пользователя: у одного
 пользователя свой ключ на каждый сервер, и добавление сервера не должно
 трогать самих пользователей.
+
+Относительно исходной схемы панели добавлено то, без чего админка не может
+вести учёт: публичный идентификатор пользователя, лимит и расход трафика,
+тарифы с ценой и периодом, отдельный признак блокировки и история замеров
+трафика по пирам.
 """
 
 from __future__ import annotations
 
 import datetime as dt
 import enum
+import secrets
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -42,6 +49,20 @@ def utcnow() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
 
 
+# Алфавит без похожих символов: 0/O и 1/I/L человек путает, когда диктует
+# идентификатор в поддержку.
+_ID_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+
+
+def new_public_id() -> str:
+    """Публичный идентификатор пользователя вида PV-7K3M-A29X."""
+    block = lambda: "".join(secrets.choice(_ID_ALPHABET) for _ in range(4))  # noqa: E731
+    return f"PV-{block()}-{block()}"
+
+
+GB = 1024 ** 3
+
+
 class Admin(Base):
     """Учётка для входа в саму панель — не имеет отношения к VPN."""
 
@@ -53,6 +74,26 @@ class Admin(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
 
+class AdminSession(Base):
+    """
+    Сессия администратора в веб-панели.
+
+    Панель — отдельный SPA, поэтому вместо cookie отдаём токен: он же
+    ходит в заголовке Authorization и так же гасится при выходе.
+    """
+
+    __tablename__ = "admin_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_id: Mapped[int] = mapped_column(ForeignKey("admins.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime)
+    revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    admin: Mapped[Admin] = relationship()
+
+
 class Provisioning(str, enum.Enum):
     """Откуда берётся конфиг пользователя для сервера."""
 
@@ -60,6 +101,29 @@ class Provisioning(str, enum.Enum):
     SHARED = "shared"
     # Панель сама создаёт пира по SSH — нужен доступ к серверу.
     SSH = "ssh"
+
+
+class Plan(Base):
+    """
+    Тариф: цена, срок и сколько трафика включено.
+
+    Цена лежит на тарифе, а не на пользователе, чтобы календарь прибыли мог
+    посчитать ожидаемые поступления: кто когда продлевается и на какую сумму.
+    """
+
+    __tablename__ = "plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(64))
+    price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB")
+    period_days: Mapped[int] = mapped_column(Integer, default=30)
+    # None — безлимит. Отдельного флага нет: «нет лимита» и есть безлимит.
+    traffic_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class Server(Base):
@@ -98,6 +162,10 @@ class Server(Base):
     ssh_key: Mapped[str | None] = mapped_column(Text, default=None)
     awg_template: Mapped[str | None] = mapped_column(Text, default=None)
 
+    # Когда с сервера последний раз снимали счётчики трафика.
+    traffic_synced_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    traffic_error: Mapped[str | None] = mapped_column(Text, default=None)
+
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     keys: Mapped[list["UserKey"]] = relationship(back_populates="server", cascade="all, delete-orphan")
@@ -109,10 +177,31 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Публичный номер, который видит и называет клиент. Внутренний id в
+    # интерфейсе не показываем: он выдаёт количество пользователей.
+    public_id: Mapped[str] = mapped_column(String(24), unique=True, index=True, default=new_public_id)
     login: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    # Пароль показывается администратору один раз при создании; здесь лежит
+    # только для того, чтобы его можно было продиктовать клиенту повторно.
+    password_hint: Mapped[str | None] = mapped_column(String(128), default=None)
+    name: Mapped[str | None] = mapped_column(String(128), default=None)
+    contact: Mapped[str | None] = mapped_column(String(128), default=None)
     note: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Выключен администратором (пауза) — вход есть, серверов нет.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Заблокирован (бан) — вход запрещён совсем. Отдельно от паузы, потому что
+    # это разные решения и разные причины.
+    is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    blocked_reason: Mapped[str | None] = mapped_column(Text, default=None)
+    blocked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    # Личный лимит трафика. None — берём из тарифа; тариф с None — безлимит.
+    traffic_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    traffic_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    traffic_reset_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     keys: Mapped[list["UserKey"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -127,8 +216,29 @@ class User(Base):
         live = [s for s in self.subscriptions if s.expires_at > moment and not s.is_cancelled]
         return max(live, key=lambda s: s.expires_at, default=None)
 
+    def effective_traffic_limit(self, now: dt.datetime | None = None) -> int | None:
+        """Личный лимит важнее тарифного; None — безлимит."""
+        if self.traffic_limit_bytes is not None:
+            return self.traffic_limit_bytes
+        sub = self.active_subscription(now)
+        if sub is not None and sub.plan_ref is not None:
+            return sub.plan_ref.traffic_limit_bytes
+        return None
+
+    def traffic_exhausted(self, now: dt.datetime | None = None) -> bool:
+        limit = self.effective_traffic_limit(now)
+        return limit is not None and self.traffic_used_bytes >= limit
+
     def has_access(self, now: dt.datetime | None = None) -> bool:
-        return self.is_active and self.active_subscription(now) is not None
+        """
+        Доступ есть, если человек не забанен, не выключен, оплачен и не
+        выбрал лимит трафика. Любое из четырёх — серверов не отдаём.
+        """
+        if self.is_blocked or not self.is_active:
+            return False
+        if self.active_subscription(now) is None:
+            return False
+        return not self.traffic_exhausted(now)
 
 
 class UserKey(Base):
@@ -146,11 +256,35 @@ class UserKey(Base):
     public_key: Mapped[str | None] = mapped_column(String(64), default=None)
     address: Mapped[str | None] = mapped_column(String(64), default=None)
 
+    # Счётчики пира с сервера. Абсолютные значения с момента поднятия
+    # интерфейса: разницу между замерами копим в traffic_used_bytes.
+    rx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    tx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    last_handshake_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    traffic_synced_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     user: Mapped[User] = relationship(back_populates="keys")
     server: Mapped[Server] = relationship(back_populates="keys")
+
+
+class TrafficSample(Base):
+    """
+    Замер трафика пира. Храним прирост, а не абсолют: сервер могли
+    перезагрузить, и счётчик обнулился — по приросту график не ломается.
+    """
+
+    __tablename__ = "traffic_samples"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), index=True)
+    delta_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    rx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    tx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    sampled_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
 
 class Subscription(Base):
@@ -160,13 +294,26 @@ class Subscription(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Код тарифа денормализован: тариф могут переименовать или удалить, а в
+    # истории подписки должно остаться, что человек покупал.
     plan: Mapped[str] = mapped_column(String(64), default="basic")
+    plan_id: Mapped[int | None] = mapped_column(
+        ForeignKey("plans.id", ondelete="SET NULL"), index=True, default=None
+    )
+    price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB")
+    period_days: Mapped[int] = mapped_column(Integer, default=30)
+    # Ждём ли от человека следующую оплату — из этого строится ожидаемая
+    # часть календаря прибыли.
+    auto_renew: Mapped[bool] = mapped_column(Boolean, default=True)
+
     starts_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
-    expires_at: Mapped[dt.datetime] = mapped_column(DateTime)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime, index=True)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     user: Mapped[User] = relationship(back_populates="subscriptions")
+    plan_ref: Mapped[Plan | None] = relationship()
 
 
 class Payment(Base):
@@ -180,6 +327,9 @@ class Payment(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None
+    )
+    subscription_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subscriptions.id", ondelete="SET NULL"), index=True, default=None
     )
     # Numeric, а не float: деньги нельзя хранить в плавающей точке
     amount: Mapped[float] = mapped_column(Numeric(12, 2))
@@ -214,3 +364,46 @@ class Session(Base):
     revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     user: Mapped[User] = relationship(back_populates="sessions")
+
+
+class AppRelease(Base):
+    """
+    Версия приложения для конкретной платформы.
+
+    Приложение спрашивает её при запуске и, если своя версия старее,
+    показывает кнопку обновления. Переустанавливать вручную не нужно:
+    ссылка на установщик приходит отсюда же.
+    """
+
+    __tablename__ = "app_releases"
+    __table_args__ = (UniqueConstraint("platform", "version", name="uq_release_platform_version"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # windows, android, macos, linux, ios
+    platform: Mapped[str] = mapped_column(String(16), index=True)
+    version: Mapped[str] = mapped_column(String(32))
+    url: Mapped[str] = mapped_column(Text)
+    changelog: Mapped[str | None] = mapped_column(Text, default=None)
+    # Размер и контрольная сумма — чтобы приложение проверило скачанное.
+    size_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    sha256: Mapped[str | None] = mapped_column(String(64), default=None)
+    # Обязательное обновление: старую версию до сервиса не пускаем.
+    is_mandatory: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    released_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class AuditLog(Base):
+    """Что администратор делал с пользователями — на случай разбирательств."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_id: Mapped[int | None] = mapped_column(
+        ForeignKey("admins.id", ondelete="SET NULL"), default=None
+    )
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    target: Mapped[str | None] = mapped_column(String(128), default=None)
+    detail: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)

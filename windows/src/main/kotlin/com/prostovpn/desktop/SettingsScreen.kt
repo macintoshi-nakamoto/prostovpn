@@ -26,6 +26,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(
@@ -89,6 +92,10 @@ fun SettingsScreen(
                 LanguageCard(state)
                 Spacer(Modifier.height(0.dp))
             }
+
+            Spacer(Modifier.height(14.dp))
+
+            UpdateCard(state)
 
             Spacer(Modifier.height(14.dp))
 
@@ -515,4 +522,93 @@ private fun FileRow(
 private fun fileMeta(file: TunnelFile, s: Strings): String {
     val entries = "${file.count} ${s.entries}"
     return if (file.isDefault) "${s.defaultMeta} · $entries" else entries
+}
+
+/**
+ * Обновление приложения.
+ *
+ * Панель говорит, есть ли версия новее; кнопка скачивает установщик и
+ * запускает его. Он ставится поверх — удалять приложение и входить заново
+ * не нужно.
+ */
+@Composable
+private fun UpdateCard(state: AppState) {
+    val s = state.s
+    val scope = rememberCoroutineScope()
+
+    var info by remember { mutableStateOf(PanelUpdate.Info.none) }
+    var checking by remember { mutableStateOf(true) }
+    var downloading by remember { mutableStateOf(false) }
+    var percent by remember { mutableStateOf(0) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    // Проверяем один раз при открытии настроек: чаще незачем, а кнопка
+    // должна появляться сама, без ручного «проверить обновления».
+    LaunchedEffect(Unit) {
+        info = PanelUpdate.check(BuildInfo.VERSION)
+        checking = false
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Theme.card)
+            .padding(16.dp),
+    ) {
+        Text(
+            text = if (info.available) s.updateAvailable.format(info.version.orEmpty()) else s.updateNone,
+            style = manrope(14.sp, W.semibold, Theme.text),
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = s.updateCurrent.format(BuildInfo.VERSION),
+            style = manrope(12.sp, W.medium, Theme.textMuted),
+        )
+
+        info.changelog?.let { text ->
+            Spacer(Modifier.height(8.dp))
+            Text(text = text, style = manrope(12.sp, W.medium, Theme.textSecondary))
+        }
+
+        if (downloading) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = s.updateDownloading.format(percent),
+                style = manrope(12.sp, W.medium, Theme.textMuted),
+            )
+        }
+
+        error?.let { text ->
+            Spacer(Modifier.height(8.dp))
+            Text(text = text, style = manrope(12.sp, W.medium, Theme.accentHover))
+        }
+
+        if (info.available && !checking) {
+            Spacer(Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .scaleClickable(0.98f, enabled = !downloading) {
+                        val url = info.url ?: return@scaleClickable
+                        downloading = true
+                        error = null
+                        scope.launch {
+                            val result = PanelUpdate.download(url) { percent = it }
+                            downloading = false
+                            result.onFailure { error = it.message ?: s.updateFailed }
+                        }
+                    }
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Theme.accentTint08),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = if (downloading) s.updateDownloadingShort else s.updateButton,
+                    style = manrope(14.sp, W.bold, Theme.link),
+                )
+            }
+        }
+    }
 }

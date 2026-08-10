@@ -110,10 +110,28 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
     var server by mutableStateOf<ServerInfo?>(null)
         private set
-    var isGuest by mutableStateOf(prefs.getBoolean("guest", false))
+    /** Токен сессии в панели. Пусто — человек не вошёл. */
+    var panelToken by mutableStateOf(prefs.getString("panelToken", "").orEmpty())
+        private set
+    var accountName by mutableStateOf(prefs.getString("accountName", "").orEmpty())
+        private set
+    var accountPublicId by mutableStateOf(prefs.getString("accountPublicId", "").orEmpty())
+        private set
+    var subscriptionDaysLeft by mutableIntStateOf(prefs.getInt("daysLeft", 0))
+        private set
+    var trafficUsedBytes by mutableStateOf(prefs.getLong("trafficUsed", 0L))
         private set
 
-    val isLoggedIn get() = server != null || isGuest
+    /** -1 означает безлимит. */
+    var trafficLimitBytes by mutableStateOf(prefs.getLong("trafficLimit", -1L))
+        private set
+
+    /** Страны, выданные панелью. Пусто — подписка кончилась. */
+    var panelServers by mutableStateOf<List<ServerInfo>>(emptyList())
+        private set
+
+    // Вход только по аккаунту: гостевого режима нет, страны выдаёт панель.
+    val isLoggedIn get() = panelToken.isNotEmpty()
 
     private var connectJob: Job? = null
     private var timerJob: Job? = null
@@ -341,11 +359,26 @@ class AppState(application: Application) : AndroidViewModel(application) {
         private set
 
     fun selectServer(index: Int) {
+        // Переключение страны меняет и конфиг, который уйдёт в туннель.
+        panelServers.getOrNull(index)?.let {
+            server = it
+            persistServer()
+        }
         selectedServerIndex = index
         prefs.edit().putInt("selectedServer", index).apply()
     }
 
     fun displayServers(): List<DisplayServer> {
+        // Стран из панели может быть несколько, и выбирает человек.
+        if (panelServers.isNotEmpty()) {
+            return panelServers.map { item ->
+                DisplayServer(
+                    flag = item.countryCode?.takeIf { it.isNotEmpty() }?.let { flagEmoji(it) }.orEmpty(),
+                    name = item.countryFor(lang).orEmpty(),
+                    sub = item.cityFor(lang).orEmpty(),
+                )
+            }
+        }
         val t = s
         server?.let { imported ->
             val flag = imported.countryCode
@@ -423,34 +456,85 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     // --- Вход ---
 
-    /** Применяет учётные данные: ключ vpn:// подключает сервер, иначе гостевой вход. */
-    fun login(credentials: String): Boolean {
-        val joined = credentials.filterNot { it.isWhitespace() }
-
-        if (joined.startsWith("vpn://")) {
-            val info = KeyParser.extractServer(joined) ?: return false
-            prefs.edit().putString("accessKey", joined).apply()
-            server = info
-            selectServer(0)
-            persistServer()
-            refreshGeo()
-            return true
+    /**
+     * Вход по логину и паролю из панели.
+     *
+     * Пароль проверяет сервер: страны выдаются только оплаченной учётной
+     * записи, и обойти это, вставив чужой ключ, нельзя.
+     */
+    suspend fun login(login: String, password: String): Result<Unit> {
+        val session = withContext(Dispatchers.IO) {
+            runCatching { PanelApi.login(login, password, BuildConfig.VERSION_NAME) }
         }
-
-        isGuest = true
-        prefs.edit().putBoolean("guest", true).apply()
-        return true
+        return session.map { applySession(it) }
     }
 
-    fun loginAsGuest() {
-        isGuest = true
-        prefs.edit().putBoolean("guest", true).apply()
+    private fun applySession(session: PanelApi.Session) {
+        panelToken = session.token
+        accountName = session.name ?: session.login
+        accountPublicId = session.publicId
+        subscriptionDaysLeft = session.daysLeft
+        trafficUsedBytes = session.trafficUsedBytes
+        trafficLimitBytes = session.trafficLimitBytes ?: -1L
+
+        prefs.edit()
+            .putString("panelToken", session.token)
+            .putString("accountName", accountName)
+            .putString("accountPublicId", accountPublicId)
+            .putInt("daysLeft", session.daysLeft)
+            .putLong("trafficUsed", session.trafficUsedBytes)
+            .putLong("trafficLimit", trafficLimitBytes)
+            .apply()
+
+        applyPanelServers(session.servers.map { it.toServerInfo() })
+    }
+
+    private fun applyPanelServers(list: List<ServerInfo>) {
+        panelServers = list
+        if (list.isEmpty()) {
+            server = null
+            return
+        }
+        if (selectedServerIndex !in list.indices) selectServer(0)
+        server = list[selectedServerIndex.coerceIn(list.indices)]
+        persistServer()
+    }
+
+    /** Перечитывает страны: подписку могли продлить или закрыть. */
+    fun refreshPanelServers() {
+        val token = panelToken
+        if (token.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = runCatching { PanelApi.servers(token) }
+            withContext(Dispatchers.Main) {
+                result
+                    .onSuccess { (list, subscription) ->
+                        subscriptionDaysLeft = subscription.optInt("days_left")
+                        trafficUsedBytes = subscription.optLong("traffic_used_bytes")
+                        trafficLimitBytes =
+                            if (subscription.isNull("traffic_limit_bytes")) -1L
+                            else subscription.optLong("traffic_limit_bytes")
+                        applyPanelServers(list.map { it.toServerInfo() })
+                    }
+                    // Сессию погасили в панели — просим войти заново.
+                    .onFailure { logout() }
+            }
+        }
     }
 
     fun logout() {
         disconnect()
+        panelToken.takeIf { it.isNotEmpty() }?.let { token ->
+            viewModelScope.launch(Dispatchers.IO) { PanelApi.logout(token) }
+        }
         server = null
-        isGuest = false
+        panelServers = emptyList()
+        panelToken = ""
+        accountName = ""
+        accountPublicId = ""
+        subscriptionDaysLeft = 0
+        trafficUsedBytes = 0L
+        trafficLimitBytes = -1L
         selectedServerIndex = 0
         val language = lang
         prefs.edit().clear().apply()

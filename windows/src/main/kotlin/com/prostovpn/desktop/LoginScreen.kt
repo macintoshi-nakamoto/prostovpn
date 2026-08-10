@@ -97,7 +97,7 @@ fun LoginScreen(
             errorText = s.errEmptyLogin
             return
         }
-        if (!credentials.startsWith("vpn://") && password.length < 4) {
+        if (password.length < 4) {
             errorText = s.errShortPassword
             return
         }
@@ -107,21 +107,20 @@ fun LoginScreen(
         isLoading = true
 
         scope.launch {
-            delay(1200)
-
-            val joined = credentials.filterNot { it.isWhitespace() }
-            if (joined.startsWith("vpn://") && KeyParser.extractServer(joined) == null) {
-                isLoading = false
-                errorText = s.errBadKey
-                return@launch
-            }
-
+            // Пароль проверяет панель: локально решать, верен он или нет,
+            // нечем — и не нужно.
+            val result = state.login(credentials, password)
             isLoading = false
-            isDone = true
-            haptics.success()
 
-            delay(450)
-            state.login(credentials)
+            result
+                .onSuccess {
+                    isDone = true
+                    haptics.success()
+                    delay(450)
+                }
+                .onFailure { error ->
+                    errorText = error.message ?: s.errBadKey
+                }
         }
     }
 
@@ -208,23 +207,6 @@ fun LoginScreen(
                         onClick = ::submit,
                     )
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(40.dp)
-                            .scaleClickable(0.98f, enabled = !isLoading && !isDone) {
-                                focusManager.clearFocus()
-                                state.loginAsGuest()
-                            }
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = s.continueWithoutAccount,
-                            style = manrope(14.sp, W.semibold, Theme.textSecondary),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
                 }
 
                 Footer(

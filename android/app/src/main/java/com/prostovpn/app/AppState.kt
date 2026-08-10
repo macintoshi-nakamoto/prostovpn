@@ -395,6 +395,25 @@ class AppState(application: Application) : AndroidViewModel(application) {
         if (selectedServerIndex >= displayServers().size) {
             selectServer(0)
         }
+        restoreRunningTunnel()
+    }
+
+    /**
+     * Подхватывает уже поднятый туннель при запуске приложения.
+     *
+     * Систему VPN переживает смерть процесса, а на Huawei и Honor процесс
+     * убивают постоянно. Без этого приложение открывалось с «Отключено»
+     * при работающем VPN, и нажатие на кнопку пыталось поднять туннель
+     * поверх живого.
+     */
+    private fun restoreRunningTunnel() {
+        viewModelScope.launch {
+            val up = withContext(tunnelDispatcher) { tunnel.isUp }
+            if (up && phase == Phase.OFF) {
+                phase = Phase.ON
+                startTimer()
+            }
+        }
     }
 
     // --- Вход ---
@@ -532,10 +551,44 @@ class AppState(application: Application) : AndroidViewModel(application) {
         seconds = 0
         val startedAt = System.currentTimeMillis()
         timerJob = viewModelScope.launch {
+            var misses = 0
+            var nextCheck = 5
+            var lastRx = -1L
             while (true) {
                 delay(500)
                 val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
                 if (elapsed != seconds) seconds = elapsed
+
+                /*
+                Туннель может умереть сам: сервер пропал, сеть сменилась,
+                система прибила процесс. Без этой проверки экран показывал
+                «подключено» и бодро считал секунды, пока наружу не уходило
+                ничего. Проверяем раз в пять секунд, а не каждые полсекунды:
+                опрос движка не бесплатный.
+                */
+                if (elapsed < nextCheck) continue
+                nextCheck = elapsed + 5
+
+                val alive = withContext(tunnelDispatcher) {
+                    if (!tunnel.isUp) return@withContext false
+                    // Идущий трафик — доказательство жизни даже до того, как
+                    // подойдёт срок следующего рукопожатия
+                    val rx = tunnel.receivedBytes()
+                    val moving = rx >= 0 && lastRx >= 0 && rx > lastRx
+                    lastRx = rx
+                    tunnel.isHealthy() || moving
+                }
+
+                // Одиночный промах не считаем: опрос изредка не проходит,
+                // а ложное отключение хуже пяти секунд задержки
+                misses = if (alive) 0 else misses + 1
+                if (misses >= 2) {
+                    timerJob = null
+                    phase = Phase.OFF
+                    connectionError = s.errTunnelDropped
+                    viewModelScope.launch(tunnelDispatcher) { runCatching { tunnel.disconnect() } }
+                    return@launch
+                }
             }
         }
     }

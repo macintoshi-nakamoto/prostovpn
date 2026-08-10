@@ -22,6 +22,7 @@ data class Strings(
     val chooseServer: String,
     val errNoHandshake: String,
     val errTunnelFailed: String,
+    val errTunnelDropped: String,
 
     val settings: String,
     val split: String,
@@ -86,6 +87,7 @@ private val RU = Strings(
     chooseServer = "ВЫБЕРИТЕ СЕРВЕР",
     errNoHandshake = "Сервер не отвечает. Возможно, сеть блокирует VPN — попробуйте другой сервер или мобильный интернет вместо Wi-Fi",
     errTunnelFailed = "Не удалось поднять туннель. Проверьте ключ и разрешение на VPN",
+    errTunnelDropped = "Соединение с VPN прервалось",
     settings = "Настройки",
     split = "Раздельное туннелирование",
     splitDesc = "Обходит видимость VPN для РФ сервисов",
@@ -146,6 +148,7 @@ private val EN = Strings(
     chooseServer = "CHOOSE A SERVER",
     errNoHandshake = "The server isn't responding. The network may be blocking VPN — try another server or mobile data instead of Wi-Fi",
     errTunnelFailed = "Couldn't bring the tunnel up. Check the key and VPN permission",
+    errTunnelDropped = "VPN connection dropped",
     settings = "Settings",
     split = "Split tunneling",
     splitDesc = "Hides VPN usage from Russian services",

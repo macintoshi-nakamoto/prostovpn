@@ -28,7 +28,13 @@ import (
 */
 func watchState(dev *device.Device, confPath string) {
 	statePath := filepath.Join(filepath.Dir(confPath), "state.txt")
-	ticker := time.NewTicker(2 * time.Second)
+	/*
+	400 мс, а не две секунды: по этому файлу приложение узнаёт о состоявшемся
+	рукопожатии. С редким тиком подключение выглядело медленным на ровном
+	месте — сервер отвечал за доли секунды, а кнопка ещё секунды крутилась.
+	Файл крошечный, запись идёт через переименование, так что цена низкая.
+	*/
+	ticker := time.NewTicker(400 * time.Millisecond)
 	defer ticker.Stop()
 
 	write := func() {

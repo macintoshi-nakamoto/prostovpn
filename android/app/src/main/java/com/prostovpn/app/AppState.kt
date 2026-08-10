@@ -73,6 +73,29 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("prosto", 0)
 
+    init {
+        migrateToFullTunnel()
+    }
+
+    /**
+     * Переводит на полный туннель по умолчанию.
+     *
+     * Раньше по умолчанию было раздельное туннелирование: в туннель уходило
+     * ~2000 подсетей. На части устройств Android столько маршрутов приводит
+     * к «подключено, но не работает» — в любой сети, потому что маршруты от
+     * сети не зависят. Полный туннель — это один маршрут и надёжная работа
+     * везде; раздельное остаётся ручной опцией.
+     *
+     * Разовая, по флагу: кто осознанно включит сплит позже — сохранит его.
+     */
+    private fun migrateToFullTunnel() {
+        if (prefs.getBoolean("fulltunnel.migrated", false)) return
+        prefs.edit()
+            .putBoolean("split.enabled", false)
+            .putBoolean("fulltunnel.migrated", true)
+            .apply()
+    }
+
     var phase by mutableStateOf(Phase.OFF)
         private set
     var seconds by mutableIntStateOf(0)
@@ -122,7 +145,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     // --- Настройки ---
 
-    var splitTunnelEnabled by mutableStateOf(prefs.getBoolean("split.enabled", true))
+    // Полный туннель по умолчанию: один маршрут вместо ~2000, работает на
+    // любом Android. Раздельное включается вручную в настройках.
+    var splitTunnelEnabled by mutableStateOf(prefs.getBoolean("split.enabled", false))
         private set
     var killSwitch by mutableStateOf(prefs.getBoolean("killSwitch", true))
         private set
@@ -405,10 +430,17 @@ class AppState(application: Application) : AndroidViewModel(application) {
         selectedServerIndex = 0
         val language = lang
         prefs.edit().clear().apply()
-        prefs.edit().putString("lang", language).apply()
+        // Язык сохраняем, а флаг миграции возвращаем сразу: без него дефолты
+        // полей в памяти и в prefs разъедутся до перезапуска
+        prefs.edit()
+            .putString("lang", language)
+            .putBoolean("fulltunnel.migrated", true)
+            .putBoolean("split.enabled", false)
+            .apply()
         cachedAllowedIps = null
         cachedAllowedIpsV4 = null
-        splitTunnelEnabled = true
+        // Полный туннель — как дефолт после установки
+        splitTunnelEnabled = false
         killSwitch = true
         autoStart = false
         autoConnect = false

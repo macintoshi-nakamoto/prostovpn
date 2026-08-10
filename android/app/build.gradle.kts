@@ -14,8 +14,8 @@ android {
         targetSdk = 35
         // Растёт с каждой выкладкой: с прежним versionCode установщик
         // Android может отказаться ставить сборку поверх старой
-        versionCode = 4
-        versionName = "1.0.2"
+        versionCode = 5
+        versionName = "1.0.3"
     }
 
     buildTypes {

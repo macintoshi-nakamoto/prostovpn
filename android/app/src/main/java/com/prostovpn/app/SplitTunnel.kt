@@ -143,10 +143,30 @@ object SplitTunnel {
         return out
     }
 
-    fun allowedIpsExcept(excludeCidrs: List<String>, includeIpv6: Boolean): String {
-        val ipv4 = complement(excludeCidrs)
-        return (if (includeIpv6) ipv4 + "::/0" else ipv4).joinToString(", ")
-    }
+    /**
+     * Список AllowedIPs для раздельного туннелирования.
+     *
+     * `::/0` добавляем ВСЕГДА, даже когда у интерфейса нет IPv6-адреса, и это не
+     * прихоть. Библиотека решает судьбу IPv6 так (GoBackend.setStateInternal):
+     *
+     *     если среди AllowedIPs есть маска 0 и пир один — allowFamily не зовётся;
+     *     иначе вызывается allowFamily(AF_INET) и allowFamily(AF_INET6).
+     *
+     * При полном туннеле маска 0 есть (`0.0.0.0/0`), поэтому IPv6 остаётся
+     * заблокированным — маршрута и адреса этого семейства нет, и система его глушит.
+     * А при раздельном туннелировании маски 0 не было ни одной, значит срабатывал
+     * `allowFamily(AF_INET6)` и РАЗБЛОКИРОВАЛ IPv6 при полном отсутствии IPv6-маршрутов:
+     * весь IPv6-трафик уходил мимо туннеля с настоящим адресом абонента. На мобильных
+     * сетях, где IPv6 выдаётся по умолчанию, это значит, что двухстековые сайты —
+     * а Google двухстековый целиком — видели реальную страну, и Gemini отвечал
+     * «эта страна не поддерживается».
+     *
+     * С `::/0` в списке маска 0 появляется: allowFamily не зовётся, IPv6 уходит в
+     * туннель. Если v6-адреса у интерфейса нет, система не отдаёт приложениям
+     * IPv6-связность и они работают по IPv4 через VPN — то есть корректно.
+     */
+    fun allowedIpsExcept(excludeCidrs: List<String>): String =
+        (complement(excludeCidrs) + "::/0").joinToString(", ")
 
     /**
      * Есть ли у интерфейса IPv6-адрес — по строке `Address` секции
@@ -177,6 +197,46 @@ object SplitTunnel {
             if (line.substringAfter('=').split(',').any { ':' in it }) return true
         }
         return false
+    }
+
+    /** Резолверы на случай, когда сервер своих не прислал. */
+    const val FALLBACK_DNS = "1.1.1.1, 8.8.8.8"
+
+    /**
+     * Дописывает `DNS` в секцию `[Interface]`, если сервер его не задал.
+     *
+     * Библиотека зовёт `VpnService.Builder.addDnsServer` только из
+     * `Interface.getDnsServers()`, своего значения по умолчанию у неё нет. Когда
+     * строки `DNS` в конфиге не было, туннель поднимался вообще без резолверов, и
+     * система продолжала спрашивать DNS оператора. Дальше два одинаково плохих
+     * исхода: при полном туннеле запросы к резолверу оператора уходят в туннель,
+     * а он часто отвечает только абонентам своей сети — имена перестают
+     * разрешаться совсем; при раздельном туннелировании адрес резолвера
+     * российский, то есть в списке исключений, и запросы идут мимо VPN — тогда
+     * ответы приходят с оглядкой на настоящее местоположение.
+     *
+     * Конфиг сервера всегда важнее: если `DNS` есть, не трогаем.
+     */
+    fun ensureDns(configText: String, servers: String = FALLBACK_DNS): String {
+        var section = ""
+        for (rawLine in configText.lineSequence()) {
+            val line = rawLine.substringBefore('#').trim()
+            if (line.isEmpty()) continue
+            if (line.startsWith("[") && line.endsWith("]")) {
+                section = line.trim('[', ']').lowercase()
+                continue
+            }
+            if (section != "interface") continue
+            if (line.substringBefore('=', "").trim().equals("dns", ignoreCase = true)) {
+                return configText
+            }
+        }
+
+        val header = Regex("(?im)^[ \\t]*\\[Interface\\][ \\t]*$")
+        val match = header.find(configText) ?: return configText
+        return configText.substring(0, match.range.last + 1) +
+            "\nDNS = $servers" +
+            configText.substring(match.range.last + 1)
     }
 
     fun applyToConfig(configText: String, allowedIps: String): String {

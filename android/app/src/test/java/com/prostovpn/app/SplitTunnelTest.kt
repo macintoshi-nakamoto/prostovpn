@@ -73,12 +73,44 @@ class SplitTunnelTest {
     }
 
     @Test
-    fun `IPv6 в туннель попадает только при наличии v6-адреса`() {
-        // Без v6-адреса ::/0 добавлять нельзя: иначе IPv6 уходит в чёрную дыру
-        val withV6 = SplitTunnel.allowedIpsExcept(listOf("87.240.128.0/18"), includeIpv6 = true)
-        val withoutV6 = SplitTunnel.allowedIpsExcept(listOf("87.240.128.0/18"), includeIpv6 = false)
-        assertTrue("::/0 ожидался при includeIpv6", "::/0" in withV6)
-        assertFalse("::/0 не должно быть без v6-адреса", "::/0" in withoutV6)
+    fun `при раздельном туннелировании IPv6 не утекает мимо VPN`() {
+        /*
+        Раньше без v6-адреса ::/0 не добавляли, боясь чёрной дыры. Но библиотека
+        (GoBackend.setStateInternal) при ОТСУТСТВИИ маски 0 среди AllowedIPs зовёт
+        allowFamily(AF_INET6), который разблокирует IPv6 при полном отсутствии
+        IPv6-маршрутов: весь IPv6 уходил мимо туннеля с настоящим адресом абонента.
+        На мобильных сетях с IPv6 двухстековые сайты видели реальную страну.
+        Маска 0 в списке гасит этот вызов, поэтому ::/0 нужен всегда.
+        */
+        val allowed = SplitTunnel.allowedIpsExcept(listOf("87.240.128.0/18"))
+        assertTrue("::/0 обязателен: без него срабатывает allowFamily(AF_INET6)", "::/0" in allowed)
+
+        val masks = allowed.split(", ").mapNotNull { it.substringAfter('/', "").toIntOrNull() }
+        assertTrue("нужна хотя бы одна маска 0, иначе IPv6 разблокируется", masks.any { it == 0 })
+    }
+
+    @Test
+    fun `DNS подставляется только когда сервер его не задал`() {
+        val withoutDns = """
+            [Interface]
+            Address = 10.8.1.3/32
+            PrivateKey = aaa=
+
+            [Peer]
+            Endpoint = 1.2.3.4:51820
+        """.trimIndent()
+        val patched = SplitTunnel.ensureDns(withoutDns)
+        assertTrue("DNS должен появиться", "DNS = ${SplitTunnel.FALLBACK_DNS}" in patched)
+        // Строка обязана попасть в [Interface], иначе парсер её не увидит
+        val interfacePart = patched.substringAfter("[Interface]").substringBefore("[Peer]")
+        assertTrue("DNS оказался вне [Interface]", "DNS" in interfacePart)
+
+        val withDns = """
+            [Interface]
+            Address = 10.8.1.3/32
+            DNS = 9.9.9.9
+        """.trimIndent()
+        assertEquals("свой DNS сервера трогать нельзя", withDns, SplitTunnel.ensureDns(withDns))
     }
 
     @Test

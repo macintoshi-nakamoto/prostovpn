@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
@@ -266,7 +267,10 @@ private fun StatusBlock(state: AppState) {
         val subStyle = manrope(14.sp, W.medium, Theme.textMuted).copy(
             fontFeatureSettings = "tnum",
         )
-        Box(Modifier.height(20.dp), contentAlignment = Alignment.Center) {
+        // Высота минимальная, а не фиксированная: подсказка и таймер занимают одну
+        // строку, но текст ошибки длиннее экрана — при height(20.dp) он обрезался
+        // на полуслове («…сеть блокирует VPN —»), и совет из него не читался
+        Box(Modifier.heightIn(min = 20.dp), contentAlignment = Alignment.Center) {
             AnimatedContent(
                 targetState = state.phase,
                 label = "sub",
@@ -275,7 +279,12 @@ private fun StatusBlock(state: AppState) {
                 },
             ) { phase ->
                 when (phase) {
-                    Phase.OFF -> Text(text = subText, style = subStyle)
+                    Phase.OFF -> Text(
+                        text = subText,
+                        style = subStyle,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 28.dp),
+                    )
                     Phase.CONNECTING, Phase.DISCONNECTING -> Text(text = "", style = subStyle)
                     // Цифры таймера «прокручиваются» — как numericText() в iOS
                     Phase.ON -> RollingText(text = state.formattedDuration, style = subStyle)

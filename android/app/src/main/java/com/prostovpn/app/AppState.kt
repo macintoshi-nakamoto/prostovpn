@@ -123,9 +123,15 @@ class AppState(application: Application) : AndroidViewModel(application) {
     private var pendingConfig: String? = null
 
     private val tunnel: TunnelManager by lazy {
-        TunnelManager.getInstance(getApplication()).apply {
-            onStateChange = { up ->
-                if (!up && phase == Phase.ON) disconnect()
+        TunnelManager.getInstance(getApplication()).also { manager ->
+            /*
+            Получателя указываем явно. Внутри apply { } им был сам TunnelManager,
+            и вызов disconnect() уходил в туннель вместо этого метода: интерфейс
+            снимался, а phase оставалась ON, и экран показывал «подключено», пока
+            через пять секунд его не поправит проверка живости.
+            */
+            manager.onStateChange = { up ->
+                if (!up && phase == Phase.ON) this@AppState.disconnect()
             }
         }
     }
@@ -174,9 +180,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
     var autoConnect by mutableStateOf(prefs.getBoolean("autoConnect", false))
         private set
 
+    // Кэш один: список AllowedIPs больше не зависит от наличия IPv6-адреса,
+    // ::/0 добавляется всегда — иначе библиотека разблокирует IPv6 мимо туннеля
     private var cachedAllowedIps: String? = null
-    // Отдельный кэш для сетей без IPv6: список без ::/0
-    private var cachedAllowedIpsV4: String? = null
     private var autoConnectTried = false
 
     fun changeSplitTunnel(enabled: Boolean) {
@@ -259,7 +265,6 @@ class AppState(application: Application) : AndroidViewModel(application) {
         activeTunnelFileId = file.id
         prefs.edit().putString("tunnel.active", file.id).apply()
         cachedAllowedIps = null
-        cachedAllowedIpsV4 = null
         if (splitTunnelEnabled) reconnectIfActive()
     }
 
@@ -318,18 +323,16 @@ class AppState(application: Application) : AndroidViewModel(application) {
         IPv6 (частых у российских операторов) это выглядит как «подключено,
         а ничего не грузит» — система предпочитает IPv6 и упирается в него.
         */
-        val ipv6 = SplitTunnel.hasIpv6Address(base)
+        val withDns = SplitTunnel.ensureDns(base)
+        val ipv6 = SplitTunnel.hasIpv6Address(withDns)
         if (!splitTunnelEnabled) {
             val all = if (ipv6) "0.0.0.0/0, ::/0" else "0.0.0.0/0"
-            return SplitTunnel.applyToConfig(base, all)
+            return SplitTunnel.applyToConfig(withDns, all)
         }
-        // Кэш зависит от того, включаем ли IPv6 — иначе после смены сервера
-        // отдали бы чужой список
-        val cacheKey = if (ipv6) cachedAllowedIps else cachedAllowedIpsV4
-        val allowed = cacheKey ?: withContext(Dispatchers.Default) {
-            SplitTunnel.allowedIpsExcept(excludeCidrs(), includeIpv6 = ipv6)
-        }.also { if (ipv6) cachedAllowedIps = it else cachedAllowedIpsV4 = it }
-        return SplitTunnel.applyToConfig(base, allowed)
+        val allowed = cachedAllowedIps ?: withContext(Dispatchers.Default) {
+            SplitTunnel.allowedIpsExcept(excludeCidrs())
+        }.also { cachedAllowedIps = it }
+        return SplitTunnel.applyToConfig(withDns, allowed)
     }
 
     // --- Серверы ---
@@ -349,7 +352,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { flagEmoji(it) } ?: "🌐"
             val name = imported.countryFor(lang)?.takeIf { it.isNotEmpty() } ?: imported.host
-            val sub = imported.cityFor(lang)?.takeIf { it.isNotEmpty() } ?: imported.host
+            // Когда геолокация не определилась, обе строки падали в один и тот же
+            // хост, и карточка показывала один IP дважды — вместо этого оставляем
+            // вторую строку пустой
+            val sub = imported.cityFor(lang)?.takeIf { it.isNotEmpty() && it != name }.orEmpty()
             return listOf(DisplayServer(flag, name, sub))
         }
         return demoServers.map { demo ->
@@ -456,7 +462,6 @@ class AppState(application: Application) : AndroidViewModel(application) {
             .putBoolean("split.enabled", false)
             .apply()
         cachedAllowedIps = null
-        cachedAllowedIpsV4 = null
         // Полный туннель — как дефолт после установки
         splitTunnelEnabled = false
         autoConnect = false
@@ -514,7 +519,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         connectionError = null
         connectJob = viewModelScope.launch {
             val prepared = buildConfigForConnect(config)
-            val result = withContext(tunnelDispatcher) { tunnel.connect(prepared) }
+            // Без withContext: connect сам сериализуется и сам уходит на IO,
+            // а ожидание рукопожатия обязано оставаться отменяемым
+            val result = tunnel.connect(prepared)
             when (result) {
                 TunnelManager.Result.CONNECTED -> {
                     phase = Phase.ON
@@ -589,7 +596,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     phase = Phase.OFF
                     connectionError = s.errTunnelDropped
                     stopForegroundNotice()
-                    viewModelScope.launch(tunnelDispatcher) { runCatching { tunnel.disconnect() } }
+                    viewModelScope.launch { runCatching { tunnel.disconnect() } }
                     return@launch
                 }
             }
@@ -611,7 +618,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         // seconds не обнуляем здесь: уходящий таймер должен дофейдиться
         // с последним значением, а не прокрутиться в 00:00; сброс — в startTimer()
         connectJob = viewModelScope.launch {
-            withContext(tunnelDispatcher) { runCatching { tunnel.disconnect() } }
+            runCatching { tunnel.disconnect() }
             // Уведомление снимаем только когда интерфейс действительно снят: пока
             // он жив, «подключено» в шторке — правда, а не задержка отрисовки
             stopForegroundNotice()

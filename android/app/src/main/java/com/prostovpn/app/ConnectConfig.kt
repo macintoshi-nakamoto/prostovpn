@@ -45,14 +45,15 @@ object ConnectConfig {
 
     /** Итоговый конфиг с учётом сплит-туннеля и наличия IPv6-адреса у интерфейса. */
     fun build(context: Context, base: String): String {
-        val ipv6 = SplitTunnel.hasIpv6Address(base)
+        val withDns = SplitTunnel.ensureDns(base)
+        val ipv6 = SplitTunnel.hasIpv6Address(withDns)
         val fullTunnel = if (ipv6) "0.0.0.0/0, ::/0" else "0.0.0.0/0"
         if (!prefs(context).getBoolean("split.enabled", false)) {
-            return SplitTunnel.applyToConfig(base, fullTunnel)
+            return SplitTunnel.applyToConfig(withDns, fullTunnel)
         }
         val content = activeListContent(context)
-            ?: return SplitTunnel.applyToConfig(base, fullTunnel)
-        val allowed = SplitTunnel.allowedIpsExcept(SplitTunnel.parseCidrList(content), includeIpv6 = ipv6)
-        return SplitTunnel.applyToConfig(base, allowed)
+            ?: return SplitTunnel.applyToConfig(withDns, fullTunnel)
+        val allowed = SplitTunnel.allowedIpsExcept(SplitTunnel.parseCidrList(content))
+        return SplitTunnel.applyToConfig(withDns, allowed)
     }
 }

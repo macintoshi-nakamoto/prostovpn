@@ -2,6 +2,12 @@ package com.prostovpn.app
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.amnezia.awg.backend.Backend
 import org.amnezia.awg.backend.GoBackend
 import org.amnezia.awg.backend.Tunnel
@@ -31,6 +37,13 @@ class TunnelManager(context: Context) {
 
     private val backend: Backend = GoBackend(context.applicationContext)
 
+    /*
+    Подключение и отключение сериализуем здесь, а не у вызывающего: владельцев
+    туннеля двое — экран ([AppState]) и Always-on VPN ([App]), который стартует
+    вообще без Activity. Без общего замка они могли войти в setState одновременно.
+    */
+    private val mutex = Mutex()
+
     private val tunnel = object : Tunnel {
         override fun getName(): String = "prosto"
         override fun onStateChange(newState: Tunnel.State) {
@@ -43,45 +56,82 @@ class TunnelManager(context: Context) {
     fun parseConfig(configText: String): Config =
         Config.parse(BufferedReader(StringReader(configText)))
 
+    private enum class Handshake { OK, TIMEOUT, INTERFACE_DOWN }
+
     /**
      * Поднимает туннель и ждёт реального рукопожатия с сервером.
      *
-     * Блокирующий вызов — запускать вне главного потока. Возвращается, когда
-     * сервер ответил, либо когда стало ясно, что не ответит.
+     * Отменяемо: ожидание идёт на [delay], поэтому нажатие «отключить» во время
+     * подключения срабатывает сразу. Раньше цикл крутился на Thread.sleep внутри
+     * односоточного диспетчера, и кнопка не отвечала до конца всего таймаута.
      */
-    fun connect(configText: String): Result {
-        // runCatching ловит Throwable, включая ошибки загрузки классов: без записи в лог
-        // такой отказ выглядел бы как «просто не подключается» и не поддавался разбору
+    suspend fun connect(configText: String): Result = mutex.withLock {
         val config = runCatching { parseConfig(configText) }
+            // runCatching ловит и ошибки загрузки классов: без записи в лог такой
+            // отказ выглядел бы как «просто не подключается» и не поддавался разбору
             .onFailure { Log.e(TAG, "не удалось разобрать конфиг", it) }
-            .getOrNull() ?: return Result.FAILED
+            .getOrNull() ?: return@withLock Result.FAILED
 
-        val up = runCatching { backend.setState(tunnel, Tunnel.State.UP, config) }
-            .getOrElse {
-                Log.e(TAG, "setState(UP) не удался", it)
-                return Result.FAILED
+        var outcome = Result.NO_HANDSHAKE
+        for (attempt in 1..ATTEMPTS) {
+            if (!bringUp(config)) {
+                outcome = Result.FAILED
+                break
             }
-        if (up != Tunnel.State.UP) return Result.FAILED
-
-        /*
-        Интерфейс поднят — но это ещё не связь. Ждём, пока движок сообщит о
-        рукопожатии: пустой last_handshake значит, что сервер пока молчит.
-        20 секунд с запасом на четыре повторные инициации AmneziaWG.
-        */
-        val deadline = System.currentTimeMillis() + HANDSHAKE_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            if (lastHandshakeMillis() > 0L) return Result.CONNECTED
-            // Туннель мог отвалиться сам (отзыв разрешения, смена сети)
-            if (runCatching { backend.getState(tunnel) }.getOrNull() != Tunnel.State.UP) {
-                return Result.FAILED
+            val window = if (attempt == 1) FIRST_WINDOW_MS else RETRY_WINDOW_MS
+            when (awaitHandshake(window)) {
+                Handshake.OK -> {
+                    Log.i(TAG, "рукопожатие получено с попытки $attempt")
+                    return@withLock Result.CONNECTED
+                }
+                Handshake.INTERFACE_DOWN -> {
+                    Log.w(TAG, "интерфейс снят во время ожидания рукопожатия")
+                    outcome = Result.FAILED
+                    break
+                }
+                Handshake.TIMEOUT -> {
+                    outcome = Result.NO_HANDSHAKE
+                    Log.w(TAG, "нет рукопожатия за $window мс (попытка $attempt из $ATTEMPTS)")
+                    /*
+                    Пересоздаём интерфейс, а не ждём дольше одним куском: первая
+                    инициация могла потеряться безвозвратно, а новая попытка идёт
+                    с новой эфемерной парой ключей и с нуля проходит фильтры сети.
+                    */
+                    if (attempt < ATTEMPTS) {
+                        tearDown()
+                        delay(RETRY_GAP_MS)
+                    }
+                }
             }
-            Thread.sleep(POLL_MS)
         }
 
-        // Рукопожатия не случилось — не оставляем мёртвый туннель поднятым,
-        // иначе весь трафик уходит в него и «интернета нет».
+        // Не оставляем мёртвый туннель поднятым, иначе весь трафик уходит в него
+        // и снаружи это выглядит как «интернета нет»
+        tearDown()
+        outcome
+    }
+
+    private suspend fun bringUp(config: Config): Boolean = withContext(Dispatchers.IO) {
+        runCatching { backend.setState(tunnel, Tunnel.State.UP, config) }
+            .onFailure { Log.e(TAG, "setState(UP) не удался", it) }
+            .getOrNull() == Tunnel.State.UP
+    }
+
+    /** Снятие не должно срываться отменой: иначе туннель останется висеть. */
+    private suspend fun tearDown() = withContext(NonCancellable + Dispatchers.IO) {
         runCatching { backend.setState(tunnel, Tunnel.State.DOWN, null) }
-        return Result.NO_HANDSHAKE
+        Unit
+    }
+
+    private suspend fun awaitHandshake(windowMs: Long): Handshake {
+        val deadline = System.currentTimeMillis() + windowMs
+        while (System.currentTimeMillis() < deadline) {
+            if (lastHandshakeMillis() > 0L) return Handshake.OK
+            // Туннель мог отвалиться сам (отзыв разрешения, смена сети)
+            if (!isUp) return Handshake.INTERFACE_DOWN
+            delay(POLL_MS)
+        }
+        return Handshake.TIMEOUT
     }
 
     /**
@@ -123,17 +173,27 @@ class TunnelManager(context: Context) {
      * показывать «отключено» до этого момента — врать о том, куда уходят
      * пакеты. Ответ нужен интерфейсу, чтобы дождаться.
      */
-    fun disconnect(): Boolean = runCatching {
-        backend.setState(tunnel, Tunnel.State.DOWN, null)
-        backend.getState(tunnel) != Tunnel.State.UP
-    }.getOrElse { false }
+    suspend fun disconnect(): Boolean = mutex.withLock {
+        tearDown()
+        !isUp
+    }
 
     val isUp: Boolean
         get() = runCatching { backend.getState(tunnel) == Tunnel.State.UP }.getOrDefault(false)
 
     companion object {
         private const val TAG = "ProstoTunnel"
-        private const val HANDSHAKE_TIMEOUT_MS = 20_000L
+
+        /*
+        Было 20 секунд одной попыткой. WireGuard повторяет инициацию примерно раз
+        в пять секунд, то есть окно давало всего четыре попытки — на загруженном
+        мобильном канале этого не хватало, и исправное подключение объявлялось
+        отказом. Теперь два захода с пересозданием интерфейса между ними.
+        */
+        private const val ATTEMPTS = 2
+        private const val FIRST_WINDOW_MS = 20_000L
+        private const val RETRY_WINDOW_MS = 15_000L
+        private const val RETRY_GAP_MS = 700L
         private const val POLL_MS = 500L
 
         @Volatile

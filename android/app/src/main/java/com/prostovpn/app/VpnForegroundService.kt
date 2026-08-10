@@ -13,6 +13,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.runBlocking
 
 /**
  * Держит процесс живым, пока поднят туннель.
@@ -33,8 +34,9 @@ class VpnForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             // Отключение из шторки: процесс приложения может быть без Activity,
-            // поэтому дёргаем общий на процесс туннель напрямую.
-            runCatching { TunnelManager.getInstance(applicationContext).disconnect() }
+            // поэтому дёргаем общий на процесс туннель напрямую. runBlocking здесь
+            // уместен — снятие занимает миллисекунды, а сервис всё равно уходит.
+            runCatching { runBlocking { TunnelManager.getInstance(applicationContext).disconnect() } }
             stopForegroundCompat()
             stopSelf()
             return START_NOT_STICKY

@@ -2,6 +2,7 @@ package com.prostovpn.app
 
 import android.app.Application
 import android.util.Log
+import kotlinx.coroutines.runBlocking
 import org.amnezia.awg.backend.GoBackend
 import java.util.Locale
 import kotlin.concurrent.thread
@@ -24,7 +25,7 @@ class App : Application() {
             thread(name = "always-on-vpn") {
                 val base = ConnectConfig.storedConfig(this) ?: return@thread
                 val prepared = runCatching { ConnectConfig.build(this, base) }.getOrDefault(base)
-                val result = TunnelManager.getInstance(this).connect(prepared)
+                val result = runBlocking { TunnelManager.getInstance(this@App).connect(prepared) }
                 Log.i(TAG, "always-on поднял туннель: $result")
                 if (result == TunnelManager.Result.CONNECTED) {
                     val lang = getSharedPreferences("prosto", 0).getString("lang", null)

@@ -29,8 +29,8 @@ android {
         targetSdk = 35
         // Растёт с каждой выкладкой: с прежним versionCode установщик
         // Android может отказаться ставить сборку поверх старой
-        versionCode = 8
-        versionName = "1.0.6"
+        versionCode = 9
+        versionName = "1.0.7"
     }
 
     signingConfigs {

@@ -119,7 +119,7 @@ fun ServerListSheet(state: AppState, onDismiss: () -> Unit) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .scaleClickable(0.98f) {
+                            .scaleClickable(0.98f, haptic = false) {
                                 haptics.selection()
                                 state.selectServer(index)
                                 scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }

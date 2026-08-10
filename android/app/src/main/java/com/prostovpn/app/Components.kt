@@ -90,22 +90,43 @@ fun rememberHaptics(): Haptics {
 fun Modifier.scaleClickable(
     scale: Float = 0.96f,
     enabled: Boolean = true,
+    haptic: Boolean = true,
     onClick: () -> Unit,
 ): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
     this
         .pressScale(interaction, scale)
         .clickable(
             interactionSource = interaction,
             indication = null,
             enabled = enabled,
-            onClick = onClick,
+            onClick = {
+                // Отклик даём здесь, а не в каждой кнопке: через этот
+                // модификатор проходят почти все нажатия в приложении, и
+                // расставлять вибрацию поштучно значит забыть половину.
+                if (haptic) haptics.tap()
+                onClick()
+            },
         )
 }
 
-fun Modifier.noRippleClickable(enabled: Boolean = true, onClick: () -> Unit): Modifier = composed {
+fun Modifier.noRippleClickable(
+    enabled: Boolean = true,
+    haptic: Boolean = true,
+    onClick: () -> Unit,
+): Modifier = composed {
     val interaction = remember { MutableInteractionSource() }
-    clickable(interactionSource = interaction, indication = null, enabled = enabled, onClick = onClick)
+    val haptics = rememberHaptics()
+    clickable(
+        interactionSource = interaction,
+        indication = null,
+        enabled = enabled,
+        onClick = {
+            if (haptic) haptics.tap()
+            onClick()
+        },
+    )
 }
 
 /** Появление с подъёмом — аналог iOS fadeUp(). */

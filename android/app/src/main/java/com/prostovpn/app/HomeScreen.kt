@@ -233,8 +233,9 @@ private fun StatusBlock(state: AppState) {
         Phase.DISCONNECTING -> s.disconnectingTxt
         Phase.ON -> s.connected
     }
+    // Ошибку подключения показываем вместо подсказки «нажмите» — она важнее
     val subText = when (state.phase) {
-        Phase.OFF -> s.tapToConnect
+        Phase.OFF -> state.connectionError ?: s.tapToConnect
         Phase.CONNECTING, Phase.DISCONNECTING -> ""
         Phase.ON -> state.formattedDuration
     }

@@ -72,6 +72,31 @@ class SplitTunnelTest {
         assertFalse("список маршрутов пуст", routes.isEmpty())
     }
 
+    @Test
+    fun `IPv6 в туннель попадает только при наличии v6-адреса`() {
+        // Без v6-адреса ::/0 добавлять нельзя: иначе IPv6 уходит в чёрную дыру
+        val withV6 = SplitTunnel.allowedIpsExcept(listOf("87.240.128.0/18"), includeIpv6 = true)
+        val withoutV6 = SplitTunnel.allowedIpsExcept(listOf("87.240.128.0/18"), includeIpv6 = false)
+        assertTrue("::/0 ожидался при includeIpv6", "::/0" in withV6)
+        assertFalse("::/0 не должно быть без v6-адреса", "::/0" in withoutV6)
+    }
+
+    @Test
+    fun `наличие IPv6-адреса определяется по конфигу`() {
+        val v4only = """
+            [Interface]
+            Address = 10.8.1.3/32
+            DNS = 1.1.1.1
+        """.trimIndent()
+        val dual = """
+            [Interface]
+            Address = 10.8.1.3/32, fd58:baa6:dead::1
+            DNS = 1.1.1.1
+        """.trimIndent()
+        assertFalse("у IPv4-конфига нет v6-адреса", SplitTunnel.hasIpv6Address(v4only))
+        assertTrue("двойной конфиг имеет v6-адрес", SplitTunnel.hasIpv6Address(dual))
+    }
+
     // --- вспомогательное ---
 
     private fun ipToLong(text: String): Long? {

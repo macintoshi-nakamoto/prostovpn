@@ -77,6 +77,14 @@ class AppState(application: Application) : AndroidViewModel(application) {
         private set
     var seconds by mutableIntStateOf(0)
         private set
+
+    /** Текст последней ошибки подключения; null — ошибки нет. */
+    var connectionError by mutableStateOf<String?>(null)
+        private set
+
+    fun dismissConnectionError() {
+        connectionError = null
+    }
     var server by mutableStateOf<ServerInfo?>(null)
         private set
     var isGuest by mutableStateOf(prefs.getBoolean("guest", false))
@@ -126,6 +134,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
         private set
 
     private var cachedAllowedIps: String? = null
+    // Отдельный кэш для сетей без IPv6: список без ::/0
+    private var cachedAllowedIpsV4: String? = null
     private var autoConnectTried = false
 
     fun changeSplitTunnel(enabled: Boolean) {
@@ -223,6 +233,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         activeTunnelFileId = file.id
         prefs.edit().putString("tunnel.active", file.id).apply()
         cachedAllowedIps = null
+        cachedAllowedIpsV4 = null
         if (splitTunnelEnabled) reconnectIfActive()
     }
 
@@ -278,12 +289,23 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun buildConfigForConnect(base: String): String {
+        /*
+        IPv6 заворачиваем в туннель только если у интерфейса есть v6-адрес.
+        Иначе ::/0 отправляет весь IPv6 в чёрную дыру: на мобильных сетях с
+        IPv6 (частых у российских операторов) это выглядит как «подключено,
+        а ничего не грузит» — система предпочитает IPv6 и упирается в него.
+        */
+        val ipv6 = SplitTunnel.hasIpv6Address(base)
         if (!splitTunnelEnabled) {
-            return SplitTunnel.applyToConfig(base, "0.0.0.0/0, ::/0")
+            val all = if (ipv6) "0.0.0.0/0, ::/0" else "0.0.0.0/0"
+            return SplitTunnel.applyToConfig(base, all)
         }
-        val allowed = cachedAllowedIps ?: withContext(Dispatchers.Default) {
-            SplitTunnel.allowedIpsExcept(excludeCidrs())
-        }.also { cachedAllowedIps = it }
+        // Кэш зависит от того, включаем ли IPv6 — иначе после смены сервера
+        // отдали бы чужой список
+        val cacheKey = if (ipv6) cachedAllowedIps else cachedAllowedIpsV4
+        val allowed = cacheKey ?: withContext(Dispatchers.Default) {
+            SplitTunnel.allowedIpsExcept(excludeCidrs(), includeIpv6 = ipv6)
+        }.also { if (ipv6) cachedAllowedIps = it else cachedAllowedIpsV4 = it }
         return SplitTunnel.applyToConfig(base, allowed)
     }
 
@@ -385,6 +407,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         prefs.edit().clear().apply()
         prefs.edit().putString("lang", language).apply()
         cachedAllowedIps = null
+        cachedAllowedIpsV4 = null
         splitTunnelEnabled = true
         killSwitch = true
         autoStart = false
@@ -441,14 +464,25 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     private fun startTunnel(config: String) {
         phase = Phase.CONNECTING
+        connectionError = null
         connectJob = viewModelScope.launch {
             val prepared = buildConfigForConnect(config)
-            val ok = withContext(tunnelDispatcher) { tunnel.connect(prepared) }
-            if (ok) {
-                phase = Phase.ON
-                startTimer()
-            } else {
-                phase = Phase.OFF
+            val result = withContext(tunnelDispatcher) { tunnel.connect(prepared) }
+            when (result) {
+                TunnelManager.Result.CONNECTED -> {
+                    phase = Phase.ON
+                    startTimer()
+                }
+                TunnelManager.Result.NO_HANDSHAKE -> {
+                    // Туннель поднялся, но сервер молчит — честно говорим об
+                    // этом, а не показываем ложное «подключено»
+                    phase = Phase.OFF
+                    connectionError = s.errNoHandshake
+                }
+                TunnelManager.Result.FAILED -> {
+                    phase = Phase.OFF
+                    connectionError = s.errTunnelFailed
+                }
             }
         }
     }
@@ -478,6 +512,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         connectJob?.cancel()
         timerJob?.cancel()
         timerJob = null
+        connectionError = null
         /*
         Держим DISCONNECTING, пока интерфейс VpnService не снят. Раньше
         здесь сразу ставилось OFF, а снятие уходило в фон: пока туннель

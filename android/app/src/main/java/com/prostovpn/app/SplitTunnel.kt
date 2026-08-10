@@ -143,8 +143,38 @@ object SplitTunnel {
         return out
     }
 
-    fun allowedIpsExcept(excludeCidrs: List<String>): String =
-        (complement(excludeCidrs) + "::/0").joinToString(", ")
+    fun allowedIpsExcept(excludeCidrs: List<String>, includeIpv6: Boolean): String {
+        val ipv4 = complement(excludeCidrs)
+        return (if (includeIpv6) ipv4 + "::/0" else ipv4).joinToString(", ")
+    }
+
+    /**
+     * Есть ли у интерфейса IPv6-адрес — по строке `Address` секции
+     * `[Interface]`.
+     *
+     * От этого зависит, можно ли заворачивать IPv6 в туннель. Если адреса
+     * нет, а `::/0` в маршрутах есть, то на Android весь IPv6 уходит в
+     * чёрную дыру: интерфейс без v6-адреса пакеты принять не может, но
+     * система считает IPv6 доступным и предпочитает его. На мобильных
+     * сетях с IPv6 это выглядит как «подключено, а ничего не грузит».
+     */
+    fun hasIpv6Address(configText: String): Boolean {
+        var section = ""
+        for (rawLine in configText.lineSequence()) {
+            val line = rawLine.substringBefore('#').trim()
+            if (line.isEmpty()) continue
+            if (line.startsWith("[") && line.endsWith("]")) {
+                section = line.trim('[', ']').lowercase()
+                continue
+            }
+            if (section != "interface") continue
+            val key = line.substringBefore('=', "").trim()
+            if (!key.equals("address", ignoreCase = true)) continue
+            // IPv6 отличаем по двоеточию: у IPv4-адресов их не бывает
+            return line.substringAfter('=').split(',').any { ':' in it }
+        }
+        return false
+    }
 
     fun applyToConfig(configText: String, allowedIps: String): String {
         val regex = Regex("(?im)^[ \\t]*AllowedIPs[ \\t]*=.*(?:\\r?\\n)?")

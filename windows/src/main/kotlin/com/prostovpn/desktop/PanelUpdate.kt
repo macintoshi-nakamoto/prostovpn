@@ -71,6 +71,7 @@ object PanelUpdate {
     ): Result<File> = withContext(Dispatchers.IO) {
         runCatching {
             val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                PanelTls.apply(this)
                 connectTimeout = TIMEOUT_MS
                 // Таймаут чтения не ставим: установщик весит десятки мегабайт,
                 // и на медленной сети долгая загрузка — норма, а не ошибка.
@@ -117,6 +118,7 @@ object PanelUpdate {
 
     private fun get(path: String): String {
         val connection = (URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection).apply {
+            PanelTls.apply(this)
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
             setRequestProperty("Content-Type", "application/json")

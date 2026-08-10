@@ -121,6 +121,7 @@ object PanelApi {
         token: String?,
     ): JSONObject {
         val connection = (URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection).apply {
+            PanelTls.apply(this)
             requestMethod = method
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS

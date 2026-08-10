@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% set page = "users" %}
+{% block title %}{{ user.login }} — Prosto VPN{% endblock %}
+
+{% block body %}
+{% set sub = user.active_subscription(now) %}
+<h1>{{ user.login }}
+  {% if not user.is_active %}<span class="pill bad">отключён</span>
+  {% elif sub %}<span class="pill ok">активен</span>
+  {% else %}<span class="pill warn">без подписки</span>{% endif %}
+</h1>
+<p class="muted">
+  Создан {{ user.created_at.strftime("%d.%m.%Y") }}.
+  {% if sub %}Подписка «{{ sub.plan }}» до {{ sub.expires_at.strftime("%d.%m.%Y") }}.{% endif %}
+  {% if user.note %}{{ user.note }}{% endif %}
+</p>
+
+<div class="row" style="align-items:flex-start; gap:14px;">
+  <form class="box" method="post" action="/users/{{ user.id }}/subscription" style="flex:1; min-width:280px;">
+    <h2 style="margin-top:0;">Продлить</h2>
+    <div class="grid">
+      <div><label>Дней</label><input name="days" type="number" value="30" min="1"></div>
+      <div><label>Тариф</label><input name="plan" value="{{ sub.plan if sub else 'basic' }}"></div>
+      <div><label>Оплата</label><input name="amount" placeholder="300"></div>
+    </div>
+    <button type="submit" style="margin-top:12px;">Продлить</button>
+  </form>
+
+  <form class="box" method="post" action="/users/{{ user.id }}/password" style="flex:1; min-width:240px;">
+    <h2 style="margin-top:0;">Сменить пароль</h2>
+    <input name="password" placeholder="новый пароль" autocomplete="off">
+    <button type="submit" style="margin-top:12px;">Сменить</button>
+  </form>
+
+  <form class="box" method="post" action="/users/{{ user.id }}/revoke" style="min-width:200px;">
+    <h2 style="margin-top:0;">Доступ</h2>
+    <p class="muted" style="margin-top:0; font-size:13px;">
+      Гасит подписку и сессии, убирает пиров с серверов.
+    </p>
+    <button type="submit" class="danger">Отключить</button>
+  </form>
+</div>
+
+<h2>Ключи по серверам</h2>
+{% if rows %}
+<table>
+  <tr><th>Сервер</th><th>Режим</th><th>Конфиг</th></tr>
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.server.name }}<br><span class="muted">{{ row.server.host }}:{{ row.server.port }}</span></td>
+    <td class="muted">{{ "общий" if row.server.provisioning.value == "shared" else "свой" }}</td>
+    <td>
+      {% if row.config %}
+        <details>
+          <summary>Показать</summary>
+          <p class="muted" style="margin:8px 0 4px;">Ссылка для вставки в приложение:</p>
+          <pre>{{ row.key }}</pre>
+          <p class="muted" style="margin:12px 0 4px;">Конфиг wg-quick:</p>
+          <pre>{{ row.config }}</pre>
+        </details>
+      {% else %}
+        <span class="pill warn">нет ключа</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Нет включённых серверов — <a href="/servers">добавь сервер</a>.</p>
+{% endif %}
+
+<h2>Сессии</h2>
+{% if user.sessions %}
+<table>
+  <tr><th>Платформа</th><th>Версия</th><th>IP</th><th>Вход</th><th>Активность</th><th>Состояние</th></tr>
+  {% for s in user.sessions | sort(attribute="last_seen_at", reverse=true) %}
+  <tr>
+    <td>{{ s.platform or "—" }}</td>
+    <td>{{ s.app_version or "—" }}</td>
+    <td class="muted">{{ s.ip or "—" }}</td>
+    <td class="muted">{{ s.created_at.strftime("%d.%m %H:%M") }}</td>
+    <td class="muted">{{ s.last_seen_at.strftime("%d.%m %H:%M") }}</td>
+    <td>{% if s.revoked_at %}<span class="pill bad">закрыта</span>
+        {% elif s.expires_at < now %}<span class="pill warn">истекла</span>
+        {% else %}<span class="pill ok">жива</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">Из приложения ещё не заходил.</p>{% endif %}
+
+<h2>Платежи</h2>
+{% if user.payments %}
+<table>
+  <tr><th>Дата</th><th>Сумма</th><th>Способ</th><th>Комментарий</th></tr>
+  {% for p in user.payments | sort(attribute="paid_at", reverse=true) %}
+  <tr>
+    <td class="muted">{{ p.paid_at.strftime("%d.%m.%Y") }}</td>
+    <td>{{ p.amount }} {{ p.currency }}</td>
+    <td class="muted">{{ p.method or "—" }}</td>
+    <td class="muted">{{ p.comment or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">Платежей нет.</p>{% endif %}
+
+<p style="margin-top:24px;"><a href="/users">← ко всем пользователям</a></p>
+{% endblock %}

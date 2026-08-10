@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set page = "users" %}
+{% block title %}Пользователи — Prosto VPN{% endblock %}
+
+{% block body %}
+<h1>Пользователи</h1>
+
+<form class="box" method="post" action="/users">
+  <div class="grid">
+    <div><label>Логин</label><input name="login" required autocomplete="off"></div>
+    <div><label>Пароль</label><input name="password" required autocomplete="off"></div>
+    <div><label>Дней подписки</label><input name="days" type="number" value="30" min="0"></div>
+    <div><label>Тариф</label><input name="plan" value="basic"></div>
+    <div><label>Оплата, если есть</label><input name="amount" placeholder="например 300"></div>
+    <div><label>Заметка</label><input name="note" placeholder="кто это"></div>
+  </div>
+  <div class="row" style="margin-top:14px;">
+    <button type="submit">Создать</button>
+    <span class="muted">Ключи на все включённые серверы выдаются сразу.</span>
+  </div>
+</form>
+
+<h2>Всего: {{ users | length }}</h2>
+{% if users %}
+<table>
+  <tr><th>Логин</th><th>Доступ</th><th>Подписка до</th><th>Ключей</th><th>Сессий</th><th>Заметка</th></tr>
+  {% for u in users %}
+  {% set sub = u.active_subscription(now) %}
+  <tr>
+    <td><a href="/users/{{ u.id }}">{{ u.login }}</a></td>
+    <td>
+      {% if not u.is_active %}<span class="pill bad">отключён</span>
+      {% elif sub %}<span class="pill ok">активен</span>
+      {% else %}<span class="pill warn">без подписки</span>{% endif %}
+    </td>
+    <td class="muted">{{ sub.expires_at.strftime("%d.%m.%Y") if sub else "—" }}</td>
+    <td>{{ u.keys | selectattr("revoked_at", "none") | list | length }}</td>
+    <td>{{ u.sessions | selectattr("revoked_at", "none") | list | length }}</td>
+    <td class="muted">{{ u.note or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}
+<p class="muted">Пока никого. Создай первого — и сразу проверь вход в приложении.</p>
+{% endif %}
+{% endblock %}

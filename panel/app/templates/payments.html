@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set page = "payments" %}
+{% block title %}Деньги — Prosto VPN{% endblock %}
+
+{% block body %}
+<h1>Деньги</h1>
+
+<div class="cards">
+  <div class="card"><div class="label">Сегодня</div><div class="value">{{ totals.revenue_day }} {{ totals.currency }}</div></div>
+  <div class="card"><div class="label">Месяц</div><div class="value">{{ totals.revenue_month }} {{ totals.currency }}</div></div>
+  <div class="card"><div class="label">Год</div><div class="value">{{ totals.revenue_year }} {{ totals.currency }}</div></div>
+</div>
+
+<h2>Записать поступление</h2>
+<form class="box" method="post" action="/payments">
+  <div class="grid">
+    <div><label>Сумма</label><input name="amount" required placeholder="300"></div>
+    <div>
+      <label>Пользователь</label>
+      <select name="user_id">
+        <option value="">— без привязки —</option>
+        {% for u in users %}<option value="{{ u.id }}">{{ u.login }}</option>{% endfor %}
+      </select>
+    </div>
+    <div><label>Способ</label><input name="method" placeholder="перевод, карта…"></div>
+    <div><label>Комментарий</label><input name="comment"></div>
+  </div>
+  <button type="submit" style="margin-top:14px;">Записать</button>
+</form>
+
+<h2>Последние платежи</h2>
+{% if payments %}
+<table>
+  <tr><th>Дата</th><th>Сумма</th><th>Пользователь</th><th>Способ</th><th>Комментарий</th></tr>
+  {% for p in payments %}
+  <tr>
+    <td class="muted">{{ p.paid_at.strftime("%d.%m.%Y %H:%M") }}</td>
+    <td>{{ p.amount }} {{ p.currency }}</td>
+    <td>{% if p.user %}<a href="/users/{{ p.user.id }}">{{ p.user.login }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td class="muted">{{ p.method or "—" }}</td>
+    <td class="muted">{{ p.comment or "" }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<p class="muted">Платежей пока нет.</p>{% endif %}
+{% endblock %}

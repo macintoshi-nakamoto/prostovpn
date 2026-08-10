@@ -97,7 +97,8 @@ fun LoginScreen(state: AppState) {
             errorText = s.errEmptyLogin
             return
         }
-        if (password.length < 4) {
+        // Ключ вставляют в поле логина — пароль для него не нужен.
+        if (!credentials.startsWith("vpn://") && password.length < 4) {
             errorText = s.errShortPassword
             return
         }
@@ -107,6 +108,18 @@ fun LoginScreen(state: AppState) {
         isLoading = true
 
         scope.launch {
+            if (credentials.startsWith("vpn://")) {
+                isLoading = false
+                if (state.loginWithKey(credentials)) {
+                    isDone = true
+                    haptics.success()
+                    delay(450)
+                } else {
+                    errorText = s.errBadKey
+                }
+                return@launch
+            }
+
             // Пароль проверяет панель: локально решать, верен он или нет,
             // нечем — и не нужно.
             val result = state.login(credentials, password)

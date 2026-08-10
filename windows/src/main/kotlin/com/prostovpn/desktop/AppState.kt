@@ -100,7 +100,7 @@ class AppState(private val scope: CoroutineScope) {
         private set
 
     // Вход только по аккаунту: гостевого режима нет, страны выдаёт панель.
-    val isLoggedIn get() = panelToken.isNotEmpty()
+    val isLoggedIn get() = panelToken.isNotEmpty() || server != null
 
     private var connectJob: Job? = null
     private var timerJob: Job? = null
@@ -378,6 +378,24 @@ class AppState(private val scope: CoroutineScope) {
      * Пароль проверяет сервер: страны выдаются только оплаченной учётной
      * записи, и обойти это, вставив чужой ключ, нельзя.
      */
+    /**
+     * Вход по ключу vpn://.
+     *
+     * Второй способ рядом с логином и паролем: ключ подключает один
+     * конкретный сервер и работает без учётной записи в панели.
+     */
+    fun loginWithKey(key: String): Boolean {
+        val joined = key.filterNot { it.isWhitespace() }
+        val info = KeyParser.extractServer(joined) ?: return false
+        prefs.put("accessKey", joined)
+        panelServers = emptyList()
+        server = info
+        selectServer(0)
+        persistServer()
+        refreshGeo()
+        return true
+    }
+
     suspend fun login(login: String, password: String): Result<Unit> =
         PanelApi.login(login, password).map { applySession(it) }
 

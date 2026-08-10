@@ -66,7 +66,7 @@ data class Strings(
 
 private val RU = Strings(
     tagline = "Свободный и безопасный интернет",
-    loginPlaceholder = "Логин",
+    loginPlaceholder = "Логин или ключ",
     passwordPlaceholder = "Пароль",
     signIn = "Войти",
     signingIn = "Подключение…",
@@ -125,7 +125,7 @@ private val RU = Strings(
 
 private val EN = Strings(
     tagline = "Free and secure internet",
-    loginPlaceholder = "Login",
+    loginPlaceholder = "Login or key",
     passwordPlaceholder = "Password",
     signIn = "Sign in",
     signingIn = "Connecting…",

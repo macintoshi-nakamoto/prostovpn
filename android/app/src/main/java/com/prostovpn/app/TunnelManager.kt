@@ -50,7 +50,11 @@ class TunnelManager(context: Context) {
      * сервер ответил, либо когда стало ясно, что не ответит.
      */
     fun connect(configText: String): Result {
-        val config = runCatching { parseConfig(configText) }.getOrNull() ?: return Result.FAILED
+        // runCatching ловит Throwable, включая ошибки загрузки классов: без записи в лог
+        // такой отказ выглядел бы как «просто не подключается» и не поддавался разбору
+        val config = runCatching { parseConfig(configText) }
+            .onFailure { Log.e(TAG, "не удалось разобрать конфиг", it) }
+            .getOrNull() ?: return Result.FAILED
 
         val up = runCatching { backend.setState(tunnel, Tunnel.State.UP, config) }
             .getOrElse {
@@ -80,9 +84,22 @@ class TunnelManager(context: Context) {
         return Result.NO_HANDSHAKE
     }
 
-    /** Время последнего рукопожатия, epoch-миллисекунды; 0 — не было. */
-    private fun lastHandshakeMillis(): Long =
-        runCatching { backend.getLastHandshake(tunnel) }.getOrDefault(0L).coerceAtLeast(0L)
+    /**
+     * Время последнего рукопожатия, epoch-миллисекунды; 0 — не было.
+     *
+     * Движок отдаёт `last_handshake_time_sec` — СЕКУНДЫ, а не миллисекунды.
+     * Без пересчёта разница с [System.currentTimeMillis] выходила порядка 1.7e12
+     * при пороге 180000, поэтому [isHealthy] не возвращала true никогда: живость
+     * держалась только на приросте трафика, и десяти секунд тишины хватало,
+     * чтобы приложение само оборвало исправный туннель.
+     *
+     * Отрицательные значения — служебные коды движка (нет туннеля, не удалось
+     * разобрать конфиг), их приводим к «рукопожатия не было».
+     */
+    private fun lastHandshakeMillis(): Long {
+        val seconds = runCatching { backend.getLastHandshake(tunnel) }.getOrDefault(-1L)
+        return if (seconds > 0L) seconds * 1000L else 0L
+    }
 
     /** Рукопожатие ещё живо? WireGuard обновляет его чаще двух минут. */
     fun isHealthy(staleMillis: Long = 180_000): Boolean {
@@ -114,9 +131,23 @@ class TunnelManager(context: Context) {
     val isUp: Boolean
         get() = runCatching { backend.getState(tunnel) == Tunnel.State.UP }.getOrDefault(false)
 
-    private companion object {
-        const val TAG = "ProstoTunnel"
-        const val HANDSHAKE_TIMEOUT_MS = 20_000L
-        const val POLL_MS = 500L
+    companion object {
+        private const val TAG = "ProstoTunnel"
+        private const val HANDSHAKE_TIMEOUT_MS = 20_000L
+        private const val POLL_MS = 500L
+
+        @Volatile
+        private var instance: TunnelManager? = null
+
+        /**
+         * Туннель на процесс один, и владельцев у него двое: экран ([AppState]) и
+         * уведомление ([VpnForegroundService]). Второй экземпляр [GoBackend] завёл бы
+         * вторую копию состояния, и кнопка «отключить» в шторке снимала бы не тот
+         * туннель, который показан на экране.
+         */
+        fun getInstance(context: Context): TunnelManager =
+            instance ?: synchronized(this) {
+                instance ?: TunnelManager(context.applicationContext).also { instance = it }
+            }
     }
 }

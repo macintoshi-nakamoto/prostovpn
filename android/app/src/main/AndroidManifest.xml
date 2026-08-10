@@ -3,21 +3,40 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+    Android 14 требует, чтобы у foreground-сервиса был объявлен тип и парное
+    разрешение. Для VPN-типа в системе нет, поэтому specialUse с подтипом ниже.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Android 13+: без него уведомление сервиса не показывается, а без видимого
+         уведомления оболочки Huawei/Xiaomi убивают процесс заметно охотнее. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- Приложению не нужны ни экран-тачскрин, ни телефония: пусть ставится
+         на ТВ-приставки, планшеты и устройства без SIM. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
     <application
+        android:name=".App"
         android:label="Prosto VPN"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.ProstoVPN"
         android:networkSecurityConfig="@xml/network_security_config"
+        android:enableOnBackInvokedCallback="true"
+        android:allowBackup="false"
         android:supportsRtl="true">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode|locale|layoutDirection|fontScale"
             android:windowSoftInputMode="adjustResize"
             android:screenOrientation="portrait">
             <intent-filter>
@@ -34,6 +53,23 @@
             <intent-filter>
                 <action android:name="android.net.VpnService" />
             </intent-filter>
+        </service>
+
+        <!--
+        Туннель wg-go живёт внутри процесса приложения: умирает процесс — рвётся VPN.
+        Голого VpnService для выживания недостаточно, оболочки Huawei/Honor (PowerGenie),
+        Xiaomi и Oppo убивают фоновые процессы по собственным правилам и штатный
+        приоритет VPN-приложения игнорируют. Постоянное уведомление переводит процесс
+        в foreground-состояние, которое эти оболочки уже уважают.
+        -->
+        <service
+            android:name=".VpnForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps the user-initiated WireGuard tunnel process alive while the VPN is connected" />
         </service>
     </application>
 </manifest>

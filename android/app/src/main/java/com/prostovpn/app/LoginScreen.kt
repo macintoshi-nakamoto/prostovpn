@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -141,6 +142,10 @@ fun LoginScreen(state: AppState) {
                     .heightIn(min = viewportHeight)
                     .height(IntrinsicSize.Min)
                     .statusBarsPadding()
+                    // targetSdk 35 включает edge-to-edge принудительно: без этого
+                    // нижняя кнопка уезжает под трёхкнопочную панель навигации,
+                    // а она по умолчанию на большинстве Huawei и Honor
+                    .navigationBarsPadding()
                     .padding(horizontal = 28.dp)
                     .padding(top = 24.dp, bottom = 40.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,

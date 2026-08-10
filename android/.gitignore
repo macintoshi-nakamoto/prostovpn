@@ -2,3 +2,10 @@ build/
 .gradle/
 local.properties
 !app/libs/
+
+# Реквизиты и сам ключ подписи — не в репозиторий.
+# Потеря prostovpn-release.jks означает невозможность выпустить обновление
+# поверх уже установленных APK: Android не примет другую подпись.
+keystore.properties
+*.jks
+*.keystore

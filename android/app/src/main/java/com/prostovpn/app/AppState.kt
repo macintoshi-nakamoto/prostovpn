@@ -123,17 +123,39 @@ class AppState(application: Application) : AndroidViewModel(application) {
     private var pendingConfig: String? = null
 
     private val tunnel: TunnelManager by lazy {
-        TunnelManager(getApplication()).apply {
+        TunnelManager.getInstance(getApplication()).apply {
             onStateChange = { up ->
                 if (!up && phase == Phase.ON) disconnect()
             }
         }
     }
 
+    /**
+     * Поднимает постоянное уведомление на время работы туннеля.
+     *
+     * Не косметика: туннель wg-go живёт в процессе приложения, а оболочки
+     * Huawei/Honor, Xiaomi и Oppo выгружают фоновые процессы по своим правилам.
+     * Foreground-состояние — единственное, что они уважают.
+     */
+    private fun startForegroundNotice() {
+        val where = currentServer?.name?.takeIf { it.isNotEmpty() }
+        val status = if (where != null) "${s.connected} · $where" else s.connected
+        VpnForegroundService.start(getApplication(), status, s.notifDisconnect)
+    }
+
+    private fun stopForegroundNotice() {
+        VpnForegroundService.stop(getApplication())
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private val tunnelDispatcher = Dispatchers.IO.limitedParallelism(1)
 
-    var lang by mutableStateOf(prefs.getString("lang", "ru") ?: "ru")
+    // Стартовый язык — из системной локали, а не всегда русский: приложение
+    // ставят и не только с русскоязычной прошивкой. Сохранённый выбор важнее.
+    var lang by mutableStateOf(
+        prefs.getString("lang", null)
+            ?: if (java.util.Locale.getDefault().language == "ru") "ru" else "en"
+    )
         private set
 
     fun changeLang(value: String) {
@@ -149,13 +171,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
     // любом Android. Раздельное включается вручную в настройках.
     var splitTunnelEnabled by mutableStateOf(prefs.getBoolean("split.enabled", false))
         private set
-    var killSwitch by mutableStateOf(prefs.getBoolean("killSwitch", true))
-        private set
-    var autoStart by mutableStateOf(prefs.getBoolean("autoStart", false))
-        private set
     var autoConnect by mutableStateOf(prefs.getBoolean("autoConnect", false))
-        private set
-    var logging by mutableStateOf(prefs.getBoolean("logging", true))
         private set
 
     private var cachedAllowedIps: String? = null
@@ -170,24 +186,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         reconnectIfActive()
     }
 
-    fun changeKillSwitch(enabled: Boolean) {
-        killSwitch = enabled
-        prefs.edit().putBoolean("killSwitch", enabled).apply()
-    }
-
-    fun changeAutoStart(enabled: Boolean) {
-        autoStart = enabled
-        prefs.edit().putBoolean("autoStart", enabled).apply()
-    }
-
     fun changeAutoConnect(enabled: Boolean) {
         autoConnect = enabled
         prefs.edit().putBoolean("autoConnect", enabled).apply()
-    }
-
-    fun changeLogging(enabled: Boolean) {
-        logging = enabled
-        prefs.edit().putBoolean("logging", enabled).apply()
     }
 
     private fun reconnectIfActive() {
@@ -296,10 +297,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun defaultListJson(): String? = runCatching {
-        getApplication<Application>().assets.open("ru-split-tunnel.json")
-            .bufferedReader().use { it.readText() }
-    }.getOrNull()
+    private fun defaultListJson(): String? = ConnectConfig.defaultListJson(getApplication())
 
     private fun activeListContent(): String? {
         val active = activeTunnelFile ?: return defaultListJson()
@@ -411,6 +409,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
             val up = withContext(tunnelDispatcher) { tunnel.isUp }
             if (up && phase == Phase.OFF) {
                 phase = Phase.ON
+                startForegroundNotice()
                 startTimer()
             }
         }
@@ -460,10 +459,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         cachedAllowedIpsV4 = null
         // Полный туннель — как дефолт после установки
         splitTunnelEnabled = false
-        killSwitch = true
-        autoStart = false
         autoConnect = false
-        logging = true
         loadTunnelFiles()
     }
 
@@ -522,6 +518,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
             when (result) {
                 TunnelManager.Result.CONNECTED -> {
                     phase = Phase.ON
+                    startForegroundNotice()
                     startTimer()
                 }
                 TunnelManager.Result.NO_HANDSHAKE -> {
@@ -550,6 +547,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
     private fun startTimer() {
         seconds = 0
         val startedAt = System.currentTimeMillis()
+        // Гостевой режим: туннеля нет, соединение имитированное. Проверять
+        // живость нечего — иначе через два промаха таймер «обрывал» связь,
+        // которой не было.
+        val real = server?.config?.isNotBlank() == true
         timerJob = viewModelScope.launch {
             var misses = 0
             var nextCheck = 5
@@ -558,6 +559,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 delay(500)
                 val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
                 if (elapsed != seconds) seconds = elapsed
+                if (!real) continue
 
                 /*
                 Туннель может умереть сам: сервер пропал, сеть сменилась,
@@ -586,6 +588,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     timerJob = null
                     phase = Phase.OFF
                     connectionError = s.errTunnelDropped
+                    stopForegroundNotice()
                     viewModelScope.launch(tunnelDispatcher) { runCatching { tunnel.disconnect() } }
                     return@launch
                 }
@@ -609,6 +612,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         // с последним значением, а не прокрутиться в 00:00; сброс — в startTimer()
         connectJob = viewModelScope.launch {
             withContext(tunnelDispatcher) { runCatching { tunnel.disconnect() } }
+            // Уведомление снимаем только когда интерфейс действительно снят: пока
+            // он жив, «подключено» в шторке — правда, а не задержка отрисовки
+            stopForegroundNotice()
             phase = Phase.OFF
             connectJob = null
         }

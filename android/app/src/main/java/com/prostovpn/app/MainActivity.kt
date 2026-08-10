@@ -1,6 +1,9 @@
 package com.prostovpn.app
 
+import android.Manifest
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -22,6 +25,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
@@ -51,6 +56,26 @@ fun RootView(state: AppState = viewModel()) {
 
     LaunchedEffect(state.isLoggedIn) {
         if (state.isLoggedIn) state.maybeAutoConnect()
+    }
+
+    /*
+    Разрешение на уведомления спрашиваем после входа, а не на старте: до входа
+    показывать нечего. Отказ не критичен — туннель поднимется и без уведомления,
+    просто на Huawei/Xiaomi процесс проживёт меньше.
+    */
+    val context = LocalContext.current
+    val notificationPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+
+    LaunchedEffect(state.isLoggedIn) {
+        if (!state.isLoggedIn) return@LaunchedEffect
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return@LaunchedEffect
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.POST_NOTIFICATIONS,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
     Box(

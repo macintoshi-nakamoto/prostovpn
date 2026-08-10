@@ -170,8 +170,11 @@ object SplitTunnel {
             if (section != "interface") continue
             val key = line.substringBefore('=', "").trim()
             if (!key.equals("address", ignoreCase = true)) continue
-            // IPv6 отличаем по двоеточию: у IPv4-адресов их не бывает
-            return line.substringAfter('=').split(',').any { ':' in it }
+            // IPv6 отличаем по двоеточию: у IPv4-адресов их не бывает.
+            // Проходим все строки Address, а не только первую: адреса разных
+            // семейств часто пишут отдельными строками, и выход на первой же
+            // строке с IPv4 прятал существующий IPv6-адрес.
+            if (line.substringAfter('=').split(',').any { ':' in it }) return true
         }
         return false
     }

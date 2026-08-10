@@ -86,7 +86,9 @@ fun SupportScreen(state: AppState, onBack: () -> Unit) {
                 Spacer(Modifier.height(2.dp))
 
                 Text(
-                    text = s.version,
+                    // Версия из сборки, а не из строк локализации: та отставала
+                    // от versionName и врала уже на втором релизе
+                    text = "${s.version} ${BuildConfig.VERSION_NAME}",
                     style = manrope(13.sp, W.medium, Theme.textMuted),
                 )
             }

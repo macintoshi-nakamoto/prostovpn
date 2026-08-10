@@ -50,6 +50,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 
 @Composable
 fun SettingsScreen(state: AppState, onBack: () -> Unit) {
@@ -169,13 +170,59 @@ private fun TogglesCard(state: AppState, onAddFile: () -> Unit) {
         }
 
         CardDivider()
-        ToggleRow(s.kill, s.killDesc, state.killSwitch) { state.changeKillSwitch(it) }
-        CardDivider()
-        ToggleRow(s.autostart, s.autostartDesc, state.autoStart) { state.changeAutoStart(it) }
-        CardDivider()
         ToggleRow(s.autoconnect, s.autoconnectDesc, state.autoConnect) { state.changeAutoConnect(it) }
         CardDivider()
-        ToggleRow(s.logging, s.loggingDesc, state.logging) { state.changeLogging(it) }
+        BackgroundWorkRow(state)
+    }
+}
+
+/**
+ * Пункт «работа в фоне» — не тумблер.
+ *
+ * Снять ограничение приложение за пользователя не может: и системный диалог
+ * оптимизации батареи, и «Запуск приложений» EMUI требуют его подтверждения.
+ * Поэтому справа не переключатель, а текущее состояние, а нажатие ведёт туда,
+ * где решение принимается.
+ */
+@Composable
+private fun BackgroundWorkRow(state: AppState) {
+    val s = state.s
+    val context = LocalContext.current
+    var unrestricted by remember { mutableStateOf(BackgroundWork.isUnrestricted(context)) }
+
+    // Пользователь уходит в системные настройки и возвращается сюда же:
+    // без перечитывания на возврате строка врала бы до пересоздания экрана
+    LifecycleResumeEffect(Unit) {
+        unrestricted = BackgroundWork.isUnrestricted(context)
+        onPauseOrDispose { }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .noRippleClickable {
+                if (unrestricted) {
+                    // Оптимизация уже снята — остаётся вендорский автозапуск,
+                    // отдельный от неё список на EMUI и MIUI
+                    BackgroundWork.openOemAutoStart(context)
+                } else {
+                    BackgroundWork.request(context)
+                }
+            }
+            .padding(vertical = 13.dp, horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(s.background, style = manrope(15.sp, W.bold, Theme.text))
+            Text(
+                text = if (unrestricted) s.backgroundDone else s.backgroundDesc,
+                style = manrope(
+                    12.5.sp,
+                    W.medium,
+                    if (unrestricted) Theme.success else Theme.textMuted,
+                ),
+            )
+        }
     }
 }
 

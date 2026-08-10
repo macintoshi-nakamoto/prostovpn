@@ -75,7 +75,7 @@ tar -C "$SRC_DIR" \
     --exclude=.git --exclude=.venv --exclude=node_modules --exclude=dist \
     --exclude='*.db' --exclude='*.db-wal' --exclude='*.db-shm' --exclude=.env \
     --exclude=__pycache__ --exclude=.pytest_cache --exclude=client \
-    -cf - backend panel deploy README.md 2>/dev/null | tar -C "$APP_DIR" -xf -
+    -cf - backend panel site deploy README.md 2>/dev/null | tar -C "$APP_DIR" -xf -
 
 # --- 3. Секреты -------------------------------------------------------------
 
@@ -85,6 +85,11 @@ if [[ -f "$ENV_FILE" ]]; then
 else
     log "Генерируем секреты"
     SECRET_KEY="$(openssl rand -base64 48 | tr -d '\n/+=' | head -c 48)"
+    # Отдельный ключ шифрования паролей клиентов. Генерируется здесь и
+    # больше не меняется никогда: после смены сохранённые пароли станут
+    # нечитаемыми, и «показать пароль» в панели перестанет работать.
+    SECRETS_KEY="$(openssl rand -base64 48 | tr -d '\n/+=' | head -c 48)"
+    MOCK_SECRET="$(openssl rand -base64 32 | tr -d '\n/+=' | head -c 32)"
     ADMIN_PASSWORD="$(openssl rand -base64 24 | tr -d '\n/+=' | head -c 20)"
     PUBLIC_HOST="${DOMAIN:-$(curl -fsS --max-time 10 https://api.ipify.org || hostname -I | awk '{print $1}')}"
 
@@ -96,6 +101,9 @@ PANEL_ADMIN_LOGIN=admin
 PANEL_ADMIN_PASSWORD=$ADMIN_PASSWORD
 PANEL_SECRET_KEY=$SECRET_KEY
 
+# НЕ МЕНЯТЬ после первого запуска: этим ключом зашифрованы пароли клиентов.
+PANEL_SECRETS_KEY=$SECRETS_KEY
+
 PANEL_CLIENT_TOKEN_DAYS=30
 PANEL_ADMIN_TOKEN_DAYS=7
 PANEL_CURRENCY=RUB
@@ -104,6 +112,53 @@ PANEL_CURRENCY=RUB
 PANEL_CORS_ORIGINS=https://$PUBLIC_HOST
 
 PANEL_TRAFFIC_SYNC_MINUTES=15
+
+# --- Сайт ---
+# Из этого адреса собираются ссылки возврата с оплаты и ссылки в письмах.
+PANEL_SITE_URL=https://$PUBLIC_HOST
+PANEL_SITE_DIR=../site
+
+# --- Оплата ---
+# mock — сайт работает целиком, но деньги не приходят: страница оплаты
+# честно написана как демонстрационная. Перед запуском продаж поставьте
+# yookassa или cryptocloud и заполните ключи ниже, см. deploy/README.md.
+PANEL_PAYMENT_PROVIDER=mock
+PANEL_MOCK_SECRET=$MOCK_SECRET
+PANEL_MOCK_DELAY_SECONDS=2
+
+PANEL_YOOKASSA_SHOP_ID=
+PANEL_YOOKASSA_SECRET_KEY=
+
+PANEL_CRYPTOCLOUD_API_KEY=
+PANEL_CRYPTOCLOUD_SHOP_ID=
+PANEL_CRYPTOCLOUD_SECRET=
+
+PANEL_ORDER_TTL_HOURS=24
+
+# --- Письма ---
+# console — только запись в лог. Пока здесь console, письма с доступом до
+# клиентов не доходят: настройте SMTP своего домена или Resend и обязательно
+# пропишите SPF, DKIM и DMARC — иначе письмо уедет в спам.
+PANEL_MAIL_PROVIDER=console
+PANEL_MAIL_FROM=no-reply@$PUBLIC_HOST
+PANEL_MAIL_FROM_NAME=Prosto
+PANEL_MAIL_SUBJECT=Ваш доступ к сервису Prosto
+
+PANEL_SMTP_HOST=
+PANEL_SMTP_PORT=587
+PANEL_SMTP_USER=
+PANEL_SMTP_PASSWORD=
+
+PANEL_RESEND_API_KEY=
+PANEL_TELEGRAM_BOT_TOKEN=
+
+PANEL_DELIVERY_POLL_SECONDS=15
+
+# --- Ограничение частоты ---
+PANEL_LOGIN_MAX_ATTEMPTS=5
+PANEL_LOGIN_WINDOW_MINUTES=15
+PANEL_LOGIN_LOCK_MINUTES=15
+PANEL_ORDER_MAX_PER_HOUR=10
 
 # Боевая установка: выдуманных клиентов в базе быть не должно.
 PANEL_SEED_DEMO=0
@@ -283,11 +338,43 @@ $HTTP2_DIRECTIVE
         add_header Cache-Control "public, max-age=86400";
     }
 
+    # Админка на отдельном пути — корень занят публичным сайтом. Открытая
+    # всему интернету форма входа в панель приглашает её подбирать; снимите
+    # комментарии с одного из вариантов и впишите свои адреса.
+    location /admin {
+        # allow 203.0.113.7;
+        # deny all;
+        #
+        # либо пароль поверх панели:
+        #   apt install apache2-utils
+        #   htpasswd -c /etc/nginx/.htpasswd-prosto имя
+        # auth_basic "Prosto";
+        # auth_basic_user_file /etc/nginx/.htpasswd-prosto;
+
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 120s;
+    }
+
+    # Страница успеха показывает логин и пароль — кэшировать её нельзя ни
+    # браузеру, ни промежуточным прокси.
+    location = /success.html {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        add_header Cache-Control "no-store" always;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
-        # Реальный адрес клиента — из него панель пишет IP сессий.
+        # Реальный адрес клиента. Из него панель пишет IP сессий и — что
+        # важнее — сверяет отправителя вебхука со списком платёжного
+        # сервиса. Без этого заголовка вебхуки будут отклоняться.
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 120s;
@@ -335,7 +422,8 @@ URL="https://$PUBLIC"
 log "Готово"
 cat <<EOF
 
-  Панель:  $URL
+  Сайт:    $URL
+  Панель:  $URL/admin
   Логин:   admin
   Пароль:  $ADMIN_PASSWORD
 
@@ -344,10 +432,20 @@ cat <<EOF
   Состояние:  systemctl status prosto-panel
   Логи:       journalctl -u prosto-panel -f
 
-  Дальше — сделать этот сервер первым VPN-сервером:
-      sudo bash $APP_DIR/deploy/setup-awg.sh
+  Дальше:
+    1. Сделать этот сервер первым VPN-сервером:
+         sudo bash $APP_DIR/deploy/setup-awg.sh
+    2. Настроить приём оплаты и письма — раздел «Приём оплаты» в
+       $APP_DIR/deploy/README.md
 
 EOF
+
+warn "Оплата пока в режиме имитации (PANEL_PAYMENT_PROVIDER=mock):"
+warn "  сайт работает целиком, но деньги не приходят, и любой посетитель"
+warn "  может «оплатить» себе подписку. Перед запуском продаж пропишите"
+warn "  ключи платёжного сервиса в $ENV_FILE."
+warn "Письма пока не уходят (PANEL_MAIL_PROVIDER=console): настройте SMTP"
+warn "  и записи SPF, DKIM, DMARC — без них письмо с доступом уедет в спам."
 
 if [[ -z "$DOMAIN" ]]; then
     warn "Сертификат самоподписанный — браузер покажет предупреждение."

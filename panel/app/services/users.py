@@ -13,9 +13,10 @@ import secrets
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
-from .. import provisioning
-from ..models import Plan, Provisioning, User, utcnow
+from .. import crypto, provisioning
+from ..models import Plan, Provisioning, User, normalize_email, utcnow
 from ..security import hash_password
+from . import credentials
 from .billing import grant_subscription
 from .errors import PanelError
 from .keys import ensure_keys
@@ -42,8 +43,38 @@ def generate_credentials(db: OrmSession, prefix: str = "user") -> tuple[str, str
     raise PanelError("не удалось подобрать свободный логин")
 
 
-def generate_password(length: int = 14) -> str:
+def generate_password(length: int | None = None) -> str:
+    """
+    Пароль в том же виде, что выдаёт сайт: `k3np-7hqm-2rxa`.
+
+    Единый вид для учёток из панели и с сайта — не косметика. Поддержка
+    диктует пароль голосом, и группами по четыре он проговаривается без
+    «эс как доллар, потом большая и»; длинная строка вперемешку регистров
+    этого не позволяет. `length` оставлен ради старых вызовов и означает
+    произвольную длину прежним алфавитом.
+    """
+    if length is None:
+        return credentials.gen_password()
     return "".join(secrets.choice(_PASS_ALPHABET) for _ in range(length))
+
+
+def reveal_password(user: User) -> str:
+    """
+    Расшифровывает пароль для показа администратору.
+
+    Вызывается ровно из одного места админского API, и то место обязано
+    записать факт показа в журнал: после выдачи это единственный способ
+    узнать пароль, и он должен оставлять след.
+    """
+    if not user.password_enc:
+        raise PanelError(
+            "пароль недоступен: учётка заведена до включения шифрования или ключ сменили. "
+            "Остаётся сбросить пароль."
+        )
+    try:
+        return crypto.decrypt(user.password_enc)
+    except crypto.SecretsUnavailable as exc:
+        raise PanelError(str(exc)) from exc
 
 
 def create_user(
@@ -57,6 +88,7 @@ def create_user(
     note: str | None = None,
     traffic_limit_bytes: int | None = None,
     price: float | None = None,
+    email: str | None = None,
 ) -> tuple[User, str, list[str]]:
     """
     Заводит клиента и сразу выдаёт ему ключи на все включённые серверы.
@@ -91,7 +123,10 @@ def create_user(
     user = User(
         login=login,
         password_hash=hash_password(password),
-        password_hint=password,
+        # Открытым текстом пароль в базе не лежит: только хэш для входа и
+        # шифротекст для показа администратору, см. crypto.py.
+        password_enc=crypto.encrypt_or_none(password),
+        email=normalize_email(email),
         name=name,
         contact=contact,
         note=note,
@@ -116,7 +151,8 @@ def set_password(db: OrmSession, user: User, password: str | None = None) -> str
     if len(value) < 4:
         raise PanelError("пароль короче четырёх символов")
     user.password_hash = hash_password(value)
-    user.password_hint = value
+    user.password_enc = crypto.encrypt_or_none(value)
+    user.password_hint = None
     # Старые входы после смены пароля больше не действуют.
     for session in user.sessions:
         if session.revoked_at is None:
@@ -203,7 +239,7 @@ def reset_traffic(db: OrmSession, user: User) -> None:
     db.commit()
 
 
-def revoke_access(db: OrmSession, user: User) -> list[str]:
+def revoke_access(db: OrmSession, user: User, reason: str = "доступ отозван") -> list[str]:
     """Снимает доступ: гасит подписки, сессии и убирает пиров с серверов."""
     problems: list[str] = []
     now = utcnow()
@@ -212,7 +248,7 @@ def revoke_access(db: OrmSession, user: User) -> list[str]:
         if sub.expires_at > now:
             sub.is_cancelled = True
 
-    problems += block_user(db, user, reason="доступ отозван")
+    problems += block_user(db, user, reason=reason)
     user.is_active = False
     db.commit()
     return problems

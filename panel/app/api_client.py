@@ -32,6 +32,10 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=1, max_length=256)
     platform: str | None = Field(default=None, max_length=32)
     app_version: str | None = Field(default=None, max_length=32)
+    # Постоянный идентификатор установки. Нужен, чтобы лимит устройств
+    # считал переустановку приложения тем же телефоном, а не вторым.
+    device_id: str | None = Field(default=None, max_length=64)
+    device_name: str | None = Field(default=None, max_length=96)
 
 
 class ServerOut(BaseModel):
@@ -200,7 +204,17 @@ def login(
             platform=body.platform,
             app_version=body.app_version,
             ip=_client_ip(request),
+            device_id=body.device_id,
+            device_name=body.device_name,
         )
+    except services.LoginThrottled as exc:
+        # 429, а не 401: приложению нужно понять, что дело не в пароле, и
+        # не предлагать человеку набрать его ещё раз прямо сейчас.
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            str(exc),
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
     except services.PanelError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
 

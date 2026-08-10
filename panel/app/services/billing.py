@@ -32,10 +32,16 @@ def grant_subscription(
     plan: Plan | str | None = None,
     price: float | None = None,
     auto_renew: bool = True,
+    commit: bool = True,
 ) -> Subscription:
     """
     Продлевает доступ. Если подписка ещё жива — продлеваем от её конца, а не
     от сегодняшнего дня: оплата не должна съедать оставшиеся дни.
+
+    `commit=False` оставляет запись в незавершённой транзакции: выдача по
+    оплаченному заказу пишет пользователя, подписку, платёж и заказ одним
+    коммитом, и промежуточная фиксация здесь означала бы, что при сбое на
+    следующем шаге в базе останется подписка без заказа.
     """
     if days <= 0:
         raise PanelError("срок должен быть больше нуля")
@@ -62,8 +68,12 @@ def grant_subscription(
         expires_at=starts + dt.timedelta(days=days),
     )
     db.add(sub)
-    db.commit()
-    db.refresh(sub)
+    if commit:
+        db.commit()
+        db.refresh(sub)
+    else:
+        # id подписки нужен вызывающему до коммита — заказ ссылается на неё.
+        db.flush()
     return sub
 
 

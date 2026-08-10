@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { usersApi } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import {
@@ -12,7 +13,7 @@ import {
   money,
   trafficLimit,
 } from "../../lib/format";
-import { platformLabel, trafficColor, userStatus } from "../../lib/status";
+import { orderStatus, platformLabel, trafficColor, userStatus } from "../../lib/status";
 import {
   Avatar,
   Bar,
@@ -35,9 +36,73 @@ import { UserControls } from "./UserControls";
 const TABS = [
   { id: "overview", label: "Обзор" },
   { id: "payments", label: "Оплаты" },
-  { id: "sessions", label: "Сессии" },
+  { id: "orders", label: "Заказы" },
+  { id: "sessions", label: "Устройства" },
   { id: "servers", label: "Серверы" },
 ];
+
+/**
+ * Пароль клиента: точки, кнопка «показать», копирование.
+ *
+ * Пароль не приходит вместе с карточкой — за ним идёт отдельный запрос, и
+ * ровно этот запрос попадает в журнал. Сделать иначе значит записывать в
+ * журнал «посмотрел пароль» каждому, кто просто открыл карточку, — и
+ * обесценить саму запись.
+ */
+function PasswordRow({ user }) {
+  const [password, setPassword] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  if (!user.hasPassword) {
+    return (
+      <KV k="Пароль">
+        <span style={{ color: "var(--gd-faint)" }}>
+          недоступен — учётка старше шифрования, остаётся сбросить
+        </span>
+      </KV>
+    );
+  }
+
+  const reveal = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await usersApi.revealPassword(user.id);
+      setPassword(result.password);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <KV k="Пароль" mono>
+      {password ? (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+          <Copyable text={password} />
+          <Button size="sm" onClick={() => setPassword(null)} title="Скрыть">
+            <EyeOff size={13} />
+          </Button>
+        </span>
+      ) : (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+          <span style={{ letterSpacing: 3, color: "var(--gd-dim)" }}>••••••••</span>
+          <Button size="sm" disabled={busy} onClick={reveal}>
+            <Eye size={13} />
+            {busy ? "…" : "Показать"}
+          </Button>
+        </span>
+      )}
+      {error && (
+        <div style={{ color: "var(--gd-neg)", fontSize: 12, marginTop: 6, whiteSpace: "normal" }}>
+          {error}
+        </div>
+      )}
+    </KV>
+  );
+}
 
 export function UserDrawer({ userId, plans, onClose, onChanged }) {
   const [tab, setTab] = useState("overview");
@@ -136,6 +201,7 @@ export function UserDrawer({ userId, plans, onClose, onChanged }) {
           <div className="gd-pane">
             {tab === "overview" && <Overview user={user} />}
             {tab === "payments" && <Payments user={user} />}
+            {tab === "orders" && <Orders user={user} />}
             {tab === "sessions" && <Sessions user={user} onChanged={applyResult} />}
             {tab === "servers" && <Servers user={user} />}
           </div>
@@ -156,15 +222,18 @@ function Overview({ user }) {
       <KV k="Логин" mono>
         <Copyable text={user.login} />
       </KV>
-      {user.passwordHint && (
-        <KV k="Пароль" mono>
-          <Copyable text={user.passwordHint} />
+      <PasswordRow user={user} />
+      {user.email && (
+        <KV k="Почта" mono>
+          <Copyable text={user.email} />
         </KV>
       )}
       {user.contact && <KV k="Контакт">{user.contact}</KV>}
       <KV k="Зарегистрирован">{dateTime(user.createdAt)}</KV>
-      <KV k="Последний вход">{user.lastSeenAt ? ago(user.lastSeenAt) : "ни разу"}</KV>
-      <KV k="Активных сессий">{user.sessionsCount}</KV>
+      <KV k="Последний вход">{user.lastLoginAt ? ago(user.lastLoginAt) : "ни разу"}</KV>
+      <KV k="Устройств">
+        {user.devicesUsed} из {user.deviceLimit}
+      </KV>
       <KV k="Серверов выдано">{user.serversCount}</KV>
       <KV k="Оплачено всего">{money(user.paidTotal, user.currency)}</KV>
       {user.blockedReason && (
@@ -173,6 +242,50 @@ function Overview({ user }) {
         </KV>
       )}
       {user.note && <KV k="Заметка">{user.note}</KV>}
+    </Card>
+  );
+}
+
+function Orders({ user }) {
+  const orders = user.orders || [];
+  if (!orders.length) return <Empty>Заказов с сайта не было</Empty>;
+
+  return (
+    <Card pad>
+      <Section title="Заказы с сайта" sub="Включая те, что не удалось выдать">
+        <div className="gd-rows">
+          {orders.map((order) => {
+            const status = orderStatus(order.status);
+            return (
+              <div key={order.id} className="gd-r">
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13.5 }}>
+                    {order.planName || order.planCode}
+                    {order.isRenewal ? " · продление" : ""}
+                  </div>
+                  <div className="gd-tile-l">
+                    {dateTime(order.createdAt)} · {order.id.slice(0, 8)}
+                  </div>
+                  {order.failureReason && (
+                    <div
+                      className="gd-tile-l"
+                      style={{ color: "var(--gd-neg)", whiteSpace: "normal", marginTop: 2 }}
+                    >
+                      {order.failureReason}
+                    </div>
+                  )}
+                </div>
+                <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                  <div className="gd-num" style={{ fontSize: 14 }}>
+                    {money(order.amountKopecks / 100, order.currency)}
+                  </div>
+                  <Chip color={status.color}>{status.label}</Chip>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Section>
     </Card>
   );
 }
@@ -258,7 +371,7 @@ function Sessions({ user, onChanged }) {
           <div key={session.id} className="gd-r">
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-                {platformLabel(session.platform)}
+                {session.deviceName || platformLabel(session.platform)}
                 {session.appVersion && <span className="gd-chip">{session.appVersion}</span>}
                 {session.isOnline && <Chip color="var(--gd-pos)">онлайн</Chip>}
                 {session.revokedAt && <Chip color="var(--gd-faint)">завершена</Chip>}

@@ -10,21 +10,13 @@ desktop/client/ui/controllers/panelAuthController.cpp. Переименован�
 
 from __future__ import annotations
 
-import os
-import tempfile
-
 import pytest
+from fastapi.testclient import TestClient
 
-_TMP = tempfile.mkdtemp(prefix="panel-contract-")
-os.environ["PANEL_DATABASE_URL"] = f"sqlite:///{_TMP}/contract.db"
-os.environ["PANEL_SEED_DEMO"] = "0"
-os.environ["PANEL_TRAFFIC_SYNC_MINUTES"] = "0"
-
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app.db import SessionLocal, init_db  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models import GB, Provisioning, Server  # noqa: E402
+# Окружение задаётся в conftest.py, см. пояснение там.
+from app.db import SessionLocal, init_db
+from app.main import app
+from app.models import GB, Provisioning, Server
 
 # Поля, которые приложение читает из ответа. Список — копия того, что
 # разбирает C++: если что-то отсюда пропадёт, вход перестанет работать.
@@ -62,7 +54,7 @@ def account(client):
     headers = {"Authorization": f"Bearer {r.json()['token']}"}
     created = client.post(
         "/api/admin/users",
-        json={"name": "Клиент Windows", "planCode": "pro", "trafficLimitBytes": 100 * GB},
+        json={"name": "Клиент Windows", "planCode": "plus", "trafficLimitBytes": 100 * GB},
         headers=headers,
     ).json()
     return created["user"]["login"], created["password"], headers
@@ -98,7 +90,7 @@ def test_unlimited_traffic_is_null_not_zero(client):
     r = client.post("/api/admin/login", json={"login": "admin", "password": "admin"})
     headers = {"Authorization": f"Bearer {r.json()['token']}"}
     created = client.post(
-        "/api/admin/users", json={"name": "Безлимитный", "planCode": "pro"}, headers=headers
+        "/api/admin/users", json={"name": "Безлимитный", "planCode": "plus"}, headers=headers
     ).json()
     client.post(
         f"/api/admin/users/{created['user']['id']}/traffic-limit",

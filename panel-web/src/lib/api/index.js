@@ -30,7 +30,27 @@ export const usersApi = {
   resetTraffic: (id) => http.post(`${BASE}/users/${id}/traffic-reset`),
   extend: (id, payload) => http.post(`${BASE}/users/${id}/extend`, payload),
   resetPassword: (id) => http.post(`${BASE}/users/${id}/password`),
+  // Показ пароля — POST, а не GET: GET оседает в истории браузера и логах
+  // прокси, а каждый такой запрос пишется в журнал поимённо.
+  revealPassword: (id) => http.post(`${BASE}/users/${id}/reveal`),
   killSession: (userId, sessionId) => http.del(`${BASE}/users/${userId}/sessions/${sessionId}`),
+};
+
+export const ordersApi = {
+  list: (params, signal) => http.get(`${BASE}/orders`, params, signal),
+  get: (id) => http.get(`${BASE}/orders/${id}`),
+  // Выдать доступ руками, когда вебхук не дошёл, а деньги получены.
+  fulfil: (id) => http.post(`${BASE}/orders/${id}/fulfil`),
+  refund: (id, reason) => http.post(`${BASE}/orders/${id}/refund`, { reason }),
+
+  deliveries: (params) => http.get(`${BASE}/deliveries`, params),
+  retryDelivery: (id) => http.post(`${BASE}/deliveries/${id}/retry`),
+  events: (params) => http.get(`${BASE}/billing-events`, params),
+};
+
+export const auditApi = {
+  list: (params, signal) => http.get(`${BASE}/audit`, params, signal),
+  actions: () => http.get(`${BASE}/audit/actions`),
 };
 
 export const serversApi = {

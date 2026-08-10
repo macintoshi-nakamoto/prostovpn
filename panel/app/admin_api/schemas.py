@@ -39,11 +39,19 @@ class PlanOut(Schema):
     id: int
     code: str
     name: str
+    # Копейки — то, чем считает сайт и провайдер; рубли — то, что рисует
+    # админка. Оба поля ставит Plan.set_price, врозь они не меняются.
     price: Decimal
+    price_kopecks: int
     currency: str
     period_days: int
     traffic_limit_bytes: int | None
+    server_limit: int
+    device_limit: int
+    allowed_regions: list[str] | None = None
+    tagline: str | None = None
     is_active: bool
+    is_public: bool
 
 
 class PlanIn(Schema):
@@ -52,7 +60,14 @@ class PlanIn(Schema):
     price: Decimal = Decimal(0)
     period_days: int = Field(default=30, ge=1)
     traffic_limit_bytes: int | None = None
+    server_limit: int = Field(default=3, ge=1)
+    device_limit: int = Field(default=3, ge=1)
+    # None — все страны. Иначе коды: ["NL", "DE", "FI"].
+    allowed_regions: list[str] | None = None
+    tagline: str | None = Field(default=None, max_length=160)
     is_active: bool = True
+    # Показывать ли тариф на сайте. Выключенный остаётся доступным админу.
+    is_public: bool = True
 
 
 # --- пользователи ------------------------------------------------------------
@@ -66,6 +81,8 @@ class UserRow(Schema):
     login: str
     name: str | None
     contact: str | None
+    email: str | None = None
+    telegram_id: int | None = None
 
     status: str  # active | paused | blocked | expired | traffic
     is_active: bool
@@ -87,8 +104,12 @@ class UserRow(Schema):
     paid_total: Decimal
     last_payment_at: dt.datetime | None
     last_seen_at: dt.datetime | None
+    last_login_at: dt.datetime | None = None
     is_online: bool
     sessions_count: int
+    # Занято устройств из скольких доступно по тарифу.
+    devices_used: int = 0
+    device_limit: int = 1
     servers_count: int
     created_at: dt.datetime
 
@@ -98,6 +119,8 @@ class SessionOut(Schema):
     platform: str | None
     app_version: str | None
     ip: str | None
+    device_id: str | None = None
+    device_name: str | None = None
     created_at: dt.datetime
     last_seen_at: dt.datetime
     expires_at: dt.datetime
@@ -143,9 +166,35 @@ class UserKeyOut(Schema):
     revoked_at: dt.datetime | None
 
 
+class OrderRow(Schema):
+    """Строка раздела «Заказы» и истории покупок в карточке."""
+
+    id: str
+    plan_code: str
+    plan_name: str | None = None
+    email: str
+    telegram_id: int | None = None
+    amount_kopecks: int
+    currency: str
+    status: str  # pending | paid | failed | refunded | expired
+    provider: str | None = None
+    provider_payment_id: str | None = None
+    is_renewal: bool
+    failure_reason: str | None = None
+    user_id: int | None = None
+    user_login: str | None = None
+    created_at: dt.datetime
+    paid_at: dt.datetime | None = None
+    # Дошло ли письмо. None — доставки по заказу не было.
+    delivery_status: str | None = None
+
+
 class UserDetail(UserRow):
     note: str | None
-    password_hint: str | None
+    # Пароль наружу не отдаётся вместе с карточкой: он приходит отдельным
+    # запросом, и только этот запрос пишется в журнал. Здесь — лишь признак
+    # того, что показывать вообще есть что.
+    has_password: bool = False
     blocked_reason: str | None
     blocked_at: dt.datetime | None
     traffic_reset_at: dt.datetime | None
@@ -153,6 +202,7 @@ class UserDetail(UserRow):
     payments: list[PaymentOut]
     subscriptions: list[SubscriptionOut]
     keys: list[UserKeyOut]
+    orders: list[OrderRow] = []
 
 
 class UserCreate(Schema):
@@ -162,6 +212,7 @@ class UserCreate(Schema):
     password: str | None = None
     name: str | None = None
     contact: str | None = None
+    email: str | None = None
     note: str | None = None
     plan_code: str | None = "basic"
     days: int | None = None
@@ -179,6 +230,7 @@ class UserCreated(Schema):
 class UserUpdate(Schema):
     name: str | None = None
     contact: str | None = None
+    email: str | None = None
     note: str | None = None
 
 
@@ -363,6 +415,72 @@ class Dashboard(Schema):
     currency: str
     daily: list[SeriesPoint]
     monthly: list[SeriesPoint]
+
+
+# --- заказы, доставка, журнал ------------------------------------------------
+
+
+class OrderStats(Schema):
+    """Шапка раздела «Заказы»: где именно всё встало."""
+
+    pending: int
+    paid: int
+    failed: int
+    refunded: int
+    expired: int
+    # Оплачено, но письмо не ушло — это то, ради чего раздел и открывают.
+    undelivered: int
+    revenue_kopecks: int
+    currency: str
+
+
+class OrderList(Schema):
+    items: list[OrderRow]
+    stats: OrderStats
+
+
+class DeliveryRow(Schema):
+    id: int
+    channel: str
+    template: str
+    target: str
+    order_id: str | None = None
+    user_id: int | None = None
+    user_login: str | None = None
+    attempts: int
+    last_error: str | None = None
+    next_attempt_at: dt.datetime
+    sent_at: dt.datetime | None = None
+    created_at: dt.datetime
+
+
+class BillingEventRow(Schema):
+    event_id: str
+    provider: str
+    kind: str | None = None
+    order_id: str | None = None
+    result: str | None = None
+    received_at: dt.datetime
+
+
+class AuditRow(Schema):
+    id: int
+    admin_id: int | None = None
+    admin_login: str | None = None
+    action: str
+    target: str | None = None
+    detail: str | None = None
+    created_at: dt.datetime
+
+
+class RevealOut(Schema):
+    """Ответ на «показать пароль». Запрос обязательно попадает в журнал."""
+
+    password: str
+
+
+class OrderActionIn(Schema):
+    reason: str | None = None
 
 
 # --- версии приложения -------------------------------------------------------

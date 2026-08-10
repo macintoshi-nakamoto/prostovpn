@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { plansApi } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
-import { days, gb, money, trafficLimit } from "../../lib/format";
+import { days, gb, money, plural, trafficLimit } from "../../lib/format";
 import {
   Button,
   Card,
@@ -55,9 +55,10 @@ export function PlansPage() {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
           {(plans.data || []).map((plan) => (
             <Card key={plan.id} pad>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 15, fontWeight: 600 }}>{plan.name}</div>
                 {!plan.isActive && <Chip color="var(--gd-faint)">выключен</Chip>}
+                {plan.isActive && !plan.isPublic && <Chip color="var(--gd-warn)">не на сайте</Chip>}
               </div>
               <div className="gd-mono" style={{ fontSize: 12, color: "var(--gd-faint)", marginTop: 3 }}>
                 {plan.code}
@@ -68,6 +69,10 @@ export function PlansPage() {
               </div>
               <div style={{ fontSize: 12.5, color: "var(--gd-dim)", marginTop: 4 }}>
                 за {days(plan.periodDays)} · {trafficLimit(plan.trafficLimitBytes)}
+              </div>
+              <div style={{ fontSize: 12.5, color: "var(--gd-dim)", marginTop: 2 }}>
+                {plan.serverLimit} {plural(plan.serverLimit, "страна", "страны", "стран")} ·{" "}
+                {plan.deviceLimit} {plural(plan.deviceLimit, "устройство", "устройства", "устройств")}
               </div>
 
               <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
@@ -106,7 +111,11 @@ function PlanModal({ plan, onClose, onSaved }) {
     // Безлимит — это отсутствие лимита, отдельного флага в базе нет.
     unlimited: plan ? plan.trafficLimitBytes == null : false,
     limitGb: plan?.trafficLimitBytes != null ? String(Math.round(gb(plan.trafficLimitBytes))) : "100",
+    serverLimit: String(plan?.serverLimit ?? 3),
+    deviceLimit: String(plan?.deviceLimit ?? 3),
+    tagline: plan?.tagline || "",
     isActive: plan ? plan.isActive : true,
+    isPublic: plan ? plan.isPublic : true,
   }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -128,7 +137,11 @@ function PlanModal({ plan, onClose, onSaved }) {
       trafficLimitBytes: form.unlimited
         ? null
         : Math.round(Number(form.limitGb.replace(",", ".")) * 1024 ** 3),
+      serverLimit: Number(form.serverLimit) || 1,
+      deviceLimit: Number(form.deviceLimit) || 1,
+      tagline: form.tagline.trim() || null,
       isActive: form.isActive,
+      isPublic: form.isPublic,
     };
     try {
       if (plan) await plansApi.update(plan.id, payload);
@@ -193,9 +206,32 @@ function PlanModal({ plan, onClose, onSaved }) {
           </Field>
         )}
 
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Стран" hint="Сколько точек подключения доступно">
+            <input className="gd-input" inputMode="numeric" value={form.serverLimit} onChange={set("serverLimit")} />
+          </Field>
+          <Field label="Устройств" hint="Больше — самое старое отвяжется">
+            <input className="gd-input" inputMode="numeric" value={form.deviceLimit} onChange={set("deviceLimit")} />
+          </Field>
+        </div>
+
+        <Field label="Подпись на сайте" hint="Короткая строка под ценой">
+          <input
+            className="gd-input"
+            value={form.tagline}
+            onChange={set("tagline")}
+            placeholder="Три страны, три устройства"
+          />
+        </Field>
+
         <label style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, cursor: "pointer" }}>
           <input type="checkbox" checked={form.isActive} onChange={set("isActive")} style={{ width: 16, height: 16, accentColor: "var(--gd-gold)" }} />
           Доступен для новых подписок
+        </label>
+
+        <label style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 13, cursor: "pointer" }}>
+          <input type="checkbox" checked={form.isPublic} onChange={set("isPublic")} style={{ width: 16, height: 16, accentColor: "var(--gd-gold)" }} />
+          Показывать на сайте
         </label>
 
         {error && <div className="gd-error">{error}</div>}

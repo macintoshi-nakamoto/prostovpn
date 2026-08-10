@@ -16,13 +16,18 @@ from __future__ import annotations
 import datetime as dt
 import enum
 import secrets
+import uuid
+from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
@@ -60,7 +65,33 @@ def new_public_id() -> str:
     return f"PV-{block()}-{block()}"
 
 
+def new_uuid() -> str:
+    """
+    Идентификатор заказа.
+
+    Строкой, а не нативным UUID: тип uuid есть в PostgreSQL и отсутствует в
+    SQLite, а панель обязана подниматься на обеих. 36 символов канонической
+    записи одинаково читаются в логах, в URL страницы успеха и в базе.
+    """
+    return str(uuid.uuid4())
+
+
 GB = 1024 ** 3
+
+
+def normalize_email(value: str | None) -> str | None:
+    """
+    Почта в базе всегда в нижнем регистре.
+
+    В PostgreSQL это делал бы citext, но в SQLite такого типа нет. Приводим
+    на входе сами — иначе `Ivan@mail.ru` и `ivan@mail.ru` заведут двух
+    пользователей, и повторная покупка создаст вторую учётку вместо
+    продления первой.
+    """
+    if value is None:
+        return None
+    cleaned = value.strip().lower()
+    return cleaned or None
 
 
 class Admin(Base):
@@ -109,6 +140,13 @@ class Plan(Base):
 
     Цена лежит на тарифе, а не на пользователе, чтобы календарь прибыли мог
     посчитать ожидаемые поступления: кто когда продлевается и на какую сумму.
+
+    Денег в тарифе два поля, и это не дублирование по недосмотру.
+    `price_kopecks` — источник истины: целые копейки, с ними считает сайт и
+    платёжный провайдер, и в них невозможно потерять копейку на округлении.
+    `price` — та же сумма рублями, оставленная ради календаря прибыли и
+    остальной финансовой части, написанной до появления оплаты. Оба поля
+    ставятся одним методом `set_price`, врозь их не трогают.
     """
 
     __tablename__ = "plans"
@@ -117,13 +155,32 @@ class Plan(Base):
     code: Mapped[str] = mapped_column(String(32), unique=True, index=True)
     name: Mapped[str] = mapped_column(String(64))
     price: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    price_kopecks: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = mapped_column(String(8), default="RUB")
     period_days: Mapped[int] = mapped_column(Integer, default=30)
     # None — безлимит. Отдельного флага нет: «нет лимита» и есть безлимит.
     traffic_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
+
+    # Сколько стран и сколько одновременных устройств даёт тариф.
+    server_limit: Mapped[int] = mapped_column(Integer, default=3)
+    device_limit: Mapped[int] = mapped_column(Integer, default=3)
+    # None — все страны. Иначе список кодов: ["NL", "DE", "FI"].
+    allowed_regions: Mapped[list[str] | None] = mapped_column(JSON, default=None)
+
+    # Короткая строка под ценой на сайте.
+    tagline: Mapped[str | None] = mapped_column(String(160), default=None)
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Тариф может быть живым, но не показываться на сайте: так делают
+    # индивидуальные условия и тестовые периоды, которые выдаёт только админ.
+    is_public: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+    def set_price(self, kopecks: int) -> None:
+        """Единственное место, где меняется цена: два поля не расходятся."""
+        self.price_kopecks = int(kopecks)
+        self.price = Decimal(kopecks) / 100
 
 
 class Server(Base):
@@ -182,12 +239,25 @@ class User(Base):
     public_id: Mapped[str] = mapped_column(String(24), unique=True, index=True, default=new_public_id)
     login: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
-    # Пароль показывается администратору один раз при создании; здесь лежит
-    # только для того, чтобы его можно было продиктовать клиенту повторно.
+    # Пароль под AES-GCM ключом SECRETS_KEY. Нужен ровно для одного: показать
+    # его администратору, когда человек потерял письмо. Открытым текстом
+    # пароль не лежит нигде — ни здесь, ни в очереди доставки, ни в логах.
+    password_enc: Mapped[str | None] = mapped_column(Text, default=None)
+    # Устаревшее поле: пароль открытым текстом. Новые учётки его не пишут,
+    # старые чистит миграция. Оставлено, чтобы обновление не потеряло данные
+    # раньше, чем они переедут в password_enc.
     password_hint: Mapped[str | None] = mapped_column(String(128), default=None)
     name: Mapped[str | None] = mapped_column(String(128), default=None)
     contact: Mapped[str | None] = mapped_column(String(128), default=None)
     note: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Почта — ключ, по которому повторная покупка находит человека и
+    # продлевает подписку вместо создания второй учётки. Регистр приводится
+    # к нижнему на записи, см. normalize_email.
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, default=None)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, index=True, default=None)
+
+    last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     # Выключен администратором (пауза) — вход есть, серверов нет.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -201,6 +271,12 @@ class User(Base):
     traffic_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
     traffic_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     traffic_reset_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    # Защита от перебора пароля. Счётчик и замок живут на пользователе, а не
+    # только в памяти процесса: перезапуск панели не должен обнулять защиту,
+    # а за одним доменом может стоять несколько воркеров.
+    failed_logins: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
@@ -224,6 +300,31 @@ class User(Base):
         if sub is not None and sub.plan_ref is not None:
             return sub.plan_ref.traffic_limit_bytes
         return None
+
+    def current_plan(self, now: dt.datetime | None = None) -> "Plan | None":
+        sub = self.active_subscription(now)
+        return sub.plan_ref if sub is not None else None
+
+    def device_limit(self, now: dt.datetime | None = None) -> int:
+        """Сколько устройств разрешено. Без действующего тарифа — один."""
+        plan = self.current_plan(now)
+        return plan.device_limit if plan is not None else 1
+
+    def server_limit(self, now: dt.datetime | None = None) -> int | None:
+        plan = self.current_plan(now)
+        return plan.server_limit if plan is not None else None
+
+    def allowed_regions(self, now: dt.datetime | None = None) -> list[str] | None:
+        plan = self.current_plan(now)
+        return plan.allowed_regions if plan is not None else None
+
+    def live_sessions(self, now: dt.datetime | None = None) -> list["Session"]:
+        """Незакрытые и непросроченные входы — они же «устройства»."""
+        moment = now or utcnow()
+        return [s for s in self.sessions if s.revoked_at is None and s.expires_at > moment]
+
+    def is_locked_out(self, now: dt.datetime | None = None) -> bool:
+        return self.locked_until is not None and self.locked_until > (now or utcnow())
 
     def traffic_exhausted(self, now: dt.datetime | None = None) -> bool:
         limit = self.effective_traffic_limit(now)
@@ -331,6 +432,9 @@ class Payment(Base):
     subscription_id: Mapped[int | None] = mapped_column(
         ForeignKey("subscriptions.id", ondelete="SET NULL"), index=True, default=None
     )
+    order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), index=True, default=None
+    )
     # Numeric, а не float: деньги нельзя хранить в плавающей точке
     amount: Mapped[float] = mapped_column(Numeric(12, 2))
     currency: Mapped[str] = mapped_column(String(8), default="RUB")
@@ -356,6 +460,11 @@ class Session(Base):
     platform: Mapped[str | None] = mapped_column(String(32), default=None)
     app_version: Mapped[str | None] = mapped_column(String(32), default=None)
     ip: Mapped[str | None] = mapped_column(String(64), default=None)
+    # Устройство глазами лимита тарифа. Приложение присылает свой постоянный
+    # идентификатор установки: без него переустановка приложения на том же
+    # телефоне считалась бы вторым устройством и съедала лимит.
+    device_id: Mapped[str | None] = mapped_column(String(64), index=True, default=None)
+    device_name: Mapped[str | None] = mapped_column(String(96), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     last_seen_at: Mapped[dt.datetime] = mapped_column(
         DateTime, default=utcnow, server_default=func.now()
@@ -392,6 +501,166 @@ class AppRelease(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     released_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+
+# --- оплата с сайта -----------------------------------------------------------
+
+
+class OrderStatus(str, enum.Enum):
+    """
+    Жизнь заказа.
+
+    `pending` — форма заполнена, деньги ещё не пришли. Единственный переход
+    в `paid` делает вебхук провайдера; возврат со страницы оплаты ничего не
+    подтверждает и статус не трогает.
+    """
+
+    PENDING = "pending"
+    PAID = "paid"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+    EXPIRED = "expired"
+
+
+class Order(Base):
+    """
+    Намерение купить. Заводится до похода на платёжную форму, потому что
+    вебхуку нужно, куда вернуться: провайдер знает только свой идентификатор
+    платежа и сумму, а кому выдавать доступ — знает заказ.
+    """
+
+    __tablename__ = "orders"
+    __table_args__ = (
+        # Один платёж провайдера — один заказ. Если провайдер по ошибке
+        # пришлёт свой payment_id второй раз с другим заказом, база не даст.
+        UniqueConstraint("provider", "provider_payment_id", name="uq_order_provider_payment"),
+        CheckConstraint(
+            "status in ('pending','paid','failed','refunded','expired')", name="ck_order_status"
+        ),
+        Index("ix_orders_status_created", "status", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    plan_code: Mapped[str] = mapped_column(ForeignKey("plans.code", ondelete="RESTRICT"), index=True)
+
+    email: Mapped[str] = mapped_column(String(255), index=True)
+    telegram_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
+
+    # Сумма фиксируется в момент создания заказа и потом не пересчитывается:
+    # человек согласился на конкретную цену, а тариф в панели могут поменять
+    # между открытием формы и приходом вебхука.
+    amount_kopecks: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB")
+
+    status: Mapped[str] = mapped_column(String(16), default=OrderStatus.PENDING.value, index=True)
+
+    provider: Mapped[str | None] = mapped_column(String(32), default=None)
+    provider_payment_id: Mapped[str | None] = mapped_column(String(128), default=None)
+    redirect_url: Mapped[str | None] = mapped_column(Text, default=None)
+
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None
+    )
+    subscription_id: Mapped[int | None] = mapped_column(
+        ForeignKey("subscriptions.id", ondelete="SET NULL"), default=None
+    )
+    # Продление существующей учётки, а не первая покупка. Определяется по
+    # почте в момент выдачи и запоминается: письмо у них разное.
+    is_renewal: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Почему заказ отклонён — например «сумма не совпала с тарифом».
+    failure_reason: Mapped[str | None] = mapped_column(Text, default=None)
+    ip: Mapped[str | None] = mapped_column(String(64), default=None)
+
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    paid_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    plan: Mapped[Plan] = relationship()
+    user: Mapped["User | None"] = relationship()
+
+    @property
+    def amount_rubles(self) -> Decimal:
+        return Decimal(self.amount_kopecks) / 100
+
+
+class BillingEvent(Base):
+    """
+    Принятое событие провайдера. Ключ идемпотентности и он же журнал.
+
+    Провайдеры повторяют доставку десятки раз, пока не увидят 200, а иногда
+    и после. Первичный ключ по идентификатору события — единственное, что
+    надёжно превращает пять доставок в одну выдачу: проверка «а вдруг уже
+    обработали» отдельным SELECT проигрывает гонку двум воркерам, вставка —
+    нет.
+    """
+
+    __tablename__ = "billing_events"
+
+    event_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), index=True)
+    kind: Mapped[str | None] = mapped_column(String(32), default=None)
+    order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), index=True, default=None
+    )
+    payload: Mapped[dict | None] = mapped_column(JSON, default=None)
+    # Чем закончилась обработка: ok, duplicate, amount_mismatch, unknown_order.
+    result: Mapped[str | None] = mapped_column(String(32), default=None)
+    received_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class DeliveryJob(Base):
+    """
+    Задание на доставку учётки: письмо или сообщение в Telegram.
+
+    Отдельная таблица, а не отправка прямо в вебхуке. Почтовый провайдер
+    бывает недоступен, и попытка достучаться до него внутри транзакции либо
+    держит блокировку на секундах ожидания, либо откатывает уже выданную
+    подписку. Здесь же лежит и ретрай: письмо с доступом теряться не должно.
+
+    Пароля в задании нет. Отправитель берёт его из `users.password_enc` и
+    расшифровывает в момент отправки — открытым текстом он не появляется ни
+    в базе очереди, ни в её логах.
+    """
+
+    __tablename__ = "delivery_jobs"
+    __table_args__ = (Index("ix_delivery_pending", "sent_at", "next_attempt_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    channel: Mapped[str] = mapped_column(String(16))  # email | telegram
+    template: Mapped[str] = mapped_column(String(32))  # credentials | renewed
+    target: Mapped[str] = mapped_column(String(255))
+
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, default=None
+    )
+    order_id: Mapped[str | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), index=True, default=None
+    )
+
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text, default=None)
+    next_attempt_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+    sent_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+    user: Mapped["User | None"] = relationship()
+    order: Mapped[Order | None] = relationship()
+
+
+class RateLimit(Base):
+    """
+    Счётчик попыток в скользящем окне: вход, создание заказов, вебхуки.
+
+    В базе, а не в памяти: перезапуск процесса не должен обнулять защиту, а
+    за одним адресом может стоять несколько воркеров uvicorn.
+    """
+
+    __tablename__ = "rate_limits"
+
+    key: Mapped[str] = mapped_column(String(160), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, default=0)
+    window_start: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+    locked_until: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
 
 class AuditLog(Base):

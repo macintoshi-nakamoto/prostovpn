@@ -15,6 +15,7 @@ export function CreateUserModal({ plans, onClose, onCreated }) {
   const [form, setForm] = useState({
     name: "",
     contact: "",
+    email: "",
     note: "",
     planCode: activePlans.find((p) => p.code === "basic")?.code || activePlans[0]?.code || "",
     login: "",
@@ -35,6 +36,7 @@ export function CreateUserModal({ plans, onClose, onCreated }) {
       const result = await usersApi.create({
         name: form.name.trim() || null,
         contact: form.contact.trim() || null,
+        email: form.email.trim() || null,
         note: form.note.trim() || null,
         planCode: form.planCode || null,
         login: form.manual && form.login.trim() ? form.login.trim() : null,
@@ -85,6 +87,19 @@ export function CreateUserModal({ plans, onClose, onCreated }) {
             <input className="gd-input" value={form.contact} onChange={set("contact")} placeholder="@ivan" />
           </Field>
         </div>
+
+        <Field
+          label="Почта"
+          hint="По ней повторная покупка на сайте продлит эту учётку, а не заведёт вторую"
+        >
+          <input
+            className="gd-input"
+            type="email"
+            value={form.email}
+            onChange={set("email")}
+            placeholder="ivan@example.com"
+          />
+        </Field>
 
         <Field label="Тариф">
           <select className="gd-select" value={form.planCode} onChange={set("planCode")}>

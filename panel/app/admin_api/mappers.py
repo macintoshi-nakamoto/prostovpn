@@ -12,7 +12,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session as OrmSession
 
-from ..models import Server, Session, User, UserKey, utcnow
+from ..models import AuditLog, DeliveryJob, Order, Server, Session, User, UserKey, utcnow
 from . import schemas
 
 # Сессия считается живой, если приложение отмечалось последние 10 минут.
@@ -60,6 +60,8 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         login=user.login,
         name=user.name,
         contact=user.contact,
+        email=user.email,
+        telegram_id=user.telegram_id,
         status=user_status(user, moment),
         is_active=user.is_active,
         is_blocked=user.is_blocked,
@@ -77,10 +79,64 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         paid_total=sum((Decimal(str(p.amount)) for p in payments), Decimal(0)),
         last_payment_at=last_payment.paid_at if last_payment else None,
         last_seen_at=last_session.last_seen_at if last_session else None,
+        last_login_at=user.last_login_at,
         is_online=any(_is_online(s, moment) for s in sessions),
         sessions_count=sum(1 for s in sessions if s.revoked_at is None),
+        devices_used=len(user.live_sessions(moment)),
+        device_limit=user.device_limit(moment),
         servers_count=sum(1 for k in user.keys if k.revoked_at is None),
         created_at=user.created_at,
+    )
+
+
+def order_row(order: Order, delivery_status: str | None = None) -> schemas.OrderRow:
+    return schemas.OrderRow(
+        id=order.id,
+        plan_code=order.plan_code,
+        plan_name=order.plan.name if order.plan else None,
+        email=order.email,
+        telegram_id=order.telegram_id,
+        amount_kopecks=order.amount_kopecks,
+        currency=order.currency,
+        status=order.status,
+        provider=order.provider,
+        provider_payment_id=order.provider_payment_id,
+        is_renewal=order.is_renewal,
+        failure_reason=order.failure_reason,
+        user_id=order.user_id,
+        user_login=order.user.login if order.user else None,
+        created_at=order.created_at,
+        paid_at=order.paid_at,
+        delivery_status=delivery_status,
+    )
+
+
+def delivery_row(job: DeliveryJob) -> schemas.DeliveryRow:
+    return schemas.DeliveryRow(
+        id=job.id,
+        channel=job.channel,
+        template=job.template,
+        target=job.target,
+        order_id=job.order_id,
+        user_id=job.user_id,
+        user_login=job.user.login if job.user else None,
+        attempts=job.attempts,
+        last_error=job.last_error,
+        next_attempt_at=job.next_attempt_at,
+        sent_at=job.sent_at,
+        created_at=job.created_at,
+    )
+
+
+def audit_row(entry: AuditLog, admin_login: str | None = None) -> schemas.AuditRow:
+    return schemas.AuditRow(
+        id=entry.id,
+        admin_id=entry.admin_id,
+        admin_login=admin_login,
+        action=entry.action,
+        target=entry.target,
+        detail=entry.detail,
+        created_at=entry.created_at,
     )
 
 
@@ -104,14 +160,17 @@ def key_out(key: UserKey) -> schemas.UserKeyOut:
     )
 
 
-def user_detail(user: User, now: dt.datetime | None = None) -> schemas.UserDetail:
+def user_detail(
+    user: User, now: dt.datetime | None = None, orders: list[Order] | None = None
+) -> schemas.UserDetail:
     moment = now or utcnow()
     row = user_row(user, moment)
 
     return schemas.UserDetail(
         **row.model_dump(),
         note=user.note,
-        password_hint=user.password_hint,
+        has_password=bool(user.password_enc),
+        orders=[order_row(o) for o in (orders or [])],
         blocked_reason=user.blocked_reason,
         blocked_at=user.blocked_at,
         traffic_reset_at=user.traffic_reset_at,
@@ -121,6 +180,8 @@ def user_detail(user: User, now: dt.datetime | None = None) -> schemas.UserDetai
                 platform=s.platform,
                 app_version=s.app_version,
                 ip=s.ip,
+                device_id=s.device_id,
+                device_name=s.device_name,
                 created_at=s.created_at,
                 last_seen_at=s.last_seen_at,
                 expires_at=s.expires_at,

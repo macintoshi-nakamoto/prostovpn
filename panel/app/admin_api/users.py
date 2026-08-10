@@ -17,11 +17,39 @@ from sqlalchemy.orm import Session as OrmSession, selectinload
 
 from .. import services
 from ..db import get_db
-from ..models import GB, Admin, Plan, Session, User, utcnow
+from ..models import GB, Admin, Order, Plan, Session, User, normalize_email, utcnow
 from . import mappers, schemas
 from .deps import audit, current_admin
 
 router = APIRouter(prefix="/users", tags=["admin:users"])
+
+
+def _orders(db: OrmSession, user: User) -> list[Order]:
+    """
+    История покупок клиента — и по учётке, и по почте.
+
+    По почте тоже, и это важнее, чем кажется: заказ, который не удалось
+    выдать — сумма не сошлась, вебхук не дошёл, — остался без ссылки на
+    пользователя. Именно такой заказ и ищут в карточке, когда человек
+    пишет «я заплатил, а доступа нет».
+    """
+    condition = Order.user_id == user.id
+    if user.email:
+        condition = condition | (Order.email == user.email)
+    return list(
+        db.scalars(
+            select(Order)
+            .where(condition)
+            .options(selectinload(Order.plan), selectinload(Order.user))
+            .order_by(Order.created_at.desc())
+        )
+    )
+
+
+def _detail(db: OrmSession, user_id: int) -> schemas.UserDetail:
+    """Карточка целиком: пользователь, связи и его заказы."""
+    user = _load(db, user_id)
+    return mappers.user_detail(user, orders=_orders(db, user))
 
 
 def _load(db: OrmSession, user_id: int) -> User:
@@ -108,6 +136,7 @@ def create_user(
             name=body.name,
             contact=body.contact,
             note=body.note,
+            email=body.email,
             traffic_limit_bytes=body.traffic_limit_bytes,
             price=float(body.price) if body.price is not None else None,
         )
@@ -116,7 +145,7 @@ def create_user(
 
     audit(db, admin, "user.create", user.public_id, f"логин {user.login}")
     return schemas.UserCreated(
-        user=mappers.user_detail(_load(db, user.id)), password=password, warnings=warnings
+        user=_detail(db, user.id), password=password, warnings=warnings
     )
 
 
@@ -124,7 +153,7 @@ def create_user(
 def get_user(
     user_id: int, db: OrmSession = Depends(get_db), _: Admin = Depends(current_admin)
 ) -> schemas.UserDetail:
-    return mappers.user_detail(_load(db, user_id))
+    return _detail(db, user_id)
 
 
 @router.patch("/{user_id}", response_model=schemas.UserDetail)
@@ -141,9 +170,19 @@ def update_user(
         user.contact = body.contact
     if body.note is not None:
         user.note = body.note
+    if body.email is not None:
+        address = normalize_email(body.email)
+        # Почта — ключ, по которому повторная покупка находит человека.
+        # Занятой почтой одного клиента нельзя пометить другого: продление
+        # ушло бы не туда.
+        if address and db.scalar(
+            select(User.id).where(User.email == address, User.id != user.id)
+        ):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "эта почта занята другой учёткой")
+        user.email = address
     db.commit()
     audit(db, admin, "user.update", user.public_id)
-    return mappers.user_detail(_load(db, user_id))
+    return _detail(db, user_id)
 
 
 # --- управление доступом -----------------------------------------------------
@@ -156,7 +195,7 @@ def enable_user(
     user = _load(db, user_id)
     services.set_user_active(db, user, True)
     audit(db, admin, "user.enable", user.public_id)
-    return mappers.user_detail(_load(db, user_id))
+    return _detail(db, user_id)
 
 
 @router.post("/{user_id}/disable", response_model=schemas.UserDetail)
@@ -167,7 +206,7 @@ def disable_user(
     user = _load(db, user_id)
     services.set_user_active(db, user, False)
     audit(db, admin, "user.disable", user.public_id)
-    return mappers.user_detail(_load(db, user_id))
+    return _detail(db, user_id)
 
 
 @router.post("/{user_id}/block", response_model=schemas.UserDetail)
@@ -195,7 +234,7 @@ def unblock_user(
     user = _load(db, user_id)
     services.unblock_user(db, user)
     audit(db, admin, "user.unblock", user.public_id)
-    return mappers.user_detail(_load(db, user_id))
+    return _detail(db, user_id)
 
 
 @router.post("/{user_id}/traffic-limit", response_model=schemas.UserDetail)
@@ -213,7 +252,7 @@ def set_traffic_limit(
     except services.PanelError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     audit(db, admin, "user.traffic_limit", user.public_id, "безлимит" if limit is None else f"{body.limit_gb} ГБ")
-    return mappers.user_detail(_load(db, user_id))
+    return _detail(db, user_id)
 
 
 @router.post("/{user_id}/traffic-reset", response_model=schemas.UserDetail)
@@ -223,7 +262,7 @@ def reset_traffic(
     user = _load(db, user_id)
     services.reset_traffic(db, user)
     audit(db, admin, "user.traffic_reset", user.public_id)
-    return mappers.user_detail(_load(db, user_id))
+    return _detail(db, user_id)
 
 
 @router.post("/{user_id}/extend", response_model=schemas.UserDetail)
@@ -274,7 +313,7 @@ def extend_subscription(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     audit(db, admin, "user.extend", user.public_id, f"{days} дн., {price or 0}")
-    return mappers.user_detail(_load(db, user_id))
+    return _detail(db, user_id)
 
 
 @router.post("/{user_id}/password", response_model=schemas.PasswordOut)
@@ -283,8 +322,32 @@ def reset_password(
 ) -> schemas.PasswordOut:
     user = _load(db, user_id)
     password = services.set_password(db, user)
-    audit(db, admin, "user.password", user.public_id)
+    audit(db, admin, "user.password_reset", user.public_id)
     return schemas.PasswordOut(password=password)
+
+
+@router.post("/{user_id}/reveal", response_model=schemas.RevealOut)
+def reveal_password(
+    user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
+) -> schemas.RevealOut:
+    """
+    Показать пароль клиента.
+
+    Единственный способ узнать его после выдачи — и потому единственный
+    метод API, у которого запись в журнал не побочный эффект, а смысл.
+    Запись делается до расшифровки: если в журнал не удалось написать,
+    пароль показывать нельзя.
+
+    POST, а не GET, намеренно: GET попадает в историю браузера, в логи
+    прокси и в предзагрузку ссылок, а этот запрос не должен случаться сам
+    собой.
+    """
+    user = _load(db, user_id)
+    audit(db, admin, "user.password_reveal", user.public_id, f"логин {user.login}")
+    try:
+        return schemas.RevealOut(password=services.reveal_password(user))
+    except services.PanelError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
 
 @router.delete("/{user_id}/sessions/{session_id}", response_model=schemas.ActionResult)

@@ -8,18 +8,22 @@ from sqlalchemy import create_engine, event, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import sessionmaker
 
+from . import migrations
 from .config import settings
-from .models import GB, Admin, Base, Plan
+from .models import Admin, Base, Plan
 from .security import hash_password
 
 # Тарифы «из коробки»: панель без единого тарифа не даёт завести человека,
-# а придумывать их в первый день никто не хочет.
+# а придумывать их в первый день никто не хочет. Цены здесь — стартовые:
+# дальше они правятся в разделе «Тарифы», и сайт берёт их оттуда, а не из
+# кода. Ставить цену в шаблон страницы нельзя — она разойдётся с той, по
+# которой выставлен счёт.
 DEFAULT_PLANS = [
-    # code, название, цена, дней, лимит трафика (None — безлимит), порядок
-    ("trial", "Пробный", 0, 7, 5 * GB, 0),
-    ("basic", "Базовый", 199, 30, 100 * GB, 1),
-    ("pro", "Про", 349, 30, None, 2),
-    ("year", "Годовой", 2990, 365, None, 3),
+    # code, название, копейки, дней, серверов, устройств, публичный, подпись
+    ("trial", "Пробный", 0, 7, 3, 1, False, "Неделя для проверки"),
+    ("basic", "Базовый", 30_000, 30, 3, 3, True, "Три страны, три устройства"),
+    ("plus", "На три месяца", 80_000, 90, 3, 3, True, "Те же условия, дешевле в месяц"),
+    ("max", "На год", 270_000, 365, 3, 5, True, "Максимальная выгода и пять устройств"),
 ]
 
 _url = settings().database_url
@@ -51,8 +55,8 @@ def get_db() -> Iterator[OrmSession]:
 
 
 def init_db() -> None:
-    """Создаёт таблицы, первого администратора и базовые тарифы."""
-    Base.metadata.create_all(engine)
+    """Создаёт таблицы, доводит схему до актуальной, заводит админа и тарифы."""
+    migrations.run(engine)
 
     config = settings()
     with SessionLocal() as db:
@@ -66,20 +70,24 @@ def init_db() -> None:
             )
             db.commit()
 
-        # Тарифы досоздаём по коду, а не «если таблица пуста»: удалённый
-        # администратором тариф не должен возвращаться, а новый в обновлении —
-        # должен появиться.
+        # Тарифы заводим только в пустую базу: удалённый администратором тариф
+        # не должен возвращаться при каждом перезапуске.
         if db.scalar(select(Plan).limit(1)) is None:
-            for code, name, price, days, limit, order in DEFAULT_PLANS:
-                db.add(
-                    Plan(
-                        code=code,
-                        name=name,
-                        price=price,
-                        currency=config.currency,
-                        period_days=days,
-                        traffic_limit_bytes=limit,
-                        sort_order=order,
-                    )
+            for order, row in enumerate(DEFAULT_PLANS):
+                code, name, kopecks, days, servers, devices, public, tagline = row
+                plan = Plan(
+                    code=code,
+                    name=name,
+                    currency=config.currency,
+                    period_days=days,
+                    server_limit=servers,
+                    device_limit=devices,
+                    is_public=public,
+                    tagline=tagline,
+                    sort_order=order,
                 )
+                plan.set_price(kopecks)
+                db.add(plan)
             db.commit()
+
+        migrations.backfill(db)

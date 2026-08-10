@@ -17,7 +17,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
-from . import provisioning
+from . import crypto, provisioning
 from .services.translit import slugify
 from .models import (
     GB,
@@ -133,8 +133,14 @@ def _make_users(
     active_servers = [s for s in servers if s.is_active]
     address_counter = {s.id: 1 for s in servers}
 
+    # Тарифы берём те, что реально есть в базе, а не по именам из кода:
+    # коды меняются, а падение демо-данных на старте выглядит как поломка
+    # панели, хотя ломается только генератор выдуманных людей.
+    codes = sorted(plans)
+    weighted = [code for code in codes for _ in range(2 if code == "basic" else 1)] or codes
+
     for index, full_name in enumerate(NAMES):
-        plan = plans[rnd.choice(["trial", "basic", "basic", "pro", "pro", "year"])]
+        plan = plans[rnd.choice(weighted)]
 
         # Раскидываем регистрации по последним пяти месяцам, чтобы графики и
         # календарь были не одной точкой.
@@ -145,7 +151,10 @@ def _make_users(
             public_id=new_public_id(),
             login=f"{slugify(full_name)}-{rnd.randint(100, 999)}",
             password_hash=hash_password(password),
-            password_hint=password,
+            # Как и у настоящих учёток: только шифротекст, никакого
+            # открытого текста в базе даже у выдуманных людей.
+            password_enc=crypto.encrypt_or_none(password),
+            email=f"{slugify(full_name)}{index}@example.com",
             name=full_name,
             contact=f"@{slugify(full_name).split('-')[0]}{rnd.randint(10, 99)}",
             created_at=created,

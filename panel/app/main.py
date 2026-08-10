@@ -15,15 +15,34 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from . import admin_api, api_client, services
+from . import admin_api, api_client, public_api, services
 from .config import settings
 from .db import SessionLocal, init_db
 
 log = logging.getLogger("panel")
 
+_ROOT = Path(__file__).resolve().parent.parent.parent
+
 # Собранная веб-панель. Если её нет — работает только API, и это нормально:
 # в разработке панель поднимает Vite на своём порту.
-PANEL_DIST = Path(__file__).resolve().parent.parent.parent / "panel" / "dist"
+PANEL_DIST = _ROOT / "panel" / "dist"
+
+
+def _site_dir() -> Path | None:
+    """
+    Каталог публичного сайта.
+
+    Раздавать его самим удобно на одном сервере и одной команде запуска. На
+    боевом сервере статику обычно отдаёт nginx — тогда `PANEL_SITE_DIR`
+    очищают, и приложение просто не берёт эти маршруты.
+    """
+    configured = settings().site_dir.strip()
+    if not configured:
+        return None
+    path = Path(configured)
+    if not path.is_absolute():
+        path = (_ROOT / "backend" / configured).resolve()
+    return path if path.is_dir() else None
 
 
 async def _traffic_loop(minutes: int) -> None:
@@ -52,6 +71,36 @@ def _sync_once() -> None:
         enforce_traffic_limits(db)
 
 
+async def _delivery_loop(seconds: int) -> None:
+    """
+    Очередь доставки и уборка вокруг неё.
+
+    Один цикл на три дела, потому что все три дёшевы и все три обязаны
+    случаться регулярно: разослать то, что не ушло сразу; добить выдачу по
+    заказам, обработка которых сорвалась; закрыть неоплаченные заказы,
+    которым больше суток.
+    """
+    tick = 0
+    while True:
+        await asyncio.sleep(seconds)
+        tick += 1
+        try:
+            await asyncio.to_thread(_delivery_once, tick)
+        except Exception:  # pragma: no cover - фоновая задача не должна падать
+            log.exception("обход очереди доставки не удался")
+
+
+def _delivery_once(tick: int) -> None:
+    with SessionLocal() as db:
+        services.delivery.run_once(db)
+        services.billing_webhook.retry_stuck(db)
+        # Просроченные заказы и счётчики частоты — раз в сотню циклов:
+        # каждые пятнадцать секунд их перебирать незачем.
+        if tick % 100 == 1:
+            services.expire_stale(db)
+            services.ratelimit.sweep(db)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
@@ -63,13 +112,18 @@ async def lifespan(_app: FastAPI):
         with SessionLocal() as db:
             seed_demo(db)
 
-    task: asyncio.Task | None = None
+    for problem in config.is_production_ready:
+        log.warning("конфигурация: %s", problem)
+
+    tasks: list[asyncio.Task] = []
     if config.traffic_sync_minutes > 0:
-        task = asyncio.create_task(_traffic_loop(config.traffic_sync_minutes))
+        tasks.append(asyncio.create_task(_traffic_loop(config.traffic_sync_minutes)))
+    if config.delivery_poll_seconds > 0:
+        tasks.append(asyncio.create_task(_delivery_loop(config.delivery_poll_seconds)))
 
     yield
 
-    if task is not None:
+    for task in tasks:
         task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await task
@@ -77,8 +131,11 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Prosto VPN — панель",
-    description="Пользователи, серверы, подписки и деньги. /api/v1 — приложениям, /api/admin — панели.",
-    version="2.0.0",
+    description=(
+        "Пользователи, серверы, подписки и деньги. "
+        "/api/v1 — приложениям и сайту, /api/admin — панели."
+    ),
+    version="2.1.0",
     lifespan=lifespan,
 )
 
@@ -91,9 +148,38 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """
+    Заголовки безопасности на всё, что отдаёт приложение.
+
+    HSTS ставится только на HTTPS-запросах: выданный по обычному http, он
+    в лучшем случае игнорируется, а в худшем запирает разработчика на
+    localhost без возможности открыть страницу.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=63072000; includeSubDomains"
+        )
+    return response
+
+
 @app.exception_handler(StarletteHTTPException)
-async def _json_errors(_request: Request, exc: StarletteHTTPException):
-    """Ошибки всегда JSON: панель и приложения читают их одинаково."""
+async def _json_errors(request: Request, exc: StarletteHTTPException):
+    """
+    Ошибки API — JSON, ошибки страниц сайта — страница.
+
+    Сайт отдаётся тем же приложением, и 404 на опечатку в адресе не должна
+    показывать человеку `{"detail":"Not Found"}`.
+    """
+    if not request.url.path.startswith("/api/"):
+        site = _site_dir()
+        if site is not None and exc.status_code == 404 and (site / "404.html").is_file():
+            return FileResponse(site / "404.html", status_code=404)
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
 
@@ -103,24 +189,41 @@ def healthz() -> dict[str, str]:
 
 
 app.include_router(api_client.router)
+app.include_router(public_api.router)
 app.include_router(admin_api.router)
 
 
-if PANEL_DIST.is_dir():
-    app.mount("/assets", StaticFiles(directory=PANEL_DIST / "assets"), name="assets")
+# --- статика ------------------------------------------------------------------
+#
+# Порядок важен: сначала админка на своём префиксе, потом сайт в корне.
+# Панель живёт на /admin, чтобы корень остался за сайтом и чтобы перед ней
+# можно было поставить отдельный фильтр по адресам или basic-auth, не
+# задевая публичные страницы.
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    def spa(full_path: str) -> FileResponse:
+if PANEL_DIST.is_dir():
+    app.mount("/admin/assets", StaticFiles(directory=PANEL_DIST / "assets"), name="panel-assets")
+
+    @app.get("/admin", include_in_schema=False)
+    @app.get("/admin/{full_path:path}", include_in_schema=False)
+    def panel_spa(full_path: str = "") -> FileResponse:
         """
         Всё, что не API, отдаём индексом панели.
 
-        Маршрутизация у SPA своя: по прямой ссылке на /users сервер обязан
-        вернуть тот же index.html, иначе перезагрузка страницы даёт 404.
+        Маршрутизация у SPA своя: по прямой ссылке на /admin/users сервер
+        обязан вернуть тот же index.html, иначе перезагрузка даёт 404.
         """
         candidate = PANEL_DIST / full_path
         if full_path and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(PANEL_DIST / "index.html")
+
+
+_SITE = _site_dir()
+if _SITE is not None:
+    app.mount("/", StaticFiles(directory=_SITE, html=True), name="site")
+    log.info("сайт раздаётся из %s", _SITE)
+elif PANEL_DIST.is_dir():
+    log.info("сайт не найден, в корне только панель")
 
 
 def main() -> None:  # pragma: no cover - запуск руками

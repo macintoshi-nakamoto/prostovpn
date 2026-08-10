@@ -7,25 +7,16 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from decimal import Decimal
 
 import pytest
+from fastapi.testclient import TestClient
 
-# База задаётся до импорта приложения: настройки читаются один раз и кэшируются.
-_TMP = tempfile.mkdtemp(prefix="panel-test-")
-os.environ["PANEL_DATABASE_URL"] = f"sqlite:///{_TMP}/test.db"
-os.environ["PANEL_SEED_DEMO"] = "0"
-os.environ["PANEL_TRAFFIC_SYNC_MINUTES"] = "0"
-os.environ["PANEL_ADMIN_LOGIN"] = "admin"
-os.environ["PANEL_ADMIN_PASSWORD"] = "admin"
-
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app.db import SessionLocal, init_db  # noqa: E402
-from app.main import app  # noqa: E402
-from app.models import GB, Provisioning, Server  # noqa: E402
+# Окружение задаётся в conftest.py: настройки кэшируются, и выставлять их
+# в каждом модуле значит зависеть от порядка импорта.
+from app.db import SessionLocal, init_db
+from app.main import app
+from app.models import GB, Provisioning, Server
 
 
 @pytest.fixture(scope="module")
@@ -74,10 +65,22 @@ def test_bad_password_rejected(client):
     assert r.status_code == 401
 
 
+def plan_price(client, auth, code: str) -> Decimal:
+    """
+    Цена тарифа из API, а не константой в тесте.
+
+    Стартовые цены правятся — и правятся именно в базе, а не в коде. Тест,
+    который знает их наизусть, ломается на каждой такой правке и ничего при
+    этом не проверяет по существу.
+    """
+    plans = client.get("/api/admin/plans", headers=auth).json()
+    return Decimal(next(p["price"] for p in plans if p["code"] == code))
+
+
 def test_create_user_generates_credentials(client, auth):
     r = client.post(
         "/api/admin/users",
-        json={"name": "Тестовый Клиент", "contact": "@test", "planCode": "pro"},
+        json={"name": "Тестовый Клиент", "contact": "@test", "planCode": "plus"},
         headers=auth,
     )
     assert r.status_code == 201, r.text
@@ -89,8 +92,8 @@ def test_create_user_generates_credentials(client, auth):
     assert user["login"].startswith("testovyy-klient-")
     assert len(password) >= 12
     assert user["publicId"].startswith("PV-")
-    assert user["plan"] == "pro"
-    assert Decimal(user["price"]) == Decimal("349.00")
+    assert user["plan"] == "plus"
+    assert Decimal(user["price"]) == plan_price(client, auth, "plus")
     assert user["status"] == "active"
 
 
@@ -116,7 +119,7 @@ def test_search_finds_by_name_and_public_id(client, auth):
 
 
 def test_traffic_limit_and_unlimited(client, auth):
-    uid = client.post("/api/admin/users", json={"name": "Лимит", "planCode": "pro"}, headers=auth).json()["user"]["id"]
+    uid = client.post("/api/admin/users", json={"name": "Лимит", "planCode": "plus"}, headers=auth).json()["user"]["id"]
 
     limited = client.post(
         f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": 250}, headers=auth
@@ -132,7 +135,7 @@ def test_traffic_limit_and_unlimited(client, auth):
 
 
 def test_traffic_exhausted_blocks_access(client, auth):
-    uid = client.post("/api/admin/users", json={"name": "Расход", "planCode": "pro"}, headers=auth).json()["user"]["id"]
+    uid = client.post("/api/admin/users", json={"name": "Расход", "planCode": "plus"}, headers=auth).json()["user"]["id"]
     client.post(f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": 1}, headers=auth)
 
     from app.models import User
@@ -173,18 +176,20 @@ def test_extend_registers_payment(client, auth):
     before = client.get(f"/api/admin/users/{uid}", headers=auth).json()
 
     after = client.post(
-        f"/api/admin/users/{uid}/extend", json={"planCode": "pro"}, headers=auth
+        f"/api/admin/users/{uid}/extend", json={"planCode": "plus"}, headers=auth
     ).json()
 
     # Продление — это и оплата: доступ и деньги не должны расходиться.
     assert len(after["payments"]) == len(before["payments"]) + 1
-    assert Decimal(after["paidTotal"]) == Decimal(before["paidTotal"]) + Decimal("349.00")
+    assert Decimal(after["paidTotal"]) == Decimal(before["paidTotal"]) + plan_price(
+        client, auth, "plus"
+    )
     assert after["daysLeft"] >= before["daysLeft"]
 
 
 def test_blocked_user_cannot_log_in(client, auth, shared_server):
     created = client.post(
-        "/api/admin/users", json={"name": "Бан", "planCode": "pro"}, headers=auth
+        "/api/admin/users", json={"name": "Бан", "planCode": "plus"}, headers=auth
     ).json()
     login, password = created["user"]["login"], created["password"]
 
@@ -198,7 +203,7 @@ def test_blocked_user_cannot_log_in(client, auth, shared_server):
 
 def test_client_login_returns_servers_without_ip_or_keys(client, auth, shared_server):
     created = client.post(
-        "/api/admin/users", json={"name": "Клиент Приложения", "planCode": "pro"}, headers=auth
+        "/api/admin/users", json={"name": "Клиент Приложения", "planCode": "plus"}, headers=auth
     ).json()
 
     r = client.post(
@@ -297,7 +302,7 @@ def test_renewed_past_period_is_not_expected_again(client, auth):
 
 def test_blocked_user_not_counted_as_expected(client, auth):
     created = client.post(
-        "/api/admin/users", json={"name": "Ушедший", "planCode": "pro"}, headers=auth
+        "/api/admin/users", json={"name": "Ушедший", "planCode": "plus"}, headers=auth
     ).json()["user"]
 
     # Смотрим тот месяц, в который попадает конец подписки: 30 дней от

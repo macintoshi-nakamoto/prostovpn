@@ -41,9 +41,19 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * Как часто приложение переспрашивает панель о новой версии, пока открыто.
+ *
+ * Пять минут — компромисс: значок появляется почти сразу после выкладки, а
+ * панель не завалена запросами. Проверка сама по себе дешёвая и тихая: пока
+ * идёт скачивание или установка, checkUpdate её пропускает.
+ */
+private const val UPDATE_POLL_MS = 5 * 60 * 1000L
 
 fun main() = application {
     val scope = rememberCoroutineScope()
@@ -99,14 +109,56 @@ fun main() = application {
         }
     }
 
+    // Подсказка под значком в трее показывает состояние, не открывая окно.
+    val s = state.s
+    val trayTooltip = when (state.phase) {
+        Phase.ON -> "${state.s.connected} · ${state.currentServer?.name.orEmpty()}".trim(' ', '·')
+        Phase.CONNECTING -> s.trayStatusConnecting
+        Phase.DISCONNECTING -> s.trayStatusDisconnecting
+        Phase.OFF -> "Prosto VPN"
+    }
+
     Tray(
         state = trayState,
         icon = painterResource("trayicon.png"),
-        tooltip = "Prosto VPN",
+        tooltip = trayTooltip,
         onAction = ::showWindow,
         menu = {
-            Item(state.s.trayOpen, onClick = ::showWindow)
-            Item(state.s.trayQuit, onClick = ::quit)
+            Item(s.trayOpen, onClick = ::showWindow)
+
+            /*
+            Управление подключением прямо из трея — окно открывать не нужно.
+            Пункт один, а не два: он и подключает, и отключает по текущему
+            состоянию, как кнопка питания на главном экране. Во время
+            перехода он недоступен — нажимать нечего.
+            */
+            when (state.phase) {
+                Phase.OFF -> Item(s.trayConnect, onClick = { state.toggleConnection() })
+                Phase.ON -> Item(s.trayDisconnect, onClick = { state.toggleConnection() })
+                Phase.CONNECTING -> Item(s.trayStatusConnecting, enabled = false, onClick = {})
+                Phase.DISCONNECTING -> Item(s.trayStatusDisconnecting, enabled = false, onClick = {})
+            }
+
+            // Выбор страны подменю: только когда есть из чего выбирать —
+            // при единственном сервере переключать не на что.
+            val servers = state.displayServers()
+            if (state.isLoggedIn && servers.size > 1) {
+                Separator()
+                Menu(s.trayServer) {
+                    servers.forEachIndexed { index, srv ->
+                        // Галочкой отмечаем выбранную страну: CheckboxItem —
+                        // единственный пункт меню трея, умеющий «отметку».
+                        CheckboxItem(
+                            text = if (srv.sub.isNotEmpty()) "${srv.name} · ${srv.sub}" else srv.name,
+                            checked = index == state.selectedServerIndex,
+                            onCheckedChange = { state.switchServer(index) },
+                        )
+                    }
+                }
+            }
+
+            Separator()
+            Item(s.trayQuit, onClick = ::quit)
         },
     )
 
@@ -156,10 +208,17 @@ fun AppRoot(
         }
     }
 
-    // Спрашиваем панель о новой версии на запуске, а не при открытии
-    // настроек: значок на шестерёнке должен появиться сам. Из init состояния
-    // это не вызвать — поля обновления объявлены ниже него.
-    LaunchedEffect(Unit) { state.checkUpdate() }
+    // Спрашиваем панель о новой версии сами и повторяем, пока приложение
+    // открыто: значок на шестерёнке и кнопка в настройках должны появиться
+    // без перезапуска — почти сразу после того, как версию выложили.
+    // Первый заход мгновенный, дальше — раз в несколько минут.
+    LaunchedEffect(Unit) {
+        state.checkUpdate()
+        while (true) {
+            delay(UPDATE_POLL_MS)
+            state.checkUpdate(silent = true)
+        }
+    }
 
     Box(
         modifier = Modifier

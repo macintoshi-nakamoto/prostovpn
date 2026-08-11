@@ -378,6 +378,30 @@ class AppState(private val scope: CoroutineScope) {
     var selectedServerIndex by mutableIntStateOf(prefs.getInt("selectedServer", 0))
         private set
 
+    /**
+     * Выбирает сервер и, если VPN уже поднят, сразу переключает на него.
+     *
+     * Отдельно от [selectServer], потому что смена страны на ходу — это
+     * снять текущий туннель и поднять новый, а простой выбор из списка на
+     * отключённом приложении ничего переподключать не должен. Пользуется
+     * этим трей: там страна меняется одним кликом, и человек ждёт, что VPN
+     * тут же переедет, а не останется на прежней.
+     */
+    fun switchServer(index: Int) {
+        if (index == selectedServerIndex && phase == Phase.ON) return
+        val wasOn = phase == Phase.ON || phase == Phase.CONNECTING
+        selectServer(index)
+        if (wasOn) {
+            scope.launch {
+                // Ждём, пока прежний туннель действительно снят: поднимать
+                // новый поверх живого адаптера нельзя — адрес будет занят.
+                disconnect()
+                withTimeoutOrNull(35_000) { snapshotFlow { phase }.first { it == Phase.OFF } }
+                if (server?.config?.isNotBlank() == true) toggleConnection()
+            }
+        }
+    }
+
     fun selectServer(index: Int) {
         selectedServerIndex = index
         prefs.putInt("selectedServer", index)
@@ -653,15 +677,33 @@ class AppState(private val scope: CoroutineScope) {
      *
      * Проверка не должна перебивать начатую установку, поэтому во время неё
      * ничего не делаем.
+     *
+     * [silent] — для фоновых повторов, пока приложение открыто. Обычная
+     * проверка показывает «Проверяем обновления…» в карточке настроек; будь
+     * повторы такими же, надпись мигала бы там каждые несколько минут. Тихая
+     * проверка молча обновляет результат: значок и кнопка появляются сами, а
+     * карточка не дёргается. Первый заход всегда обычный — там ждать нечего.
      */
-    fun checkUpdate() {
-        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.INSTALLING) return
+    fun checkUpdate(silent: Boolean = false) {
+        when (updateStage) {
+            UpdateStage.DOWNLOADING, UpdateStage.INSTALLING -> return
+            // Уже идёт видимая проверка — тихий повтор ей не мешает.
+            UpdateStage.CHECKING -> if (silent) return
+            UpdateStage.IDLE -> Unit
+        }
         updateJob?.cancel()
         updateJob = scope.launch {
-            updateStage = UpdateStage.CHECKING
-            updateFailure = null
-            updateCheck = PanelUpdate.check(BuildInfo.VERSION)
-            updateStage = UpdateStage.IDLE
+            if (!silent) {
+                updateStage = UpdateStage.CHECKING
+                updateFailure = null
+            }
+            val result = PanelUpdate.check(BuildInfo.VERSION)
+            // Тихую неудачу не показываем: связь могла моргнуть на одну
+            // проверку, а прежний результат ещё верен. Ошибку оставляем
+            // видимой проверке — той, что человек запустил кнопкой.
+            if (silent && result.isFailure && updateCheck != null) return@launch
+            updateCheck = result
+            if (!silent) updateStage = UpdateStage.IDLE
         }
     }
 

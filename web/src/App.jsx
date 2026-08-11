@@ -7,12 +7,35 @@ import { Account } from "./pages/Account.jsx";
 import { Legal } from "./pages/Legal.jsx";
 import { NotFound } from "./pages/NotFound.jsx";
 
-/** Каждый переход — наверх страницы: иначе кабинет открывается прокрученным. */
+/**
+ * Страница всегда открывается сверху.
+ *
+ * Две разные вещи. Переход по маршруту — прокрутка в ноль, иначе кабинет
+ * открывается с середины. Перезагрузка — браузер сам возвращает прежнее
+ * положение, и человек видит середину лендинга вместо начала; отключаем это
+ * через scrollRestoration и прокручиваем сами, уже после того как React
+ * отрисовал первый кадр.
+ */
 function ScrollToTop() {
   const { pathname } = useLocation();
+
   useEffect(() => {
+    if ("scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+    // Первый кадр может прийти раньше, чем браузер применит своё
+    // восстановление, поэтому дублируем прокрутку следующим кадром.
+    window.scrollTo(0, 0);
+    const frame = requestAnimationFrame(() => window.scrollTo(0, 0));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    // Якорь в адресе — намеренный переход к секции, его не перебиваем.
+    if (window.location.hash) return;
     window.scrollTo(0, 0);
   }, [pathname]);
+
   return null;
 }
 

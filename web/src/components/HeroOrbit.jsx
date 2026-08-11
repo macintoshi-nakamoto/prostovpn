@@ -67,13 +67,21 @@ export function HeroOrbit({ src = "/assets/hero-orbit.png", alt = "" }) {
         <span className="orbit-halo" />
         <span className="orbit-ring orbit-ring-1" />
         <span className="orbit-ring orbit-ring-2" />
-        <img
-          className="orbit-img"
-          src={src}
-          alt={alt}
-          onLoad={() => setReady(true)}
-          onError={() => setFailed(true)}
-        />
+        {/*
+        WebP вчетверо легче того же PNG с прозрачностью, а герой — первое,
+        что грузится. PNG остаётся запасным: <picture> сам выберет по силам
+        браузера, и старый обойдётся без webp.
+        */}
+        <picture>
+          <source srcSet={src.replace(/\.png$/, ".webp")} type="image/webp" />
+          <img
+            className="orbit-img"
+            src={src}
+            alt={alt}
+            onLoad={() => setReady(true)}
+            onError={() => setFailed(true)}
+          />
+        </picture>
       </div>
     </div>
   );

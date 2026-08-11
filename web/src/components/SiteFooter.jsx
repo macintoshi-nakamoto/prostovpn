@@ -18,8 +18,9 @@ export function SiteFooter() {
           <div>
             <Link to="/faq">FAQ</Link>
             <Link to="/contacts">Поддержка</Link>
-            <a href="https://t.me/prosto_vpn_supp" target="_blank" rel="noreferrer">
-              Telegram
+            {/* Канал, а не поддержка: за помощью ведёт соседняя ссылка. */}
+            <a href="https://t.me/prostovpn_tg" target="_blank" rel="noreferrer">
+              Telegram-канал
             </a>
           </div>
           <div>

@@ -59,6 +59,11 @@
   opacity: 0;
 }
 
+/* <picture> по умолчанию строчный — иначе под картинкой остаётся зазор. */
+.orbit-in picture {
+  display: block;
+}
+
 .orbit-img {
   position: relative;
   display: block;

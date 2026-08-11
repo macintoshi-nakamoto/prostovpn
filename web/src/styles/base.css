@@ -1,0 +1,220 @@
+/*
+ * Дизайн-система публичного сайта.
+ *
+ * Значения взяты из макета один в один: цвета, радиусы, шрифт. Светлая тема,
+ * акцент #FA4C16, фирменный ProstoDisplay поверх Onest. Компоненты держат
+ * стили здесь, а не инлайном, — так проще держать сайт единым.
+ */
+
+@font-face {
+  font-family: "ProstoDisplay";
+  src: url("/assets/prosto.woff2") format("woff2"), url("/assets/prosto.woff") format("woff");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  /* Акцент и его оттенки */
+  --accent: #fa4c16;
+  --accent-hover: #e23f0d;
+  --accent-deep: #d93a05;
+  --accent-dark: #c93607;
+  --accent-soft: #ff6a2b;
+  --accent-tint: #fff1ea;
+
+  /* Нейтральные */
+  --ink: #0a0a0a;
+  --ink-2: #262626;
+  --text-muted: #5a6069;
+  --text-dim: #6b717a;
+  --text-faint: #8a9099;
+  --line: #eceef1;
+  --line-2: #f2f4f6;
+  --border: #e1e4e8;
+
+  /* Поверхности */
+  --bg: #ffffff;
+  --bg-soft: #f5f6f8;
+  --bg-softer: #fafbfc;
+  --bg-field: #f7f8fa;
+
+  /* Градиент бренда */
+  --brand-gradient: linear-gradient(118deg, #ff7a3d 0%, #fa4c16 46%, #d93a05 100%);
+
+  --radius-card: 28px;
+  --radius: 14px;
+  --shadow-card: 0 24px 60px rgba(20, 25, 35, 0.08);
+  --shadow-soft: 0 8px 24px rgba(20, 25, 35, 0.08);
+
+  --font: "ProstoDisplay", "Onest", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+a:hover {
+  color: var(--accent-dark);
+}
+
+button {
+  font-family: inherit;
+}
+
+input {
+  font-family: inherit;
+}
+input::placeholder {
+  color: #a6acb4;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+img {
+  max-width: 100%;
+}
+
+/* Общий контейнер */
+.wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 32px;
+  width: 100%;
+}
+
+/* --- Появление при прокрутке -------------------------------------------------
+ * Ставится на элемент; JS-хук снимает [data-reveal] когда элемент входит в
+ * область видимости, и всё внутри плавно всплывает. До появления — прозрачно
+ * и чуть ниже, чтобы движение читалось.
+ */
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(26px);
+}
+[data-revealed] {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal],
+  [data-revealed] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Плавающие объекты и пульсация — из макета */
+@keyframes floatY {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-16px);
+  }
+}
+@keyframes pulseRing {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.float {
+  animation: floatY 8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .float {
+    animation: none;
+  }
+}
+
+/* Кнопки-«таблетки» и основные CTA переиспользуются между страницами */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 16px 28px;
+  border-radius: var(--radius);
+  transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease,
+    transform 0.15s ease, box-shadow 0.2s ease;
+  text-align: center;
+}
+.btn:active {
+  transform: scale(0.985);
+}
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 10px 26px rgba(217, 58, 5, 0.24);
+}
+.btn-primary:hover {
+  background: var(--accent-hover);
+  color: #fff;
+}
+.btn-dark {
+  background: var(--ink);
+  color: #fff;
+}
+.btn-dark:hover {
+  background: var(--ink-2);
+  color: #fff;
+}
+.btn-outline {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+}
+.btn-outline:hover {
+  background: var(--ink);
+  color: #fff;
+}
+.btn-block {
+  width: 100%;
+}
+.btn[disabled] {
+  opacity: 0.55;
+  cursor: default;
+  transform: none;
+}

@@ -362,12 +362,21 @@ class DeviceOut(BaseModel):
     is_current: bool = False
 
 
+class PaymentOut(BaseModel):
+    amount: float
+    currency: str = "RUB"
+    comment: str | None = None
+    paid_at: dt.datetime
+
+
 class AccountOut(BaseModel):
     login: str
     email: str | None = None
     public_id: str
     plan: str | None = None
     plan_title: str | None = None
+    period_days: int | None = None
+    price: float | None = None
     active: bool
     expires_at: dt.datetime | None = None
     days_left: int | None = None
@@ -375,6 +384,7 @@ class AccountOut(BaseModel):
     devices: list[DeviceOut]
     traffic_used_bytes: int = 0
     traffic_limit_bytes: int | None = None
+    payments: list[PaymentOut] = []
 
 
 def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
@@ -388,6 +398,8 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         public_id=user.public_id,
         plan=subscription.plan if subscription else None,
         plan_title=plan.name if plan else None,
+        period_days=plan.period_days if plan else None,
+        price=float(subscription.price) if subscription and subscription.price else None,
         active=user.has_access(now),
         expires_at=subscription.expires_at if subscription else None,
         days_left=max(0, (subscription.expires_at - now).days) if subscription else None,
@@ -406,6 +418,15 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         ],
         traffic_used_bytes=user.traffic_used_bytes,
         traffic_limit_bytes=user.effective_traffic_limit(now),
+        payments=[
+            PaymentOut(
+                amount=float(payment.amount),
+                currency=payment.currency,
+                comment=payment.comment,
+                paid_at=payment.paid_at,
+            )
+            for payment in sorted(user.payments, key=lambda p: p.paid_at, reverse=True)
+        ],
     )
 
 

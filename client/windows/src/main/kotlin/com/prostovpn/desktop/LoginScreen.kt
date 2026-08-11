@@ -132,7 +132,9 @@ fun LoginScreen(
                     delay(450)
                 }
                 .onFailure { error ->
-                    errorText = error.message ?: s.errBadKey
+                    // Не текст панели: он русский, а интерфейс бывает
+                    // английским. Перевод выбирается по коду причины.
+                    errorText = state.loginError(error)
                 }
         }
     }

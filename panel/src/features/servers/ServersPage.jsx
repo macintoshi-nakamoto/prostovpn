@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Plus, RefreshCw, Stethoscope, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Stethoscope, Trash2, X } from "lucide-react";
 import { serversApi } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import { ago, bytes, flag, num, plural } from "../../lib/format";
@@ -67,8 +67,35 @@ function healthState(server) {
   return { ok: false, color: "var(--gd-info)", label: "Не проверялся" };
 }
 
-/** Что за машина: железо, система, состояние туннеля. */
+/**
+ * Открыт ли блок «Данные сервера».
+ *
+ * Помним выбор между перезагрузками и общим на все карточки: развернув его
+ * один раз, администратор ждёт его развёрнутым и завтра, а свернув —
+ * свёрнутым на всех узлах, а не только на том, где нажал.
+ */
+const FACTS_OPEN_KEY = "panel.serverFacts.open";
+
+function factsOpenDefault() {
+  return localStorage.getItem(FACTS_OPEN_KEY) === "1";
+}
+
+/**
+ * Что за машина: железо, система, состояние туннеля.
+ *
+ * Свёрнут по умолчанию: полтора десятка строк на каждой карточке узла
+ * отодвигали вниз всё остальное, а нужны они редко — когда с узлом что-то
+ * не так. Свёрнутая строка оставляет главное: систему и аптайм.
+ */
 function Facts({ facts }) {
+  const [open, setOpen] = useState(factsOpenDefault);
+
+  const toggle = () => {
+    const next = !open;
+    setOpen(next);
+    localStorage.setItem(FACTS_OPEN_KEY, next ? "1" : "0");
+  };
+
   if (!facts) return null;
 
   const mem =
@@ -115,26 +142,64 @@ function Facts({ facts }) {
 
   if (!rows.length) return null;
 
+  // Что видно в свёрнутом виде — самое частое «а что там вообще за машина».
+  const short = [facts.os, uptime(facts.uptimeSeconds)].filter(Boolean).join(" · ");
+
   return (
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--gd-tile)" }}>
-      <div className="gd-sec-title" style={{ marginBottom: 8 }}>
-        Данные сервера
-      </div>
-      {rows.map(([label, value]) => (
-        <KV key={label} k={label}>
-          {value}
-        </KV>
-      ))}
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          width: "100%",
+          padding: 0,
+          background: "none",
+          border: 0,
+          color: "inherit",
+          font: "inherit",
+          cursor: "pointer",
+          textAlign: "left",
+        }}
+      >
+        <span style={{ display: "flex", color: "var(--gd-dim)" }}>
+          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </span>
+        <span className="gd-sec-title" style={{ margin: 0 }}>
+          Данные сервера
+        </span>
+        {!open && short && (
+          <span
+            className="gd-tile-l"
+            style={{ marginTop: 0, marginLeft: "auto", maxWidth: "60%" }}
+          >
+            {short}
+          </span>
+        )}
+      </button>
 
-      {facts.ipForward === false && (
-        <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--gd-neg)", lineHeight: 1.5 }}>
-          Пересылка пакетов выключена: туннель поднимется, но интернет через него не пойдёт.
-          На сервере: <span className="gd-mono">sysctl -w net.ipv4.ip_forward=1</span>
-        </div>
-      )}
-      {facts.awgService && facts.awgService !== "active" && (
-        <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--gd-warn)" }}>
-          Служба awg-quick@awg0: {facts.awgService}
+      {open && (
+        <div style={{ marginTop: 8 }}>
+          {rows.map(([label, value]) => (
+            <KV key={label} k={label}>
+              {value}
+            </KV>
+          ))}
+
+          {facts.ipForward === false && (
+            <div style={{ marginTop: 10, fontSize: 12.5, color: "var(--gd-neg)", lineHeight: 1.5 }}>
+              Пересылка пакетов выключена: туннель поднимется, но интернет через него не пойдёт.
+              На сервере: <span className="gd-mono">sysctl -w net.ipv4.ip_forward=1</span>
+            </div>
+          )}
+          {facts.awgService && facts.awgService !== "active" && (
+            <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--gd-warn)" }}>
+              Служба awg-quick@awg0: {facts.awgService}
+            </div>
+          )}
         </div>
       )}
     </div>

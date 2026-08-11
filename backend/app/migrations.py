@@ -44,6 +44,7 @@ def backfill(db: OrmSession) -> None:
     """
     _backfill_plan_kopecks(db)
     _encrypt_legacy_passwords(db)
+    _measure_published_releases(db)
 
 
 # --- структура ----------------------------------------------------------------
@@ -229,3 +230,58 @@ def _encrypt_legacy_passwords(db: OrmSession) -> None:
         user.password_hint = None
     db.commit()
     log.info("миграция: %d паролей зашифровано", len(stale))
+
+
+def _measure_published_releases(db: OrmSession) -> None:
+    """
+    Досчитывает sha256 у уже опубликованных версий.
+
+    Раньше сумму вписывали руками и потому не вписывали вовсе — а приложение
+    без неё отказывается ставить обновление, и кнопка «Обновить» падала
+    ошибкой у всех сразу. Считаем на старте: файл обычно лежит на этом же
+    сервере, чтение занимает доли секунды. Не вышло — версия остаётся как
+    была, а причина уходит в журнал: старт панели этим ронять нечего.
+    """
+    from .config import settings
+    from .models import AppRelease
+    from .services import releases
+
+    stale = list(
+        db.scalars(
+            select(AppRelease).where(AppRelease.sha256.is_(None), AppRelease.is_active.is_(True))
+        )
+    )
+    if not stale:
+        return
+
+    fixed = 0
+    for release in stale:
+        # Только файл с диска: ходить по сети на старте нельзя — недоступная
+        # ссылка задержала бы запуск панели на таймаут, и не один раз.
+        if releases.local_installer(release.url) is None:
+            log.warning(
+                "версия %s %s без контрольной суммы: установщика нет в %s — "
+                "приложение откажется ставить это обновление",
+                release.platform,
+                release.version,
+                settings().downloads_dir or "(каталог установщиков не задан)",
+            )
+            continue
+        try:
+            checksum, size = releases.measure(release.url)
+        except Exception as exc:  # noqa: BLE001 - причина уходит в журнал, старт не рвём
+            log.warning(
+                "версия %s %s без контрольной суммы, обновление по ней не поставится: %s",
+                release.platform,
+                release.version,
+                exc,
+            )
+            continue
+        release.sha256 = checksum
+        if not release.size_bytes:
+            release.size_bytes = size
+        fixed += 1
+
+    if fixed:
+        db.commit()
+        log.info("миграция: контрольная сумма посчитана у %d версий приложения", fixed)

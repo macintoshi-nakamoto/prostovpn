@@ -90,6 +90,11 @@ fun AppRoot(
         }
     }
 
+    // Спрашиваем панель о новой версии на запуске, а не при открытии
+    // настроек: значок на шестерёнке должен появиться сам. Из init состояния
+    // это не вызвать — поля обновления объявлены ниже него.
+    LaunchedEffect(Unit) { state.checkUpdate() }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -146,6 +151,10 @@ fun AppRoot(
         GlassControlBar(
             backdrop = backdrop,
             showSettings = state.isLoggedIn && page == Page.MAIN,
+            // Обновление лежит в настройках, а до настроек ещё надо дойти:
+            // без метки на шестерёнке о нём узнавали только те, кто и так
+            // туда заглядывал.
+            settingsBadge = state.updateAvailable,
             onSettings = { page = Page.SETTINGS },
             onMinimize = onMinimize,
             onClose = onClose,

@@ -19,8 +19,9 @@ import java.util.concurrent.TimeUnit
  * Обновление приложения через панель.
  *
  * Панель говорит, есть ли версия новее установленной, и даёт ссылку на
- * установщик. Он ставится поверх, поэтому удалять приложение и входить
- * заново не нужно.
+ * установщик. Дальше всё делает приложение: скачивает, сверяет, ставит и
+ * открывается уже новым — от человека нужно одно нажатие и согласие на
+ * права администратора.
  */
 object PanelUpdate {
 
@@ -77,6 +78,9 @@ object PanelUpdate {
 
         /** Установщик не запустился. */
         LAUNCH,
+
+        /** Человек не дал прав администратора — установка не начиналась. */
+        CANCELLED,
     }
 
     class UpdateProblem(val problem: Problem, val httpCode: Int = 0) : Exception(problem.name)
@@ -126,9 +130,9 @@ object PanelUpdate {
     /**
      * Скачивает установщик и сверяет его с тем, что обещала панель.
      *
-     * Запуск сюда не входит: между скачиванием и установкой приложение
-     * спрашивает согласие и снимает туннель, а вызывающему нужно отличать
-     * «не скачалось» от «не запустилось».
+     * Установка сюда не входит: между ней и скачиванием приложение снимает
+     * туннель и просит прав, а вызывающему нужно отличать «не скачалось» от
+     * «не поставилось».
      *
      * Без sha256 не скачиваем вовсе. Проверять «только если хеш пришёл»
      * бессмысленно: подменить содержимое на пути от панели до человека
@@ -226,35 +230,166 @@ object PanelUpdate {
     }
 
     /**
-     * Запускает установщик и убеждается, что он действительно стартовал.
+     * Ставит обновление и открывает уже новую версию.
      *
-     * Не тихая установка: пользователь должен видеть, что ставится, и
-     * подтвердить повышение прав — молча менять программу на диске нельзя.
+     * Как в Telegram: одно нажатие — и через несколько секунд приложение
+     * снова на экране, только новое. Мастера установки человек не видит, и
+     * запускать приложение заново руками не нужно.
      *
-     * MSI отдаём msiexec напрямую, а не системной ассоциации: обработчик по
-     * расширению выбирает машина, и это лишний способ увести файл не туда.
+     * Сделать это изнутри самого приложения нельзя: MSI ставится major
+     * upgrade'ом — сносит прежнюю установку целиком, а её файлы держит наша
+     * же JVM. Поэтому работу доделывает отдельный процесс: он ждёт, пока мы
+     * выйдем, ставит пакет тихо (`/qn`) и запускает новую версию.
+     *
+     * Права администратора нужны один раз, на установку: пакет ставится в
+     * Program Files. Запрос UAC поднимаем здесь, пока приложение ещё на
+     * экране, — отказ должен оставить всё как было, а не оборвать VPN ради
+     * установки, которая не начнётся.
+     *
+     * Скрипт передаём base64 в командной строке, а не файлом на диске:
+     * файл в общем %TEMP% между записью и запуском может подменить любой
+     * процесс пользователя, а запускается он с повышением прав.
+     *
+     * @param expectedSha256 сумма скачанного: помощник сверяет файл ещё раз,
+     *   уже в повышенном процессе и прямо перед запуском msiexec.
      */
-    suspend fun install(file: File): Result<Unit> = withContext(Dispatchers.IO) {
-        try {
-            val process = if (file.extension.equals("msi", ignoreCase = true)) {
-                ProcessBuilder("msiexec.exe", "/i", file.absolutePath).start()
-            } else {
-                ProcessBuilder(file.absolutePath).start()
+    suspend fun installAndRestart(file: File, expectedSha256: String): Result<Unit> =
+        withContext(Dispatchers.IO) {
+            val checksum = expectedSha256.lowercase()
+            if (!HEX64.matches(checksum)) {
+                return@withContext Result.failure(UpdateProblem(Problem.NO_CHECKSUM))
             }
-            /*
-            Мгновенный ненулевой код — это отказ запуска. Ждать дольше нельзя:
-            установщик живёт до конца установки, и его успех сюда не приходит.
-            */
-            if (process.waitFor(2, TimeUnit.SECONDS) && process.exitValue() != 0) {
-                Result.failure(UpdateProblem(Problem.LAUNCH))
-            } else {
-                Result.success(Unit)
+            if (!isWindows) return@withContext Result.failure(UpdateProblem(Problem.LAUNCH))
+
+            val helper = helperScript(
+                installer = file.absolutePath,
+                sha256 = checksum,
+                appPath = installedAppPath(),
+                pid = ProcessHandle.current().pid(),
+            )
+            when (runElevated(helper)) {
+                Elevation.OK -> Result.success(Unit)
+                Elevation.DENIED -> Result.failure(UpdateProblem(Problem.CANCELLED))
+                Elevation.ERROR -> Result.failure(UpdateProblem(Problem.LAUNCH))
             }
-        } catch (e: IOException) {
-            Result.failure(UpdateProblem(Problem.LAUNCH))
-        } catch (e: InterruptedException) {
-            Result.failure(UpdateProblem(Problem.LAUNCH))
         }
+
+    private val isWindows: Boolean
+        get() = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
+
+    /**
+     * Путь до установленного приложения — его же запустит помощник.
+     *
+     * `jpackage.app-path` выставляет лаунчер установленной сборки. На
+     * ProcessHandle не полагаемся: под Gradle он вернёт java.exe, и вместо
+     * приложения открылась бы JVM.
+     */
+    private fun installedAppPath(): String? =
+        (System.getProperty("jpackage.app-path")
+            ?: runCatching { ProcessHandle.current().info().command().orElse(null) }.getOrNull())
+            ?.takeIf { it.endsWith(".exe", ignoreCase = true) }
+
+    private fun psQuote(value: String) = "'" + value.replace("'", "''") + "'"
+
+    /**
+     * Что делает повышенный помощник: ждёт нашего выхода, ставит, открывает.
+     *
+     * Порядок важен. Пока JVM жива, MSI упрётся в занятые файлы, поэтому
+     * первым делом — ожидание. Ждём по идентификатору процесса, а не по
+     * имени: второй экземпляр приложения не должен считаться нами.
+     */
+    private fun helperScript(installer: String, sha256: String, appPath: String?, pid: Long): String {
+        val relaunch = appPath?.let {
+            /*
+            Через explorer, а не напрямую: помощник работает с правами
+            администратора, и запущенное им приложение унаследовало бы их.
+            Explorer работает от имени вошедшего человека и открывает
+            приложение с обычными правами — тот же процесс, что и запуск
+            с ярлыка.
+
+            Путь внутри кавычек: Start-Process складывает -ArgumentList в
+            командную строку как есть, ничего не экранируя, а приложение
+            стоит в «C:\Program Files\Prosto VPN\» — без кавычек explorer
+            получил бы три отдельных слова.
+            */
+            "Start-Process explorer.exe -ArgumentList ${psQuote("\"" + it + "\"")}"
+        } ?: ""
+
+        return """
+            ${'$'}ErrorActionPreference = 'SilentlyContinue'
+
+            ${'$'}deadline = (Get-Date).AddSeconds(90)
+            while ((Get-Process -Id $pid -ErrorAction SilentlyContinue) -and (Get-Date) -lt ${'$'}deadline) {
+                Start-Sleep -Milliseconds 200
+            }
+
+            ${'$'}installer = ${psQuote(installer)}
+            ${'$'}actual = (Get-FileHash -Path ${'$'}installer -Algorithm SHA256).Hash
+            if (${'$'}actual -ne ${psQuote(sha256)}) {
+                Remove-Item ${'$'}installer -Force
+                exit 2
+            }
+
+            ${'$'}line = '/i "' + ${'$'}installer + '" /qn /norestart'
+            ${'$'}msi = Start-Process msiexec.exe -ArgumentList ${'$'}line -Wait -PassThru
+            Remove-Item ${'$'}installer -Force
+            if (${'$'}msi.ExitCode -eq 0 -or ${'$'}msi.ExitCode -eq 3010) {
+                $relaunch
+            }
+            exit ${'$'}msi.ExitCode
+        """.trimIndent()
+    }
+
+    private enum class Elevation { OK, DENIED, ERROR }
+
+    /** Отказ в UAC приходит Win32Exception с кодом 1223, а не кодом возврата. */
+    private const val ERROR_CANCELLED = 1223
+
+    /**
+     * Поднимает помощника с правами администратора и ждёт только решения UAC.
+     *
+     * Именно только решения: помощник ждёт нашего выхода, и дожидаться его
+     * целиком значит запереть себя — он не закончит, пока мы не закроемся, а
+     * мы не закроемся, пока он не закончит.
+     */
+    private fun runElevated(helper: String): Elevation {
+        fun encode(script: String) =
+            java.util.Base64.getEncoder().encodeToString(script.toByteArray(Charsets.UTF_16LE))
+
+        val launcher = """
+            ${'$'}ErrorActionPreference = 'Stop'
+            try {
+                Start-Process -FilePath 'powershell.exe' -Verb RunAs -WindowStyle Hidden -ArgumentList @(
+                    '-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden',
+                    '-EncodedCommand', '${encode(helper)}'
+                )
+                exit 0
+            } catch {
+                ${'$'}e = ${'$'}_.Exception
+                while (${'$'}e -ne ${'$'}null -and -not (${'$'}e -is [System.ComponentModel.Win32Exception])) {
+                    ${'$'}e = ${'$'}e.InnerException
+                }
+                if (${'$'}e -is [System.ComponentModel.Win32Exception]) { exit ${'$'}e.NativeErrorCode }
+                exit 1
+            }
+        """.trimIndent()
+
+        return runCatching {
+            val process = ProcessBuilder(
+                "powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encode(launcher),
+            ).redirectErrorStream(true).start()
+
+            // Запрос UAC может провисеть на экране: ждём человека, а не сеть.
+            if (!process.waitFor(2, TimeUnit.MINUTES)) {
+                process.destroyForcibly()
+                return Elevation.ERROR
+            }
+            when (process.exitValue()) {
+                0 -> Elevation.OK
+                ERROR_CANCELLED -> Elevation.DENIED
+                else -> Elevation.ERROR
+            }
+        }.getOrDefault(Elevation.ERROR)
     }
 
     private fun get(path: String): String {

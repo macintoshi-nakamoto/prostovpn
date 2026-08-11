@@ -78,6 +78,11 @@ export function ReleasesPage() {
         <div style={{ display: "flex", gap: 6 }}>
           {r.isMandatory && <Chip color="var(--gd-neg)">обязательное</Chip>}
           {!r.isActive && <Chip color="var(--gd-faint)">выключено</Chip>}
+          {/* Без суммы приложение отказывается ставить обновление — это
+              не мелочь в карточке, а неработающая кнопка «Обновить». */}
+          {r.isActive && !r.sha256 && (
+            <Chip color="var(--gd-warn)">без контрольной суммы</Chip>
+          )}
         </div>
       ),
     },
@@ -226,12 +231,25 @@ function ReleaseModal({ release, onClose, onSaved }) {
         </Field>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 12 }}>
-          <Field label="Размер, байт" hint="Необязательно">
+          <Field label="Размер, байт" hint="Оставьте пустым — посчитается сам">
             <input className="gd-input" inputMode="numeric" value={form.sizeBytes} onChange={set("sizeBytes")} />
           </Field>
-          <Field label="SHA-256" hint="Необязательно — для проверки скачанного">
+          <Field
+            label="SHA-256"
+            hint="Оставьте пустым — панель посчитает сама по файлу установщика"
+          >
             <input className="gd-input" value={form.sha256} onChange={set("sha256")} />
           </Field>
+        </div>
+
+        {/* Приложение не ставит обновление, у которого нет контрольной суммы:
+            установщик запускается с правами администратора, и проверить его
+            больше нечем. Пока сумму вписывали руками, её не вписывал никто. */}
+        <div style={{ fontSize: 12.5, color: "var(--gd-dim)", lineHeight: 1.5 }}>
+          Приложение ставит обновление только с контрольной суммой. Панель считает её
+          при публикации: по файлу из каталога установщиков, а если его там нет — скачав
+          файл по ссылке. Не получится ни то, ни другое — публикация не пройдёт и скажет
+          об этом.
         </div>
 
         <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>

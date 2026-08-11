@@ -6,6 +6,11 @@ struct SupportView: View {
 
     private var t: L10n { state.t }
 
+    /// Адрес сайта одной строкой: он же в подписи, он же во всех ссылках
+    /// экрана. Страницы указываем с расширением — так они открываются и
+    /// когда сайт отдаёт nginx, и когда его раздаёт сама панель.
+    private let site = "https://prostovpn.cc"
+
     var body: some View {
         ZStack {
             Theme.background.ignoresSafeArea()
@@ -39,22 +44,22 @@ struct SupportView: View {
                     linkRow(
                         icon: "globe",
                         title: t.siteTitle,
-                        subtitle: "prostovpn.media",
-                        url: "https://prostovpn.media"
+                        subtitle: "prostovpn.cc",
+                        url: "\(site)/"
                     )
                     CardDivider()
                     linkRow(
                         icon: "questionmark.circle",
                         title: t.faqTitle,
                         subtitle: t.faqSub,
-                        url: "https://prostovpn.media/faq"
+                        url: "\(site)/faq.html"
                     )
                     CardDivider()
                     linkRow(
                         icon: "star",
                         title: t.rateTitle,
                         subtitle: t.rateSub,
-                        url: "https://prostovpn.media/app"
+                        url: "\(site)/download.html"
                     )
                 }
                 .cardGroup()
@@ -109,9 +114,9 @@ struct SupportView: View {
 
     private var footer: some View {
         HStack(spacing: 4) {
-            footerLink(t.privacy, url: "https://prostovpn.media/privacy")
+            footerLink(t.privacy, url: "\(site)/privacy.html")
             Text("·").foregroundColor(Theme.textFaint)
-            footerLink(t.terms, url: "https://prostovpn.media/terms")
+            footerLink(t.terms, url: "\(site)/offer.html")
         }
         .font(.manrope(12, .regular))
         .frame(maxWidth: .infinity)

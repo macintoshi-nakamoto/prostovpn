@@ -355,6 +355,11 @@ def test_dashboard(client, auth):
 
 # --- обновление приложения ---------------------------------------------------
 
+# Контрольная сумма установщика. В тестах про сравнение версий важно только
+# то, что она есть: без неё панель не публикует версию — приложение такое
+# обновление всё равно откажется ставить.
+SHA256 = "a" * 64
+
 
 def test_release_publish_and_check(client, auth):
     """Приложение спрашивает версию без токена — и на экране входа тоже."""
@@ -365,6 +370,7 @@ def test_release_publish_and_check(client, auth):
             "version": "2.2.0",
             "url": "https://example.com/ProstoVPN-2.2.0.msi",
             "changelog": "Вход по логину и паролю",
+            "sha256": SHA256,
         },
         headers=auth,
     )
@@ -385,12 +391,22 @@ def test_version_compare_is_numeric_not_alphabetical(client, auth):
     """2.10 новее 2.9 — строковое сравнение сказало бы обратное."""
     client.post(
         "/api/admin/releases",
-        json={"platform": "linux", "version": "2.10.0", "url": "https://example.com/a.AppImage"},
+        json={
+            "platform": "linux",
+            "version": "2.10.0",
+            "url": "https://example.com/a.AppImage",
+            "sha256": SHA256,
+        },
         headers=auth,
     )
     client.post(
         "/api/admin/releases",
-        json={"platform": "linux", "version": "2.9.0", "url": "https://example.com/b.AppImage"},
+        json={
+            "platform": "linux",
+            "version": "2.9.0",
+            "url": "https://example.com/b.AppImage",
+            "sha256": SHA256,
+        },
         headers=auth,
     )
     latest = client.get("/api/v1/version", params={"platform": "linux", "current": "2.9.0"}).json()
@@ -412,6 +428,7 @@ def test_mandatory_only_when_update_exists(client, auth):
             "version": "3.0.0",
             "url": "https://example.com/app.apk",
             "isMandatory": True,
+            "sha256": SHA256,
         },
         headers=auth,
     )
@@ -424,12 +441,60 @@ def test_release_upsert_does_not_duplicate(client, auth):
     for url in ("https://example.com/v1.msi", "https://example.com/v2.msi"):
         client.post(
             "/api/admin/releases",
-            json={"platform": "macos", "version": "1.0.0", "url": url},
+            json={"platform": "macos", "version": "1.0.0", "url": url, "sha256": SHA256},
             headers=auth,
         )
     rows = [r for r in client.get("/api/admin/releases", headers=auth).json() if r["platform"] == "macos"]
     assert len(rows) == 1
     assert rows[0]["url"].endswith("v2.msi")
+
+
+def test_release_without_checksum_is_not_published(client, auth):
+    """
+    Версия без контрольной суммы — это неработающая кнопка «Обновить».
+
+    Приложение не ставит установщик, суммы которого панель не назвала: он
+    запускается с правами администратора, и проверить его больше нечем.
+    Пока сумму вписывали руками, её не вписывал никто, и обновление падало
+    ошибкой у всех сразу — поэтому панель либо считает её сама, либо
+    отказывает в публикации и говорит почему.
+    """
+    # Порт 9 отбрасывает соединение сразу: до сети тест не идёт.
+    r = client.post(
+        "/api/admin/releases",
+        json={"platform": "windows", "version": "9.9.9", "url": "http://127.0.0.1:9/app.msi"},
+        headers=auth,
+    )
+    assert r.status_code == 400, r.text
+    assert "сумм" in r.json()["detail"]
+
+    # Черновик — можно: его приложениям не предлагают, а файла может ещё
+    # и не быть.
+    draft = client.post(
+        "/api/admin/releases",
+        json={
+            "platform": "windows",
+            "version": "9.9.9",
+            "url": "http://127.0.0.1:9/app.msi",
+            "isActive": False,
+        },
+        headers=auth,
+    )
+    assert draft.status_code == 201, draft.text
+
+
+def test_release_rejects_malformed_checksum(client, auth):
+    r = client.post(
+        "/api/admin/releases",
+        json={
+            "platform": "windows",
+            "version": "9.9.8",
+            "url": "https://example.com/app.msi",
+            "sha256": "не-шестнадцатеричная",
+        },
+        headers=auth,
+    )
+    assert r.status_code == 400, r.text
 
 
 def test_saving_server_does_not_wipe_template_and_ssh(client, auth, shared_server):

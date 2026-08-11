@@ -87,7 +87,21 @@ object PanelApi {
      * каждом перезапуске панели: одна неудачная проверка списка стран — и
      * все сохранённые настройки стёрты.
      */
-    class PanelException(message: String, val status: Int = 0) : IOException(message)
+    class PanelException(
+        message: String,
+        val status: Int = 0,
+        /**
+         * Код причины от панели: bad_credentials, blocked, disabled,
+         * throttled. Пустой — панель старая и кодов не присылает.
+         *
+         * Нужен, потому что текст панели русский, а интерфейс бывает
+         * английским, и по одному коду ответа причину не восстановить:
+         * 401 приходит и на «пароль не тот», и на «доступ заблокирован».
+         */
+        val code: String = "",
+        /** Через сколько секунд можно повторить — из Retry-After. */
+        val retryAfterSeconds: Int = 0,
+    ) : IOException(message)
 
     suspend fun login(login: String, password: String): Result<Session> =
         withContext(Dispatchers.IO) {
@@ -216,10 +230,16 @@ object PanelApi {
             }
 
             if (code !in 200..299) {
-                // Панель кладёт человеческий текст в detail — показываем его
-                // как есть, он написан для пользователя, а не для лога.
+                // Текст панели берём запасным вариантом: он написан для
+                // человека, но по-русски. Свой перевод приложение выберет по
+                // коду причины — см. AppState.loginError.
                 val detail = runCatching { JSONObject(text).optString("detail") }.getOrNull()
-                throw PanelException(detail?.takeIf { it.isNotBlank() } ?: "Ошибка $code", code)
+                throw PanelException(
+                    message = detail?.takeIf { it.isNotBlank() } ?: "Ошибка $code",
+                    status = code,
+                    code = connection.getHeaderField("X-Error-Code").orEmpty(),
+                    retryAfterSeconds = connection.getHeaderFieldInt("Retry-After", 0),
+                )
             }
             return JSONObject(text)
         } finally {

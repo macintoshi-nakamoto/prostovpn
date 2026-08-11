@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     # стоит за nginx отдельно).
     site_dir: str = "../site"
 
+    # Каталог с установщиками приложения (его же отдаёт nginx по /downloads/,
+    # см. deploy/nginx.conf). Панель читает оттуда файл, чтобы посчитать его
+    # размер и sha256 при публикации версии: без контрольной суммы приложение
+    # отказывается ставить обновление, и «Обновить» падает ошибкой.
+    downloads_dir: str = "/var/www/prosto-downloads"
+
     # Активный провайдер оплаты: mock | yookassa | cryptocloud.
     payment_provider: str = "mock"
 

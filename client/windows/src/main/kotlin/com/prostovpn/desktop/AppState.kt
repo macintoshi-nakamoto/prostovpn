@@ -5,12 +5,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -18,6 +21,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.prefs.Preferences
 import java.util.zip.Inflater
+import kotlin.system.exitProcess
 
 data class ServerInfo(
     val host: String,
@@ -63,6 +67,9 @@ data class TunnelFile(
  * «отключено» — врать пользователю о том, куда уходят его пакеты.
  */
 enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
+
+/** Что сейчас происходит с обновлением. */
+enum class UpdateStage { CHECKING, IDLE, DOWNLOADING, INSTALLING }
 
 /**
  * Состояние приложения. Подключение в тестовой сборке для Windows —
@@ -588,6 +595,139 @@ class AppState(private val scope: CoroutineScope) {
                     val status = (error as? PanelApi.PanelException)?.status ?: 0
                     if (status == 401 || status == 403) logout()
                 }
+        }
+    }
+
+    /**
+     * Почему вход не состоялся — на языке интерфейса.
+     *
+     * Раньше на экран уходил текст панели, а он написан по-русски: человек с
+     * английским интерфейсом на неверный пароль получал русскую строку.
+     * Причину панель называет кодом (`X-Error-Code`), перевод к нему — наш.
+     *
+     * Панель без кодов — старая. Её текст всё ещё лучше нашего домысла, если
+     * интерфейс русский; для английского берём своё, пусть и общее.
+     */
+    fun loginError(error: Throwable): String {
+        val failure = error as? PanelApi.PanelException ?: return s.errPanelUnreachable
+
+        when (failure.code) {
+            "bad_credentials" -> return s.errBadCredentials
+            "blocked" -> return s.errAccountBlocked
+            "disabled" -> return s.errAccountDisabled
+            "throttled" -> return tooManyTries(failure.retryAfterSeconds)
+        }
+
+        val panelText = failure.message?.takeIf { it.isNotBlank() && lang != "en" }
+        return when {
+            failure.status == 429 -> tooManyTries(failure.retryAfterSeconds)
+            failure.status == 401 || failure.status == 403 -> panelText ?: s.errBadCredentials
+            failure.status >= 500 -> panelText ?: s.errPanelFault
+            else -> panelText ?: s.errPanelFault
+        }
+    }
+
+    private fun tooManyTries(retryAfterSeconds: Int): String {
+        if (retryAfterSeconds <= 0) return s.errTooManyTries
+        // Округляем вверх: «через 0 мин» — это не ответ на вопрос «когда».
+        val minutes = ((retryAfterSeconds + 59) / 60).coerceAtLeast(1)
+        return s.errTooManyTriesIn.format(minutes)
+    }
+
+    // --- Обновление ---
+
+    /**
+     * Ответ панели про новую версию.
+     *
+     * Живёт здесь, а не на экране настроек: значок на шестерёнке должен
+     * появляться сам, до того как в настройки зайдут.
+     */
+    var updateCheck by mutableStateOf<Result<PanelUpdate.Info>?>(null)
+        private set
+
+    var updateStage by mutableStateOf(UpdateStage.CHECKING)
+        private set
+
+    var updatePercent by mutableIntStateOf(0)
+        private set
+
+    /**
+     * Что помешало обновиться. Держим исключением, а не текстом: перевод у
+     * него на экране настроек, вместе с остальными словами про обновление.
+     */
+    var updateFailure by mutableStateOf<Throwable?>(null)
+        private set
+
+    private var updateJob: Job? = null
+
+    /** Есть ли новая версия — по этому рисуется значок на кнопке настроек. */
+    val updateAvailable: Boolean
+        get() = updateCheck?.getOrNull()?.available == true
+
+    val updateInfo: PanelUpdate.Info?
+        get() = updateCheck?.getOrNull()?.takeIf { it.available }
+
+    /**
+     * Спрашивает панель о новой версии.
+     *
+     * Проверка не должна перебивать начатую установку, поэтому во время неё
+     * ничего не делаем.
+     */
+    fun checkUpdate() {
+        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.INSTALLING) return
+        updateJob?.cancel()
+        updateJob = scope.launch {
+            updateStage = UpdateStage.CHECKING
+            updateFailure = null
+            updateCheck = PanelUpdate.check(BuildInfo.VERSION)
+            updateStage = UpdateStage.IDLE
+        }
+    }
+
+    /**
+     * Скачивает и ставит обновление: приложение закроется и откроется уже
+     * новым. Мастер установки человек не видит, запускать заново не нужно.
+     *
+     * Порядок именно такой. Сначала права: не дали — рвать VPN было не за
+     * чем, остаёмся работать и показываем причину. И только когда помощник
+     * с правами запущен, снимаем туннель и уходим с дороги: служба держит
+     * prostovpn-tunnel.exe и wintun.dll внутри папки установки, и без этого
+     * MSI упрётся в занятые файлы даже после выхода JVM.
+     */
+    fun installUpdate() {
+        val info = updateInfo ?: return
+        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.INSTALLING) return
+
+        updateJob?.cancel()
+        updateJob = scope.launch {
+            updateFailure = null
+            updatePercent = 0
+            updateStage = UpdateStage.DOWNLOADING
+
+            val file = PanelUpdate.download(info) { updatePercent = it }.getOrElse { problem ->
+                updateStage = UpdateStage.IDLE
+                updateFailure = problem
+                return@launch
+            }
+
+            updateStage = UpdateStage.INSTALLING
+            val started = PanelUpdate.installAndRestart(file, info.sha256.orEmpty())
+            if (started.isFailure) {
+                file.delete()
+                updateStage = UpdateStage.IDLE
+                updateFailure = started.exceptionOrNull()
+                return@launch
+            }
+
+            if (phase != Phase.OFF) {
+                disconnect()
+                // Снятие блокирующее и небыстрое; если туннель так и не ушёл,
+                // всё равно уходим — помощник уже ждёт нашего выхода.
+                withTimeoutOrNull(35_000) { snapshotFlow { phase }.first { it == Phase.OFF } }
+            }
+
+            // Штатного exitApplication сюда не дотянуть — окно живёт в Main.kt.
+            exitProcess(0)
         }
     }
 

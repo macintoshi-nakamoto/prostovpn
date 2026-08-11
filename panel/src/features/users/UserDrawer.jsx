@@ -16,7 +16,6 @@ import {
 import { orderStatus, platformLabel, trafficColor, userStatus } from "../../lib/status";
 import {
   Avatar,
-  Bar,
   Button,
   Card,
   Chip,
@@ -175,21 +174,16 @@ export function UserDrawer({ userId, plans, onClose, onChanged }) {
               )}
             </div>
             {user.trafficLimitBytes != null && (
-              <>
-                <div style={{ marginTop: 10 }}>
-                  <Bar pct={user.trafficPct} color={trafficColor(user.trafficPct)} />
-                </div>
-                <div className="gd-tile-l" style={{ marginTop: 8 }}>
-                  {user.status === "traffic" ? (
-                    <span style={{ color: "var(--gd-neg)" }}>
-                      Лимит выбран — доступ закрыт, пиры сняты с узлов. Обнулите счётчик
-                      или поднимите лимит, чтобы вернуть доступ.
-                    </span>
-                  ) : (
-                    <>Осталось {bytes(Math.max(0, user.trafficLimitBytes - user.trafficUsedBytes))}</>
-                  )}
-                </div>
-              </>
+              <div className="gd-tile-l" style={{ marginTop: 8, whiteSpace: "normal" }}>
+                {user.status === "traffic" ? (
+                  <span style={{ color: "var(--gd-neg)" }}>
+                    Лимит выбран — доступ закрыт, пиры сняты с узлов. Обнулите счётчик
+                    или поднимите лимит, чтобы вернуть доступ.
+                  </span>
+                ) : (
+                  <>Осталось {bytes(Math.max(0, user.trafficLimitBytes - user.trafficUsedBytes))}</>
+                )}
+              </div>
             )}
             {user.trafficResetAt && (
               <div className="gd-tile-l" style={{ marginTop: 8 }}>

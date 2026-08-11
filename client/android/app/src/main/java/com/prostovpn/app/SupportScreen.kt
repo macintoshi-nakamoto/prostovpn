@@ -26,6 +26,13 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/**
+ * Адрес сайта одной строкой: он же в подписи, он же во всех ссылках экрана.
+ * Страницы указываем с расширением — так они открываются и когда сайт
+ * отдаёт nginx, и когда его раздаёт сама панель.
+ */
+private const val SITE = "https://prostovpn.cc"
+
 @Composable
 fun SupportScreen(state: AppState, onBack: () -> Unit) {
     val s = state.s
@@ -103,20 +110,20 @@ fun SupportScreen(state: AppState, onBack: () -> Unit) {
                 LinkRow(
                     icon = Icons.globe,
                     title = s.siteTitle,
-                    subtitle = "prostovpn.media",
-                ) { open("https://prostovpn.media") }
+                    subtitle = "prostovpn.cc",
+                ) { open("$SITE/") }
                 CardDivider()
                 LinkRow(
                     icon = Icons.help,
                     title = s.faqTitle,
                     subtitle = s.faqSub,
-                ) { open("https://prostovpn.media/faq") }
+                ) { open("$SITE/faq.html") }
                 CardDivider()
                 LinkRow(
                     icon = Icons.star,
                     title = s.rateTitle,
                     subtitle = s.rateSub,
-                ) { open("https://prostovpn.media/app") }
+                ) { open("$SITE/download.html") }
             }
 
             Spacer(Modifier.weight(1f))
@@ -129,7 +136,7 @@ fun SupportScreen(state: AppState, onBack: () -> Unit) {
                 Text(
                     text = s.privacy,
                     style = manrope(12.sp, W.regular, Theme.text.copy(alpha = 0.5f)),
-                    modifier = Modifier.noRippleClickable { open("https://prostovpn.media/privacy") },
+                    modifier = Modifier.noRippleClickable { open("$SITE/privacy.html") },
                 )
                 Text(
                     text = " · ",
@@ -138,7 +145,7 @@ fun SupportScreen(state: AppState, onBack: () -> Unit) {
                 Text(
                     text = s.terms,
                     style = manrope(12.sp, W.regular, Theme.text.copy(alpha = 0.5f)),
-                    modifier = Modifier.noRippleClickable { open("https://prostovpn.media/terms") },
+                    modifier = Modifier.noRippleClickable { open("$SITE/offer.html") },
                 )
             }
         }

@@ -32,6 +32,18 @@ log = logging.getLogger("panel.client")
 router = APIRouter(prefix="/api/v1", tags=["client"])
 
 
+def _error_code_header(exc: services.PanelError) -> dict[str, str] | None:
+    """
+    Код причины отказа рядом с текстом.
+
+    Заголовком, а не полем в теле: `detail` приложения читают строкой уже
+    сейчас, и превращать его в объект — значит сломать вход всем, кто ещё
+    не обновился.
+    """
+    code = getattr(exc, "code", "")
+    return {"X-Error-Code": code} if code else None
+
+
 class LoginRequest(BaseModel):
     login: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=256)
@@ -320,10 +332,17 @@ def login(
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             str(exc),
-            headers={"Retry-After": str(exc.retry_after)},
+            # Сколько ждать, приложение берёт из Retry-After — это уже
+            # стандартный заголовок, своего для этого заводить незачем.
+            headers={"Retry-After": str(exc.retry_after), "X-Error-Code": "throttled"},
         ) from exc
     except services.PanelError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+        # Текст здесь русский, а интерфейс приложения бывает английским.
+        # Поэтому рядом с ним — код причины: по нему приложение подставит
+        # свой перевод, а старое, кода не знающее, покажет текст как раньше.
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, str(exc), headers=_error_code_header(exc)
+        ) from exc
 
     session = services.session_for_token(db, token)
     assert session is not None

@@ -38,7 +38,9 @@ class LoginThrottled(PanelError):
 
     def __init__(self, retry_after: int) -> None:
         minutes = max(1, round(retry_after / 60))
-        super().__init__(f"слишком много попыток входа, попробуйте через {minutes} мин")
+        super().__init__(
+            f"слишком много попыток входа, попробуйте через {minutes} мин", "throttled"
+        )
         self.retry_after = retry_after
 
 
@@ -139,12 +141,12 @@ def authenticate(
         # Коммит вне ветки: get_db не коммитит сам, а одинаковый набор
         # действий в обеих ветках не даёт мерить их по времени ответа.
         db.commit()
-        raise PanelError(BAD_CREDENTIALS)
+        raise PanelError(BAD_CREDENTIALS, "bad_credentials")
 
     if user.is_blocked:
-        raise PanelError("доступ заблокирован")
+        raise PanelError("доступ заблокирован", "blocked")
     if not user.is_active:
-        raise PanelError("доступ отключён")
+        raise PanelError("доступ отключён", "disabled")
 
     ratelimit.clear(db, key)
     ratelimit.clear(db, name_key)

@@ -26,13 +26,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,11 +39,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
-import java.io.File
-import kotlin.system.exitProcess
 
 @Composable
 fun SettingsScreen(
@@ -58,7 +50,6 @@ fun SettingsScreen(
     val s = state.s
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showFileSheet by remember { mutableStateOf(state.previewFileSheetOpen) }
-    val update = remember { UpdateState() }
 
     Box(Modifier.fillMaxSize()) {
         Column(
@@ -101,7 +92,7 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            UpdateCard(state, update)
+            UpdateCard(state)
 
             Spacer(Modifier.height(14.dp))
 
@@ -127,8 +118,6 @@ fun SettingsScreen(
             backdrop = backdrop,
             onDismiss = { showFileSheet = false },
         )
-
-        UpdateConfirmDialog(state = state, update = update, backdrop = backdrop)
 
         GlassDialog(
             visible = showLogoutConfirm,
@@ -531,57 +520,26 @@ private fun fileMeta(file: TunnelFile, s: Strings): String {
 }
 
 /**
- * Состояние карточки обновления.
- *
- * Вынесено из карточки, потому что диалог подтверждения живёт в корне
- * экрана (он растягивается на всё окно), а карточка — внутри колонки.
- */
-private class UpdateState {
-    var attempt by mutableStateOf(0)
-    var check by mutableStateOf<Result<PanelUpdate.Info>?>(null)
-    var checking by mutableStateOf(true)
-    var downloading by mutableStateOf(false)
-    var preparing by mutableStateOf(false)
-    var percent by mutableStateOf(0)
-    var error by mutableStateOf<String?>(null)
-
-    /** Скачанный и проверенный установщик: ждёт подтверждения на установку. */
-    var ready by mutableStateOf<File?>(null)
-}
-
-/**
  * Обновление приложения.
  *
- * Панель говорит, есть ли версия новее; кнопка скачивает установщик и
- * запускает его. Он ставится поверх — удалять приложение и входить заново
- * не нужно.
+ * Панель говорит, есть ли версия новее; одно нажатие — и приложение
+ * скачивает её, ставит и открывается уже новым. Мастера установки человек
+ * не видит и запускать приложение заново не должен: единственное, что от
+ * него нужно, — согласиться на права администратора.
+ *
+ * Состояние живёт в AppState: значок на шестерёнке появляется до того, как
+ * в настройки зайдут, а установка не должна обрываться от ухода с экрана.
  */
 @Composable
-private fun UpdateCard(state: AppState, update: UpdateState) {
+private fun UpdateCard(state: AppState) {
     val s = state.s
     val u = updateStrings(state.lang)
-    val scope = rememberCoroutineScope()
 
-    // Проверяем при открытии настроек: чаще незачем, а кнопка должна
-    // появляться сама, без ручного «проверить обновления». Счётчик попыток —
-    // ключ эффекта: по нему же перезапускает проверку «Проверить снова».
-    LaunchedEffect(update.attempt) {
-        update.checking = true
-        update.error = null
-        try {
-            update.check = PanelUpdate.check(BuildInfo.VERSION)
-        } finally {
-            // Иначе после неудачи кнопка повтора залипнет навсегда.
-            update.checking = false
-        }
-    }
-
-    val checking = update.checking
-    val downloading = update.downloading
-    val preparing = update.preparing
-    val info = update.check?.getOrNull()
-    val failure = update.check?.exceptionOrNull()
-    val fresh = info?.takeIf { it.available }
+    val stage = state.updateStage
+    val checking = stage == UpdateStage.CHECKING
+    val busy = stage == UpdateStage.DOWNLOADING || stage == UpdateStage.INSTALLING
+    val failure = state.updateCheck?.exceptionOrNull()
+    val fresh = state.updateInfo
 
     Column(
         modifier = Modifier
@@ -610,22 +568,28 @@ private fun UpdateCard(state: AppState, update: UpdateState) {
             style = manrope(12.sp, W.medium, Theme.textMuted),
         )
 
-        info?.changelog?.let { text ->
-            Spacer(Modifier.height(8.dp))
-            Text(text = text, style = manrope(12.sp, W.medium, Theme.textSecondary))
-        }
+        // Списка изменений здесь нет намеренно: он занимал половину экрана
+        // настроек и в состоянии «установлена последняя версия» рассказывал
+        // о том, что и так уже стоит.
 
-        if (downloading || preparing) {
+        if (busy) {
             Spacer(Modifier.height(10.dp))
             Text(
-                text = if (preparing) u.preparing else s.updateDownloading.format(update.percent),
+                text = if (stage == UpdateStage.INSTALLING) {
+                    u.installing
+                } else {
+                    s.updateDownloading.format(state.updatePercent)
+                },
                 style = manrope(12.sp, W.medium, Theme.textMuted),
             )
         }
 
-        update.error?.let { text ->
+        state.updateFailure?.let { problem ->
             Spacer(Modifier.height(8.dp))
-            Text(text = text, style = manrope(12.sp, W.medium, Theme.accentHover))
+            Text(
+                text = downloadReason(problem, s, u),
+                style = manrope(12.sp, W.medium, Theme.accentHover),
+            )
         }
 
         if (!checking && failure != null) {
@@ -634,7 +598,7 @@ private fun UpdateCard(state: AppState, update: UpdateState) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(46.dp)
-                    .scaleClickable(0.98f) { update.attempt++ }
+                    .scaleClickable(0.98f) { state.checkUpdate() }
                     .clip(RoundedCornerShape(14.dp))
                     .background(Theme.accentTint08),
                 contentAlignment = Alignment.Center,
@@ -643,137 +607,36 @@ private fun UpdateCard(state: AppState, update: UpdateState) {
             }
         }
 
-        if (!checking && fresh != null) {
+        if (fresh != null) {
             Spacer(Modifier.height(12.dp))
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(46.dp)
-                    .scaleClickable(0.98f, enabled = !downloading && !preparing) {
-                        update.downloading = true
-                        update.error = null
-                        update.percent = 0
-                        scope.launch {
-                            val result = PanelUpdate.download(fresh) { update.percent = it }
-                            update.downloading = false
-                            result
-                                .onSuccess { update.ready = it }
-                                .onFailure { update.error = downloadReason(it, s, u) }
-                        }
-                    }
+                    .scaleClickable(0.98f, enabled = !busy) { state.installUpdate() }
                     .clip(RoundedCornerShape(14.dp))
                     .background(Theme.accentTint08),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text = if (downloading) s.updateDownloadingShort else s.updateButton,
+                    text = when (stage) {
+                        UpdateStage.DOWNLOADING -> s.updateDownloadingShort
+                        UpdateStage.INSTALLING -> u.installing
+                        else -> s.updateButton
+                    },
                     style = manrope(14.sp, W.bold, Theme.link),
                 )
             }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = u.restartHint,
+                style = manrope(11.5.sp, W.medium, Theme.textFaint).copy(lineHeight = 16.sp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
     }
-}
-
-/**
- * Подтверждение установки.
- *
- * Спрашиваем до запуска установщика: MSI ставится major upgrade'ом, то есть
- * сносит прежнюю установку, а JVM и служба туннеля держат её файлы. Поэтому
- * мы сами уходим с дороги — и человек должен знать заранее, что приложение
- * закроется, а после установки его надо открыть заново.
- */
-@Composable
-private fun UpdateConfirmDialog(state: AppState, update: UpdateState, backdrop: BackdropState) {
-    val s = state.s
-    val u = updateStrings(state.lang)
-    val scope = rememberCoroutineScope()
-
-    GlassDialog(
-        visible = update.ready != null,
-        backdrop = backdrop,
-        onDismiss = { update.ready = null },
-    ) {
-        Text(
-            text = u.confirmTitle,
-            style = manrope(18.sp, W.extraBold, Theme.text),
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = u.confirmMessage,
-            style = manrope(13.5.sp, W.medium, Theme.textSecondary),
-            textAlign = TextAlign.Center,
-        )
-        Spacer(Modifier.height(20.dp))
-        Row(Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(46.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(Color.White.copy(alpha = 0.07f))
-                    .noRippleClickable { update.ready = null },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(s.no, style = manrope(15.sp, W.bold, Theme.text))
-            }
-            Spacer(Modifier.width(10.dp))
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(46.dp)
-                    .clip(RoundedCornerShape(15.dp))
-                    .background(Theme.accentTint12)
-                    .noRippleClickable {
-                        val file = update.ready ?: return@noRippleClickable
-                        update.ready = null
-                        update.preparing = true
-                        scope.launch {
-                            runUpdate(state, file, u, s) {
-                                update.preparing = false
-                                update.error = it
-                            }
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(s.yes, style = manrope(15.sp, W.bold, Theme.link))
-            }
-        }
-    }
-}
-
-/**
- * Ставит обновление: запускает установщик, снимает туннель и уходит.
- *
- * Порядок именно такой. Сначала установщик: если он не стартовал (нет
- * msiexec, человек закрыл UAC), туннель зря рвать не за что — остаёмся
- * работать и показываем ошибку. И только когда установщик жив, снимаем
- * туннель: служба держит prostovpn-tunnel.exe и wintun.dll внутри папки
- * установки, и без этого MSI упрётся в «файлы заняты» даже после выхода JVM.
- */
-private suspend fun runUpdate(
-    state: AppState,
-    file: File,
-    u: UpdateStrings,
-    s: Strings,
-    onError: (String) -> Unit,
-) {
-    val started = PanelUpdate.install(file)
-    if (started.isFailure) {
-        onError(downloadReason(started.exceptionOrNull() ?: Exception(), s, u))
-        return
-    }
-
-    if (state.phase != Phase.OFF) {
-        state.disconnect()
-        // Снятие блокирующее и небыстрое; если туннель так и не ушёл,
-        // всё равно уходим — установщик уже на экране.
-        withTimeoutOrNull(35_000) { snapshotFlow { state.phase }.first { it == Phase.OFF } }
-    }
-
-    // Штатного exitApplication сюда не дотянуть — окно живёт в Main.kt.
-    exitProcess(0)
 }
 
 /**
@@ -794,9 +657,9 @@ private class UpdateStrings(
     val insecure: String,
     val corrupted: String,
     val launchFailed: String,
-    val confirmTitle: String,
-    val confirmMessage: String,
-    val preparing: String,
+    val cancelled: String,
+    val installing: String,
+    val restartHint: String,
 )
 
 private val UPDATE_RU = UpdateStrings(
@@ -810,11 +673,10 @@ private val UPDATE_RU = UpdateStrings(
     noChecksum = "Панель не сообщила контрольную сумму — обновитесь вручную с сайта",
     insecure = "Ссылка на установщик небезопасна — обновитесь вручную с сайта",
     corrupted = "Файл обновления не совпал с обещанным — скачивание отменено",
-    launchFailed = "Не удалось запустить установщик",
-    confirmTitle = "Установить обновление?",
-    confirmMessage = "VPN отключится, приложение закроется и откроется установщик. " +
-        "После установки откройте Prosto VPN заново.",
-    preparing = "Готовим обновление…",
+    launchFailed = "Не удалось запустить установку",
+    cancelled = "Обновление отменено: на установку нужны права администратора",
+    installing = "Устанавливаем…",
+    restartHint = "Приложение закроется и откроется заново уже обновлённым",
 )
 
 private val UPDATE_EN = UpdateStrings(
@@ -828,11 +690,10 @@ private val UPDATE_EN = UpdateStrings(
     noChecksum = "The panel did not provide a checksum — update manually from the site",
     insecure = "The installer link is not secure — update manually from the site",
     corrupted = "The downloaded file does not match — the download was discarded",
-    launchFailed = "Could not start the installer",
-    confirmTitle = "Install the update?",
-    confirmMessage = "The VPN will disconnect, the app will close and the installer will open. " +
-        "Open Prosto VPN again once it is installed.",
-    preparing = "Preparing the update…",
+    launchFailed = "Could not start the installation",
+    cancelled = "Update cancelled: installing needs administrator rights",
+    installing = "Installing…",
+    restartHint = "The app will close and open again already updated",
 )
 
 private fun updateStrings(lang: String): UpdateStrings = if (lang == "en") UPDATE_EN else UPDATE_RU
@@ -848,13 +709,14 @@ private fun checkReason(error: Throwable, u: UpdateStrings): String {
     }
 }
 
-/** Почему скачивание или запуск не удались. */
+/** Почему скачивание или установка не удались. */
 private fun downloadReason(error: Throwable, s: Strings, u: UpdateStrings): String =
     when ((error as? PanelUpdate.UpdateProblem)?.problem) {
         PanelUpdate.Problem.NO_CHECKSUM -> u.noChecksum
         PanelUpdate.Problem.INSECURE_URL -> u.insecure
         PanelUpdate.Problem.CORRUPTED -> u.corrupted
         PanelUpdate.Problem.LAUNCH -> u.launchFailed
+        PanelUpdate.Problem.CANCELLED -> u.cancelled
         // Текст исключения человеку ничего не объясняет, а адрес панели из
         // него утекает на экран.
         else -> s.updateFailed

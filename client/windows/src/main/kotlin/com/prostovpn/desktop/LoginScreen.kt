@@ -148,11 +148,18 @@ fun LoginScreen(
                     .padding(top = 56.dp, bottom = 36.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // Отступ над знаком — такой же, как под ним: логотип встаёт по
+                // центру свободного поля между верхом окна и формой, а не
+                // липнет к самому верху.
+                Spacer(
+                    Modifier
+                        .weight(1f)
+                        .heightIn(min = 24.dp)
+                )
+
                 Header(
                     tagline = s.tagline,
-                    modifier = Modifier
-                        .padding(top = 20.dp)
-                        .fadeUp(),
+                    modifier = Modifier.fadeUp(),
                 )
 
                 Spacer(

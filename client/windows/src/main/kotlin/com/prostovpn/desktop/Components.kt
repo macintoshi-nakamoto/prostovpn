@@ -194,17 +194,37 @@ fun LogoImage(
 }
 
 /**
- * Иконка приложения — та же оранжевая плитка, что в трее и на панели задач.
+ * Круглый знак с «P» — для мест, где места на надпись нет.
  *
- * Нужна там, где места на надпись нет: в кружке заголовка главного экрана
- * широкий знак превратился бы в нечитаемую полоску.
+ * В кружке заголовка главного экрана широкий знак «PROSTO» превратился бы в
+ * нечитаемую полоску, поэтому там остаётся круг. Свечение считаем по
+ * меньшей стороне: знак квадратный.
  */
 @Composable
-fun AppMark(modifier: Modifier = Modifier) {
+fun LogoMark(
+    modifier: Modifier = Modifier,
+    glowAlpha: Float = 0.45f,
+) {
     Image(
-        painter = painterResource("appicon.png"),
+        painter = painterResource("mark.png"),
         contentDescription = null,
-        modifier = modifier,
+        modifier = modifier.drawBehind {
+            if (glowAlpha > 0f) {
+                val radius = size.minDimension * 0.72f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Theme.accentWarm.copy(alpha = glowAlpha),
+                            Color.Transparent,
+                        ),
+                        center = center,
+                        radius = radius,
+                    ),
+                    radius = radius,
+                    center = center,
+                )
+            }
+        },
     )
 }
 

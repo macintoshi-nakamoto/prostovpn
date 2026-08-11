@@ -214,7 +214,10 @@ private fun Header(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             GlassCircleButton(backdrop = backdrop, onClick = onOpenSupport) {
-                AppMark(modifier = Modifier.size(26.dp).clip(RoundedCornerShape(8.dp)))
+                LogoMark(
+                    modifier = Modifier.size(26.dp),
+                    glowAlpha = 0.45f,
+                )
             }
 
             Spacer(Modifier.weight(1f))

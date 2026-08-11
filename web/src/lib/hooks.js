@@ -87,11 +87,17 @@ export function useParallax(speed = 0.15, { rotate = 0 } = {}) {
     const apply = () => {
       frame = 0;
       const rect = node.getBoundingClientRect();
+      /*
+      На телефоне размах вдвое меньше. Прокрутка пальцем быстрая и рывками,
+      и тот же сдвиг, что хорош на широком экране, читается там дёрганьем, а
+      объект успевает уехать далеко от своего места.
+      */
+      const scale = window.innerWidth < 700 ? 0.5 : 1;
       // Ноль в тот момент, когда центр элемента совпал с центром экрана:
       // так объект не «прыгает» при появлении, а проходит через своё место.
       const fromCenter = rect.top + rect.height / 2 - window.innerHeight / 2;
-      const shift = -fromCenter * speed;
-      const turn = rotate ? ` rotate(${(-fromCenter * rotate) / 100}deg)` : "";
+      const shift = -fromCenter * speed * scale;
+      const turn = rotate ? ` rotate(${(-fromCenter * rotate * scale) / 100}deg)` : "";
       node.style.transform = `translate3d(0, ${shift.toFixed(1)}px, 0)${turn}`;
     };
 

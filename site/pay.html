@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Оплата — Prosto</title>
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#0a0908" />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/css/site.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap top-in">
+        <a class="brand" href="/"><span class="brand-mark"></span>Prosto</a>
+      </div>
+    </header>
+
+    <main class="wrap" style="padding-top: 150px; padding-bottom: 80px; max-width: 520px">
+      <!-- Демонстрационная форма оплаты.
+
+           Настоящий платёжный сервис ещё не подключён, и эта страница
+           занимает его место, чтобы весь путь — заказ, оплата, уведомление,
+           выдача — работал целиком уже сейчас.
+
+           Полей карты здесь нет и не будет: страница, которая выглядит как
+           приём платежей и просит номер карты «понарошку», — это фишинговая
+           форма, чем бы она ни объяснялась. -->
+      <div
+        class="note-box"
+        style="border-color: rgba(255, 92, 0, 0.4); background: rgba(255, 92, 0, 0.07); margin-bottom: 26px"
+      >
+        <strong style="color: var(--accent)">Демонстрационный режим.</strong> Платёжный сервис ещё
+        не подключён — деньги не списываются. Кнопка ниже имитирует успешную оплату, чтобы можно
+        было пройти весь путь до выдачи доступа.
+      </div>
+
+      <p class="eyebrow">К оплате</p>
+      <div class="price" style="margin-bottom: 8px">
+        <span class="price-value" id="amount" style="font-size: clamp(3rem, 11vw, 5rem)">—</span>
+      </div>
+      <p class="muted" id="plan-note" style="margin-top: 0"></p>
+
+      <div class="card" style="margin-top: 32px">
+        <div class="kv">
+          <div class="kv-k">Заказ</div>
+          <div class="kv-v mono" id="order-id" style="font-family: var(--mono); font-size: 14px">—</div>
+        </div>
+        <div class="kv">
+          <div class="kv-k">Доступ придёт на</div>
+          <div class="kv-v" id="email">—</div>
+        </div>
+
+        <div class="error-box" id="error" hidden style="margin-top: 20px; margin-bottom: 0"></div>
+
+        <button class="btn btn-lg btn-block" type="button" id="pay" style="margin-top: 24px">
+          Оплатить
+        </button>
+        <a
+          class="btn btn-ghost btn-block"
+          href="/#tarify"
+          style="margin-top: 10px"
+          id="cancel"
+          >Отменить</a
+        >
+      </div>
+
+      <p class="field-hint" style="margin-top: 20px">
+        При подключении настоящего платёжного сервиса эта страница исчезнет: с оформления вы
+        будете попадать сразу на его форму, а сюда — уже никогда.
+      </p>
+    </main>
+
+    <script type="module" src="assets/js/pay.js"></script>
+    <script type="module" src="assets/js/site.js"></script>
+  </body>
+</html>

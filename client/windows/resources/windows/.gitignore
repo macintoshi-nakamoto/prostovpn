@@ -1,0 +1,6 @@
+# Движок туннеля собирается задачей buildTunnel, wintun — fetchWintun
+prostovpn-tunnel.exe
+wintun.dll
+# Движок Amnezia больше не используется — остаток прежних сборок
+amneziawg.exe
+tmp/

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Скачать — Prosto</title>
+    <meta name="description" content="Приложение для Windows, Android, iPhone и Mac." />
+    <meta name="theme-color" content="#0a0908" />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/css/site.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap top-in">
+        <a class="brand" href="/"><span class="brand-mark"></span>Prosto</a>
+        <button class="nav-toggle" type="button" aria-expanded="false">Меню</button>
+        <nav class="nav">
+          <a href="/#tarify">Тарифы</a>
+          <a href="account.html">Личный кабинет</a>
+          <a href="contacts.html">Поддержка</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap" style="padding-top: 150px; padding-bottom: 60px">
+      <p class="eyebrow" data-reveal>Приложение</p>
+      <h1 data-split style="font-size: clamp(2.2rem, 6vw, 4rem)">Скачайте и войдите</h1>
+      <p class="lead" data-reveal style="--delay: 200ms">
+        Логин и пароль из письма. Больше ничего вводить не нужно.
+      </p>
+
+      <div class="dl-grid" id="downloads" style="margin-top: 48px" data-reveal>
+        <p class="muted">Загружаем ссылки…</p>
+      </div>
+
+      <section class="prose narrow" style="margin-top: 72px" data-reveal>
+        <h2 id="windows">Windows</h2>
+        <p>
+          Скачайте установщик и запустите. Windows может спросить подтверждение — это обычное
+          предупреждение для программ, работающих с сетевым подключением.
+        </p>
+
+        <h2 id="android">Android</h2>
+        <p>
+          Скачайте файл и откройте его. Понадобится разрешить установку из этого источника —
+          система подскажет, где нажать.
+        </p>
+
+        <h2 id="ios">iPhone и iPad</h2>
+        <p>
+          Установите приложение и разрешите добавление конфигурации — iOS спросит об этом один
+          раз при первом подключении.
+        </p>
+
+        <h2 id="macos">macOS</h2>
+        <p>Откройте образ и перетащите приложение в «Программы».</p>
+
+        <h2>Не входит?</h2>
+        <p>
+          Проверьте, что логин начинается с <span class="mono">pv</span> и в пароле стоят дефисы.
+          Если всё равно не пускает — <a href="contacts.html" class="accent">напишите нам</a>,
+          посмотрим со своей стороны.
+        </p>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap">
+        <div class="foot-links">
+          <a href="/">Главная</a>
+          <a href="account.html">Личный кабинет</a>
+          <a href="offer.html">Оферта</a>
+          <a href="privacy.html">Конфиденциальность</a>
+          <a href="contacts.html">Контакты</a>
+        </div>
+        <p class="foot-note">© <span data-year>2026</span> Prosto</p>
+      </div>
+    </footer>
+
+    <script type="module" src="assets/js/download.js"></script>
+    <script type="module" src="assets/js/site.js"></script>
+  </body>
+</html>

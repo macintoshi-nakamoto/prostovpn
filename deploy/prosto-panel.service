@@ -1,0 +1,51 @@
+# Справочный образец юнита панели — для чтения и ручного восстановления.
+#
+# Рабочий /etc/systemd/system/prosto-panel.service пишет deploy/bootstrap.sh:
+# правьте генератор там, иначе изменение отсюда затрётся при первой же
+# установке. Копировать этот файл как есть не нужно.
+#
+#   Состояние: systemctl status prosto-panel
+#   Логи:      journalctl -u prosto-panel -f
+#
+# Очередь доставки писем и обходчик заказов крутятся внутри этого же
+# процесса — отдельного воркера поднимать не нужно.
+
+[Unit]
+Description=Prosto — панель, API и приём оплаты
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=prostovpn
+Group=prostovpn
+WorkingDirectory=/opt/prosto-vpn/backend
+EnvironmentFile=/opt/prosto-vpn/backend/.env
+
+# Один воркер намеренно. Счётчики частоты и идемпотентность вебхука
+# рассчитаны на несколько процессов и переживут их, но SQLite при
+# параллельной записи упирается в блокировки. Второй воркер добавляют
+# вместе с переездом на PostgreSQL, не раньше.
+ExecStart=/opt/prosto-vpn/backend/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers \
+    --forwarded-allow-ips 127.0.0.1
+
+Restart=always
+RestartSec=3
+
+# Панель ходит по SSH на узлы и пишет в свою базу — больше ей ничего не
+# нужно, и остальное лучше закрыть.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/prosto-vpn/backend
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+# Пароли не должны попадать в журнал даже при отладке.
+SyslogIdentifier=prosto-panel
+
+[Install]
+WantedBy=multi-user.target

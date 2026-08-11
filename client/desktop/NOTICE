@@ -1,0 +1,21 @@
+Nexa VPN
+Copyright (c) 2026 Nexa VPN contributors
+
+This project is a modified derivative of Amnezia VPN:
+https://github.com/amnezia-vpn/amnezia-client
+
+Upstream baseline:
+e38a233904d9db148f620fdd30fd56a770b457e8
+
+Amnezia VPN copyright and license notices remain in the source tree and its
+history. Nexa VPN modifications include product identity, operating-system
+identifiers, artwork, packaging defaults, update safeguards and project
+documentation. These modifications do not imply endorsement by the Amnezia
+project.
+
+The combined client is distributed under GNU GPL version 3. See LICENSE.
+Bundled libraries, protocol engines, drivers, fonts, images and server
+components may carry additional licenses. See THIRD_PARTY_LICENSES.md,
+per-file notices, dependency recipes and each component's license before
+redistribution. A platform-specific SBOM and complete notice bundle are still
+required for a public binary release.

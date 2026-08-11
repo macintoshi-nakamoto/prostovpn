@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Prosto VPN{% endblock %}</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #141a22; --panel2: #1b232d; --line: #26303c;
+    --text: #e7edf5; --muted: #8b9bb0; --accent: #4da3ff; --ok: #35c77b;
+    --warn: #ffb340; --bad: #ff5f56;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header {
+    display: flex; align-items: center; gap: 22px; padding: 14px 24px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; z-index: 5;
+  }
+  header .brand { font-weight: 650; letter-spacing: .2px; }
+  header nav { display: flex; gap: 18px; flex: 1; }
+  header nav a { color: var(--muted); }
+  header nav a.on, header nav a:hover { color: var(--text); text-decoration: none; }
+  main { padding: 24px; max-width: 1180px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 18px; }
+  h2 { font-size: 16px; margin: 26px 0 12px; color: var(--muted); font-weight: 600; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .card .label { color: var(--muted); font-size: 13px; }
+  .card .value { font-size: 25px; font-weight: 650; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  form.box { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+  input, select, textarea {
+    width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--panel2); color: var(--text); font: inherit;
+  }
+  textarea { min-height: 110px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+  button {
+    padding: 9px 16px; border-radius: 8px; border: 1px solid transparent;
+    background: var(--accent); color: #06121f; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.ghost { background: transparent; border-color: var(--line); color: var(--text); }
+  button.danger { background: var(--bad); color: #2a0705; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .muted { color: var(--muted); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .pill.ok { background: rgba(53,199,123,.15); color: var(--ok); }
+  .pill.bad { background: rgba(255,95,86,.15); color: var(--bad); }
+  .pill.warn { background: rgba(255,179,64,.15); color: var(--warn); }
+  .flash { background: rgba(77,163,255,.12); border: 1px solid rgba(77,163,255,.35);
+           padding: 11px 14px; border-radius: 10px; margin-bottom: 18px; }
+  code, pre { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+  pre { background: var(--panel2); padding: 12px; border-radius: 8px; overflow-x: auto; margin: 0; }
+  details summary { cursor: pointer; color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">Prosto VPN</span>
+  <nav>
+    <a href="/" class="{% if page == 'dashboard' %}on{% endif %}">Сводка</a>
+    <a href="/users" class="{% if page == 'users' %}on{% endif %}">Пользователи</a>
+    <a href="/servers" class="{% if page == 'servers' %}on{% endif %}">Серверы</a>
+    <a href="/payments" class="{% if page == 'payments' %}on{% endif %}">Деньги</a>
+  </nav>
+  <a href="/docs" class="muted">API</a>
+  <a href="/logout" class="muted">Выйти</a>
+</header>
+<main>
+  {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

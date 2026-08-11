@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Оформление — Prosto</title>
+    <meta name="description" content="Выберите срок и укажите почту — доступ придёт на неё." />
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#0a0908" />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/css/site.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap top-in">
+        <a class="brand" href="/"><span class="brand-mark"></span>Prosto</a>
+        <button class="nav-toggle" type="button" aria-expanded="false">Меню</button>
+        <nav class="nav">
+          <a href="/#tarify">Тарифы</a>
+          <a href="download.html">Скачать</a>
+          <a href="account.html">Личный кабинет</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap" style="padding-top: 140px; padding-bottom: 80px; max-width: 640px">
+      <p class="eyebrow">Оформление</p>
+      <h1 style="font-size: clamp(2rem, 5vw, 3rem)">Куда прислать доступ</h1>
+
+      <div class="card" style="margin-top: 36px">
+        <label class="field">
+          <span class="field-label">Тариф</span>
+          <select class="input" id="plan">
+            <option>Загружаем…</option>
+          </select>
+        </label>
+
+        <div
+          id="summary"
+          style="
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            padding: 18px 0 22px;
+            border-bottom: 1px solid var(--line);
+            margin-bottom: 24px;
+          "
+        >
+          <span class="price-value" id="price" style="font-size: clamp(2.6rem, 8vw, 4rem)">—</span>
+          <span class="price-unit" id="price-note"></span>
+        </div>
+
+        <form id="form" novalidate>
+          <label class="field">
+            <span class="field-label">Почта</span>
+            <input
+              class="input"
+              type="email"
+              id="email"
+              name="email"
+              autocomplete="email"
+              inputmode="email"
+              placeholder="ваша@почта.ру"
+              required
+            />
+            <span class="field-hint">
+              На неё придут логин и пароль. Проверьте букву в адресе — письмо уйдёт именно
+              туда, куда написано.
+            </span>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Telegram ID <span class="muted">— не обязательно</span></span>
+            <input
+              class="input"
+              type="text"
+              id="telegram"
+              inputmode="numeric"
+              placeholder="123456789"
+            />
+            <span class="field-hint">
+              Продублируем доступ в Telegram, если письмо потеряется. Узнать свой ID можно
+              у бота <span class="mono">@userinfobot</span>. Перед этим напишите нашему боту,
+              иначе он не сможет вам ответить.
+            </span>
+          </label>
+
+          <div class="error-box" id="error" hidden></div>
+
+          <button class="btn btn-lg btn-block" type="submit" id="submit">Перейти к оплате</button>
+
+          <p class="field-hint" style="margin-top: 18px">
+            Нажимая кнопку, вы соглашаетесь с <a href="offer.html" class="accent">офертой</a> и
+            <a href="privacy.html" class="accent">политикой конфиденциальности</a>.
+          </p>
+        </form>
+      </div>
+
+      <div class="note-box" style="margin-top: 22px">
+        Уже покупали на эту почту? Оплата продлит существующий доступ — логин и пароль
+        останутся прежними, менять ничего не придётся.
+      </div>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap">
+        <div class="foot-links">
+          <a href="/">Главная</a>
+          <a href="download.html">Скачать</a>
+          <a href="offer.html">Оферта</a>
+          <a href="privacy.html">Конфиденциальность</a>
+          <a href="contacts.html">Контакты</a>
+        </div>
+        <p class="foot-note">© <span data-year>2026</span> Prosto</p>
+      </div>
+    </footer>
+
+    <script type="module" src="assets/js/checkout.js"></script>
+    <script type="module" src="assets/js/site.js"></script>
+  </body>
+</html>

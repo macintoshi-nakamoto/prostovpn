@@ -1,0 +1,34 @@
+# Секреты и база
+backend/.env
+backend/*.db
+# Резервные копии базы: в них пароли клиентов открытым текстом
+backend/*.db.backup*
+backend/*.db.bak
+*.sqlite
+*.sqlite3
+backend/*.db-wal
+backend/*.db-shm
+
+# Окружения и сборки
+backend/.venv/
+backend/.pytest_cache/
+__pycache__/
+*.pyc
+
+panel/node_modules/
+panel/dist/
+
+client/build/
+
+# Портативный тулчейн для сборки клиента
+.toolchain/
+client/windows/build/
+client/android/build/
+
+# Сборки десктопного клиента: артефакты, а не исходники
+client/windows/build/
+client/windows/.gradle/
+
+# Сертификат панели: привязан к конкретной установке и раскрывает её адрес.
+# Кладётся на месте, если панель работает за самоподписанным сертификатом.
+**/panel_cert.pem

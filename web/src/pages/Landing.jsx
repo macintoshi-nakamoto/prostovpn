@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { SiteHeader } from "../components/SiteHeader.jsx";
 import { SiteFooter } from "../components/SiteFooter.jsx";
-import { Reveal } from "../components/Reveal.jsx";
+import { Reveal, ArtImage } from "../components/Reveal.jsx";
+import { HeroOrbit } from "../components/HeroOrbit.jsx";
+import { useTilt } from "../lib/hooks";
 import { api } from "../lib/api";
 import { moneyFromKopecks } from "../lib/format";
 import "./landing.css";
@@ -97,6 +99,31 @@ const FALLBACK_PLANS = [
   { term: "3 года", perMonth: "119 ₽", note: "4 284 ₽ за весь срок", featured: false },
 ];
 
+/**
+ * Карточка преимущества.
+ *
+ * Иконка выходит из размытия с поворотом, карточка отзывается на курсор
+ * наклоном и подсветкой — четыре одинаковых блока перестают быть просто
+ * рядом картинок.
+ */
+function Feature({ feature, delay }) {
+  const tilt = useTilt(9);
+  return (
+    <Reveal className="ld-feature" delay={delay}>
+      <div className="ld-feature-in tilt tilt-glow" ref={tilt}>
+        <ArtImage
+          src={`/assets/${feature.icon}`}
+          className={`ld-feature-art${feature.plain ? "" : " ld-feature-shadow"}`}
+          speed={0.05}
+          delay={delay + 90}
+        />
+        <h3>{feature.title}</h3>
+        <p>{feature.text}</p>
+      </div>
+    </Reveal>
+  );
+}
+
 export function Landing() {
   const [plans, setPlans] = useState(FALLBACK_PLANS);
 
@@ -123,27 +150,37 @@ export function Landing() {
       {/* Герой */}
       <section id="top" className="ld-hero">
         <div className="ld-hero-glow" aria-hidden="true" />
+        <HeroOrbit />
         <div className="wrap ld-hero-in">
-          <Reveal className="ld-hero-body">
+          {/*
+          Строки заголовка появляются по очереди, а не блоком: так герой
+          «набирается» на глазах и держит взгляд первые полторы секунды.
+          */}
+          <div className="ld-hero-body">
             <h1>
-              Интернет
-              <br />
-              без границ
+              <Reveal as="span" className="ld-hero-line" delay={60}>
+                Интернет
+              </Reveal>
+              <Reveal as="span" className="ld-hero-line" delay={180}>
+                без границ
+              </Reveal>
             </h1>
-            <p>
+            <Reveal as="p" delay={340}>
               Подключение в одно нажатие, 60+ стран и скорость до 1 Гбит/с. Без логов, без
               лимитов трафика и без настроек.
-            </p>
-            <div className="ld-hero-cta">
+            </Reveal>
+            <Reveal className="ld-hero-cta" delay={440}>
               <a href="#plans" className="btn ld-hero-primary">
                 Начать использовать
               </a>
               <a href="#app" className="btn ld-hero-ghost">
                 Как это работает
               </a>
-            </div>
-            <span className="ld-hero-plats">iOS · Android · macOS · Windows</span>
-          </Reveal>
+            </Reveal>
+            <Reveal as="span" className="ld-hero-plats" delay={560}>
+              iOS · Android · macOS · Windows
+            </Reveal>
+          </div>
         </div>
       </section>
 
@@ -151,24 +188,29 @@ export function Landing() {
       <section className="ld-features">
         <div className="wrap ld-features-grid">
           {FEATURES.map((f, i) => (
-            <Reveal className="ld-feature" key={f.title} delay={i * 80}>
-              <img
-                src={`/assets/${f.icon}`}
-                alt=""
-                className={f.plain ? "" : "ld-feature-shadow"}
-              />
-              <h3>{f.title}</h3>
-              <p>{f.text}</p>
-            </Reveal>
+            <Feature key={f.title} feature={f} delay={i * 110} />
           ))}
         </div>
       </section>
 
       {/* Ноль записей */}
       <section id="speed" className="ld-zero">
-        <img className="ld-zero-obj ld-zero-left float" src="/assets/obj-ruble-lock.png" alt="" aria-hidden="true" />
-        <img className="ld-zero-obj ld-zero-right float" src="/assets/obj-platforms.png" alt="" aria-hidden="true" />
-        <Reveal className="ld-zero-in">
+        {/* Объекты по краям едут против прокрутки и слегка поворачиваются —
+            секция получает глубину, а не просто «две картинки по бокам». */}
+        <ArtImage
+          className="ld-zero-obj ld-zero-left"
+          src="/assets/obj-ruble-lock.png"
+          speed={0.22}
+          rotate={0.9}
+        />
+        <ArtImage
+          className="ld-zero-obj ld-zero-right"
+          src="/assets/obj-platforms.png"
+          speed={-0.16}
+          rotate={-1.1}
+          delay={120}
+        />
+        <Reveal className="ld-zero-in" variant="zoom">
           <div className="ld-zero-num">0</div>
           <h2>
             записей
@@ -213,7 +255,13 @@ export function Landing() {
           </Reveal>
           <div className="ld-app-art">
             <div className="ld-app-halo" aria-hidden="true" />
-            <img src="/assets/obj-laptop-orange.png" alt="Prosto VPN на ноутбуке" />
+            <ArtImage
+              className="ld-app-laptop"
+              src="/assets/obj-laptop-orange.png"
+              alt="Prosto VPN на ноутбуке"
+              speed={0.1}
+              float={false}
+            />
           </div>
         </div>
       </section>
@@ -221,9 +269,9 @@ export function Landing() {
       {/* Российские сервисы */}
       <section id="split" className="ld-split">
         <div className="ld-split-deco" aria-hidden="true">
-          <img className="ld-split-ribbon" src="/assets/ribbon-diagonal.png" alt="" />
-          <img className="ld-split-badge ld-split-badge-1 float" src="/assets/logo-t.png" alt="" />
-          <img className="ld-split-badge ld-split-badge-2 float" src="/assets/logo-vk.png" alt="" />
+          <ArtImage className="ld-split-ribbon" src="/assets/ribbon-diagonal.png" speed={-0.2} rotate={-1.4} float={false} />
+          <ArtImage className="ld-split-badge ld-split-badge-1" src="/assets/logo-t.png" speed={0.26} rotate={1.8} />
+          <ArtImage className="ld-split-badge ld-split-badge-2" src="/assets/logo-vk.png" speed={0.18} rotate={-1.6} delay={100} />
         </div>
         <div className="wrap ld-split-in">
           <Reveal className="ld-split-head">
@@ -259,7 +307,7 @@ export function Landing() {
 
       {/* Тарифы */}
       <section id="plans" className="ld-plans">
-        <img className="ld-plans-ribbon" src="/assets/ribbon-spiral.png" alt="" aria-hidden="true" />
+        <ArtImage className="ld-plans-ribbon" src="/assets/ribbon-spiral.png" speed={0.24} rotate={-2} />
         <div className="wrap ld-plans-in">
           <Reveal className="ld-plans-head">
             <h2>
@@ -318,14 +366,14 @@ export function Landing() {
           </Reveal>
           <div className="ld-shield-art">
             <div className="ld-shield-halo" aria-hidden="true" />
-            <img className="float" src="/assets/obj-case-2.png" alt="" />
+            <ArtImage className="ld-shield-obj" src="/assets/obj-case-2.png" speed={0.14} rotate={0.8} />
           </div>
         </div>
       </section>
 
       {/* Одна подписка — все устройства */}
       <section className="ld-devices">
-        <img className="ld-devices-phone" src="/assets/obj-iphone-side.png" alt="" aria-hidden="true" />
+        <ArtImage className="ld-devices-phone" src="/assets/obj-iphone-side.png" speed={0.3} rotate={1.2} />
         <div className="wrap ld-devices-in">
           <Reveal className="ld-devices-body">
             <h3>Одна подписка — все устройства</h3>
@@ -341,7 +389,7 @@ export function Landing() {
 
       {/* Прозрачно во всём */}
       <section id="docs" className="ld-docs">
-        <img className="ld-docs-ribbon" src="/assets/ribbon-wave.png" alt="" aria-hidden="true" />
+        <ArtImage className="ld-docs-ribbon" src="/assets/ribbon-wave.png" speed={-0.22} rotate={1.5} />
         <div className="wrap ld-docs-in">
           <Reveal className="ld-docs-head">
             <h2>

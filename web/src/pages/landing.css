@@ -35,6 +35,18 @@
   line-height: 0.98;
   letter-spacing: -0.03em;
   font-weight: 700;
+  /* Строки появляются по очереди, поэтому каждая — свой блок. */
+  display: flex;
+  flex-direction: column;
+}
+.ld-hero-line {
+  display: block;
+}
+/* Текст героя лежит над объектом справа. */
+.ld-hero-body {
+  position: relative;
+  z-index: 2;
+  max-width: 620px;
 }
 .ld-hero-body p {
   max-width: 520px;
@@ -85,19 +97,29 @@
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 40px;
 }
-.ld-feature {
+.ld-feature-in {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 14px;
+  padding: 26px 18px 28px;
+  border-radius: 24px;
+  cursor: default;
 }
-.ld-feature img {
-  height: 72px;
-  width: auto;
+.ld-feature-art {
+  width: 84px;
+  margin-bottom: 2px;
 }
-.ld-feature-shadow {
+.ld-feature-shadow img {
   filter: drop-shadow(0 6px 14px rgba(20, 25, 35, 0.22));
+}
+/* Иконка чуть выходит вперёд при наведении — карточка получает объём. */
+.ld-feature-in .art {
+  transition: transform 0.45s var(--ease-out);
+}
+.ld-feature-in:hover .art {
+  transform: translateY(-8px) scale(1.06);
 }
 .ld-feature h3 {
   font-size: 24px;
@@ -120,7 +142,8 @@
 }
 .ld-zero-obj {
   position: absolute;
-  height: auto;
+}
+.ld-zero-obj img {
   filter: saturate(1.14) hue-rotate(-6deg) drop-shadow(0 26px 44px rgba(120, 52, 14, 0.14));
 }
 .ld-zero-left {
@@ -132,7 +155,6 @@
   right: -48px;
   top: 214px;
   width: 330px;
-  animation-delay: -3s;
 }
 .ld-zero-in {
   position: relative;
@@ -212,9 +234,12 @@
   font-size: 15px;
   padding: 14px 24px;
 }
+/* Та же квадратная коробка, что и в подвале, — иконки сторов разной формы. */
 .ld-store img {
-  height: 20px;
-  width: auto;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  flex: none;
 }
 .ld-app-art {
   position: relative;
@@ -232,13 +257,13 @@
   background: radial-gradient(circle, rgba(250, 76, 22, 0.18) 0%, rgba(245, 246, 248, 0) 66%);
   top: -20px;
 }
-.ld-app-art img {
+.ld-app-laptop {
   position: relative;
   width: 100%;
   max-width: 740px;
-  height: auto;
-  display: block;
   margin: 0 -40px -6px 0;
+}
+.ld-app-laptop img {
   filter: drop-shadow(0 30px 50px rgba(30, 20, 10, 0.16));
 }
 
@@ -263,6 +288,8 @@
 }
 .ld-split-badge {
   position: absolute;
+}
+.ld-split-badge img {
   filter: drop-shadow(0 18px 30px rgba(120, 52, 14, 0.2));
 }
 .ld-split-badge-1 {
@@ -274,7 +301,6 @@
   left: -34px;
   bottom: 168px;
   width: 128px;
-  animation-delay: -4s;
 }
 .ld-split-in {
   position: relative;
@@ -321,6 +347,16 @@
   font-size: 16px;
   line-height: 1.45;
   color: var(--text-muted);
+}
+/* Карточка приподнимается и светлеет — видно, что на неё смотрят. */
+.ld-split-card {
+  transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out),
+    background 0.35s ease;
+}
+.ld-split-card:hover {
+  transform: translateY(-6px);
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(20, 25, 35, 0.1);
 }
 .ld-split-note {
   display: flex;
@@ -397,6 +433,18 @@
   display: flex;
   flex-direction: column;
   gap: 22px;
+  transition: transform 0.4s var(--ease-out), box-shadow 0.4s var(--ease-out);
+}
+.ld-plan:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 26px 54px rgba(20, 25, 35, 0.14);
+}
+/* Выделенный тариф заметно крупнее соседей и мягко дышит. */
+.ld-plan-featured {
+  transform: scale(1.035);
+}
+.ld-plan-featured:hover {
+  transform: translateY(-8px) scale(1.045);
 }
 .ld-plan-featured {
   background: var(--ink);
@@ -520,11 +568,12 @@
   border-radius: 50%;
   background: radial-gradient(circle, rgba(250, 76, 22, 0.28) 0%, rgba(10, 10, 10, 0) 65%);
 }
-.ld-shield-art img {
+.ld-shield-obj {
   position: relative;
   width: 400px;
   max-width: 100%;
-  height: auto;
+}
+.ld-shield-obj img {
   filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.6));
 }
 
@@ -539,11 +588,12 @@
   position: absolute;
   right: 9%;
   top: 6px;
-  height: 248px;
-  width: auto;
+  width: 150px;
+  pointer-events: none;
+}
+.ld-devices-phone img {
   transform: rotate(8deg);
   filter: drop-shadow(0 22px 34px rgba(120, 52, 14, 0.18));
-  pointer-events: none;
 }
 .ld-devices-in {
   position: relative;

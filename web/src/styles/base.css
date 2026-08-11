@@ -116,19 +116,57 @@ img {
 }
 
 /* --- Появление при прокрутке -------------------------------------------------
- * Ставится на элемент; JS-хук снимает [data-reveal] когда элемент входит в
- * область видимости, и всё внутри плавно всплывает. До появления — прозрачно
- * и чуть ниже, чтобы движение читалось.
+ *
+ * JS-хук снимает [data-reveal] и ставит [data-revealed], когда элемент
+ * входит в область видимости; вся анимация — здесь. Значение атрибута
+ * задаёт характер движения: текст всплывает, заголовок приближается,
+ * картинка выходит из размытия.
+ *
+ * Пружинная кривая с лёгким перелётом: движение читается живым, а не
+ * равномерным сползанием.
  */
+:root {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.32, 0.44, 1);
+}
+
 [data-reveal] {
   opacity: 0;
-  transform: translateY(26px);
+  will-change: transform, opacity;
 }
+[data-reveal="up"] {
+  transform: translateY(34px);
+}
+[data-reveal="zoom"] {
+  transform: translateY(22px) scale(0.965);
+}
+[data-reveal="left"] {
+  transform: translateX(-40px);
+}
+[data-reveal="right"] {
+  transform: translateX(40px);
+}
+/* Картинки: из размытия, с поворотом и увеличением — так их видно. */
+[data-reveal="art"] {
+  transform: translateY(46px) scale(0.86) rotate(-5deg);
+  filter: blur(14px) saturate(0.7);
+}
+
 [data-revealed] {
   opacity: 1;
   transform: none;
-  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
-    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  filter: none;
+  transition:
+    opacity 0.8s var(--ease-out),
+    transform 0.9s var(--ease-spring),
+    filter 0.8s var(--ease-out);
+}
+/* Картинке даём больше времени: движение крупное и должно ощущаться. */
+img[data-revealed] {
+  transition:
+    opacity 1s var(--ease-out),
+    transform 1.15s var(--ease-spring),
+    filter 0.95s var(--ease-out);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -136,7 +174,35 @@ img {
   [data-revealed] {
     opacity: 1;
     transform: none;
+    filter: none;
     transition: none;
+  }
+}
+
+/* --- Картинки-объекты --------------------------------------------------------
+ * Внешний span везёт параллакс, внутренний img — появление и покачивание.
+ * Разделение обязательно: transform у них общий, и на одном элементе они
+ * затирали бы друг друга.
+ */
+.art {
+  display: block;
+  will-change: transform;
+}
+.art-float,
+.art-still {
+  display: block;
+}
+.art-float {
+  animation: floatY 9s ease-in-out infinite;
+}
+.art-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .art-float {
+    animation: none;
   }
 }
 
@@ -191,7 +257,92 @@ img {
   text-align: center;
 }
 .btn:active {
-  transform: scale(0.985);
+  transform: scale(0.97);
+  transition-duration: 0.06s;
+}
+.btn:hover {
+  transform: translateY(-2px);
+}
+/*
+ * Блик, пробегающий по кнопке при наведении.
+ *
+ * Полоса лежит поверх и уезжает за край; overflow прячет её в покое, а не
+ * анимируется — двигается только transform, то есть кадры не стоят ничего.
+ */
+.btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.35) 50%,
+    transparent 80%
+  );
+  transform: translateX(-120%);
+  transition: transform 0.75s var(--ease-out);
+}
+.btn:hover::after {
+  transform: translateX(120%);
+}
+.btn-outline::after {
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    rgba(10, 10, 10, 0.08) 50%,
+    transparent 80%
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn::after {
+    display: none;
+  }
+  .btn:hover {
+    transform: none;
+  }
+}
+
+/* --- Карточка с наклоном за курсором ---------------------------------------- */
+.tilt {
+  transform: perspective(900px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg));
+  transition: transform 0.4s var(--ease-out), box-shadow 0.4s var(--ease-out);
+  transform-style: preserve-3d;
+}
+.tilt:hover {
+  transition-duration: 0.12s;
+}
+/* Мягкое пятно света идёт за курсором — карточка перестаёт быть плоской. */
+.tilt-glow {
+  position: relative;
+  isolation: isolate;
+}
+.tilt-glow::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  background: radial-gradient(
+    circle at var(--glow-x, 50%) var(--glow-y, 50%),
+    rgba(250, 76, 22, 0.16),
+    transparent 62%
+  );
+}
+.tilt-glow:hover::before {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tilt {
+    transform: none;
+  }
 }
 .btn-primary {
   background: var(--accent);

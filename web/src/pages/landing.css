@@ -728,8 +728,10 @@
   }
 }
 @media (max-width: 520px) {
+  /* Только по бокам — сокращение сбросило бы вертикальные отступы секций. */
   .wrap {
-    padding: 0 20px;
+    padding-left: 20px;
+    padding-right: 20px;
   }
   .ld-features-grid {
     grid-template-columns: 1fr;

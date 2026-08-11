@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
@@ -260,7 +260,49 @@ if PANEL_DIST.is_dir():
 
 
 _SITE = _site_dir()
-if _SITE is not None:
+
+# Адреса страниц старого сайта. Они разошлись по установленным приложениям
+# и по чужим ссылкам, поэтому после переезда на SPA продолжают работать —
+# уводят на новый маршрут, а не в 404.
+_LEGACY_PAGES = {
+    "faq.html": "/faq",
+    "privacy.html": "/privacy",
+    "offer.html": "/terms",
+    "contacts.html": "/contacts",
+    "account.html": "/account",
+    "download.html": "/#app",
+    "index.html": "/",
+}
+
+if _SITE is not None and settings().site_spa:
+
+    # response_model=None: из объединённой аннотации FastAPI пытается собрать
+    # модель ответа и падает — здесь возвращается готовый Response.
+    @app.get("/{full_path:path}", include_in_schema=False, response_model=None)
+    def site_spa(full_path: str = "") -> FileResponse | RedirectResponse:
+        """
+        Сайт-одностраничник: файл, если он есть, иначе index.html.
+
+        Маршрутизация у SPA своя, и по прямой ссылке на /account сервер
+        обязан вернуть тот же index.html — иначе перезагрузка страницы даёт
+        404. Маршруты /api и /admin сюда не попадают: они объявлены выше, а
+        FastAPI выбирает первый подошедший.
+        """
+        target = _LEGACY_PAGES.get(full_path)
+        if target is not None:
+            return RedirectResponse(target, status_code=301)
+
+        # resolve() и проверка каталога обязательны: uvicorn не схлопывает
+        # «..» в пути, и без них запрос вида /../backend/.env отдал бы файл
+        # с секретами.
+        root = _SITE.resolve()
+        candidate = (root / full_path).resolve()
+        if full_path and candidate.is_file() and candidate.is_relative_to(root):
+            return FileResponse(candidate)
+        return FileResponse(root / "index.html")
+
+    log.info("сайт раздаётся из %s (одностраничный)", _SITE)
+elif _SITE is not None:
     app.mount("/", StaticFiles(directory=_SITE, html=True), name="site")
     log.info("сайт раздаётся из %s", _SITE)
 elif PANEL_DIST.is_dir():

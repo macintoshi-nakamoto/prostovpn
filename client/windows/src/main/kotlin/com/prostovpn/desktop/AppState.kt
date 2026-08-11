@@ -492,32 +492,13 @@ class AppState(private val scope: CoroutineScope) {
     // --- Вход ---
 
     /**
-     * Вход по логину и паролю из панели.
+     * Вход по логину и паролю из панели — единственный способ войти.
      *
      * Пароль проверяет сервер: страны выдаются только оплаченной учётной
-     * записи, и обойти это, вставив чужой ключ, нельзя.
+     * записи. Вход по ключу `vpn://` убран: он давал доступ в обход
+     * подписки и жил рядом со своим набором ошибок, а человек за весь срок
+     * должен видеть ровно две строки — логин и пароль из письма о покупке.
      */
-    /**
-     * Вход по ключу vpn://.
-     *
-     * Второй способ рядом с логином и паролем: ключ подключает один
-     * конкретный сервер и работает без учётной записи в панели.
-     */
-    fun loginWithKey(key: String): Boolean {
-        val joined = key.filterNot { it.isWhitespace() }
-        val info = KeyParser.extractServer(joined) ?: return false
-        // Сам ключ не сохраняем: его никто не читал, а java.util.prefs
-        // бросает на значении длиннее 8192 символов — контейнер Amnezia
-        // легко перешагивает предел, и вход по ключу валил корутину
-        // композиции вместо ошибки на экране. Сессия переживает перезапуск
-        // за счёт server.host и server.config.
-        panelServers = emptyList()
-        server = info
-        selectServer(0)
-        persistServer()
-        return true
-    }
-
     suspend fun login(login: String, password: String): Result<Unit> =
         PanelApi.login(login, password).map { applySession(it) }
 

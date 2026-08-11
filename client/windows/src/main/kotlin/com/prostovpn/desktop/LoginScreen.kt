@@ -97,8 +97,7 @@ fun LoginScreen(
             errorText = s.errEmptyLogin
             return
         }
-        // Ключ вставляют в поле логина — пароль для него не нужен.
-        if (!credentials.startsWith("vpn://") && password.length < 4) {
+        if (password.length < 4) {
             errorText = s.errShortPassword
             return
         }
@@ -108,20 +107,9 @@ fun LoginScreen(
         isLoading = true
 
         scope.launch {
-            if (credentials.startsWith("vpn://")) {
-                isLoading = false
-                if (state.loginWithKey(credentials)) {
-                    isDone = true
-                    haptics.success()
-                    delay(450)
-                } else {
-                    errorText = s.errBadKey
-                }
-                return@launch
-            }
-
-            // Пароль проверяет панель: локально решать, верен он или нет,
-            // нечем — и не нужно.
+            // Единственный способ войти — логин и пароль из панели, их
+            // выдают при покупке. Ключи vpn:// больше не принимаются:
+            // человек за весь срок видит ровно две строки.
             val result = state.login(credentials, password)
             isLoading = false
 
@@ -242,19 +230,14 @@ private fun Header(tagline: String, modifier: Modifier = Modifier) {
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Название отдельной строкой не пишем: его теперь несёт сам знак, а
+        // подпись под ним говорит, что это за сервис.
         LogoImage(
-            modifier = Modifier.size(width = 132.dp, height = 88.dp),
+            modifier = Modifier.size(width = 216.dp, height = 29.dp),
             glowAlpha = 0.28f,
         )
 
-        Spacer(Modifier.height(10.dp))
-
-        Text(
-            text = "Prosto VPN",
-            style = manrope(28.sp, W.extraBold, Theme.text, letterSpacing = 0.5.sp),
-        )
-
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(12.dp))
 
         Text(
             text = tagline,

@@ -64,27 +64,18 @@ fun SupportScreen(
                 }
             }
 
+            // Только логотип: название и версия отсюда убраны. Название
+            // теперь читается с самого знака, а версию видно в настройках,
+            // рядом с кнопкой обновления, — там она и нужна.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 30.dp),
+                    .padding(top = 26.dp, bottom = 34.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 LogoImage(
-                    modifier = Modifier.size(width = 120.dp, height = 80.dp),
+                    modifier = Modifier.size(width = 186.dp, height = 25.dp),
                     glowAlpha = 0.35f,
-                )
-
-                Text(
-                    text = "Prosto VPN",
-                    style = manrope(22.sp, W.extraBold, Theme.text),
-                )
-
-                Spacer(Modifier.height(2.dp))
-
-                Text(
-                    text = s.version,
-                    style = manrope(13.sp, W.medium, Theme.textMuted),
                 )
             }
 

@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,29 +34,96 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Notification
+import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberTrayState
 import androidx.compose.ui.window.rememberWindowState
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 fun main() = application {
+    val scope = rememberCoroutineScope()
+    // Состояние живёт здесь, а не внутри окна: меню в трее подписано на
+    // языке приложения, а выход из него должен успеть снять туннель.
+    val state = remember { AppState(scope) }
+
     val windowState = rememberWindowState(
         size = DpSize(400.dp, 660.dp),
         position = WindowPosition(Alignment.Center),
     )
 
+    /*
+    Крестик прячет окно, а не закрывает приложение: VPN должен продолжать
+    работать, когда окно убрали с глаз. Приложение живёт, пока Window
+    остаётся в композиции, — поэтому окно скрывается, а не снимается.
+    */
+    var windowVisible by remember { mutableStateOf(true) }
+    val trayState = rememberTrayState()
+    var trayHintShown by remember { mutableStateOf(false) }
+
+    fun showWindow() {
+        windowVisible = true
+        windowState.isMinimized = false
+    }
+
+    fun hideToTray() {
+        windowVisible = false
+        // Один раз за запуск объясняем, куда делось окно: иначе это
+        // выглядит так, будто приложение закрылось и VPN отключился.
+        if (!trayHintShown) {
+            trayHintShown = true
+            runCatching {
+                trayState.sendNotification(
+                    Notification("Prosto VPN", state.s.trayHint, Notification.Type.Info)
+                )
+            }
+        }
+    }
+
+    fun quit() {
+        scope.launch {
+            /*
+            Туннель поднят службой Windows и переживёт закрытие приложения.
+            Уходя, снимаем его сами: иначе весь трафик продолжит идти через
+            VPN, а выключить его будет уже нечем.
+            */
+            if (state.phase != Phase.OFF) {
+                state.disconnect()
+                withTimeoutOrNull(20_000) { snapshotFlow { state.phase }.first { it == Phase.OFF } }
+            }
+            exitApplication()
+        }
+    }
+
+    Tray(
+        state = trayState,
+        icon = painterResource("trayicon.png"),
+        tooltip = "Prosto VPN",
+        onAction = ::showWindow,
+        menu = {
+            Item(state.s.trayOpen, onClick = ::showWindow)
+            Item(state.s.trayQuit, onClick = ::quit)
+        },
+    )
+
     Window(
-        onCloseRequest = ::exitApplication,
+        onCloseRequest = ::hideToTray,
+        visible = windowVisible,
         state = windowState,
         title = "Prosto VPN",
         undecorated = true,
         transparent = true,
         resizable = false,
-        icon = painterResource("logo.png"),
+        icon = painterResource("appicon.png"),
     ) {
         AppRoot(
+            state = state,
             onMinimize = { windowState.isMinimized = true },
-            onClose = ::exitApplication,
+            onClose = ::hideToTray,
             drag = { content -> WindowDraggableArea(content = content) },
         )
     }
@@ -68,13 +136,11 @@ enum class Page { MAIN, SETTINGS, SUPPORT }
 /** Корень приложения: окно-«квадратик» со скруглёнными углами и своим хромом. */
 @Composable
 fun AppRoot(
+    state: AppState,
     onMinimize: () -> Unit,
     onClose: () -> Unit,
     drag: @Composable (@Composable () -> Unit) -> Unit = { it() },
 ) {
-    val scope = rememberCoroutineScope()
-    val state = remember { AppState(scope) }
-
     var page by remember { mutableStateOf(Page.MAIN) }
     var powerCenter by remember { mutableStateOf(Offset.Zero) }
 

@@ -159,7 +159,12 @@ fun Modifier.softShadow(
     }
 }
 
-/** Логотип с тёплым свечением, как в iOS. */
+/**
+ * Знак «PROSTO» с тёплым свечением, как в iOS.
+ *
+ * Надпись широкая, поэтому свечение считаем от ширины: круг по меньшей
+ * стороне у полосы 7:1 выродился бы в еле заметное пятно посередине.
+ */
 @Composable
 fun LogoImage(
     modifier: Modifier = Modifier,
@@ -170,6 +175,7 @@ fun LogoImage(
         contentDescription = null,
         modifier = modifier.drawBehind {
             if (glowAlpha > 0f) {
+                val radius = size.maxDimension * 0.6f
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
@@ -177,13 +183,28 @@ fun LogoImage(
                             Color.Transparent,
                         ),
                         center = center,
-                        radius = size.minDimension * 0.72f,
+                        radius = radius,
                     ),
-                    radius = size.minDimension * 0.72f,
+                    radius = radius,
                     center = center,
                 )
             }
         },
+    )
+}
+
+/**
+ * Иконка приложения — та же оранжевая плитка, что в трее и на панели задач.
+ *
+ * Нужна там, где места на надпись нет: в кружке заголовка главного экрана
+ * широкий знак превратился бы в нечитаемую полоску.
+ */
+@Composable
+fun AppMark(modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource("appicon.png"),
+        contentDescription = null,
+        modifier = modifier,
     )
 }
 

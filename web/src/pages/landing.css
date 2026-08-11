@@ -107,9 +107,44 @@
   border-radius: 24px;
   cursor: default;
 }
+/*
+ * Иконка живёт в коробке постоянной высоты и вписывается в неё.
+ *
+ * У четырёх иконок разные пропорции — от 0.83 до 1.38, — и при заданной
+ * одной ширине их высоты расходились на сорок точек. Заголовки под ними
+ * начинались на разной высоте, и ряд читался лесенкой.
+ */
 .ld-feature-art {
-  width: 84px;
+  width: 100px;
+  height: 96px;
   margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Промежуточный слой (он везёт покачивание) тоже растягиваем, иначе
+   центрировать внутри него нечего. */
+.ld-feature-art .art-float,
+.ld-feature-art .art-still {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ld-feature-art picture {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.ld-feature-art img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 .ld-feature-shadow img {
   filter: drop-shadow(0 6px 14px rgba(20, 25, 35, 0.22));
@@ -235,11 +270,14 @@
   padding: 14px 24px;
 }
 /* Та же квадратная коробка, что и в подвале, — иконки сторов разной формы. */
+.ld-store picture {
+  display: flex;
+  flex: none;
+}
 .ld-store img {
   width: 22px;
   height: 22px;
   object-fit: contain;
-  flex: none;
 }
 .ld-app-art {
   position: relative;
@@ -777,16 +815,280 @@
     display: none;
   }
 }
-@media (max-width: 520px) {
+/* ── Телефон ────────────────────────────────────────────────────────────────
+ *
+ * Секции сделаны под широкий экран: крупные заголовки, отступы по сто с
+ * лишним точек и объекты по краям. На телефоне всё это надо ужать, иначе
+ * страница превращается в бесконечную прокрутку с половиной букв за краем.
+ */
+@media (max-width: 640px) {
   /* Только по бокам — сокращение сбросило бы вертикальные отступы секций. */
   .wrap {
     padding-left: 20px;
     padding-right: 20px;
   }
+
+  .ld-hero {
+    border-bottom-left-radius: 28px;
+    border-bottom-right-radius: 28px;
+  }
+  .ld-hero-in {
+    padding: 108px 20px 64px;
+    min-height: 0;
+  }
+  .ld-hero-body {
+    gap: 20px;
+  }
+  .ld-hero-body h1 {
+    font-size: 40px;
+    line-height: 1.02;
+  }
+  .ld-hero-body p {
+    font-size: 17px;
+  }
+  /* Кнопки во всю ширину: попасть пальцем в узкую — лотерея. */
+  .ld-hero-cta {
+    width: 100%;
+    gap: 10px;
+  }
+  .ld-hero-cta .btn {
+    width: 100%;
+    font-size: 16px;
+    padding: 16px 24px;
+  }
+
+  .ld-features {
+    padding: 44px 0 48px;
+  }
   .ld-features-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 12px;
+  }
+  .ld-feature-in {
+    padding: 14px 8px 16px;
+    gap: 10px;
+  }
+  .ld-feature-art {
+    width: 72px;
+    height: 68px;
+  }
+  .ld-feature h3 {
+    font-size: 18px;
+  }
+  .ld-feature p {
+    font-size: 14px;
+  }
+
+  .ld-zero {
+    padding: 64px 0 68px;
+  }
+  .ld-zero-num {
+    font-size: 92px;
+  }
+  .ld-zero h2 {
+    font-size: 32px;
+  }
+  .ld-zero p {
+    font-size: 16px;
+  }
+  .ld-zero-in {
+    gap: 16px;
+    padding: 0 20px;
+  }
+  .ld-zero-btn {
+    width: 100%;
+    font-size: 16px;
+    padding: 16px 24px;
+  }
+
+  .ld-app {
+    padding: 60px 0 0;
+  }
+  .ld-app-grid {
+    gap: 28px;
+  }
+  .ld-app-body {
+    gap: 18px;
+  }
+  .ld-app-body h2,
+  .ld-split-head h2,
+  .ld-plans-head h2,
+  .ld-shield-body h2,
+  .ld-docs-head h2 {
+    font-size: 32px;
+  }
+  .ld-app-body p,
+  .ld-split-head p,
+  .ld-plans-head p,
+  .ld-docs-head p {
+    font-size: 16px;
+  }
+  .ld-app-stores {
+    width: 100%;
+    gap: 10px;
+  }
+  .ld-app-stores .btn {
+    flex: 1;
+    padding: 13px 12px;
+    font-size: 14px;
+  }
+  .ld-app-halo {
+    width: 420px;
+    height: 420px;
+  }
+
+  .ld-split {
+    padding: 60px 0;
+  }
+  .ld-split-in {
+    gap: 30px;
+  }
+  .ld-split-head {
+    gap: 16px;
   }
   .ld-split-cards {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .ld-split-card {
+    padding: 20px 20px;
+  }
+  .ld-split-card h3 {
+    font-size: 18px;
+  }
+  .ld-split-card p {
+    font-size: 15px;
+  }
+  .ld-split-note {
+    padding: 22px 22px;
+    gap: 16px;
+  }
+  .ld-split-note span {
+    font-size: 16px;
+  }
+  .ld-split-note-btn {
+    width: 100%;
+  }
+  /* Декоративные значки на телефоне только мешают тексту. */
+  .ld-split-deco {
+    display: none;
+  }
+
+  .ld-plans {
+    padding: 60px 0;
+  }
+  .ld-plans-in {
+    gap: 28px;
+  }
+  .ld-plans-ribbon {
+    display: none;
+  }
+  .ld-plan {
+    padding: 26px 22px;
+    gap: 16px;
+  }
+  .ld-plan-sum {
+    font-size: 40px;
+  }
+  /* Выделенный тариф на телефоне не увеличиваем: он вылезал бы за край. */
+  .ld-plan-featured,
+  .ld-plan-featured:hover {
+    transform: none;
+  }
+  .ld-plan:hover {
+    transform: none;
+  }
+
+  .ld-shield {
+    padding: 60px 0;
+  }
+  .ld-shield-grid {
+    gap: 30px;
+  }
+  .ld-shield-body {
+    gap: 22px;
+  }
+  .ld-shield-list {
+    gap: 18px;
+  }
+  .ld-shield-list h3 {
+    font-size: 18px;
+  }
+  .ld-shield-list p {
+    font-size: 15px;
+  }
+  .ld-shield-btn {
+    width: 100%;
+  }
+  .ld-shield-art {
+    min-height: 0;
+  }
+  .ld-shield-obj {
+    width: 240px;
+  }
+  .ld-shield-halo {
+    width: 260px;
+    height: 260px;
+  }
+
+  .ld-devices {
+    padding: 40px 0;
+  }
+  .ld-devices-in {
+    gap: 18px;
+  }
+  .ld-devices-body h3 {
+    font-size: 21px;
+  }
+  .ld-devices-body p {
+    font-size: 15px;
+  }
+  .ld-devices-tags span {
+    padding: 9px 16px;
+    font-size: 14px;
+  }
+
+  .ld-docs {
+    padding: 60px 0 64px;
+  }
+  .ld-docs-in {
+    gap: 26px;
+  }
+  .ld-docs-ribbon {
+    display: none;
+  }
+  .ld-docs-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .ld-docs-card {
+    padding: 20px 20px;
+  }
+  .ld-docs-title {
+    font-size: 18px;
+  }
+  .ld-docs-sub {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 400px) {
+  .ld-hero-body h1 {
+    font-size: 34px;
+  }
+  .ld-features-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .ld-zero-num {
+    font-size: 76px;
+  }
+  .ld-zero h2,
+  .ld-app-body h2,
+  .ld-split-head h2,
+  .ld-plans-head h2,
+  .ld-shield-body h2,
+  .ld-docs-head h2 {
+    font-size: 28px;
   }
 }

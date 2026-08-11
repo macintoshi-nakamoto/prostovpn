@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Picture } from "./Picture.jsx";
 import "./site-footer.css";
 
 /** Подвал лендинга: навигация, контакт поддержки, копирайт. Из макета. */
@@ -6,7 +7,7 @@ export function SiteFooter() {
   return (
     <footer className="sf">
       <div className="wrap sf-in">
-        <img className="sf-logo" src="/assets/logo.png" alt="PROSTO" />
+        <Picture className="sf-logo" src="/assets/logo.png" alt="PROSTO" />
 
         <div className="sf-cols">
           <div>
@@ -30,11 +31,11 @@ export function SiteFooter() {
           </div>
           <div className="sf-stores">
             <Link to="/login" className="btn btn-dark sf-store">
-              <img src="/assets/ic-appstore.png" alt="" />
+              <Picture src="/assets/ic-appstore.png" />
               App Store
             </Link>
             <Link to="/login" className="btn btn-dark sf-store">
-              <img src="/assets/ic-googleplay.png" alt="" />
+              <Picture src="/assets/ic-googleplay.png" />
               Google Play
             </Link>
           </div>

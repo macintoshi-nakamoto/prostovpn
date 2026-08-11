@@ -443,18 +443,165 @@
   .ac-plan-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .ac-tabs {
+}
+
+/* ── Телефон ────────────────────────────────────────────────────────────────
+ *
+ * Вкладки здесь раньше просто прятались — и в «Подписку» с телефона было не
+ * попасть вовсе. Теперь они переезжают под шапку отдельной строкой с
+ * горизонтальной прокруткой: три раздела в 360 точек не помещаются, а
+ * скрывать их нельзя.
+ */
+@media (max-width: 760px) {
+  .ac-header {
+    border-bottom-left-radius: 28px;
+    border-bottom-right-radius: 28px;
+  }
+  .ac-header-in {
+    height: 62px;
+    gap: 12px;
+  }
+  .ac-logo img {
+    height: 17px;
+  }
+  /* Имя учётки прячем: в шапке телефона важнее логотип и меню. */
+  .ac-user-btn {
+    font-size: 0;
+    gap: 0;
+    padding: 4px;
+  }
+  .ac-user-btn .ac-avatar {
+    font-size: 14px;
+  }
+  .ac-caret {
     display: none;
   }
-}
-@media (max-width: 560px) {
+
+  .ac-tabs {
+    order: 3;
+    width: 100%;
+    margin: 0 -16px;
+    padding: 0 16px 12px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .ac-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .ac-tabs button {
+    flex: none;
+    white-space: nowrap;
+    font-size: 14px;
+    padding: 9px 14px;
+  }
+  .ac-header-in {
+    flex-wrap: wrap;
+    height: auto;
+    padding-top: 12px;
+  }
+
+  .ac-main {
+    padding-top: 26px;
+    padding-bottom: 56px;
+    gap: 18px;
+  }
   .ac-title h1 {
-    font-size: 32px;
+    font-size: 30px;
+  }
+  .ac-title p {
+    font-size: 15px;
+  }
+
+  .ac-hero {
+    padding: 24px 22px;
+    border-radius: 24px;
+    gap: 18px;
   }
   .ac-hero-plan {
+    font-size: 24px;
+  }
+  .ac-hero-sub {
+    font-size: 15px;
+  }
+  .ac-hero-btn {
+    width: 100%;
+    padding: 15px 20px;
+  }
+
+  .ac-stat {
+    padding: 20px 22px;
+  }
+  .ac-stat-v {
     font-size: 26px;
   }
+  .ac-stat-mono {
+    font-size: 19px;
+  }
+
   .ac-card {
-    padding: 24px 20px;
+    padding: 22px 18px;
+    border-radius: 20px;
+  }
+  .ac-card h2 {
+    font-size: 19px;
+  }
+
+  .ac-plan-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 22px 18px;
+    gap: 18px;
+  }
+  .ac-plan-v {
+    font-size: 19px;
+  }
+  .ac-renew {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ac-renew-btn {
+    width: 100%;
+  }
+
+  /* Таблица платежей в три колонки на телефоне не читается: строки
+     превращаются в карточки, заголовок таблицы прячется. */
+  .ac-pay-head {
+    display: none;
+  }
+  .ac-pay-row {
+    grid-template-columns: 1fr auto;
+    gap: 4px 12px;
+    padding: 14px 0;
+  }
+  .ac-pay-desc {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 14px;
+  }
+  .ac-pay-sum {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    font-size: 17px;
+  }
+
+  .ac-device {
+    padding: 14px 16px;
+  }
+  .ac-menu {
+    right: 0;
+    min-width: 200px;
+  }
+}
+
+@media (max-width: 420px) {
+  .ac-stats {
+    gap: 12px;
+  }
+  .ac-plan-summary {
+    grid-template-columns: 1fr;
+  }
+  .ac-title h1 {
+    font-size: 26px;
   }
 }

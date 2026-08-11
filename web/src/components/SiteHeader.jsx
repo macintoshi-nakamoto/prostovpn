@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { Picture } from "./Picture.jsx";
 import { useSession } from "../lib/session.jsx";
 import { useScrolled } from "../lib/hooks";
 import "./site-header.css";
@@ -37,7 +38,7 @@ export function SiteHeader() {
     <header className={`sh${scrolled ? " sh-solid" : ""}`}>
       <div className="wrap sh-in">
         <Link to="/" className="sh-logo" onClick={toTop}>
-          <img src="/assets/logo.png" alt="PROSTO" />
+          <Picture src="/assets/logo.png" alt="PROSTO" />
         </Link>
         <nav className="sh-nav">
           <a href={section("speed")}>Скорость</a>

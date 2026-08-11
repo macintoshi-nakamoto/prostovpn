@@ -8,9 +8,13 @@
   gap: 56px;
 }
 .sf-logo {
+  align-self: flex-start;
+  display: block;
+}
+.sf-logo img {
   height: 22px;
   width: auto;
-  align-self: flex-start;
+  display: block;
 }
 .sf-cols {
   display: grid;
@@ -52,11 +56,14 @@
  * выглядели кривыми. Поэтому обе кладём в одинаковую квадратную коробку и
  * вписываем целиком: занимаемое место совпадает, рисунок не искажается.
  */
+.sf-store picture {
+  display: flex;
+  flex: none;
+}
 .sf-store img {
   width: 22px;
   height: 22px;
   object-fit: contain;
-  flex: none;
 }
 .sf-contact {
   display: flex;
@@ -101,5 +108,46 @@
   .sf-cols {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 28px 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sf {
+    padding: 52px 0 40px;
+  }
+  .sf-in {
+    gap: 32px;
+  }
+  .sf-cols {
+    gap: 24px 16px;
+    font-size: 15px;
+  }
+  .sf-cols > div {
+    gap: 14px;
+  }
+  /* Кнопки сторов занимают всю ширину столбца — так в них легче попасть. */
+  .sf-stores {
+    grid-column: 1 / -1;
+    flex-direction: row;
+  }
+  .sf-store {
+    width: auto;
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 14px;
+    justify-content: center;
+  }
+  .sf-contact a {
+    font-size: 18px;
+  }
+  .sf-contact span {
+    font-size: 14px;
+  }
+  .sf-bottom {
+    gap: 14px;
+    font-size: 14px;
+  }
+  .sf-bottom a {
+    margin-left: 16px;
   }
 }

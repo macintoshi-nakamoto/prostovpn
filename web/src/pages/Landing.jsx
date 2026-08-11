@@ -4,6 +4,7 @@ import { SiteHeader } from "../components/SiteHeader.jsx";
 import { SiteFooter } from "../components/SiteFooter.jsx";
 import { Reveal, ArtImage } from "../components/Reveal.jsx";
 import { HeroOrbit } from "../components/HeroOrbit.jsx";
+import { Picture } from "../components/Picture.jsx";
 import { useTilt } from "../lib/hooks";
 import { api } from "../lib/api";
 import { moneyFromKopecks } from "../lib/format";
@@ -244,11 +245,11 @@ export function Landing() {
             </p>
             <div className="ld-app-stores">
               <Link to="/login" className="btn btn-dark ld-store">
-                <img src="/assets/ic-appstore.png" alt="" />
+                <Picture src="/assets/ic-appstore.png" />
                 App Store
               </Link>
               <Link to="/login" className="btn btn-dark ld-store">
-                <img src="/assets/ic-googleplay.png" alt="" />
+                <Picture src="/assets/ic-googleplay.png" />
                 Google Play
               </Link>
             </div>

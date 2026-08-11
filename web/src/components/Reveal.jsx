@@ -64,19 +64,24 @@ export function ArtImage({
   появление на самой картинке. На одном элементе последнее объявленное
   затирало бы остальные.
   */
+  const webp = src.replace(/\.png$/i, ".webp");
+
   return (
     <span ref={parallax} className={`art${className ? ` ${className}` : ""}`}>
       <span className={float ? "art-float" : "art-still"}>
-        <img
-          ref={reveal}
-          data-reveal="art"
-          src={src}
-          alt={alt}
-          className="art-img"
-          style={{ transitionDelay: delay ? `${delay}ms` : undefined }}
-          loading="lazy"
-          {...rest}
-        />
+        <picture>
+          {webp !== src && <source srcSet={webp} type="image/webp" />}
+          <img
+            ref={reveal}
+            data-reveal="art"
+            src={src}
+            alt={alt}
+            className="art-img"
+            style={{ transitionDelay: delay ? `${delay}ms` : undefined }}
+            loading="lazy"
+            {...rest}
+          />
+        </picture>
       </span>
     </span>
   );

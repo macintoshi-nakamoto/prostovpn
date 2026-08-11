@@ -244,26 +244,79 @@
   padding: 0;
 }
 
+/* ── Телефон ──────────────────────────────────────────────────────────────────
+ *
+ * Рассказ о кабинете с заголовком и списком занимал на телефоне почти весь
+ * первый экран, и до полей входа приходилось прокручивать. Вместо него —
+ * узкая оранжевая шапка со скруглением внизу и логотипом по центру: она
+ * держит фирменный цвет, а форма оказывается сразу перед глазами.
+ */
 @media (max-width: 900px) {
   .lg-root {
     grid-template-columns: 1fr;
+    background: var(--bg-soft);
   }
   .lg-side {
     min-height: 0;
-    border-radius: 0 0 36px 36px;
-    padding: 40px 32px 44px;
-    gap: 34px;
+    border-radius: 0 0 28px 28px;
+    padding: 0 20px;
+    height: 72px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
   }
-  .lg-side-body h1 {
-    font-size: 40px;
-  }
-  .lg-side-list {
+  /* Текст и подпись помощи на телефоне не нужны — остаётся только знак. */
+  .lg-side-body,
+  .lg-side-help,
+  .lg-side-glow {
     display: none;
   }
+  .lg-side-logo img {
+    height: 20px;
+  }
+
   .lg-panel {
-    padding: 36px 20px 60px;
+    padding: 26px 16px 44px;
+    align-items: flex-start;
   }
   .lg-card {
-    padding: 32px 26px 30px;
+    padding: 26px 20px 24px;
+    border-radius: 24px;
+    gap: 20px;
+    box-shadow: 0 12px 34px rgba(20, 25, 35, 0.07);
+  }
+  .lg-head h2 {
+    font-size: 26px;
+  }
+  .lg-head p {
+    font-size: 15px;
+  }
+  .lg-tabs button {
+    padding: 11px 14px;
+    font-size: 14.5px;
+  }
+  /* 16 точек в поле ввода — граница, ниже которой iOS увеличивает страницу
+     при фокусе. Оставляем ровно её. */
+  .lg-field input {
+    font-size: 16px;
+    padding: 14px 15px;
+  }
+  .lg-pass input {
+    padding-right: 88px;
+  }
+  .lg-submit {
+    font-size: 16px;
+    padding: 16px 22px;
+  }
+}
+
+@media (max-width: 380px) {
+  .lg-card {
+    padding: 22px 16px 20px;
+  }
+  .lg-head h2 {
+    font-size: 24px;
   }
 }

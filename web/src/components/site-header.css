@@ -20,6 +20,9 @@
   justify-content: space-between;
   gap: 32px;
 }
+.sh-logo picture {
+  display: block;
+}
 .sh-logo img {
   height: 19px;
   width: auto;
@@ -27,6 +30,7 @@
   filter: brightness(0) invert(1);
   transition: filter 0.24s ease;
 }
+/* Над оранжевым героем логотип белый, на белой шапке — обычный. */
 .sh-solid .sh-logo img {
   filter: none;
 }

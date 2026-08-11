@@ -5,6 +5,7 @@ import { api, ApiError } from "../lib/api";
 import { useDismiss } from "../lib/hooks";
 import { bytes, days, longDate, money, shortDate, ago } from "../lib/format";
 import { SetupGuide } from "../components/SetupGuide.jsx";
+import { Picture } from "../components/Picture.jsx";
 import { PasswordDialog } from "../components/PasswordDialog.jsx";
 import "./account.css";
 
@@ -60,7 +61,7 @@ export function Account() {
       <header className="ac-header">
         <div className="wrap ac-header-in">
           <Link to="/" className="ac-logo">
-            <img src="/assets/logo.png" alt="PROSTO" />
+            <Picture src="/assets/logo.png" alt="PROSTO" />
           </Link>
           <nav className="ac-tabs">
             {TABS.map((t) => (

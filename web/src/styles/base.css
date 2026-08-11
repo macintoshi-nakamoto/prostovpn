@@ -195,6 +195,10 @@ img[data-revealed] {
 .art-float {
   animation: floatY 9s ease-in-out infinite;
 }
+/* <picture> строчный по умолчанию — иначе под картинкой остаётся зазор. */
+.art picture {
+  display: block;
+}
 .art-img {
   display: block;
   width: 100%;

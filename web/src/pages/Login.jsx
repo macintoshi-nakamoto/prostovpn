@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
+import { Picture } from "../components/Picture.jsx";
 import { ApiError } from "../lib/api";
 import "./login.css";
 
@@ -87,7 +88,7 @@ export function Login() {
       <aside className="lg-side">
         <div className="lg-side-glow" aria-hidden="true" />
         <Link to="/" className="lg-side-logo">
-          <img src="/assets/logo.png" alt="PROSTO" />
+          <Picture src="/assets/logo.png" alt="PROSTO" />
         </Link>
         <div className="lg-side-body">
           <h1>

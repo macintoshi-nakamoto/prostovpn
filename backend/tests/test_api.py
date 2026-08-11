@@ -573,3 +573,89 @@ def test_server_without_config_source_is_rejected(client, auth):
     )
     assert r.status_code == 400
     assert "шаблон" in r.json()["detail"]
+
+
+# --- регистрация с сайта ------------------------------------------------------
+
+
+def test_register_creates_account_and_signs_in(client):
+    """
+    Регистрация сразу пускает внутрь.
+
+    Отдельный вход после неё — лишний ввод тех же логина и пароля, поэтому
+    ответ здесь такой же, как у /login: с токеном и подпиской.
+    """
+    r = client.post(
+        "/api/v1/register",
+        json={"login": "novichok", "password": "dovolno-dlinnyi", "email": "n@example.com"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["token"]
+    assert body["account"]["login"] == "novichok"
+    # Пробный тариф выдаётся сразу, иначе заходить некуда.
+    assert body["subscription"]["active"] is True
+
+    # Токен настоящий: с ним работают обычные маршруты приложения.
+    me = client.get("/api/v1/servers", headers={"Authorization": f"Bearer {body['token']}"})
+    assert me.status_code == 200
+
+
+def test_register_rejects_taken_login(client):
+    payload = {"login": "zanyato", "password": "dovolno-dlinnyi"}
+    assert client.post("/api/v1/register", json=payload).status_code == 201
+    second = client.post("/api/v1/register", json=payload)
+    assert second.status_code == 400
+    # Код причины нужен приложению: текст панели русский, а интерфейс бывает
+    # английским.
+    assert second.headers.get("X-Error-Code") == "login_taken"
+
+
+def test_register_rejects_short_password(client):
+    r = client.post("/api/v1/register", json={"login": "korotysh", "password": "1234567"})
+    assert r.status_code == 422
+
+
+def test_register_rejects_login_with_spaces(client):
+    r = client.post("/api/v1/register", json={"login": "два слова", "password": "dovolno-dlinnyi"})
+    assert r.status_code == 400
+    assert r.headers.get("X-Error-Code") == "login_invalid"
+
+
+def test_register_is_rate_limited_per_address(client):
+    """
+    Бесплатный доступ без ограничения раздаётся одним скриптом в сто рук.
+
+    Лимит наполняем сами, а не гоняем регистрацию по кругу: боевое число
+    большое, а в прогоне оно поднято ещё выше, чтобы не мешать остальным
+    тестам. Проверяем здесь именно то, что маршрут смотрит на ограничитель.
+    """
+    from app import services
+    from app.config import settings
+    from app.db import SessionLocal
+
+    config = settings()
+    # Адрес подставляем заголовком, как это делает nginx: у TestClient хост
+    # «testclient», и проверку формата в client_ip он не проходит — все
+    # запросы прогона иначе считались бы под одним ключом «unknown».
+    address = "203.0.113.77"
+    key = f"signup:{address}"
+    with SessionLocal() as db:
+        for _ in range(config.signup_max_per_ip):
+            services.ratelimit.hit(
+                db,
+                key,
+                limit=config.signup_max_per_ip,
+                window_minutes=config.signup_window_minutes,
+                lock_minutes=config.signup_window_minutes,
+            )
+
+    r = client.post(
+        "/api/v1/register",
+        json={"login": "perebor", "password": "dovolno-dlinnyi"},
+        headers={"X-Forwarded-For": address},
+    )
+    assert r.status_code == 429, r.text
+    assert r.headers.get("X-Error-Code") == "throttled"
+    # Приложению нужно знать, когда можно повторить, а не только что нельзя.
+    assert r.headers.get("Retry-After")

@@ -109,9 +109,12 @@ def create_user(
         # Логин набирают руками в приложении: кириллица и пробелы в нём
         # оборачиваются жалобой «не могу войти», а причина не видна.
         if not all(ch.isascii() and (ch.isalnum() or ch in "-_.") for ch in login):
-            raise PanelError("в логине допустимы латинские буквы, цифры, дефис, точка и подчёркивание")
+            raise PanelError(
+                "в логине допустимы латинские буквы, цифры, дефис, точка и подчёркивание",
+                "login_invalid",
+            )
         if db.scalar(select(User).where(User.login == login)):
-            raise PanelError(f"пользователь «{login}» уже есть")
+            raise PanelError(f"пользователь «{login}» уже есть", "login_taken")
         password = password or generate_password()
     else:
         login, generated = generate_credentials(db, prefix=(name or "user"))

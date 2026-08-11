@@ -42,5 +42,9 @@ os.environ.update(
         # десятка. Сам ограничитель проверяется отдельным тестом на своих
         # числах — см. test_order_rate_limit_mechanism.
         "PANEL_ORDER_MAX_PER_HOUR": "500",
+        # То же и с регистрацией: учёток за прогон заводится больше, чем
+        # разрешает боевой лимит на один адрес, а сам ограничитель проверяется
+        # отдельным тестом — см. test_register_is_rate_limited_per_address.
+        "PANEL_SIGNUP_MAX_PER_IP": "500",
     }
 )

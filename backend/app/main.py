@@ -208,7 +208,15 @@ async def _json_errors(request: Request, exc: StarletteHTTPException):
         site = _site_dir()
         if site is not None and exc.status_code == 404 and (site / "404.html").is_file():
             return FileResponse(site / "404.html", status_code=404)
-    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    # Заголовки ответа переносим как есть. Ответ здесь собирается заново, и
+    # без этой строки терялось всё, что маршрут к ошибке приложил: Retry-After
+    # у ограничителя частоты и X-Error-Code, по которому приложение выбирает
+    # свой перевод вместо русского текста панели.
+    return JSONResponse(
+        {"detail": exc.detail},
+        status_code=exc.status_code,
+        headers=getattr(exc, "headers", None),
+    )
 
 
 @app.get("/healthz", include_in_schema=False)

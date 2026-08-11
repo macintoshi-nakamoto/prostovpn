@@ -357,6 +357,103 @@ def login(
     )
 
 
+class RegisterRequest(BaseModel):
+    """
+    Регистрация с сайта.
+
+    Пароль длиннее, чем требует вход: там его выдаёт панель и он заведомо
+    стойкий, а здесь человек придумывает сам.
+    """
+
+    login: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=8, max_length=128)
+    email: str | None = Field(default=None, max_length=254)
+    platform: str | None = Field(default=None, max_length=32)
+    app_version: str | None = Field(default=None, max_length=32)
+    device_id: str | None = Field(default=None, max_length=64)
+    device_name: str | None = Field(default=None, max_length=96)
+
+
+@router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)
+def register(
+    body: RegisterRequest,
+    request: Request,
+    background: BackgroundTasks,
+    db: OrmSession = Depends(get_db),
+) -> LoginResponse:
+    """
+    Заводит учётку и сразу пускает внутрь.
+
+    Отвечает тем же, чем вход: сайту и приложению после регистрации не нужен
+    второй запрос, а человеку — второй ввод тех же логина и пароля.
+
+    Тариф — пробный, из настроек. Оплаченные учётки по-прежнему создаёт
+    только вебхук платёжного провайдера: бесплатной регистрацией нельзя
+    получить то, за что платят.
+    """
+    config = settings()
+    if not config.signup_enabled:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "регистрация сейчас закрыта",
+            headers={"X-Error-Code": "signup_closed"},
+        )
+
+    ip = client_ip(request)
+    verdict = services.ratelimit.hit(
+        db,
+        f"signup:{ip or 'unknown'}",
+        limit=config.signup_max_per_ip,
+        window_minutes=config.signup_window_minutes,
+        lock_minutes=config.signup_window_minutes,
+    )
+    if not verdict.allowed:
+        log.warning("регистрация заперта для %s", ip)
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "с этого адреса уже заводили аккаунты — попробуйте позже",
+            headers={"Retry-After": str(verdict.retry_after), "X-Error-Code": "throttled"},
+        )
+
+    try:
+        user, _password, _warnings = services.create_user(
+            db,
+            login=body.login,
+            password=body.password,
+            plan_code=config.signup_plan_code,
+            email=body.email,
+            note="регистрация с сайта",
+        )
+    except services.PanelError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers=_error_code_header(exc)
+        ) from exc
+
+    # Сессию открываем тем же кодом, что и обычный вход: там живут учёт
+    # устройств, лимит по тарифу и запись в журнал.
+    _user, token = services.authenticate(
+        db,
+        login=body.login,
+        password=body.password,
+        platform=body.platform,
+        app_version=body.app_version,
+        ip=ip,
+        device_id=body.device_id,
+        device_name=body.device_name,
+    )
+    session = services.session_for_token(db, token)
+    assert session is not None
+    servers = _servers_out(db, user, background)
+    return LoginResponse(
+        token=token,
+        expires_at=session.expires_at,
+        account=AccountOut(public_id=user.public_id, login=user.login, name=user.name),
+        subscription=_subscription_out(user),
+        servers=servers,
+        notice=_notice_for(db, user, servers),
+    )
+
+
 @router.get("/servers", response_model=ServersResponse)
 def servers(
     request: Request,

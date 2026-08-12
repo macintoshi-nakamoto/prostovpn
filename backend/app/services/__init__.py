@@ -14,6 +14,7 @@ from .auth import (
     admin_session_for_token,
     authenticate,
     authenticate_admin,
+    reset_login_throttle,
     revoke_admin_session,
     session_for_token,
     touch,
@@ -63,6 +64,7 @@ __all__ = [
     # auth
     "LoginThrottled",
     "authenticate",
+    "reset_login_throttle",
     "authenticate_admin",
     "admin_session_for_token",
     "revoke_admin_session",

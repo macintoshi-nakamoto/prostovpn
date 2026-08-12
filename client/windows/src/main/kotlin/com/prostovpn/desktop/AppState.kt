@@ -609,11 +609,20 @@ class AppState(private val scope: CoroutineScope) {
         val token = panelToken
         if (token.isEmpty()) return
         scope.launch {
-            PanelApi.servers(token)
+            val result = PanelApi.servers(token)
+            // Пока запрос был в пути (до 15 секунд), человек мог выйти и даже
+            // войти заново под другим токеном. Применять ответ старого
+            // токена в обоих случаях нельзя: при выходе он воскресил бы
+            // стёртую сессию (снова записал бы конфиг в prefs, вернул бы с
+            // экрана входа на главный без токена), а после нового входа —
+            // подменил бы свежие данные протухшими. Ответ актуален, только
+            // если токен всё ещё тот же.
+            if (panelToken != token) return@launch
+            result
                 .onSuccess { session ->
                     // Страны были, а теперь их нет — доступ закрыли, пока
                     // приложение работало: кончился трафик или срок.
-                    val lostAccess = session.servers.isEmpty() && panelServers.isNotEmpty()
+                    val lostAccess = session.servers.isEmpty() && phase != Phase.OFF
                     applySubscription(session)
                     applyPanelServers(session.servers)
                     if (lostAccess) dropTunnelWithoutAccess()

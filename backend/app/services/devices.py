@@ -90,7 +90,13 @@ def disconnect(db: OrmSession, session: Session, reason: str = "") -> list[str]:
             except Exception as exc:  # noqa: BLE001 — причина нужна администратору
                 problems.append(f"{server.name}: {exc}")
                 log.error("пир устройства %s не снят с узла %s: %s", session.id, server.name, exc)
-                continue
+                # НЕ continue: ключ всё равно отзываем. Это не «оставить
+                # доступ», а передать снятие сверке reconcile_peers — она
+                # ходит по узлам регулярно и снимает пира, которому в базе
+                # не соответствует живой ключ. Оставь мы ключ живым (как было
+                # с continue), reconcile увидел бы его в known и пира НЕ снял
+                # бы: отключённое устройство — например, украденный телефон —
+                # осталось бы в VPN навсегда, стоило узлу разок не ответить.
         key.revoked_at = now
     db.commit()
 

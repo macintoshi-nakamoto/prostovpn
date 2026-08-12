@@ -202,12 +202,100 @@ def test_device_without_its_own_peer_falls_back_to_the_account_key(server_id, no
         assert [s.config for s in mine] == [shared.config], "устройство осталось без конфига"
 
 
-def test_unreachable_node_still_kills_the_token(server_id, node, monkeypatch):
+def test_parallel_traffic_sync_does_not_double_count(server_id, node, monkeypatch):
     """
-    Узел не ответил — сессия всё равно погашена, а причина названа.
+    Два обхода одного узла разом не задваивают расход.
+
+    Фоновый цикл и кнопка «Синхронизировать» в панели — два пути к одному
+    sync_server_traffic из разных сессий. Раньше расход считался
+    read-modify-write по ORM-объекту: оба читали прежний замер, оба брали
+    одну и ту же дельту и оба прибавляли — гигабайт превращался в два.
+    Замок на сервер сериализует обход: второй заход видит уже записанный
+    замер, его дельта — ноль.
+    """
+    import threading
+
+    from app.models import GB
+    from app.services import billing, traffic
+
+    user_id = _user("dev-traffic-race")
+    with SessionLocal() as db:
+        user, server = db.get(User, user_id), db.get(Server, server_id)
+        billing.grant_subscription(db, user, days=30)
+        key = keys_service.issue_key(db, user, server, device_id="counter")
+        public_key = key.public_key
+
+    # Узел рапортует гигабайт принятого. Формат awg dump: первая строка —
+    # интерфейс (её отбрасывают по позиции), дальше по восемь полей на пира.
+    dump = (
+        "iface_pubkey\t(none)\toff\toff\t0\t0\t0\toff\n"
+        f"{public_key}\t(none)\t10.30.30.9:51820\t10.8.0.2/32\t0\t{GB}\t0\t25\n"
+    )
+    monkeypatch.setattr(traffic.provisioning, "run_over_ssh", lambda *_a, **_k: dump)
+
+    # Два одновременных обхода в разных сессиях, синхронный старт барьером.
+    barrier = threading.Barrier(2)
+
+    def run_sync():
+        barrier.wait()
+        with SessionLocal() as db:
+            traffic.sync_server_traffic(db, db.get(Server, server_id))
+
+    threads = [threading.Thread(target=run_sync) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    with SessionLocal() as db:
+        used = db.get(User, user_id).traffic_used_bytes
+    assert used == GB, f"расход задвоился: {used} вместо {GB}"
+
+
+def test_login_returns_the_peer_provisioned_during_that_same_login(server_id, node):
+    """
+    Свежий пир, заведённый на входе, попадает в ответ этого же входа.
+
+    ensure_keys добавляет UserKey по внешнему ключу, не трогая уже
+    загруженную коллекцию user.keys, а сессия живёт с expire_on_commit=False
+    — коммит внутри ensure_keys её не перечитывает. Без явного сброса кэша
+    _servers_out итерировал старый список без только что созданного пира и
+    отдавал устройству пустой список стран ровно на входе, когда пир уже
+    готов. Проверяем именно этот путь: чистое устройство, вход, непустой
+    список.
+    """
+    from app.api_client import _provision_for_login, _servers_out
+    from app.services import billing
+
+    user_id = _user("dev-fresh-login")
+    session_id = _session(user_id, "brand-new")
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        billing.grant_subscription(db, user, days=30)
+        # Ключей на этом узле у устройства пока нет — их заведёт вход.
+
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        session = db.get(Session, session_id)
+        _provision_for_login(db, user, session)
+        out = _servers_out(db, user, session)
+        mine = [s for s in out if s.id == server_id]
+        assert mine, "вход завёл пира, но список серверов на входе оказался пустым"
+        assert mine[0].config, "сервер в списке есть, а конфига нет"
+
+
+def test_unreachable_node_still_kills_the_token_and_revokes_the_key(server_id, node, monkeypatch):
+    """
+    Узел не ответил — сессия погашена, а ключ ВСЁ РАВНО отозван.
 
     Оставлять живой токен из-за недоступного узла нельзя: это худший из
     исходов, доступ остаётся и в приложении, и в туннеле.
+
+    Ключ обязан стать отозванным, даже когда снять пира по SSH не вышло.
+    Иначе сверка reconcile_peers считает его живым и пира не снимает — и
+    отключённое устройство (например, украденный телефон) остаётся в VPN
+    навсегда, стоило узлу разок не ответить. Отзыв ключа передаёт снятие
+    сверке: она увидит на узле пира без живого ключа и снимет его.
     """
     user_id = _user("dev-offline")
     session_id = _session(user_id, "laptop")
@@ -224,3 +312,50 @@ def test_unreachable_node_still_kills_the_token(server_id, node, monkeypatch):
         problems = devices_service.disconnect(db, db.get(Session, session_id))
         assert problems and "dev-node" in problems[0]
         assert db.get(Session, session_id).revoked_at is not None
+
+    with SessionLocal() as db:
+        key = db.scalar(
+            select(UserKey).where(UserKey.user_id == user_id, UserKey.device_id == "laptop")
+        )
+        assert key.revoked_at is not None, "ключ остался живым — reconcile не снимет пира, доступ вечен"
+
+
+def test_background_provision_does_not_resurrect_an_unlinked_device(server_id, node):
+    """
+    Фоновая доза ключей не воскрешает пира отвязанного устройства.
+
+    Сценарий гонки: /servers заметил недостающий ключ и поставил фоновую
+    задачу на это устройство; в те же секунды человек отвязал устройство в
+    кабинете (сессия погашена, ключи отозваны). Раньше фоновая задача видела
+    только «доступ у аккаунта есть» и заводила пира заново — отключённый
+    телефон возвращался в VPN. Теперь задача проверяет, что у устройства
+    ещё есть живая сессия.
+    """
+    from app.api_client import _provision_missing_keys
+    from app.services import billing
+
+    user_id = _user("dev-resurrect")
+    session_id = _session(user_id, "ghost")
+    with SessionLocal() as db:
+        user, server = db.get(User, user_id), db.get(Server, server_id)
+        billing.grant_subscription(db, user, days=30)
+        keys_service.issue_key(db, user, server, device_id="ghost")
+
+    # Отвязка устройства: сессия погашена, пир снят, ключ отозван.
+    with SessionLocal() as db:
+        devices_service.disconnect(db, db.get(Session, session_id))
+    assert node.peers == set(), "после отвязки пира на узле быть не должно"
+
+    # Фоновая задача, поставленная до отвязки, выполняется уже после неё.
+    _provision_missing_keys(user_id, "ghost")
+
+    assert node.peers == set(), "фоновая доза воскресила пира отвязанного устройства"
+    with SessionLocal() as db:
+        live = db.scalars(
+            select(UserKey).where(
+                UserKey.user_id == user_id,
+                UserKey.device_id == "ghost",
+                UserKey.revoked_at.is_(None),
+            )
+        ).all()
+        assert live == [], "у отвязанного устройства снова появился живой ключ"

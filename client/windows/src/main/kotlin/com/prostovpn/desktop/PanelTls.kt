@@ -89,20 +89,38 @@ object PanelTls {
      *
      * Имя хоста у самоподписанного сертификата — обычно IP-адрес, а Java
      * ищет его в SAN и в CN не смотрит. Поэтому для соединений, принятых
-     * нашим сертификатом, сверяем хост с адресом панели, а не с полями
-     * сертификата.
+     * ИМЕННО нашим вложенным сертификатом, сверяем хост с адресом панели, а
+     * не с полями сертификата.
+     *
+     * Обход проверки имени применяется только к нашему сертификату, и это не
+     * придирка. Голое `hostname == panelHost` было дырой: все запросы и так
+     * идут на panelHost, поэтому условие истинно всегда, а срабатывало оно и
+     * для любого валидного сертификата публичного CA. Атакующий во враждебной
+     * сети предъявлял валидный сертификат на свой домен — системная проверка
+     * цепочки его принимала, проверка имени падала (SAN не совпал), но фолбэк
+     * `hostname == panelHost` возвращал true, и логин, пароль и токен уходили
+     * ему. Теперь фолбэк требует, чтобы предъявленный сертификат был байт в
+     * байт нашим вложенным: у чужого сертификата этого совпадения нет.
      */
     fun apply(connection: java.net.URLConnection) {
         if (connection !is HttpsURLConnection) return
         val factory = socketFactory ?: return
+        val ourCert = pinned ?: return
         connection.sslSocketFactory = factory
 
         val panelHost = runCatching { URL(PanelApi.baseUrl).host }.getOrNull()
         connection.setHostnameVerifier { hostname, session ->
-            // Сначала обычная проверка; если не прошла — соединение принято
-            // нашим сертификатом, и хост должен совпасть с адресом панели.
-            HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session) ||
-                (panelHost != null && hostname == panelHost)
+            // Обычная проверка имени по SAN/CN — основной путь, работает,
+            // когда у панели нормальный публичный сертификат.
+            if (HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session)) {
+                return@setHostnameVerifier true
+            }
+            // Не прошла — принимаем, только если это наш вложенный сертификат
+            // и хост совпал с адресом панели. Сверяем сам сертификат, а не
+            // факт «цепочка кому-то доверена».
+            if (panelHost == null || hostname != panelHost) return@setHostnameVerifier false
+            val presented = runCatching { session.peerCertificates.firstOrNull() }.getOrNull()
+            presented is X509Certificate && presented == ourCert
         }
     }
 }

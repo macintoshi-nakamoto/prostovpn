@@ -228,8 +228,16 @@ def _provision_missing_keys(user_id: int, device_id: str) -> None:
 
     with SessionLocal() as db:
         user = db.get(User, user_id)
-        if user is not None and user.has_access():
-            services.ensure_keys(db, user, devices={device_id})
+        if user is None or not user.has_access():
+            return
+        # Устройство могли отвязать, пока задача ждала очереди: disconnect
+        # погасил сессию и отозвал ключи, а мы бы тут же завели пир заново —
+        # отключённый телефон (украденный, чужой) вернулся бы в VPN. Заводим
+        # ключ, только если у устройства ещё есть живая сессия.
+        if device_id not in user.devices():
+            log.info("фоновая выдача пропущена: устройство %s уже отвязано", device_id or "(учётки)")
+            return
+        services.ensure_keys(db, user, devices={device_id})
 
 
 def _notice_for(db: OrmSession, user: User, servers: list[ServerOut]) -> str | None:
@@ -437,6 +445,14 @@ def _provision_for_login(db: OrmSession, user: User, session: Session) -> None:
     for warning in warnings:
         log.warning("вход %s: %s", user.public_id, warning)
 
+    # Сбрасываем кэш коллекции ключей. ensure_keys добавил новые UserKey
+    # через db.add по внешнему ключу, не трогая уже загруженный user.keys, а
+    # сессия живёт с expire_on_commit=False — коммит внутри ensure_keys эту
+    # коллекцию не перечитывает. Без сброса _servers_out ниже итерирует
+    # старый список без только что созданного пира и отдаёт устройству
+    # пустой список стран — на самом входе, ровно когда пир уже готов.
+    db.expire(user, ["keys"])
+
 
 class RegisterRequest(BaseModel):
     """
@@ -509,6 +525,16 @@ def register(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, str(exc), headers=_error_code_header(exc)
         ) from exc
+
+    # Снимаем замок входа с только что заведённого логина.
+    #
+    # Человек мог несколько раз попытаться войти этим логином ДО регистрации,
+    # думая, что аккаунт есть, — и запереть бакет login-throttle на пятнадцать
+    # минут. Тогда authenticate ниже упирался в LoginThrottled уже ПОСЛЕ того,
+    # как create_user завёл учётку: 500, пользователь создан, токена нет, а
+    # повтор жалуется «логин занят». Свой собственный, только что созданный
+    # логин запирать бессмысленно — сбрасываем его счётчики.
+    services.reset_login_throttle(db, body.login, ip)
 
     # Сессию открываем тем же кодом, что и обычный вход: там живут учёт
     # устройств, лимит по тарифу и запись в журнал.

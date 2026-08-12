@@ -11,14 +11,19 @@ from __future__ import annotations
 
 import datetime as dt
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session as OrmSession
 
 from .. import provisioning
-from ..models import Provisioning, Server, TrafficSample, UserKey, utcnow
+from ..models import Provisioning, Server, TrafficSample, User, UserKey, utcnow
 
 # Интерфейс AmneziaWG на сервере — тот же, что использует provisioning.
 INTERFACE = "awg0"
+
+# Пауза перед снятием «лишнего» пира: даёт закоммититься выдаче, идущей
+# параллельно (см. reconcile_peers). Секунды, а не десятки: коммит public_key
+# в issue_key следует за awg-set почти сразу, а сверка идёт раз в минуту.
+RECONCILE_GRACE_SECONDS = 3
 
 
 # Строка пира в `awg show dump` ровно из восьми полей:
@@ -64,16 +69,48 @@ def _parse_dump(text: str) -> dict[str, dict[str, int]]:
     return peers
 
 
+# Замок на сервер: одновременный обход одного узла двумя путями (фоновый
+# цикл и кнопка «Синхронизировать» в панели) — это read-modify-write по
+# traffic_used_bytes из двух сессий. Оба читают старый расход, оба считают
+# дельту от одного и того же прежнего замера и оба прибавляют — расход
+# задваивается, а параллельный сброс при продлении затирается. Замок
+# сериализует обход конкретного узла; разные узлы друг друга не ждут.
+_server_locks: dict[int, "threading.Lock"] = {}
+_server_locks_guard = None
+
+
+def _lock_for_server(server_id: int) -> "threading.Lock":
+    global _server_locks_guard
+    import threading
+
+    if _server_locks_guard is None:
+        _server_locks_guard = threading.Lock()
+    with _server_locks_guard:
+        lock = _server_locks.get(server_id)
+        if lock is None:
+            lock = threading.Lock()
+            _server_locks[server_id] = lock
+        return lock
+
+
 def sync_server_traffic(db: OrmSession, server: Server) -> dict[str, object]:
     """
     Обновляет расход трафика по всем пирам одного сервера.
 
     Ошибку не поднимаем наверх, а записываем в сам сервер: один недоступный
     сервер не должен ронять обход остальных.
+
+    Обход одного узла сериализован замком: параллельный запуск задвоил бы
+    расход, посчитав одну и ту же дельту дважды из двух сессий.
     """
     if server.provisioning != Provisioning.SSH:
         return {"server_id": server.id, "skipped": "общий ключ — счётчиков по людям нет"}
 
+    with _lock_for_server(server.id):
+        return _sync_server_traffic_locked(db, server)
+
+
+def _sync_server_traffic_locked(db: OrmSession, server: Server) -> dict[str, object]:
     try:
         raw = provisioning.run_over_ssh(server, f"awg show {INTERFACE} dump")
     except Exception as exc:
@@ -111,7 +148,21 @@ def sync_server_traffic(db: OrmSession, server: Server) -> dict[str, object]:
             key.last_handshake_at = dt.datetime.utcfromtimestamp(peer["handshake"])
 
         if delta > 0:
-            key.user.traffic_used_bytes += delta
+            # Атомарный инкремент на уровне SQL, а не read-modify-write по
+            # ORM-объекту: замок сериализует обход узла, но расход трогает и
+            # сброс при продлении из другой сессии — пусть база складывает
+            # сама, чтобы значение не затёрлось прочитанным до сброса.
+            #
+            # synchronize_session="fetch": обновлённое значение подтягивается
+            # обратно в объект сессии. Без этого enforce_access, идущий тем же
+            # заходом (_sync_once), видел бы прежний расход и не отключил бы
+            # исчерпавшего трафик до следующего цикла.
+            db.execute(
+                update(User)
+                .where(User.id == key.user_id)
+                .values(traffic_used_bytes=User.traffic_used_bytes + delta)
+                .execution_options(synchronize_session="fetch")
+            )
             db.add(
                 TrafficSample(
                     user_id=key.user_id,
@@ -172,19 +223,41 @@ def reconcile_peers(db: OrmSession, server: Server) -> list[str]:
     except Exception:
         return []
 
-    known = {
-        key.public_key
-        for key in db.scalars(
-            select(UserKey).where(
-                UserKey.server_id == server.id, UserKey.revoked_at.is_(None)
-            )
-        )
-        if key.public_key
-    }
+    def live_public_keys() -> set[str]:
+        # Отдельная сессия на каждый снимок: с одной и той же коммит другой
+        # сессии не виден, пока текущая не завершит свою транзакцию, — а нам
+        # нужно именно свежее состояние базы между двумя чтениями.
+        from ..db import SessionLocal
+
+        with SessionLocal() as snapshot:
+            return {
+                key.public_key
+                for key in snapshot.scalars(
+                    select(UserKey).where(
+                        UserKey.server_id == server.id, UserKey.revoked_at.is_(None)
+                    )
+                )
+                if key.public_key
+            }
+
+    known = live_public_keys()
+    suspects = [pk for pk in _parse_dump(raw) if pk not in known]
+    if not suspects:
+        return []
+
+    # Грейс перед снятием: между `add_peer_over_ssh` и коммитом public_key в
+    # issue_key есть окно, где пир на узле уже есть, а в базе его ключа ещё
+    # нет. Без паузы сверка сняла бы только что выданного пира, и устройство
+    # осталось бы без доступа до следующего ensure_keys. Ждём и перечитываем
+    # базу: закоммиченный за это время ключ уходит из подозреваемых.
+    import time as _time
+
+    _time.sleep(RECONCILE_GRACE_SECONDS)
+    known_after = live_public_keys()
 
     removed: list[str] = []
-    for public_key in _parse_dump(raw):
-        if public_key in known:
+    for public_key in suspects:
+        if public_key in known_after:
             continue
         try:
             provisioning.remove_peer_over_ssh(server, public_key)
@@ -216,7 +289,6 @@ def enforce_access(db: OrmSession) -> list[str]:
 
     Возвращает описания закрытых доступов — для журнала.
     """
-    from ..models import User
     from .keys import revoke_key  # локально: иначе циклический импорт
 
     closed: list[str] = []

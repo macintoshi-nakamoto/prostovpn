@@ -661,6 +661,49 @@ def test_register_is_rate_limited_per_address(client):
     assert r.headers.get("Retry-After")
 
 
+def test_register_recovers_from_prior_login_lockout(client):
+    """
+    Регистрация не падает 500-й, если логин был заперт неудачными входами.
+
+    Человек несколько раз пробует войти под логином, которого ещё нет
+    (думает, что аккаунт есть), — и запирает бакет входа. Потом жмёт
+    «Зарегистрироваться». Раньше authenticate внутри register упирался в
+    замок УЖЕ после create_user: 500, учётка заведена, токена нет, а повтор
+    жалуется «логин занят». Теперь свой только что созданный логин
+    отпирается — регистрация проходит и сразу пускает внутрь.
+    """
+    from app.config import settings
+
+    login = "byl-zablokirovan"
+    config = settings()
+    address = "203.0.113.90"
+
+    # Запираем вход этим логином: больше лимита неудачных попыток.
+    for _ in range(config.login_max_attempts + 1):
+        client.post(
+            "/api/v1/login",
+            json={"login": login, "password": "nevernyi"},
+            headers={"X-Forwarded-For": address},
+        )
+
+    # Убеждаемся, что вход действительно заперт.
+    throttled = client.post(
+        "/api/v1/login",
+        json={"login": login, "password": "nevernyi"},
+        headers={"X-Forwarded-For": address},
+    )
+    assert throttled.status_code == 429, throttled.text
+
+    # А регистрация тем же логином с того же адреса — проходит и даёт токен.
+    r = client.post(
+        "/api/v1/register",
+        json={"login": login, "password": "dovolno-dlinnyi"},
+        headers={"X-Forwarded-For": address},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["token"]
+
+
 # --- трафик: предупреждение и отключение --------------------------------------
 
 

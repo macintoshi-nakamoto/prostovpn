@@ -82,6 +82,20 @@ def _login_ip_key(ip: str | None) -> str:
     return f"login-ip:{ip or 'unknown'}"
 
 
+def reset_login_throttle(db: OrmSession, login: str, ip: str | None) -> None:
+    """
+    Снимает замок входа с логина — по паре (адрес, логин) и по имени.
+
+    Зовётся после регистрации: свой только что созданный логин не должен
+    оставаться запертым прежними попытками войти в ещё не существующий
+    аккаунт. Счётчик по адресу (`_login_ip_key`) не трогаем — он считает
+    чужой перебор с того же адреса, и своя регистрация его обнулять не
+    вправе.
+    """
+    ratelimit.clear(db, _login_key(login, ip))
+    ratelimit.clear(db, _login_name_key(login))
+
+
 def authenticate(
     db: OrmSession,
     login: str,

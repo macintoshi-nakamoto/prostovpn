@@ -173,6 +173,35 @@ def test_disconnect_keeps_shared_key_while_someone_uses_it(server_id, node):
     assert shared.public_key not in node.peers, "последний вход ушёл, а пир остался"
 
 
+def test_device_without_its_own_peer_falls_back_to_the_account_key(server_id, node):
+    """
+    Устройство, вошедшее до появления пиров на устройство, не теряет туннель.
+
+    Ровно тот переход, ради которого написана подмена в _servers_out: сессия
+    уже есть и с device_id, а ключ у человека пока один — общий. Пустой
+    список стран в этот момент означал бы «доступ закрыт», и клиент опустил
+    бы рабочий туннель.
+    """
+    from app.api_client import _servers_out
+    from app.services import billing
+
+    user_id = _user("dev-fallback")
+    session_id = _session(user_id, "laptop")
+
+    with SessionLocal() as db:
+        user, server = db.get(User, user_id), db.get(Server, server_id)
+        billing.grant_subscription(db, user, days=30)
+        shared = keys_service.issue_key(db, user, server)
+
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        out = _servers_out(db, user, db.get(Session, session_id))
+        # Именно по этому узлу: база у прогона общая, и соседние модули
+        # заводят в ней свои серверы.
+        mine = [s for s in out if s.id == server_id]
+        assert [s.config for s in mine] == [shared.config], "устройство осталось без конфига"
+
+
 def test_unreachable_node_still_kills_the_token(server_id, node, monkeypatch):
     """
     Узел не ответил — сессия всё равно погашена, а причина названа.

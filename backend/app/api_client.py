@@ -293,13 +293,19 @@ def _servers_out(
         return []
 
     device_id = session.device_key if session is not None else ""
-    by_server = {
-        key.server_id: key
-        for key in user.keys
-        if key.revoked_at is None and (key.device_id or "") == device_id
-    }
+    by_server: dict[int, object] = {}
+    shared: dict[int, object] = {}
+    for key in user.keys:
+        if key.revoked_at is None:
+            if (key.device_id or "") == device_id:
+                by_server[key.server_id] = key
+            elif not key.device_id:
+                shared[key.server_id] = key
 
     # Чего-то не хватает — досоздадим после ответа, не задерживая человека.
+    # Считаем по своим ключам, до подмены общим: иначе устройство, которому
+    # отдали ключ учётки, выглядело бы обеспеченным и своего пира не
+    # получило бы никогда.
     if background is not None:
         missing = any(
             server.id not in by_server and server.provisioning != Provisioning.SHARED
@@ -307,6 +313,16 @@ def _servers_out(
         )
         if missing:
             background.add_task(_provision_missing_keys, user.id, device_id)
+
+    # Своего пира ещё нет — отдаём общий ключ учётки.
+    #
+    # Иначе устройство, вошедшее до того, как появились пиры на устройство,
+    # получало бы пустой список стран и роняло рабочий туннель: свой ключ
+    # создаётся в фоне и поспевает к следующему опросу, а этот ответ уже
+    # ушёл. Подмена не мешает — общий пир на узле живой, конфиг рабочий, —
+    # а со следующего запроса устройство перейдёт на собственный.
+    for server_id, key in shared.items():
+        by_server.setdefault(server_id, key)
 
     out: list[ServerOut] = []
     for server in services.active_servers(db):

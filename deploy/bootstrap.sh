@@ -253,6 +253,17 @@ case "$CURRENT_SITE_DIR" in
         set_env PANEL_SITE_DIR ../web/dist
         set_env PANEL_SITE_SPA 1
         ;;
+    ../web|"$APP_DIR/web")
+        # Сборка, положенная в каталог руками: index.html и assets лежат в
+        # самом web/. Дальше туда же распакуются исходники, и index.html
+        # окажется тем, что ссылается на /src/main.jsx, — в готовой сборке
+        # такого файла нет, и сайт открывался бы пустой страницей. Поэтому
+        # прежнюю сборку убираем, а каталогом сайта становится web/dist.
+        log "Переносим сайт из web/ в собираемый web/dist"
+        rm -rf "$APP_DIR/web/index.html" "$APP_DIR/web/assets"
+        set_env PANEL_SITE_DIR ../web/dist
+        set_env PANEL_SITE_SPA 1
+        ;;
     ../web/dist|"$APP_DIR/web/dist")
         # Уже переведён — но флаг одностраничника мог остаться невыставленным,
         # и тогда прямая ссылка на /account отдавала бы 404.

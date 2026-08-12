@@ -361,8 +361,19 @@ export function Landing() {
       <section id="split" className="ld-split">
         <div className="ld-split-deco" aria-hidden="true">
           <ArtImage className="ld-split-ribbon" src="/assets/ribbon-diagonal.png" speed={-0.2} rotate={-1.4} float={false} />
-          <ArtImage className="ld-split-badge ld-split-badge-1" src="/assets/logo-t.png" speed={0.26} rotate={1.8} />
-          <ArtImage className="ld-split-badge ld-split-badge-2" src="/assets/logo-vk.png" speed={0.18} rotate={-1.6} delay={100} />
+          {/*
+          У бейджей проставлены настоящие размеры файлов, и это не украшение
+          разметки. Ширину задаёт css, высота — auto; пока картинка не
+          загрузилась и пропорция неизвестна, высота считается нулевой, а у
+          пустой коробки доля пересечения всегда 0 — наблюдатель появления
+          не срабатывает и бейдж навсегда остаётся прозрачным. С width/height
+          пропорция известна сразу, до загрузки.
+
+          Ход параллакса у первого меньше соседей: он стоит у верхнего края
+          секции, а она обрезает содержимое — см. .ld-split-badge-1 в css.
+          */}
+          <ArtImage className="ld-split-badge ld-split-badge-1" src="/assets/logo-t.png" width={208} height={221} speed={0.1} rotate={1.8} />
+          <ArtImage className="ld-split-badge ld-split-badge-2" src="/assets/logo-vk.png" width={256} height={189} speed={0.18} rotate={-1.6} delay={100} />
         </div>
         <div className="wrap ld-split-in">
           <Reveal className="ld-split-head">

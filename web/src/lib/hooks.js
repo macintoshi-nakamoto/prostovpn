@@ -48,7 +48,33 @@ export function useReveal(options = {}) {
     );
 
     observer.observe(node);
-    return () => observer.disconnect();
+
+    /*
+    Картинка, которая ещё не загрузилась, занимает нулевую высоту.
+
+    У `.art-img` задана только ширина, высота — auto, и до загрузки коробка
+    получается 104×0. Доля пересечения у пустой коробки всегда 0, порог 0.05 её
+    не берёт, и элемент навсегда остаётся с [data-reveal], то есть с
+    opacity: 0. Отсюда и брались «иногда не показывается»: успела картинка
+    загрузиться до прохода наблюдателя — видно, не успела — нет.
+
+    Поэтому на загрузке перевешиваем наблюдение заново: у элемента уже есть
+    настоящий размер, и наблюдатель сразу присылает первое уведомление с
+    честной долей.
+    */
+    const onLoad = () => {
+      if (!node.hasAttribute("data-reveal")) return;
+      observer.unobserve(node);
+      observer.observe(node);
+    };
+    if (node.tagName === "IMG" && !node.complete) {
+      node.addEventListener("load", onLoad);
+    }
+
+    return () => {
+      node.removeEventListener("load", onLoad);
+      observer.disconnect();
+    };
   }, [options.threshold, options.rootMargin]);
 
   return ref;

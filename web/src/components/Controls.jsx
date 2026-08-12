@@ -8,6 +8,11 @@ import "./controls.css";
  * Один компонент на весь сайт: они стоят рядом в четырёх разных шапках, и
  * разъехавшиеся по виду копии заметны сразу.
  *
+ * Активный язык подсвечивает не сама кнопка, а отдельная «капля» (.ctl-thumb),
+ * скользящая под подписями, — переключение выглядит переездом одного предмета,
+ * а не перекраской двух кнопок. Смена темы — той же природы: солнце и луна
+ * лежат в кнопке стопкой и сменяются поворотом, а не подменой узла.
+ *
  * Своих вариантов оформления у компонента нет. Над героем лендинга шапка
  * прозрачная, и содержимое в ней белое — но так же там ведут себя и логотип, и
  * меню, и кнопка справа: перекрашивает их сама шапка селектором `.sh .ctl`,
@@ -47,10 +52,15 @@ export function Controls() {
       {/*
       Языки показаны оба сразу, а не текущий с переключением по клику. Кнопка
       с надписью «RU» одинаково читается и как «сейчас русский», и как
-      «нажмите, чтобы стал русский»; две кнопки с подсветкой активной не
+      «нажмите, чтобы стал русский»; две кнопки с каплей на активной не
       оставляют выбора для толкования.
       */}
-      <div className="ctl-lang" role="group" aria-label={t("controls.language")}>
+      <div
+        className={`ctl-lang${lang === "en" ? " ctl-lang-en" : ""}`}
+        role="group"
+        aria-label={t("controls.language")}
+      >
+        <span className="ctl-thumb" aria-hidden="true" />
         <button
           type="button"
           className={lang === "ru" ? "active" : ""}
@@ -71,14 +81,19 @@ export function Controls() {
 
       <button
         type="button"
-        className="ctl-theme"
+        className={`ctl-theme${dark ? " ctl-theme-dark" : ""}`}
         onClick={toggle}
         // Подпись называет то, что произойдёт по нажатию, а не текущее
         // состояние: иконка и так показывает, куда переключаемся.
         title={dark ? t("controls.themeToLight") : t("controls.themeToDark")}
         aria-label={dark ? t("controls.themeToLight") : t("controls.themeToDark")}
       >
-        {dark ? <SunIcon /> : <MoonIcon />}
+        <span className="ctl-ic ctl-ic-sun">
+          <SunIcon />
+        </span>
+        <span className="ctl-ic ctl-ic-moon">
+          <MoonIcon />
+        </span>
       </button>
     </div>
   );

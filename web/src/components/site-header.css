@@ -98,6 +98,9 @@
   background: rgba(255, 255, 255, 0.14);
   border-color: rgba(255, 255, 255, 0.3);
   color: rgba(255, 255, 255, 0.92);
+  /* Стекло по-настоящему: позади — градиент героя и его объекты. */
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
 }
 .sh:not(.sh-solid) .ctl-lang button {
   color: rgba(255, 255, 255, 0.75);
@@ -105,10 +108,14 @@
 .sh:not(.sh-solid) .ctl-lang button:hover {
   color: #fff;
 }
+/* Капля над героем — белая, и подпись на ней оранжевая, как на белых
+   кнопках самого героя. Тема тут ни при чём: градиент один в обеих. */
 .sh:not(.sh-solid) .ctl-lang button.active {
-  background: #fff;
   color: var(--accent-deep);
-  box-shadow: none;
+}
+.sh:not(.sh-solid) .ctl-thumb {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 10px rgba(120, 30, 0, 0.28);
 }
 .sh:not(.sh-solid) .ctl-theme:hover {
   color: #fff;

@@ -8,6 +8,10 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
  * как React вообще загрузится. Иначе первым кадром человеку с тёмной темой
  * бьёт в глаза белый фон, и только потом страница темнеет.
  *
+ * По умолчанию сайт светлый, и системную настройку мы не читаем: макет
+ * рисован светлым, это лицо продукта — тёмную включают рукой, и выбор
+ * запоминается. (Так решено владельцем; раньше первый заход шёл за системой.)
+ *
  * Ключ хранилища отличается от панельного (vpn_panel_theme) намеренно: сайт и
  * админка живут на одном домене, и общий ключ связал бы их темы в одну.
  */
@@ -15,25 +19,15 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 const STORAGE_KEY = "prosto_theme";
 const Ctx = createContext(null);
 
-/** Тема первого захода: сохранённая → системная → светлая. */
+/** Тема первого захода: сохранённая, иначе светлая. */
 export function readTheme() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark") return stored;
   } catch {
-    // Приватный режим может запрещать хранилище — тогда просто системная.
+    // Приватный режим может запрещать хранилище — тогда просто светлая.
   }
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
-/** Выбирал ли человек тему руками. Пока нет — идём за системой. */
-function chosen() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored === "light" || stored === "dark";
-  } catch {
-    return false;
-  }
+  return "light";
 }
 
 export function ThemeProvider({ children }) {
@@ -47,22 +41,7 @@ export function ThemeProvider({ children }) {
     if (meta) meta.setAttribute("content", theme === "dark" ? "#12141a" : "#FA4C16");
   }, [theme]);
 
-  useEffect(() => {
-    // Пока человек не выбрал тему сам, следуем за системой на лету: переключение
-    // на уровне ОС не должно требовать перезагрузки вкладки.
-    const media = window.matchMedia?.("(prefers-color-scheme: dark)");
-    if (!media) return undefined;
-    const onChange = (e) => {
-      if (!chosen()) setTheme(e.matches ? "dark" : "light");
-    };
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
-
   const value = useMemo(() => {
-    // Пишем в хранилище здесь, а не в эффекте: эффект сохранял бы и тему,
-    // доставшуюся от системы, и слушатель выше замолчал бы навсегда, хотя
-    // человек ничего не выбирал.
     const choose = (next) => {
       try {
         localStorage.setItem(STORAGE_KEY, next);

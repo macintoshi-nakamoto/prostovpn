@@ -1,7 +1,9 @@
 import { Link, useLocation } from "react-router-dom";
 import { Picture } from "./Picture.jsx";
+import { Controls } from "./Controls.jsx";
 import { useSession } from "../lib/session.jsx";
 import { useScrolled } from "../lib/hooks";
+import { useT } from "../lib/i18n/index.jsx";
 import "./site-header.css";
 
 /**
@@ -16,6 +18,7 @@ export function SiteHeader() {
   const scrolled = useScrolled(60);
   const { authed } = useSession();
   const { pathname } = useLocation();
+  const t = useT();
   const onLanding = pathname === "/";
 
   /*
@@ -41,15 +44,20 @@ export function SiteHeader() {
           <Picture src="/assets/logo.png" alt="PROSTO" />
         </Link>
         <nav className="sh-nav">
-          <a href={section("speed")}>Скорость</a>
-          <a href={section("app")}>Приложение</a>
-          <a href={section("plans")}>Тарифы</a>
-          <a href={section("security")}>Безопасность</a>
-          <Link to="/faq">FAQ</Link>
+          <a href={section("speed")}>{t("nav.speed")}</a>
+          <a href={section("app")}>{t("nav.app")}</a>
+          <a href={section("plans")}>{t("nav.plans")}</a>
+          <a href={section("security")}>{t("nav.security")}</a>
+          <Link to="/faq">{t("nav.faq")}</Link>
         </nav>
-        <Link to={authed ? "/account" : "/login"} className="sh-cta">
-          {authed ? "Кабинет" : "Войти"}
-        </Link>
+        {/* Переключатели и кнопка входа — одной группой: на узком экране меню
+            пропадает, и без обёртки space-between растащил бы их по краям. */}
+        <div className="sh-right">
+          <Controls />
+          <Link to={authed ? "/account" : "/login"} className="sh-cta">
+            {authed ? t("nav.account") : t("nav.signin")}
+          </Link>
+        </div>
       </div>
     </header>
   );

@@ -1,9 +1,12 @@
 import { Link } from "react-router-dom";
 import { Picture } from "./Picture.jsx";
+import { useT } from "../lib/i18n/index.jsx";
 import "./site-footer.css";
 
 /** Подвал лендинга: навигация, контакт поддержки, копирайт. Из макета. */
 export function SiteFooter() {
+  const t = useT();
+
   return (
     <footer className="sf">
       <div className="wrap sf-in">
@@ -11,23 +14,23 @@ export function SiteFooter() {
 
         <div className="sf-cols">
           <div>
-            <a href="#plans">Тарифы</a>
-            <a href="#app">Приложение</a>
-            <a href="#speed">Серверы</a>
-            <a href="#security">Безопасность</a>
+            <a href="#plans">{t("footer.plans")}</a>
+            <a href="#app">{t("footer.app")}</a>
+            <a href="#speed">{t("footer.servers")}</a>
+            <a href="#security">{t("footer.security")}</a>
           </div>
           <div>
-            <Link to="/faq">FAQ</Link>
-            <Link to="/contacts">Поддержка</Link>
+            <Link to="/faq">{t("footer.faq")}</Link>
+            <Link to="/contacts">{t("footer.support")}</Link>
             {/* Канал, а не поддержка: за помощью ведёт соседняя ссылка. */}
             <a href="https://t.me/prostovpn_tg" target="_blank" rel="noreferrer">
-              Telegram-канал
+              {t("footer.channel")}
             </a>
           </div>
           <div>
-            <Link to="/terms">Условия</Link>
-            <Link to="/privacy">Конфиденциальность</Link>
-            <Link to="/contacts">Контакты</Link>
+            <Link to="/terms">{t("footer.terms")}</Link>
+            <Link to="/privacy">{t("footer.privacy")}</Link>
+            <Link to="/contacts">{t("footer.contacts")}</Link>
           </div>
           <div className="sf-stores">
             <Link to="/login" className="btn btn-dark sf-store">
@@ -45,14 +48,14 @@ export function SiteFooter() {
           <a href="https://t.me/prosto_vpn_supp" target="_blank" rel="noreferrer">
             @prosto_vpn_supp
           </a>
-          <span>Поддержка в Telegram отвечает быстро — в среднем за несколько минут</span>
+          <span>{t("footer.supportNote")}</span>
         </div>
 
         <div className="sf-bottom">
           <span>© {new Date().getFullYear()} Prosto VPN</span>
           <div>
-            <Link to="/terms">Условия</Link>
-            <Link to="/privacy">Конфиденциальность</Link>
+            <Link to="/terms">{t("footer.terms")}</Link>
+            <Link to="/privacy">{t("footer.privacy")}</Link>
           </div>
         </div>
       </div>

@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { Picture } from "../components/Picture.jsx";
+import { Controls } from "../components/Controls.jsx";
 import { ApiError } from "../lib/api";
+import { useT } from "../lib/i18n/index.jsx";
 import "./login.css";
 
 /**
@@ -13,6 +15,7 @@ import "./login.css";
  * ввода тех же логина и пароля.
  */
 export function Login() {
+  const t = useT();
   const { signIn, signUp } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
@@ -37,15 +40,19 @@ export function Login() {
 
   const messageFor = (err) => {
     if (err instanceof ApiError) {
-      if (err.code === "login_taken") return "Логин занят — придумайте другой";
-      if (err.code === "login_invalid")
-        return "В логине только латиница, цифры, дефис, точка и подчёркивание";
-      if (err.code === "bad_credentials") return "Неверный логин или пароль";
-      if (err.code === "throttled") return "Слишком много попыток. Попробуйте позже";
-      if (err.code === "signup_closed") return "Регистрация сейчас закрыта";
-      return err.message;
+      // Коды бэкенда переводим сами; на незнакомый код остаётся его текст —
+      // он приходит по-русски, но лучше настоящая причина, чем «что-то пошло
+      // не так» вместо неё.
+      const known = {
+        login_taken: "loginTaken",
+        login_invalid: "loginInvalid",
+        bad_credentials: "badCredentials",
+        throttled: "throttled",
+        signup_closed: "signupClosed",
+      }[err.code];
+      return known ? t(`login.errors.${known}`) : err.message;
     }
-    return "Что-то пошло не так. Попробуйте ещё раз";
+    return t("login.errors.unknown");
   };
 
   const submit = async (e) => {
@@ -53,20 +60,20 @@ export function Login() {
     if (busy) return;
 
     if (!login.trim() || !password) {
-      setError("Заполните логин и пароль");
+      setError(t("login.errors.empty"));
       return;
     }
     if (!isLogin) {
       if (password.length < 8) {
-        setError("Пароль должен быть не короче 8 символов");
+        setError(t("login.errors.short"));
         return;
       }
       if (password !== password2) {
-        setError("Пароли не совпадают");
+        setError(t("login.errors.mismatch"));
         return;
       }
       if (!accepted) {
-        setError("Нужно принять условия");
+        setError(t("login.errors.accept"));
         return;
       }
     }
@@ -92,26 +99,26 @@ export function Login() {
         </Link>
         <div className="lg-side-body">
           <h1>
-            Личный
+            {t("login.sideLine1")}
             <br />
-            кабинет
+            {t("login.sideLine2")}
           </h1>
-          <p>
-            Подписка, устройства и данные для входа в одном месте. Вход только по логину и
-            паролю, без привязки телефона.
-          </p>
+          <p>{t("login.sideLead")}</p>
           <ul className="lg-side-list">
-            <li>Статус подписки и продление</li>
-            <li>До пяти устройств на аккаунт</li>
-            <li>Инструкции для всех платформ</li>
+            {["0", "1", "2"].map((i) => (
+              <li key={i}>{t(`login.sideList.${i}`)}</li>
+            ))}
           </ul>
         </div>
         <div className="lg-side-help">
-          Нужна помощь? <Link to="/contacts">поддержка</Link>
+          {t("login.help")} <Link to="/contacts">{t("login.helpLink")}</Link>
         </div>
       </aside>
 
       <div className="lg-panel">
+        <div className="lg-controls">
+          <Controls />
+        </div>
         <form className="lg-card" onSubmit={submit}>
           <div className="lg-tabs">
             <button
@@ -119,29 +126,25 @@ export function Login() {
               className={isLogin ? "active" : ""}
               onClick={() => switchMode("login")}
             >
-              Вход
+              {t("login.tabSignin")}
             </button>
             <button
               type="button"
               className={!isLogin ? "active" : ""}
               onClick={() => switchMode("register")}
             >
-              Регистрация
+              {t("login.tabSignup")}
             </button>
           </div>
 
           <div className="lg-head">
-            <h2>{isLogin ? "С возвращением" : "Создать аккаунт"}</h2>
-            <p>
-              {isLogin
-                ? "Введите логин и пароль от аккаунта Prosto VPN"
-                : "Логин и пароль — всё, что нужно. Почту можно добавить позже"}
-            </p>
+            <h2>{isLogin ? t("login.headSignin") : t("login.headSignup")}</h2>
+            <p>{isLogin ? t("login.subSignin") : t("login.subSignup")}</p>
           </div>
 
           <div className="lg-fields">
             <label className="lg-field">
-              <span>Логин</span>
+              <span>{t("login.fieldLogin")}</span>
               <input
                 type="text"
                 value={login}
@@ -156,7 +159,7 @@ export function Login() {
             </label>
 
             <label className="lg-field">
-              <span>Пароль</span>
+              <span>{t("login.fieldPassword")}</span>
               <div className="lg-pass">
                 <input
                   type={showPass ? "text" : "password"}
@@ -165,11 +168,11 @@ export function Login() {
                     setPassword(e.target.value);
                     setError("");
                   }}
-                  placeholder={isLogin ? "Ваш пароль" : "Минимум 8 символов"}
+                  placeholder={isLogin ? t("login.placeholderPassword") : t("login.placeholderNewPassword")}
                   autoComplete={isLogin ? "current-password" : "new-password"}
                 />
                 <button type="button" onClick={() => setShowPass((v) => !v)}>
-                  {showPass ? "Скрыть" : "Показать"}
+                  {showPass ? t("login.hide") : t("login.show")}
                 </button>
               </div>
             </label>
@@ -177,7 +180,7 @@ export function Login() {
             {!isLogin && (
               <>
                 <label className="lg-field">
-                  <span>Повторите пароль</span>
+                  <span>{t("login.fieldRepeat")}</span>
                   <input
                     type={showPass ? "text" : "password"}
                     value={password2}
@@ -185,12 +188,12 @@ export function Login() {
                       setPassword2(e.target.value);
                       setError("");
                     }}
-                    placeholder="Ещё раз тот же пароль"
+                    placeholder={t("login.placeholderRepeat")}
                     autoComplete="new-password"
                   />
                 </label>
                 <label className="lg-field">
-                  <span>Почта для чеков · необязательно</span>
+                  <span>{t("login.fieldEmail")}</span>
                   <input
                     type="email"
                     value={email}
@@ -214,8 +217,8 @@ export function Login() {
                 }}
               />
               <span>
-                Принимаю <Link to="/terms">условия подписки</Link> и{" "}
-                <Link to="/privacy">политику обработки данных</Link>
+                {t("login.acceptBefore")} <Link to="/terms">{t("login.acceptTerms")}</Link>{" "}
+                {t("login.acceptAnd")} <Link to="/privacy">{t("login.acceptPrivacy")}</Link>
               </span>
             </label>
           )}
@@ -225,17 +228,17 @@ export function Login() {
           <button type="submit" className="btn btn-primary btn-block lg-submit" disabled={busy}>
             {busy
               ? isLogin
-                ? "Входим…"
-                : "Создаём…"
+                ? t("login.busySignin")
+                : t("login.busySignup")
               : isLogin
-                ? "Войти"
-                : "Зарегистрироваться"}
+                ? t("login.submitSignin")
+                : t("login.submitSignup")}
           </button>
 
           <div className="lg-switch">
-            {isLogin ? "Ещё нет аккаунта? " : "Уже есть аккаунт? "}
+            {isLogin ? t("login.switchToSignup") : t("login.switchToSignin")}{" "}
             <button type="button" onClick={() => switchMode(isLogin ? "register" : "login")}>
-              {isLogin ? "Зарегистрироваться" : "Войти"}
+              {isLogin ? t("login.submitSignup") : t("login.submitSignin")}
             </button>
           </div>
         </form>

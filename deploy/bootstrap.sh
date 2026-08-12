@@ -107,11 +107,15 @@ fi
 log "Копируем код в $APP_DIR"
 mkdir -p "$APP_DIR"
 # Исключаем окружения и базу: они на сервере свои.
+# `web` — публичный сайт (React + Vite), `site` — прежние статические
+# страницы. Второе оставлено намеренно: оно всё ещё содержит оформление
+# заказа и оплату, которых у нового сайта пока нет, и его каталог может
+# стоять в PANEL_SITE_DIR на уже работающей установке.
 tar -C "$SRC_DIR" \
     --exclude=.git --exclude=.venv --exclude=node_modules --exclude=dist \
     --exclude='*.db' --exclude='*.db-wal' --exclude='*.db-shm' --exclude=.env \
     --exclude=__pycache__ --exclude=.pytest_cache --exclude=client \
-    -cf - backend panel site deploy README.md 2>/dev/null | tar -C "$APP_DIR" -xf -
+    -cf - backend panel web site deploy README.md 2>/dev/null | tar -C "$APP_DIR" -xf -
 
 # --- 3. Секреты -------------------------------------------------------------
 
@@ -168,7 +172,11 @@ PANEL_TRAFFIC_SYNC_SECONDS=60
 # --- Сайт ---
 # Из этого адреса собираются ссылки возврата с оплаты и ссылки в письмах.
 PANEL_SITE_URL=$PUBLIC_ORIGIN
-PANEL_SITE_DIR=../site
+# Собранный одностраничник из web/. Пустое значение — сайт раздаёт nginx.
+PANEL_SITE_DIR=../web/dist
+# Маршрутизация у одностраничника своя: по прямой ссылке на /account сервер
+# обязан вернуть тот же index.html, иначе перезагрузка страницы даёт 404.
+PANEL_SITE_SPA=1
 
 # --- Оплата ---
 # mock — сайт работает целиком, но деньги не приходят: страница оплаты
@@ -219,6 +227,39 @@ EOF
     chmod 600 "$ENV_FILE"
 fi
 
+# --- 3.1 Доводка существующего конфига --------------------------------------
+#
+# Публичный сайт переехал со статических страниц (site/) на собранный
+# одностраничник (web/dist). Новая установка получает это выше, а
+# существующей нужно поправить два ключа: без них обновление тихо продолжит
+# отдавать прежний сайт, и правки до людей не доедут.
+#
+# Трогаем ровно тот случай, когда в конфиге стоит прежний каталог. Пустое
+# значение не трогаем: это осознанный выбор — статику отдаёт nginx.
+
+set_env() {
+    local key="$1" value="$2"
+    if grep -qE "^${key}=" "$ENV_FILE"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+    else
+        printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+    fi
+}
+
+CURRENT_SITE_DIR="$(grep -E '^PANEL_SITE_DIR=' "$ENV_FILE" | cut -d= -f2- || true)"
+case "$CURRENT_SITE_DIR" in
+    ../site|"$APP_DIR/site")
+        log "Переводим сайт на собранный одностраничник"
+        set_env PANEL_SITE_DIR ../web/dist
+        set_env PANEL_SITE_SPA 1
+        ;;
+    ../web/dist|"$APP_DIR/web/dist")
+        # Уже переведён — но флаг одностраничника мог остаться невыставленным,
+        # и тогда прямая ссылка на /account отдавала бы 404.
+        set_env PANEL_SITE_SPA 1
+        ;;
+esac
+
 # --- 4. Бэкенд --------------------------------------------------------------
 
 log "Ставим Python-окружение"
@@ -230,6 +271,19 @@ python3 -m venv "$APP_DIR/backend/.venv"
 
 log "Собираем веб-панель"
 cd "$APP_DIR/panel"
+npm ci --silent 2>/dev/null || npm install --silent
+npm run build --silent
+cd - >/dev/null
+
+# --- 5.1 Публичный сайт -----------------------------------------------------
+#
+# Собирается здесь же и по той же причине, что и панель: в репозитории лежат
+# исходники, а бэкенд отдаёт готовую сборку из web/dist. Без этого шага
+# обновление кода до сайта не доезжает вовсе — на сервере остаётся прежняя
+# сборка, и правки страниц выглядят как «выложил и ничего не изменилось».
+
+log "Собираем публичный сайт"
+cd "$APP_DIR/web"
 npm ci --silent 2>/dev/null || npm install --silent
 npm run build --silent
 cd - >/dev/null

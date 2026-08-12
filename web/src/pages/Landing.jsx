@@ -254,8 +254,11 @@ export function Landing() {
   }, []);
 
   // Число устройств в плитке преимуществ и в секции про устройства —
-  // из панели: два места на странице не должны обещать разное.
+  // из панели: два места на странице не должны обещать разное. Плитке нужна
+  // прописная: она стоит в ряду с «До 1 Гбит/с» и «60+ стран», а в середине
+  // предложения ниже прописная была бы ошибкой.
   const devicesLabel = `до ${devices} ${plural(devices, ["устройства", "устройств", "устройств"])}`;
+  const devicesTitle = devicesLabel[0].toUpperCase() + devicesLabel.slice(1);
 
   return (
     <div className="ld">
@@ -310,7 +313,7 @@ export function Landing() {
           {FEATURES.map((f, i) => (
             <Feature
               key={f.title}
-              feature={f.key === "devices" ? { ...f, title: devicesLabel } : f}
+              feature={f.key === "devices" ? { ...f, title: devicesTitle } : f}
               delay={i * 110}
             />
           ))}

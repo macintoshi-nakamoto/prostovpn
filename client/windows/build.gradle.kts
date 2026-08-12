@@ -94,6 +94,26 @@ val panelUrl: String = (project.findProperty("panelUrl") as String?)
     ?: System.getenv("PANEL_URL")
     ?: "https://panel.example.com"
 
+/*
+Собрать установщик с заглушкой нельзя — только запустить из Gradle.
+
+Это не перестраховка: такой установщик уже один раз уехал человеку.
+Приложение выглядело собранным, ставилось и открывалось, но ходило на
+несуществующий panel.example.com — и в обновлениях вечно показывало
+«нет сети», а вход не работал. Ошибка сборки честнее ошибки в рантайме:
+её видит тот, кто собирает, а не тот, кто установил.
+*/
+gradle.taskGraph.whenReady {
+    val packaging = allTasks.any { it.name.startsWith("package") && it.project == project }
+    if (packaging && panelUrl == "https://panel.example.com") {
+        throw GradleException(
+            "Установщик собирается без адреса панели: он уйдёт людям с зашитым " +
+                "panel.example.com, и приложение не сможет ни войти, ни обновиться. " +
+                "Соберите так: ./gradlew packageMsi -PpanelUrl=https://ваш-домен"
+        )
+    }
+}
+
 val generateBuildInfo = tasks.register("generateBuildInfo") {
     val outputDir = layout.buildDirectory.dir("generated/buildinfo")
     val version = appVersion

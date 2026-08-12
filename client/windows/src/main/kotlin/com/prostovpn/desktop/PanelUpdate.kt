@@ -292,11 +292,22 @@ object PanelUpdate {
     private fun psQuote(value: String) = "'" + value.replace("'", "''") + "'"
 
     /**
-     * Что делает повышенный помощник: ждёт нашего выхода, ставит, открывает.
+     * Что делает повышенный помощник: ждёт нашего выхода, освобождает папку
+     * установки, ставит, открывает.
      *
-     * Порядок важен. Пока JVM жива, MSI упрётся в занятые файлы, поэтому
-     * первым делом — ожидание. Ждём по идентификатору процесса, а не по
-     * имени: второй экземпляр приложения не должен считаться нами.
+     * Порядок важен, и это выучено на настоящей поломке. Пока хоть один
+     * процесс держит файлы в папке установки, MSI не может их заменить: он
+     * откладывает замену «на перезагрузку», Windows выполняет отложенное при
+     * следующем включении, и папка остаётся полупустой — приложение больше
+     * не запускается вовсе. Держать файлы может не только экземпляр, который
+     * запустил обновление: второй экземпляр из трея, служба туннеля с
+     * prostovpn-tunnel.exe и wintun.dll внутри той же папки.
+     *
+     * Поэтому: сначала ждём выхода того, кто нас запустил (по идентификатору,
+     * а не по имени), не дождались — гасим принудительно; затем гасим всё
+     * остальное, чей исполняемый файл лежит в папке установки. Человек уже
+     * согласился на обновление и дал права администратора — «подождать ещё»
+     * здесь означало бы сломать ему установку.
      */
     private fun helperScript(installer: String, sha256: String, appPath: String?, pid: Long): String {
         val relaunch = appPath?.let {
@@ -315,6 +326,19 @@ object PanelUpdate {
             "Start-Process explorer.exe -ArgumentList ${psQuote("\"" + it + "\"")}"
         } ?: ""
 
+        // Корень установки — каталог самого приложения. Нет пути (запуск из
+        // Gradle) — нечего и освобождать.
+        val installRoot = appPath?.let { File(it).parent }
+        val freeFolder = installRoot?.let {
+            """
+            ${'$'}root = ${psQuote(it)}
+            Get-Process | Where-Object {
+                ${'$'}_.Path -and ${'$'}_.Path.StartsWith(${'$'}root, [System.StringComparison]::OrdinalIgnoreCase)
+            } | Stop-Process -Force
+            Start-Sleep -Milliseconds 500
+            """.trimIndent()
+        } ?: ""
+
         return """
             ${'$'}ErrorActionPreference = 'SilentlyContinue'
 
@@ -322,6 +346,12 @@ object PanelUpdate {
             while ((Get-Process -Id $pid -ErrorAction SilentlyContinue) -and (Get-Date) -lt ${'$'}deadline) {
                 Start-Sleep -Milliseconds 200
             }
+            if (Get-Process -Id $pid -ErrorAction SilentlyContinue) {
+                Stop-Process -Id $pid -Force
+                Start-Sleep -Milliseconds 500
+            }
+
+            $freeFolder
 
             ${'$'}installer = ${psQuote(installer)}
             ${'$'}actual = (Get-FileHash -Path ${'$'}installer -Algorithm SHA256).Hash

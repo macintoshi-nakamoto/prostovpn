@@ -55,7 +55,35 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 private const val UPDATE_POLL_MS = 5 * 60 * 1000L
 
-fun main() = application {
+/*
+Просьбы «покажись» от повторных запусков. Приходят из фонового потока
+SingleInstance, а окно живёт в композиции — переносим через поток состояния,
+который слушает LaunchedEffect. Счётчик, а не флаг: каждый повторный запуск
+должен показывать окно, даже если оно уже показывалось.
+*/
+private val showRequests = java.util.concurrent.atomic.AtomicLong(0)
+private val showRequestTicks = kotlinx.coroutines.flow.MutableStateFlow(0L)
+
+fun main() {
+    /*
+    Второй экземпляр не запускаем. Два процесса разом держат файлы в папке
+    установки, и обновление, дождавшись выхода одного, ставится поверх
+    живого второго — ровно так установка однажды осталась без библиотек и
+    перестала запускаться. Повторный запуск для человека выглядит как
+    «приложение открылось»: работающему экземпляру передаётся просьба
+    показать окно.
+    */
+    if (!SingleInstance.acquire(onShowRequest = {
+            showRequestTicks.value = showRequests.incrementAndGet()
+        })
+    ) {
+        return
+    }
+
+    runApp()
+}
+
+private fun runApp() = application {
     val scope = rememberCoroutineScope()
     // Состояние живёт здесь, а не внутри окна: меню в трее подписано на
     // языке приложения, а выход из него должен успеть снять туннель.
@@ -78,6 +106,14 @@ fun main() = application {
     fun showWindow() {
         windowVisible = true
         windowState.isMinimized = false
+    }
+
+    // Человек запустил приложение ещё раз — показываем окно вместо второго
+    // процесса. collect на главном потоке композиции, звать showWindow можно.
+    LaunchedEffect(Unit) {
+        showRequestTicks.collect { tick ->
+            if (tick > 0) showWindow()
+        }
     }
 
     fun hideToTray() {

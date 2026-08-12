@@ -41,16 +41,15 @@
 	<string>Dark</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSExceptionDomains</key>
-		<dict>
-			<key>ip-api.com</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
-		</dict>
-	</dict>
+	<key>PanelURL</key>
+	<string>$(PANEL_URL)</string>
+	<key>TunnelBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER).tunnel</string>
+	<key>KeychainAccessGroup</key>
+	<string>$(AppIdentifierPrefix)cc.prostovpn.shared</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<true/>
+	<key>ITSEncryptionExportComplianceCode</key>
+	<string></string>
 </dict>
 </plist>

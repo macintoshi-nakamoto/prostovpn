@@ -363,23 +363,19 @@ final class AppState: ObservableObject {
             .count
     }
 
-    func refreshGeo() {
-        guard let host = importedServer?.host, !host.isEmpty, importedServer?.country == nil else { return }
-        guard let url = URL(string: "http://ip-api.com/json/\(host)?fields=status,country,countryCode,city&lang=ru") else { return }
+    /*
+     Геолокацию узла у стороннего сервиса больше не спрашиваем.
 
-        Task { [weak self] in
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else { return }
-            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  json["status"] as? String == "success" else { return }
+     Запрос уходил открытым HTTP и нёс в адресе IP узла, к которому человек
+     собирается подключиться, — то есть провайдеру и любому промежуточному
+     узлу выдавался ровно тот адрес, который надо заблокировать. Для
+     VPN-приложения это дыра в том самом, ради чего его ставят.
 
-            guard let self, var updated = self.importedServer, updated.host == host else { return }
-            updated.country = json["country"] as? String
-            updated.city = json["city"] as? String
-            updated.countryCode = json["countryCode"] as? String
-            self.importedServer = updated
-            self.persistServer()
-        }
-    }
+     Страна и город приходят вместе со списком стран из панели — там они
+     заведены администратором и не требуют чужого сервиса. Ровно эта же
+     утечка была в десктопном клиенте и убрана там по той же причине.
+     */
+    func refreshGeo() {}
 
     static func extractServer(fromAccessKey key: String) -> ServerInfo? {
         let payload = String(key.dropFirst("vpn://".count))

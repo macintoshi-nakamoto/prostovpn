@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+    windowBackground обязан оставаться тёмным (= Theme.bgTop из Compose):
+    его видно долю секунды до первого кадра Compose, и на ТВ (где холодный
+    старт на слабом железе заметно дольше) белая вспышка бросается в глаза
+    на весь экран. Портретных допущений в теме нет — ориентацию решает
+    MainActivity по isTv().
+    -->
     <style name="Theme.ProstoVPN" parent="android:Theme.Material.NoActionBar">
         <item name="android:windowBackground">#1A110B</item>
         <item name="android:statusBarColor">#1A110B</item>

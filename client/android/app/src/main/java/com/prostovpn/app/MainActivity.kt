@@ -2,6 +2,7 @@ package com.prostovpn.app
 
 import android.Manifest
 import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -32,6 +33,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        /*
+        Портрет фиксируем кодом, а не манифестом: интерфейс телефона свёрстан
+        под вертикаль, но на ТВ экран всегда landscape — запрос портрета там
+        в лучшем случае игнорируется, в худшем (leanback-панели вроде
+        Hi HX-32H01FB) кладёт активити набок или убивает её при старте.
+        */
+        if (!isTv()) {
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),

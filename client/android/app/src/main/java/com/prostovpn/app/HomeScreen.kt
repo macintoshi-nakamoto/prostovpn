@@ -1,5 +1,8 @@
 package com.prostovpn.app
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
@@ -23,6 +26,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,10 +41,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +65,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -167,6 +175,13 @@ private fun MainPage(
             }
 
             Spacer(Modifier.weight(1f).heightIn(min = 12.dp))
+
+            PanelBanners(
+                state = state,
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 10.dp),
+            )
 
             CurrentServerCard(
                 state = state,
@@ -354,6 +369,12 @@ private fun PowerButton(
 
     val interaction = remember { MutableInteractionSource() }
     val popScale = remember { Animatable(1f) }
+
+    // На пульте первый DPAD-фокус должен стоять на главном действии экрана,
+    // а не на верхней кнопке шапки: включение VPN — то, ради чего экран.
+    val powerFocus = remember { FocusRequester() }
+    val isTv = rememberIsTv()
+    LaunchedEffect(isTv) { if (isTv) runCatching { powerFocus.requestFocus() } }
     val bloom = remember { Animatable(0f) }
 
     // «Салют» только на реальном переходе в ON (не при возврате на экран,
@@ -438,6 +459,9 @@ private fun PowerButton(
                     cornerRadius = 88.dp,
                     yOffset = 12.dp,
                 )
+                // До clip: рамка фокуса должна рисоваться за пределами круга
+                .tvFocusHighlight(CircleShape)
+                .focusRequester(powerFocus)
                 .clip(CircleShape)
                 .liquidGlass(
                     backdrop = backdrop,
@@ -499,4 +523,161 @@ private fun SpinnerRing(modifier: Modifier = Modifier) {
             )
         }
     }
+}
+
+/**
+ * Сообщения панели между кнопкой и карточкой сервера: обязательное
+ * обновление, объяснение пустого списка стран, предупреждение о конце
+ * трафика или подписки.
+ *
+ * До этого приложение молчало: человек узнавал, что подписка кончилась, в
+ * момент, когда переставали выдаваться страны, — и выглядело это как
+ * поломка, а не как «пора продлить». Баннеры не перекрывают основной флоу
+ * и не трогают статусный блок — кнопка подключения остаётся главной.
+ */
+@Composable
+private fun PanelBanners(state: AppState, modifier: Modifier = Modifier) {
+    val showUpdate = state.updates.mandatory
+    val showNotice = state.panelNotice.isNotEmpty()
+    val showRenew = state.trafficLow || state.expiresSoon
+    if (!showUpdate && !showNotice && !showRenew) return
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (showUpdate) MandatoryUpdateBanner(state)
+        if (showNotice) NoticeCard(state.panelNotice)
+        if (showRenew) RenewBanner(state)
+    }
+}
+
+/** Общая подложка баннеров — тот же тёплый тинт, что у активных карточек. */
+@Composable
+private fun BannerCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Theme.accentTint12)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        content = content,
+    )
+}
+
+/**
+ * Почему список стран пуст — готовый человеческий текст с панели.
+ * Здесь его только показывают, не переводя и не сокращая.
+ */
+@Composable
+private fun NoticeCard(text: String) {
+    BannerCard {
+        Text(
+            text = text,
+            style = manrope(12.5.sp, W.semibold, Theme.accentSoft).copy(lineHeight = 17.sp),
+        )
+    }
+}
+
+/** Трафик или срок подписки на исходе — предупреждение с кнопкой продления. */
+@Composable
+private fun RenewBanner(state: AppState) {
+    val s = state.s
+    val context = LocalContext.current
+
+    // Трафик важнее срока: без него VPN встанет раньше, чем кончится подписка
+    val headline = if (state.trafficLow) {
+        s.trafficLowWarn.format(formatBytes(state.trafficLeftBytes.coerceAtLeast(0), s))
+    } else {
+        s.expiresSoonWarn.format(dayPhrase(state.subscriptionDaysLeft, state.lang, s))
+    }
+
+    BannerCard {
+        Text(
+            text = headline,
+            style = manrope(12.5.sp, W.semibold, Theme.accentSoft).copy(lineHeight = 17.sp),
+        )
+        if (state.renewUrl.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            PrimaryButton(
+                text = s.renew,
+                height = 42.dp,
+                cornerRadius = 13.dp,
+                onClick = { openRenewUrl(context, state.renewUrl) },
+            )
+        }
+    }
+}
+
+/**
+ * Обязательное обновление — на главном, не только в настройках: без него
+ * сервис не работает, и прятать это за шестерёнкой значит оставить
+ * человека наедине с молча неработающим VPN.
+ */
+@Composable
+private fun MandatoryUpdateBanner(state: AppState) {
+    val s = state.s
+    val updates = state.updates
+
+    BannerCard {
+        Text(
+            text = s.updateAvailable.format(updates.info?.version.orEmpty()),
+            style = manrope(13.sp, W.bold, Theme.text),
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = s.updateMandatory,
+            style = manrope(12.sp, W.medium, Theme.textMuted),
+        )
+        Spacer(Modifier.height(10.dp))
+        PrimaryButton(
+            // Кнопка сама рассказывает, что происходит: повторное нажатие
+            // во время скачивания install() всё равно игнорирует
+            text = when (updates.stage) {
+                UpdateManager.Stage.DOWNLOADING -> s.updateDownloading.format(updates.percent)
+                UpdateManager.Stage.INSTALLING -> s.updateInstalling
+                else -> s.updateButton
+            },
+            height = 42.dp,
+            cornerRadius = 13.dp,
+            onClick = { updates.install() },
+        )
+    }
+}
+
+/**
+ * Открывает личный кабинет в браузере.
+ *
+ * Тихо переживает отказ: на приставке без браузера кнопка «Продлить» не
+ * должна ронять приложение.
+ */
+private fun openRenewUrl(context: Context, url: String) {
+    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+}
+
+/** Гигабайты и мегабайты — единицы, в которых человек думает о трафике. */
+private fun formatBytes(bytes: Long, s: Strings): String {
+    if (bytes <= 0) return "0 ${s.unitMb}"
+    val gb = bytes / 1024.0 / 1024.0 / 1024.0
+    if (gb >= 1) return String.format("%.1f %s", gb, s.unitGb)
+    return String.format("%.0f %s", bytes / 1024.0 / 1024.0, s.unitMb)
+}
+
+/**
+ * «3 дня» / "3 days".
+ *
+ * Русские окончания — по правилу (день/дня/дней), в английском форм две,
+ * и правило для них другое: 21 по-русски «день», по-английски — "days".
+ */
+private fun dayPhrase(count: Int, lang: String, s: Strings): String {
+    if (lang == "en") return "$count " + if (count == 1) s.dayOne else s.dayMany
+    val n = kotlin.math.abs(count) % 100
+    val n1 = n % 10
+    val word = when {
+        n in 11..19 -> s.dayMany
+        n1 in 2..4 -> s.dayFew
+        n1 == 1 -> s.dayOne
+        else -> s.dayMany
+    }
+    return "$count $word"
 }

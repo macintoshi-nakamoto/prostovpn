@@ -1051,10 +1051,17 @@ class AppState(private val scope: CoroutineScope) {
                     }
                     misses = if (alive) 0 else misses + 1
                     if (misses >= 2) {
-                        phase = Phase.OFF
+                        // Через штатный disconnect(), а не «OFF + снятие в
+                        // фоне»: мгновенный OFF разрешал нажать «Подключить»,
+                        // пока фоновый /down ещё работает, — запоздавшее
+                        // снятие сносило только что созданную службу, а
+                        // неудача /down всплывала окном UAC уже после того,
+                        // как экран отрапортовал «отключено». DISCONNECTING
+                        // честно держит кнопку занятой, ошибку показываем
+                        // до него — причина обрыва важнее, чем ход уборки.
                         connectionError = s.errTunnelDropped
                         timerJob = null
-                        scope.launch(Dispatchers.IO) { runCatching { tunnel.disconnect() } }
+                        disconnect()
                         return@launch
                     }
                 }

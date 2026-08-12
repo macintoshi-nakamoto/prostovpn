@@ -42,12 +42,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
@@ -127,6 +130,32 @@ fun Modifier.noRippleClickable(
             onClick()
         },
     )
+}
+
+/*
+Индикация фокуса для D-pad (Android TV). Clickable-элементы Compose и так
+фокусируемы, но никак не подсвечены — с пульта не видно, где стоишь.
+При фокусе рисуем рамку 2dp акцентом и лёгкую вуаль поверх содержимого:
+drawWithContent не трогает layout, соседи не рекомпозируются. На телефоне
+в touch-режиме фокус на кнопки не приходит вовсе, поэтому модификатор там
+не рисует ничего и отдельной проверки isTv() не требует.
+
+Ставить ДО clickable/scaleClickable в цепочке: onFocusChanged слушает
+focus-узел, который создаётся ниже (правее) по цепочке модификаторов.
+*/
+fun Modifier.tvFocusHighlight(shape: Shape = RoundedCornerShape(16.dp)): Modifier = composed {
+    var focused by remember { mutableStateOf(false) }
+    this
+        .onFocusChanged { focused = it.isFocused }
+        .drawWithContent {
+            drawContent()
+            if (focused) {
+                val outline = shape.createOutline(size, layoutDirection, this)
+                // Вуаль тише рамки: она лишь приподнимает элемент над фоном
+                drawOutline(outline, color = Theme.accentTint10)
+                drawOutline(outline, color = Theme.accent, style = Stroke(width = 2.dp.toPx()))
+            }
+        }
 }
 
 /** Появление с подъёмом — аналог iOS fadeUp(). */
@@ -249,6 +278,7 @@ fun GlassCircleButton(
         modifier = Modifier
             .size(size)
             .pressScale(interaction, 0.92f)
+            .tvFocusHighlight(CircleShape)
             .clip(CircleShape)
             .liquidGlass(backdrop)
             // отдельный слой: подсветка и контент не заставляют стекло пересчитывать blur
@@ -416,6 +446,7 @@ fun OrangeToggle(checked: Boolean, onChange: (Boolean) -> Unit) {
     Box(
         modifier = Modifier
             .size(width = 48.dp, height = 29.dp)
+            .tvFocusHighlight(CircleShape)
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.12f))
             .drawBehind {
@@ -457,6 +488,7 @@ fun PrimaryButton(
             .fillMaxWidth()
             .height(height)
             .softShadow(Theme.accent.copy(alpha = 0.30f), 12.dp, cornerRadius, yOffset = 8.dp)
+            .tvFocusHighlight(RoundedCornerShape(cornerRadius))
             .clip(RoundedCornerShape(cornerRadius))
             .background(Theme.primaryGradient)
             .drawWithContent {
@@ -530,6 +562,7 @@ fun WarmAlertDialog(
                         modifier = Modifier
                             .weight(1f)
                             .height(46.dp)
+                            .tvFocusHighlight(RoundedCornerShape(15.dp))
                             .clip(RoundedCornerShape(15.dp))
                             .background(Color.White.copy(alpha = 0.06f))
                             .noRippleClickable(onClick = onDismiss),
@@ -543,6 +576,7 @@ fun WarmAlertDialog(
                     modifier = Modifier
                         .weight(1f)
                         .height(46.dp)
+                        .tvFocusHighlight(RoundedCornerShape(15.dp))
                         .clip(RoundedCornerShape(15.dp))
                         .background(
                             if (destructive) Theme.accentTint12 else Color.White.copy(alpha = 0.06f)

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+Монохромная версия для themed-иконок (Android 13+): та же «П», один цвет.
+Конкретное значение цвета система игнорирует и перекрашивает под тему.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M37.5,33 L55.5,33 L55.5,43 L46,43 Q44,43 44,45 L44,71.5 Q44,75 40.5,75 L37.5,75 Q34,75 34,71.5 L34,36.5 Q34,33 37.5,33 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M58.5,33 L70.5,33 Q74,33 74,36.5 L74,71.5 Q74,75 70.5,75 L67.5,75 Q64,75 64,71.5 L64,45 Q64,43 62,43 L58.5,43 Z" />
+</vector>

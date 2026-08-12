@@ -24,6 +24,13 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+/**
+ * Адрес сайта одной строкой: он же в подписи, он же во всех ссылках экрана.
+ * Страницы указываем с расширением — так они открываются и когда сайт
+ * отдаёт nginx, и когда его раздаёт сама панель.
+ */
+private const val SITE = "https://prostovpn.cc"
+
 @Composable
 fun SupportScreen(
     state: AppState,
@@ -57,27 +64,23 @@ fun SupportScreen(
                 }
             }
 
+            // Опускаем знак от кнопки «назад»: не по центру экрана, а
+            // примерно на трети — под ним ещё четыре карточки со ссылками, и
+            // ровная середина увела бы их слишком низко.
+            Spacer(Modifier.weight(0.5f))
+
+            // Только логотип: название и версия отсюда убраны. Название
+            // теперь читается с самого знака, а версию видно в настройках,
+            // рядом с кнопкой обновления, — там она и нужна.
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 30.dp),
+                    .padding(top = 26.dp, bottom = 34.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 LogoImage(
-                    modifier = Modifier.size(width = 120.dp, height = 80.dp),
+                    modifier = Modifier.size(width = 186.dp, height = 25.dp),
                     glowAlpha = 0.35f,
-                )
-
-                Text(
-                    text = "Prosto VPN",
-                    style = manrope(22.sp, W.extraBold, Theme.text),
-                )
-
-                Spacer(Modifier.height(2.dp))
-
-                Text(
-                    text = s.version,
-                    style = manrope(13.sp, W.medium, Theme.textMuted),
                 )
             }
 
@@ -91,20 +94,20 @@ fun SupportScreen(
                 LinkRow(
                     icon = Icons.globe,
                     title = s.siteTitle,
-                    subtitle = "prostovpn.media",
-                ) { open("https://prostovpn.media") }
+                    subtitle = "prostovpn.cc",
+                ) { open("$SITE/") }
                 CardDivider()
                 LinkRow(
                     icon = Icons.help,
                     title = s.faqTitle,
                     subtitle = s.faqSub,
-                ) { open("https://prostovpn.media/faq") }
+                ) { open("$SITE/faq.html") }
                 CardDivider()
                 LinkRow(
                     icon = Icons.star,
                     title = s.rateTitle,
                     subtitle = s.rateSub,
-                ) { open("https://prostovpn.media/app") }
+                ) { open("$SITE/download.html") }
             }
 
             Spacer(Modifier.weight(1f))
@@ -117,7 +120,7 @@ fun SupportScreen(
                 Text(
                     text = s.privacy,
                     style = manrope(12.sp, W.regular, Theme.text.copy(alpha = 0.5f)),
-                    modifier = Modifier.noRippleClickable { open("https://prostovpn.media/privacy") },
+                    modifier = Modifier.noRippleClickable { open("$SITE/privacy.html") },
                 )
                 Text(
                     text = " · ",
@@ -126,7 +129,7 @@ fun SupportScreen(
                 Text(
                     text = s.terms,
                     style = manrope(12.sp, W.regular, Theme.text.copy(alpha = 0.5f)),
-                    modifier = Modifier.noRippleClickable { open("https://prostovpn.media/terms") },
+                    modifier = Modifier.noRippleClickable { open("$SITE/offer.html") },
                 )
             }
         }

@@ -98,24 +98,26 @@ fun main() {
 }
 
 /**
- * KillSwitch в конфиге решает настройка приложения, не содержимое ключа.
+ * KillSwitch выключен всегда и настройкой больше не управляется.
  *
  * «off» отключает blockAll движка — он конфликтует с обходами блокировок
  * на WinDivert (zapret): их переинжектированные пакеты теряют привязку
- * к процессу, и брандмауэр глушит собственное рукопожатие туннеля.
+ * к процессу, и брандмауэр глушит собственное рукопожатие туннеля. Молча:
+ * человек видел «не подключается» и никак не связывал это с переключателем
+ * в настройках.
  */
 private fun checkKillSwitchKey(config: String) {
-    val off = WgConfig.sanitize(config, killSwitchOn = false)!!
-    check("KillSwitch = off" in off) { "KillSwitch = off не записан" }
+    val prepared = WgConfig.sanitize(config)!!
+    check("KillSwitch = off" in prepared) { "KillSwitch = off не записан" }
 
-    val on = WgConfig.sanitize(config, killSwitchOn = true)!!
-    check("KillSwitch" !in on) { "KillSwitch попал в конфиг при включённом режиме" }
-
-    // Ключ из входного текста не должен перебивать настройку приложения
+    // Ключ из входного текста не должен перебивать решение приложения.
     val foreign = config.replace("[Interface]", "[Interface]\nKillSwitch = banana")
-    val cleaned = WgConfig.sanitize(foreign, killSwitchOn = true)!!
-    check("KillSwitch" !in cleaned) { "чужой KillSwitch из ключа не отсеян" }
-    println("killswitch: off пишется, on — по умолчанию, чужой отсеивается")
+    val cleaned = WgConfig.sanitize(foreign)!!
+    check("banana" !in cleaned) { "чужой KillSwitch из ключа не отсеян" }
+    check(cleaned.count { it == '\n' } > 0 && "KillSwitch = off" in cleaned) {
+        "после отсева не осталось собственного KillSwitch = off"
+    }
+    println("killswitch: всегда off, чужое значение из ключа отсеивается")
 }
 
 /**

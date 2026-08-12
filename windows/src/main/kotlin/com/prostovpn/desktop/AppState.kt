@@ -5,21 +5,23 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import java.util.prefs.Preferences
 import java.util.zip.Inflater
+import kotlin.system.exitProcess
 
 data class ServerInfo(
     val host: String,
@@ -66,6 +68,20 @@ data class TunnelFile(
  */
 enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
 
+/** Что сейчас происходит с обновлением. */
+enum class UpdateStage { CHECKING, IDLE, DOWNLOADING, INSTALLING }
+
+/**
+ * Как часто перечитывать подписку, пока приложение открыто.
+ *
+ * Минута, а не пять. Этим опросом приложение узнаёт о трёх вещах, которые
+ * должны отражаться быстро: администратор отключил или заблокировал
+ * доступ, кончился трафик, продлилась подписка. Панель снимает счётчики с
+ * узлов раз в минуту — чаще спрашивать бессмысленно, данные не свежее.
+ * Сам запрос — лёгкий GET, посильный панели даже от тысяч приложений.
+ */
+private const val ACCOUNT_POLL_MS = 60 * 1000L
+
 /**
  * Состояние приложения. Подключение в тестовой сборке для Windows —
  * симуляция (как в iOS-демо); точка интеграции реального туннеля — startConnect().
@@ -80,10 +96,66 @@ class AppState(private val scope: CoroutineScope) {
         private set
     var server by mutableStateOf<ServerInfo?>(null)
         private set
-    var isGuest by mutableStateOf(prefs.getBoolean("guest", false))
+    /** Токен сессии в панели. Пусто — человек не вошёл. */
+    var panelToken by mutableStateOf(prefs.get("panelToken", "") ?: "")
+        private set
+    var accountName by mutableStateOf(prefs.get("accountName", "") ?: "")
+        private set
+    var accountPublicId by mutableStateOf(prefs.get("accountPublicId", "") ?: "")
+        private set
+    var subscriptionDaysLeft by mutableIntStateOf(prefs.getInt("daysLeft", 0))
+        private set
+    var trafficUsedBytes by mutableStateOf(prefs.getLong("trafficUsed", 0L))
+        private set
+    /** -1 — безлимит. */
+    var trafficLimitBytes by mutableStateOf(prefs.getLong("trafficLimit", -1L))
         private set
 
-    val isLoggedIn get() = server != null || isGuest
+    /** -1 — безлимит. Остаток считает панель, а не приложение. */
+    var trafficLeftBytes by mutableStateOf(prefs.getLong("trafficLeft", -1L))
+        private set
+
+    /** Трафика осталось мало — на главном экране горит предупреждение. */
+    var trafficLow by mutableStateOf(prefs.getBoolean("trafficLow", false))
+        private set
+
+    /** Подписка кончается — пора показать кнопку продления. */
+    var expiresSoon by mutableStateOf(prefs.getBoolean("expiresSoon", false))
+        private set
+
+    /** Куда ведёт кнопка продления. Пусто — продлевать пока незачем. */
+    var renewUrl by mutableStateOf(prefs.get("renewUrl", "") ?: "")
+        private set
+
+    /**
+     * Почему панель не дала ни одной страны.
+     *
+     * Пустой список без объяснения человек читает как «приложение
+     * сломалось»: он ввёл логин с паролем, вход прошёл — и дальше пустой
+     * экран. Текст пишет панель, здесь его только показывают.
+     */
+    var panelNotice by mutableStateOf("")
+
+    /**
+     * Почему человека выкинуло на экран входа.
+     *
+     * Заполняется, когда панель погасила сессию, — устройство отключили из
+     * личного кабинета или админки. Без объяснения это выглядело как
+     * поломка: приложение молча оказывалось на форме входа, и человек шёл
+     * в поддержку со «слетел аккаунт». Читается один раз экраном входа.
+     */
+    var signedOutReason by mutableStateOf("")
+        private set
+
+    /** Экран входа забирает причину: показывается она ровно один раз. */
+    fun consumeSignedOutReason(): String = signedOutReason.also { signedOutReason = "" }
+
+    /** Страны, выданные панелью. Пусто — подписка кончилась. */
+    var panelServers by mutableStateOf<List<ServerInfo>>(emptyList())
+        private set
+
+    // Вход только по аккаунту: гостевого режима нет, страны выдаёт панель.
+    val isLoggedIn get() = panelToken.isNotEmpty() || server != null
 
     private var connectJob: Job? = null
     private var timerJob: Job? = null
@@ -105,8 +177,6 @@ class AppState(private val scope: CoroutineScope) {
     // туннеля включается только при AllowedIPs = 0.0.0.0/0
     var splitTunnelEnabled by mutableStateOf(prefs.getBoolean("split.enabled", false))
         private set
-    var killSwitch by mutableStateOf(prefs.getBoolean("killSwitch", true))
-        private set
     var autoStart by mutableStateOf(prefs.getBoolean("autoStart", false))
         private set
     var autoConnect by mutableStateOf(prefs.getBoolean("autoConnect", false))
@@ -122,14 +192,87 @@ class AppState(private val scope: CoroutineScope) {
         cachedAllowedIps = null
     }
 
-    fun changeKillSwitch(enabled: Boolean) {
-        killSwitch = enabled
-        prefs.putBoolean("killSwitch", enabled)
-    }
-
     fun changeAutoStart(enabled: Boolean) {
+        val previous = autoStart
         autoStart = enabled
         prefs.putBoolean("autoStart", enabled)
+
+        val exePath = if (enabled) appExePath() else null
+        // Запуск из Gradle или IDE: пути до exe нет, и прописывать вместо
+        // приложения java.exe нельзя. Меняем только настройку — и тумблер
+        // не откатываем, иначе разработчик увидит вечно выключенный.
+        if (!WindowsTunnel.isWindows || (enabled && exePath == null)) return
+
+        scope.launch(Dispatchers.IO) {
+            val ok = writeAutoStartEntry(exePath)
+            withContext(Dispatchers.Main) {
+                if (ok) {
+                    if (exePath != null) prefs.put("autoStart.path", exePath) else prefs.remove("autoStart.path")
+                } else {
+                    // Реестр не поддался — тумблер обязан показать правду.
+                    // Иначе интерфейс обещает автозапуск, которого нет.
+                    autoStart = previous
+                    prefs.putBoolean("autoStart", previous)
+                }
+            }
+        }
+    }
+
+    /**
+     * Путь до установленного приложения.
+     *
+     * jpackage.app-path выставляет лаунчер установленной сборки. Полагаться
+     * на ProcessHandle нельзя: под Gradle он вернёт java.exe, и в
+     * автозагрузку попадёт JVM вместо приложения, поэтому всё, что не
+     * заканчивается на .exe, отбрасываем.
+     */
+    private fun appExePath(): String? {
+        val path = System.getProperty("jpackage.app-path")
+            ?: runCatching { ProcessHandle.current().info().command().orElse(null) }.getOrNull()
+        return path?.takeIf { it.endsWith(".exe", ignoreCase = true) }
+    }
+
+    /**
+     * Прописывает приложение в автозагрузку текущего пользователя или
+     * убирает оттуда ([exePath] = null).
+     *
+     * Ветка HKCU — прав администратора не требует. Путь пишем в кавычках:
+     * приложение стоит в «C:\Program Files\Prosto VPN\», а без кавычек
+     * Windows на таком пути сначала пробует запустить C:\Program.exe.
+     * Скрипт отдаём base64 (-EncodedCommand), как и при поднятии прав в
+     * WindowsTunnel: пути с пробелами и кириллицей не ломаются о двойное
+     * экранирование.
+     *
+     * @return изменился ли реестр на самом деле
+     */
+    private fun writeAutoStartEntry(exePath: String?): Boolean {
+        if (!WindowsTunnel.isWindows) return false
+        fun psQuote(value: String) = "'" + value.replace("'", "''") + "'"
+
+        val action = if (exePath == null) {
+            // Значения может и не быть — это не ошибка, а нормальный случай.
+            "Remove-ItemProperty -Path ${psQuote(RUN_KEY)} -Name ${psQuote(RUN_VALUE)} -ErrorAction SilentlyContinue"
+        } else {
+            "Set-ItemProperty -Path ${psQuote(RUN_KEY)} -Name ${psQuote(RUN_VALUE)} " +
+                "-Value ${psQuote("\"" + exePath + "\"")}"
+        }
+        val script = """
+            ${'$'}ErrorActionPreference = 'Stop'
+            try { $action; exit 0 } catch { exit 1 }
+        """.trimIndent()
+        val encoded = java.util.Base64.getEncoder()
+            .encodeToString(script.toByteArray(Charsets.UTF_16LE))
+
+        return runCatching {
+            val process = ProcessBuilder(
+                "powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded,
+            ).redirectErrorStream(true).start()
+            if (!process.waitFor(15, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return false
+            }
+            process.exitValue() == 0
+        }.getOrDefault(false)
     }
 
     fun changeAutoConnect(enabled: Boolean) {
@@ -259,13 +402,53 @@ class AppState(private val scope: CoroutineScope) {
     var selectedServerIndex by mutableIntStateOf(prefs.getInt("selectedServer", 0))
         private set
 
+    /**
+     * Выбирает сервер и, если VPN уже поднят, сразу переключает на него.
+     *
+     * Отдельно от [selectServer], потому что смена страны на ходу — это
+     * снять текущий туннель и поднять новый, а простой выбор из списка на
+     * отключённом приложении ничего переподключать не должен. Пользуется
+     * этим трей: там страна меняется одним кликом, и человек ждёт, что VPN
+     * тут же переедет, а не останется на прежней.
+     */
+    fun switchServer(index: Int) {
+        if (index == selectedServerIndex && phase == Phase.ON) return
+        val wasOn = phase == Phase.ON || phase == Phase.CONNECTING
+        selectServer(index)
+        if (wasOn) {
+            scope.launch {
+                // Ждём, пока прежний туннель действительно снят: поднимать
+                // новый поверх живого адаптера нельзя — адрес будет занят.
+                disconnect()
+                withTimeoutOrNull(35_000) { snapshotFlow { phase }.first { it == Phase.OFF } }
+                if (server?.config?.isNotBlank() == true) toggleConnection()
+            }
+        }
+    }
+
     fun selectServer(index: Int) {
         selectedServerIndex = index
         prefs.putInt("selectedServer", index)
+        // Переключение страны меняет и конфиг, который уйдёт в туннель.
+        panelServers.getOrNull(index)?.let {
+            server = it
+            persistServer()
+        }
     }
 
     fun displayServers(): List<DisplayServer> {
         val t = s
+        // Страны из панели: их может быть несколько, и выбирает человек.
+        if (panelServers.isNotEmpty()) {
+            return panelServers.map { item ->
+                val flag = item.countryCode?.takeIf { it.isNotEmpty() }?.let { flagEmoji(it) } ?: "🌐"
+                DisplayServer(
+                    flag = flag,
+                    name = item.countryFor(lang).orEmpty(),
+                    sub = item.cityFor(lang).orEmpty(),
+                )
+            }
+        }
         server?.let { imported ->
             val flag = imported.countryCode
                 ?.takeIf { it.isNotEmpty() }
@@ -326,43 +509,341 @@ class AppState(private val scope: CoroutineScope) {
                 countryCode = prefs.get("server.countryCode", null),
                 config = prefs.get("server.config", null),
             )
-            refreshGeo()
         }
         loadTunnelFiles()
-        if (selectedServerIndex >= displayServers().size) {
-            selectServer(0)
+        /*
+        Индекс выбранной страны здесь не трогаем. Список панели ещё не
+        получен, displayServers() отдаёт один восстановленный сервер — и
+        сохранённый выбор второй или третьей страны затирался нулём прямо
+        в настройках, то есть навсегда. Индекс проверяет applyPanelServers
+        по фактическому списку, а показ прикрывает coerceAtMost
+        в currentServer.
+        */
+        // Сессия могла протухнуть, а список стран — измениться, пока
+        // приложение было закрыто.
+        refreshPanelServers()
+        startAccountWatch()
+        // Обновление ставится в другой каталог, и в автозагрузке остаётся
+        // путь до прежнего exe — автозапуск молча ломается. Поэтому сверяем
+        // сохранённый путь с фактическим, а не наличие значения.
+        if (autoStart) {
+            val exePath = appExePath()
+            if (exePath != null && exePath != prefs.get("autoStart.path", null)) {
+                scope.launch(Dispatchers.IO) {
+                    if (writeAutoStartEntry(exePath)) {
+                        withContext(Dispatchers.Main) { prefs.put("autoStart.path", exePath) }
+                    }
+                }
+            }
         }
     }
 
     // --- Вход ---
 
-    fun login(credentials: String): Boolean {
-        val joined = credentials.filterNot { it.isWhitespace() }
+    /**
+     * Вход по логину и паролю из панели — единственный способ войти.
+     *
+     * Пароль проверяет сервер: страны выдаются только оплаченной учётной
+     * записи. Вход по ключу `vpn://` убран: он давал доступ в обход
+     * подписки и жил рядом со своим набором ошибок, а человек за весь срок
+     * должен видеть ровно две строки — логин и пароль из письма о покупке.
+     */
+    suspend fun login(login: String, password: String): Result<Unit> =
+        PanelApi.login(login, password).map { applySession(it) }
 
-        if (joined.startsWith("vpn://")) {
-            val info = KeyParser.extractServer(joined) ?: return false
-            prefs.put("accessKey", joined)
-            server = info
-            selectServer(0)
-            persistServer()
-            refreshGeo()
-            return true
-        }
+    private fun applySession(session: PanelApi.Session) {
+        panelToken = session.token
+        accountName = session.name ?: session.login
+        accountPublicId = session.publicId
+        applySubscription(session)
 
-        isGuest = true
-        prefs.putBoolean("guest", true)
-        return true
+        prefs.put("panelToken", session.token)
+        prefs.put("accountName", accountName)
+        prefs.put("accountPublicId", accountPublicId)
+        // Сбрасываем на диск немедленно. Preferences пишутся отложенно,
+        // фоновым потоком, и внезапная перезагрузка теряет последние
+        // записи — а теряется при этом именно токен, то есть вход.
+        runCatching { prefs.flush() }
+
+        applyPanelServers(session.servers)
     }
 
-    fun loginAsGuest() {
-        isGuest = true
-        prefs.putBoolean("guest", true)
+    /**
+     * Переносит подписку из ответа панели в состояние и настройки.
+     *
+     * Одним местом на оба вызова — вход и обновление списка стран. Пока их
+     * было два, любое новое поле требовалось не забыть дважды.
+     */
+    private fun applySubscription(session: PanelApi.Session) {
+        subscriptionDaysLeft = session.daysLeft
+        trafficUsedBytes = session.trafficUsedBytes
+        trafficLimitBytes = session.trafficLimitBytes ?: -1L
+        trafficLeftBytes = session.trafficLeftBytes ?: -1L
+        trafficLow = session.trafficLow
+        expiresSoon = session.expiresSoon
+        renewUrl = session.renewUrl.orEmpty()
+        panelNotice = session.notice.orEmpty()
+
+        prefs.putInt("daysLeft", session.daysLeft)
+        prefs.putLong("trafficUsed", session.trafficUsedBytes)
+        prefs.putLong("trafficLimit", trafficLimitBytes)
+        prefs.putLong("trafficLeft", trafficLeftBytes)
+        prefs.putBoolean("trafficLow", trafficLow)
+        prefs.putBoolean("expiresSoon", expiresSoon)
+        prefs.put("renewUrl", renewUrl)
+    }
+
+    private fun applyPanelServers(list: List<ServerInfo>) {
+        panelServers = list
+        if (list.isEmpty()) {
+            server = null
+            return
+        }
+        if (selectedServerIndex !in list.indices) selectServer(0)
+        server = list[selectedServerIndex.coerceIn(list.indices)]
+        persistServer()
+    }
+
+    /** Перечитывает страны: подписку могли продлить или закрыть. */
+    fun refreshPanelServers() {
+        val token = panelToken
+        if (token.isEmpty()) return
+        scope.launch {
+            PanelApi.servers(token)
+                .onSuccess { session ->
+                    // Страны были, а теперь их нет — доступ закрыли, пока
+                    // приложение работало: кончился трафик или срок.
+                    val lostAccess = session.servers.isEmpty() && panelServers.isNotEmpty()
+                    applySubscription(session)
+                    applyPanelServers(session.servers)
+                    if (lostAccess) dropTunnelWithoutAccess()
+                }
+                .onFailure { error ->
+                    // Разлогиниваем ТОЛЬКО когда панель прямо сказала, что
+                    // токен не годится. Раньше сюда попадала любая неудача:
+                    // пятисотка, перезапуск панели, срабатывание защиты от
+                    // частых запросов — и человек, ничего не делавший,
+                    // обнаруживал себя на экране входа с потёртыми
+                    // настройками. Недоступная панель — это временно, а
+                    // стирание сессии необратимо.
+                    val status = (error as? PanelApi.PanelException)?.status ?: 0
+                    if (status == 401 || status == 403) {
+                        logout()
+                        // Уже после logout: он чистит состояние, а причина
+                        // должна дожить до экрана входа.
+                        signedOutReason = s.noticeRemoteSignout
+                    }
+                }
+        }
+    }
+
+    /**
+     * Периодический опрос панели, пока приложение открыто.
+     *
+     * До этого подписка перечитывалась ровно один раз — на старте. Человек,
+     * оставивший приложение открытым, узнавал о кончившемся трафике только
+     * после перезапуска: предупреждение «осталось меньше 5 ГБ» не появлялось
+     * никогда, а туннель продолжал работать, пока панель не снимет пира с
+     * узла своим обходом.
+     *
+     * Пять минут — компромисс: чаще незачем (расход трафика считается по
+     * обходу узлов, а он идёт раз в минуту), реже — предупреждение теряет
+     * смысл.
+     */
+    private fun startAccountWatch() {
+        scope.launch {
+            while (true) {
+                delay(ACCOUNT_POLL_MS)
+                if (panelToken.isNotEmpty()) refreshPanelServers()
+            }
+        }
+    }
+
+    /**
+     * Доступа больше нет — снимаем туннель.
+     *
+     * Панель убирает пира с узла своим обходом, но между тем, как трафик
+     * кончился, и тем, как узел об этом узнает, туннель на компьютере
+     * продолжает стоять поднятым: соединение уже не работает, а приложение
+     * показывает «подключено». Причину человек прочитает в баннере — она
+     * пришла в том же ответе (panelNotice).
+     */
+    private fun dropTunnelWithoutAccess() {
+        if (phase == Phase.OFF || phase == Phase.DISCONNECTING) return
+        disconnect()
+    }
+
+    /**
+     * Почему вход не состоялся — на языке интерфейса.
+     *
+     * Раньше на экран уходил текст панели, а он написан по-русски: человек с
+     * английским интерфейсом на неверный пароль получал русскую строку.
+     * Причину панель называет кодом (`X-Error-Code`), перевод к нему — наш.
+     *
+     * Панель без кодов — старая. Её текст всё ещё лучше нашего домысла, если
+     * интерфейс русский; для английского берём своё, пусть и общее.
+     */
+    fun loginError(error: Throwable): String {
+        val failure = error as? PanelApi.PanelException ?: return s.errPanelUnreachable
+
+        when (failure.code) {
+            "bad_credentials" -> return s.errBadCredentials
+            "blocked" -> return s.errAccountBlocked
+            "disabled" -> return s.errAccountDisabled
+            "throttled" -> return tooManyTries(failure.retryAfterSeconds)
+        }
+
+        val panelText = failure.message?.takeIf { it.isNotBlank() && lang != "en" }
+        return when {
+            failure.status == 429 -> tooManyTries(failure.retryAfterSeconds)
+            failure.status == 401 || failure.status == 403 -> panelText ?: s.errBadCredentials
+            failure.status >= 500 -> panelText ?: s.errPanelFault
+            else -> panelText ?: s.errPanelFault
+        }
+    }
+
+    private fun tooManyTries(retryAfterSeconds: Int): String {
+        if (retryAfterSeconds <= 0) return s.errTooManyTries
+        // Округляем вверх: «через 0 мин» — это не ответ на вопрос «когда».
+        val minutes = ((retryAfterSeconds + 59) / 60).coerceAtLeast(1)
+        return s.errTooManyTriesIn.format(minutes)
+    }
+
+    // --- Обновление ---
+
+    /**
+     * Ответ панели про новую версию.
+     *
+     * Живёт здесь, а не на экране настроек: значок на шестерёнке должен
+     * появляться сам, до того как в настройки зайдут.
+     */
+    var updateCheck by mutableStateOf<Result<PanelUpdate.Info>?>(null)
+        private set
+
+    var updateStage by mutableStateOf(UpdateStage.CHECKING)
+        private set
+
+    var updatePercent by mutableIntStateOf(0)
+        private set
+
+    /**
+     * Что помешало обновиться. Держим исключением, а не текстом: перевод у
+     * него на экране настроек, вместе с остальными словами про обновление.
+     */
+    var updateFailure by mutableStateOf<Throwable?>(null)
+        private set
+
+    private var updateJob: Job? = null
+
+    /** Есть ли новая версия — по этому рисуется значок на кнопке настроек. */
+    val updateAvailable: Boolean
+        get() = updateCheck?.getOrNull()?.available == true
+
+    val updateInfo: PanelUpdate.Info?
+        get() = updateCheck?.getOrNull()?.takeIf { it.available }
+
+    /**
+     * Спрашивает панель о новой версии.
+     *
+     * Проверка не должна перебивать начатую установку, поэтому во время неё
+     * ничего не делаем.
+     *
+     * [silent] — для фоновых повторов, пока приложение открыто. Обычная
+     * проверка показывает «Проверяем обновления…» в карточке настроек; будь
+     * повторы такими же, надпись мигала бы там каждые несколько минут. Тихая
+     * проверка молча обновляет результат: значок и кнопка появляются сами, а
+     * карточка не дёргается. Первый заход всегда обычный — там ждать нечего.
+     */
+    fun checkUpdate(silent: Boolean = false) {
+        when (updateStage) {
+            UpdateStage.DOWNLOADING, UpdateStage.INSTALLING -> return
+            // Уже идёт видимая проверка — тихий повтор ей не мешает.
+            UpdateStage.CHECKING -> if (silent) return
+            UpdateStage.IDLE -> Unit
+        }
+        updateJob?.cancel()
+        updateJob = scope.launch {
+            if (!silent) {
+                updateStage = UpdateStage.CHECKING
+                updateFailure = null
+            }
+            val result = PanelUpdate.check(BuildInfo.VERSION)
+            // Тихую неудачу не показываем: связь могла моргнуть на одну
+            // проверку, а прежний результат ещё верен. Ошибку оставляем
+            // видимой проверке — той, что человек запустил кнопкой.
+            if (silent && result.isFailure && updateCheck != null) return@launch
+            updateCheck = result
+            if (!silent) updateStage = UpdateStage.IDLE
+        }
+    }
+
+    /**
+     * Скачивает и ставит обновление: приложение закроется и откроется уже
+     * новым. Мастер установки человек не видит, запускать заново не нужно.
+     *
+     * Порядок именно такой. Сначала права: не дали — рвать VPN было не за
+     * чем, остаёмся работать и показываем причину. И только когда помощник
+     * с правами запущен, снимаем туннель и уходим с дороги: служба держит
+     * prostovpn-tunnel.exe и wintun.dll внутри папки установки, и без этого
+     * MSI упрётся в занятые файлы даже после выхода JVM.
+     */
+    fun installUpdate() {
+        val info = updateInfo ?: return
+        if (updateStage == UpdateStage.DOWNLOADING || updateStage == UpdateStage.INSTALLING) return
+
+        updateJob?.cancel()
+        updateJob = scope.launch {
+            updateFailure = null
+            updatePercent = 0
+            updateStage = UpdateStage.DOWNLOADING
+
+            val file = PanelUpdate.download(info) { updatePercent = it }.getOrElse { problem ->
+                updateStage = UpdateStage.IDLE
+                updateFailure = problem
+                return@launch
+            }
+
+            updateStage = UpdateStage.INSTALLING
+            val started = PanelUpdate.installAndRestart(file, info.sha256.orEmpty())
+            if (started.isFailure) {
+                file.delete()
+                updateStage = UpdateStage.IDLE
+                updateFailure = started.exceptionOrNull()
+                return@launch
+            }
+
+            if (phase != Phase.OFF) {
+                disconnect()
+                // Снятие блокирующее и небыстрое; если туннель так и не ушёл,
+                // всё равно уходим — помощник уже ждёт нашего выхода.
+                withTimeoutOrNull(35_000) { snapshotFlow { phase }.first { it == Phase.OFF } }
+            }
+
+            // Штатного exitApplication сюда не дотянуть — окно живёт в Main.kt.
+            exitProcess(0)
+        }
     }
 
     fun logout() {
         disconnect()
+        // Гасим сессию и на стороне панели: иначе она останется висеть
+        // в списке устройств администратора.
+        panelToken.takeIf { it.isNotEmpty() }?.let { token ->
+            scope.launch { PanelApi.logout(token) }
+        }
         server = null
-        isGuest = false
+        panelServers = emptyList()
+        panelToken = ""
+        accountName = ""
+        accountPublicId = ""
+        subscriptionDaysLeft = 0
+        trafficUsedBytes = 0L
+        trafficLimitBytes = -1L
+        trafficLeftBytes = -1L
+        trafficLow = false
+        expiresSoon = false
+        renewUrl = ""
+        panelNotice = ""
         selectedServerIndex = 0
         val language = lang
         runCatching { prefs.clear() }
@@ -370,22 +851,53 @@ class AppState(private val scope: CoroutineScope) {
         // Как и при первом запуске: список исключений разворачивается в
         // ~2000 маршрутов, поэтому по умолчанию выключено (см. split.enabled)
         splitTunnelEnabled = false
-        killSwitch = true
+        // Значение в автозагрузке переживает prefs.clear(): без явного
+        // удаления приложение продолжало бы стартовать с системой после
+        // выхода из аккаунта.
+        if (autoStart) scope.launch(Dispatchers.IO) { writeAutoStartEntry(null) }
         autoStart = false
         autoConnect = false
         logging = true
         loadTunnelFiles()
     }
 
+    /**
+     * java.util.prefs режет значение на 8192 символах и бросает
+     * IllegalArgumentException прямо в вызывающую корутину — конфиг из
+     * ключа Amnezia легко перешагивает предел и вместо ошибки на экране
+     * гасил композицию. Слишком длинное значение не сохраняем, а прежнее
+     * стираем: показать чужой конфиг хуже, чем не показать никакого.
+     */
+    private fun putSafe(key: String, value: String) {
+        if (value.length > Preferences.MAX_VALUE_LENGTH) {
+            runCatching { prefs.remove(key) }
+            return
+        }
+        runCatching { prefs.put(key, value) }
+    }
+
+    /**
+     * Пустое значение именно стирает ключ.
+     *
+     * Пока пустые поля просто пропускались, гео прежнего сервера оставалось
+     * в настройках и прилипало к новому: на экране висел чужой город, а
+     * refreshGeo уже не перезапрашивал — поля не null, только протухшие.
+     */
+    private fun putOrRemove(key: String, value: String?) {
+        if (value.isNullOrEmpty()) runCatching { prefs.remove(key) } else putSafe(key, value)
+    }
+
     private fun persistServer() {
         val current = server ?: return
+        // Именно put: у серверов панели host пустой, а init поднимает
+        // сохранённый сервер как раз по наличию этого ключа.
         prefs.put("server.host", current.host)
-        current.country?.let { prefs.put("server.country", it) }
-        current.city?.let { prefs.put("server.city", it) }
-        current.countryEn?.let { prefs.put("server.countryEn", it) }
-        current.cityEn?.let { prefs.put("server.cityEn", it) }
-        current.countryCode?.let { prefs.put("server.countryCode", it) }
-        current.config?.let { prefs.put("server.config", it) }
+        putOrRemove("server.country", current.country)
+        putOrRemove("server.city", current.city)
+        putOrRemove("server.countryEn", current.countryEn)
+        putOrRemove("server.cityEn", current.cityEn)
+        putOrRemove("server.countryCode", current.countryCode)
+        putOrRemove("server.config", current.config)
     }
 
     // --- Подключение ---
@@ -430,15 +942,7 @@ class AppState(private val scope: CoroutineScope) {
             val prepared = withContext(Dispatchers.Default) {
                 // Приводим к тому, что принимает туннель Windows: мобильные
                 // ключи он отвергает целиком, без Address не будет маршрутов.
-                //
-                // Kill switch — по настройке, но при раздельном туннелировании
-                // всегда выключен: blockAll движка пропускает только туннель,
-                // то есть глушил бы ровно тот трафик, который сплит должен
-                // вести мимо VPN.
-                WgConfig.sanitize(
-                    buildConfigForConnect(config),
-                    killSwitchOn = killSwitch && !splitTunnelEnabled,
-                )
+                WgConfig.sanitize(buildConfigForConnect(config))
             }
             if (prepared == null) {
                 phase = Phase.OFF
@@ -593,37 +1097,24 @@ class AppState(private val scope: CoroutineScope) {
             }
         }
 
-    // --- Геолокация сервера ---
+    /*
+    Геолокацию сервера у стороннего сервиса больше не спрашиваем.
 
-    fun refreshGeo() {
-        val host = server?.host?.takeIf { it.isNotEmpty() } ?: return
-        if (server?.country != null && server?.countryEn != null) return
+    Запрос уходил открытым HTTP и содержал в адресе IP узла, к которому
+    человек собирается подключиться, — то есть провайдеру и любому
+    промежуточному узлу выдавался ровно тот адрес, который надо
+    заблокировать. Гео серверов панели и так приходит вместе со списком
+    стран, а утекал именно путь без панели: вход по ключу vpn://, где узел
+    чужой и цензору неизвестен. Страна и город там — косметика в одной
+    строке, displayServers() на этот случай показывает host.
 
-        scope.launch {
-            val (ru, en) = withContext(Dispatchers.IO) {
-                val ruDeferred = async { fetchGeo(host, "ru") }
-                val enDeferred = async { fetchGeo(host, "en") }
-                ruDeferred.await() to enDeferred.await()
-            }
-            if (ru == null && en == null) return@launch
-
-            val current = server ?: return@launch
-            if (current.host != host) return@launch
-            server = current.copy(
-                country = ru?.optString("country")?.takeIf { it.isNotEmpty() } ?: current.country,
-                city = ru?.optString("city")?.takeIf { it.isNotEmpty() } ?: current.city,
-                countryEn = en?.optString("country")?.takeIf { it.isNotEmpty() } ?: current.countryEn,
-                cityEn = en?.optString("city")?.takeIf { it.isNotEmpty() } ?: current.cityEn,
-                countryCode = (ru ?: en)?.optString("countryCode")?.takeIf { it.isNotEmpty() }
-                    ?: current.countryCode,
-            )
-            persistServer()
-        }
-    }
+    Если гео понадобится вернуть — только через панель (свой эндпоинт,
+    запрос через PanelApi.request с пиннингом), а не через чужой сервис.
+    */
 
     /** Только для офскрин-скриншотов (задача gradle screenshots). */
-    internal fun previewAs(guest: Boolean, previewPhase: Phase, previewSeconds: Int = 754) {
-        isGuest = guest
+    internal fun previewAs(loggedIn: Boolean, previewPhase: Phase, previewSeconds: Int = 754) {
+        panelToken = if (loggedIn) "preview" else ""
         phase = previewPhase
         seconds = previewSeconds
     }
@@ -647,18 +1138,14 @@ class AppState(private val scope: CoroutineScope) {
         previewFileSheetOpen = true
     }
 
-    private fun fetchGeo(host: String, lang: String): JSONObject? = runCatching {
-        val url = URL("http://ip-api.com/json/$host?fields=status,country,countryCode,city&lang=$lang")
-        val connection = url.openConnection() as HttpURLConnection
-        connection.connectTimeout = 8000
-        connection.readTimeout = 8000
-        val text = connection.inputStream.bufferedReader().use { it.readText() }
-        JSONObject(text).takeIf { it.optString("status") == "success" }
-    }.getOrNull()
-
     companion object {
         const val DEFAULT_FILE_ID = "default"
         const val DEFAULT_FILE_NAME = "ru-split-tunnel.json"
+
+        private const val RUN_KEY = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+
+        /** Имя значения в Run — то же, что packageName у jpackage. */
+        private const val RUN_VALUE = "Prosto VPN"
 
         val demoServers = listOf(
             DemoServer("🇳🇱", "Нидерланды", "Netherlands", "Амстердам", "Amsterdam", 34),

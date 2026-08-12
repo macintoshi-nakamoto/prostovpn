@@ -92,6 +92,10 @@ fun SettingsScreen(
 
             Spacer(Modifier.height(14.dp))
 
+            UpdateCard(state)
+
+            Spacer(Modifier.height(14.dp))
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -185,8 +189,6 @@ private fun TogglesCard(state: AppState, onAddFile: () -> Unit) {
             )
         }
 
-        CardDivider()
-        ToggleRow(s.kill, s.killDesc, state.killSwitch) { state.changeKillSwitch(it) }
         CardDivider()
         ToggleRow(s.autostart, s.autostartDesc, state.autoStart) { state.changeAutoStart(it) }
         CardDivider()
@@ -516,3 +518,206 @@ private fun fileMeta(file: TunnelFile, s: Strings): String {
     val entries = "${file.count} ${s.entries}"
     return if (file.isDefault) "${s.defaultMeta} · $entries" else entries
 }
+
+/**
+ * Обновление приложения.
+ *
+ * Панель говорит, есть ли версия новее; одно нажатие — и приложение
+ * скачивает её, ставит и открывается уже новым. Мастера установки человек
+ * не видит и запускать приложение заново не должен: единственное, что от
+ * него нужно, — согласиться на права администратора.
+ *
+ * Состояние живёт в AppState: значок на шестерёнке появляется до того, как
+ * в настройки зайдут, а установка не должна обрываться от ухода с экрана.
+ */
+@Composable
+private fun UpdateCard(state: AppState) {
+    val s = state.s
+    val u = updateStrings(state.lang)
+
+    val stage = state.updateStage
+    val checking = stage == UpdateStage.CHECKING
+    val busy = stage == UpdateStage.DOWNLOADING || stage == UpdateStage.INSTALLING
+    val failure = state.updateCheck?.exceptionOrNull()
+    val fresh = state.updateInfo
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Theme.card)
+            .padding(16.dp),
+    ) {
+        Text(
+            /*
+            Четыре состояния, а не два: раньше «установлена последняя версия»
+            показывалось и пока проверка идёт, и когда она провалилась, —
+            то есть чаще всего это было неправдой.
+            */
+            text = when {
+                checking -> u.checking
+                failure != null -> u.checkFailed.format(checkReason(failure, u))
+                fresh != null -> s.updateAvailable.format(fresh.version.orEmpty())
+                else -> s.updateNone
+            },
+            style = manrope(14.sp, W.semibold, Theme.text),
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            text = s.updateCurrent.format(BuildInfo.VERSION),
+            style = manrope(12.sp, W.medium, Theme.textMuted),
+        )
+
+        // Списка изменений здесь нет намеренно: он занимал половину экрана
+        // настроек и в состоянии «установлена последняя версия» рассказывал
+        // о том, что и так уже стоит.
+
+        if (busy) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = if (stage == UpdateStage.INSTALLING) {
+                    u.installing
+                } else {
+                    s.updateDownloading.format(state.updatePercent)
+                },
+                style = manrope(12.sp, W.medium, Theme.textMuted),
+            )
+        }
+
+        state.updateFailure?.let { problem ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = downloadReason(problem, s, u),
+                style = manrope(12.sp, W.medium, Theme.accentHover),
+            )
+        }
+
+        if (!checking && failure != null) {
+            Spacer(Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .scaleClickable(0.98f) { state.checkUpdate() }
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Theme.accentTint08),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = u.retry, style = manrope(14.sp, W.bold, Theme.link))
+            }
+        }
+
+        if (fresh != null) {
+            Spacer(Modifier.height(12.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .scaleClickable(0.98f, enabled = !busy) { state.installUpdate() }
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Theme.accentTint08),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = when (stage) {
+                        UpdateStage.DOWNLOADING -> s.updateDownloadingShort
+                        UpdateStage.INSTALLING -> u.installing
+                        else -> s.updateButton
+                    },
+                    style = manrope(14.sp, W.bold, Theme.link),
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = u.restartHint,
+                style = manrope(11.5.sp, W.medium, Theme.textFaint).copy(lineHeight = 16.sp),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+/**
+ * Тексты карточки обновления.
+ *
+ * Живут рядом с ней, а не в общем Strings: набор меняется вместе с логикой
+ * проверки и больше нигде не нужен.
+ */
+private class UpdateStrings(
+    val checking: String,
+    val checkFailed: String,
+    val reasonNetwork: String,
+    val reasonPanel: String,
+    val reasonServer: String,
+    val reasonAnswer: String,
+    val retry: String,
+    val noChecksum: String,
+    val insecure: String,
+    val corrupted: String,
+    val launchFailed: String,
+    val cancelled: String,
+    val installing: String,
+    val restartHint: String,
+)
+
+private val UPDATE_RU = UpdateStrings(
+    checking = "Проверяем обновления…",
+    checkFailed = "Не удалось проверить обновления: %s",
+    reasonNetwork = "нет связи",
+    reasonPanel = "сервис обновлений недоступен",
+    reasonServer = "сервер ответил %d",
+    reasonAnswer = "непонятный ответ",
+    retry = "Проверить снова",
+    noChecksum = "Панель не сообщила контрольную сумму — обновитесь вручную с сайта",
+    insecure = "Ссылка на установщик небезопасна — обновитесь вручную с сайта",
+    corrupted = "Файл обновления не совпал с обещанным — скачивание отменено",
+    launchFailed = "Не удалось запустить установку",
+    cancelled = "Обновление отменено: на установку нужны права администратора",
+    installing = "Устанавливаем…",
+    restartHint = "Приложение закроется и откроется заново уже обновлённым",
+)
+
+private val UPDATE_EN = UpdateStrings(
+    checking = "Checking for updates…",
+    checkFailed = "Could not check for updates: %s",
+    reasonNetwork = "no connection",
+    reasonPanel = "the update service is unavailable",
+    reasonServer = "the server replied %d",
+    reasonAnswer = "unexpected reply",
+    retry = "Check again",
+    noChecksum = "The panel did not provide a checksum — update manually from the site",
+    insecure = "The installer link is not secure — update manually from the site",
+    corrupted = "The downloaded file does not match — the download was discarded",
+    launchFailed = "Could not start the installation",
+    cancelled = "Update cancelled: installing needs administrator rights",
+    installing = "Installing…",
+    restartHint = "The app will close and open again already updated",
+)
+
+private fun updateStrings(lang: String): UpdateStrings = if (lang == "en") UPDATE_EN else UPDATE_RU
+
+/** Почему проверка не удалась — адрес панели в текст не попадает. */
+private fun checkReason(error: Throwable, u: UpdateStrings): String {
+    val problem = (error as? PanelUpdate.UpdateProblem) ?: return u.reasonNetwork
+    return when (problem.problem) {
+        PanelUpdate.Problem.PANEL_OUTDATED -> u.reasonPanel
+        PanelUpdate.Problem.SERVER -> u.reasonServer.format(problem.httpCode)
+        PanelUpdate.Problem.BAD_ANSWER -> u.reasonAnswer
+        else -> u.reasonNetwork
+    }
+}
+
+/** Почему скачивание или установка не удались. */
+private fun downloadReason(error: Throwable, s: Strings, u: UpdateStrings): String =
+    when ((error as? PanelUpdate.UpdateProblem)?.problem) {
+        PanelUpdate.Problem.NO_CHECKSUM -> u.noChecksum
+        PanelUpdate.Problem.INSECURE_URL -> u.insecure
+        PanelUpdate.Problem.CORRUPTED -> u.corrupted
+        PanelUpdate.Problem.LAUNCH -> u.launchFailed
+        PanelUpdate.Problem.CANCELLED -> u.cancelled
+        // Текст исключения человеку ничего не объясняет, а адрес панели из
+        // него утекает на экран.
+        else -> s.updateFailed
+    }

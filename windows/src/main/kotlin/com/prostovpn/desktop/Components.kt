@@ -159,7 +159,12 @@ fun Modifier.softShadow(
     }
 }
 
-/** Логотип с тёплым свечением, как в iOS. */
+/**
+ * Знак «PROSTO» с тёплым свечением, как в iOS.
+ *
+ * Надпись широкая, поэтому свечение считаем от ширины: круг по меньшей
+ * стороне у полосы 7:1 выродился бы в еле заметное пятно посередине.
+ */
 @Composable
 fun LogoImage(
     modifier: Modifier = Modifier,
@@ -170,6 +175,7 @@ fun LogoImage(
         contentDescription = null,
         modifier = modifier.drawBehind {
             if (glowAlpha > 0f) {
+                val radius = size.maxDimension * 0.6f
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
@@ -177,9 +183,44 @@ fun LogoImage(
                             Color.Transparent,
                         ),
                         center = center,
-                        radius = size.minDimension * 0.72f,
+                        radius = radius,
                     ),
-                    radius = size.minDimension * 0.72f,
+                    radius = radius,
+                    center = center,
+                )
+            }
+        },
+    )
+}
+
+/**
+ * Круглый знак с «P» — для мест, где места на надпись нет.
+ *
+ * В кружке заголовка главного экрана широкий знак «PROSTO» превратился бы в
+ * нечитаемую полоску, поэтому там остаётся круг. Свечение считаем по
+ * меньшей стороне: знак квадратный.
+ */
+@Composable
+fun LogoMark(
+    modifier: Modifier = Modifier,
+    glowAlpha: Float = 0.45f,
+) {
+    Image(
+        painter = painterResource("mark.png"),
+        contentDescription = null,
+        modifier = modifier.drawBehind {
+            if (glowAlpha > 0f) {
+                val radius = size.minDimension * 0.72f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Theme.accentWarm.copy(alpha = glowAlpha),
+                            Color.Transparent,
+                        ),
+                        center = center,
+                        radius = radius,
+                    ),
+                    radius = radius,
                     center = center,
                 )
             }

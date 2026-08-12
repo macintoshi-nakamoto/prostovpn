@@ -1,6 +1,7 @@
 package com.prostovpn.desktop
 
 import java.io.File
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
 
 /**
@@ -46,10 +47,10 @@ class WindowsTunnel {
         REJECTED,
 
         /**
-         * Сервер молчал при взведённом kill-switch. Блокирующие правила
-         * конфликтуют с обходами на WinDivert (zapret): переинжектированные
-         * пакеты теряют привязку к процессу, и брандмауэр глушит наше же
-         * рукопожатие.
+         * Больше не выставляется: с тех пор как WgConfig всегда дописывает
+         * `KillSwitch = off`, блокирующие правила не взводятся вовсе и такое
+         * молчание неотличимо от [SILENCE]. Значение оставлено, пока его
+         * разбирают AppState и Loc; удалять — вместе с ними.
          */
         KILLSWITCH,
 
@@ -190,6 +191,27 @@ class WindowsTunnel {
 
         // Имя файла задаёт имя туннеля и имя службы — менять нельзя.
         val configFile = File(dataDir(), "$TUNNEL_NAME.conf")
+
+        /*
+        Прошлый туннель обязан быть снят до старта нового. Конфиг у нас один
+        файл на все подключения, а движок на «/start» уже запущенной службы
+        просто возвращает 0, ничего не перезапуская: служба продолжает жить
+        со своим прежним конфигом — прежняя страна, возможно уже отозванный
+        ключ. Её же свежее рукопожатие в state.txt мы приняли бы за своё и
+        отрапортовали «подключено», хотя сменить сервер не удалось.
+        */
+        var forceInstall = false
+        if (state() !in setOf("ABSENT", "STOPPED")) {
+            if (!disconnect()) {
+                /*
+                Служба жива и не снимается — «/start» на ней бесполезен.
+                Идём сразу в установку с правами: она снимет и пересоздаст
+                службу, и та прочитает уже новый конфиг.
+                */
+                forceInstall = true
+            }
+        }
+
         runCatching { configFile.writeText(configText.normalizeNewlines()) }
             .getOrElse { return Result.Failure(Reason.TunnelFailed, "Не удалось записать конфиг: ${it.message}") }
 
@@ -197,7 +219,9 @@ class WindowsTunnel {
         val report = File(dataDir(), "install.log")
         report.delete()
         File(dataDir(), "tunnel.log").delete()
-        // Чужое состояние от прошлого подключения приняли бы за своё
+        // Чужое состояние от прошлого подключения приняли бы за своё. Чистим
+        // только после снятия прошлого туннеля: живая служба переписывает
+        // этот файл каждые 400 мс и тут же воскресила бы его.
         File(dataDir(), "state.txt").delete()
 
         /*
@@ -205,11 +229,15 @@ class WindowsTunnel {
         запускать выдано тому, кто сидит за машиной. Поэтому обычное
         подключение — это просто старт службы, без запроса прав.
 
-        Права нужны, только когда службы ещё нет или она от прошлой сборки:
-        тогда ставим заново. Так UAC остаётся ровно на первом подключении
-        и после обновления приложения.
+        Права нужны, только когда службы ещё нет, она от прошлой сборки или
+        не снялась выше: тогда ставим заново. Так UAC остаётся ровно на первом
+        подключении и после обновления приложения.
+
+        45 секунд на «/start»: диспетчер служб ждёт запуска до 30 секунд
+        (ServicesPipeTimeout), и более короткий таймаут рвал бы штатно долгий
+        первый старт.
         */
-        if (run(exe, "/start", configFile.absolutePath) == null) {
+        if (forceInstall || run(exe, "/start", configFile.absolutePath, timeoutSeconds = 45) == null) {
             // 60 секунд: на чистой машине первое подключение ещё ставит драйвер Wintun
             val install = runElevated(
                 exe,
@@ -221,7 +249,14 @@ class WindowsTunnel {
             }
         }
 
-        val deadline = System.currentTimeMillis() + 20_000
+        /*
+        90 секунд, а не 20: движок ставит службу и сразу выходит, не дожидаясь
+        RUNNING, а первое подключение на чистой машине ещё грузит драйвер
+        Wintun и резолвит имя сервера. С коротким окном мы отказывались,
+        пока служба честно стартовала, — через пару секунд она доходила до
+        RUNNING и забирала весь трафик под надписью «отключено».
+        */
+        val deadline = System.currentTimeMillis() + 90_000
         var running = false
         while (!running && System.currentTimeMillis() < deadline) {
             when (state()) {
@@ -232,7 +267,16 @@ class WindowsTunnel {
             }
         }
         if (!running) {
-            return Result.Failure(Reason.TunnelFailed, lastTunnelError())
+            // Бросать стартующую службу нельзя: она дойдёт до RUNNING уже
+            // после нашего отказа. Снимаем — и честно говорим, если не вышло.
+            val down = disconnect()
+            return Result.Failure(
+                Reason.TunnelFailed,
+                listOfNotNull(
+                    lastTunnelError().takeIf { it.isNotBlank() },
+                    "туннель не снялся — адаптер может забирать трафик".takeIf { !down },
+                ).joinToString(" · "),
+            )
         }
 
         /*
@@ -250,7 +294,17 @@ class WindowsTunnel {
             Thread.sleep(500)
         }
 
-        disconnect()
+        if (!disconnect()) {
+            /*
+            Живой адаптер важнее диагноза молчащего сервера: текст отказа для
+            NoHandshake собирается по diag и про неснятый туннель промолчал бы,
+            а человек тем временем сидит с трафиком в мёртвом VPN.
+            */
+            return Result.Failure(
+                Reason.TunnelFailed,
+                "рукопожатия нет, и туннель не снялся — адаптер может забирать трафик",
+            )
+        }
         return Result.Failure(Reason.NoHandshake, diag = classifyHandshakeFailure())
     }
 
@@ -295,13 +349,6 @@ class WindowsTunnel {
             // Windows превращает ICMP «порт недоступен» в ошибку чтения сокета
             listOf("forcibly closed", "connection reset", "refused")
                 .any { text.contains(it, ignoreCase = true) } -> HandshakeDiag.PORT_CLOSED
-
-            // Молчание при взведённом kill-switch — почти наверняка сам
-            // kill-switch: с WinDivert-обходами (zapret) blockAll глушит
-            // собственное рукопожатие. Совет «выключите Kill Switch»
-            // полезнее диагноза «сервер молчит».
-            text.contains("restrictive kill switch: true") &&
-                text.contains("Sending handshake initiation") -> HandshakeDiag.KILLSWITCH
 
             // Инициации уходили, ответа не было ни одного
             text.contains("Sending handshake initiation") -> HandshakeDiag.SILENCE
@@ -439,12 +486,32 @@ class WindowsTunnel {
         val process = ProcessBuilder(listOf(exe.absolutePath) + args)
             .redirectErrorStream(true)
             .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }
-        if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
-            process.destroyForcibly()
-            return null
+        try {
+            /*
+            Вывод сливаем параллельно ожиданию, отдельным потоком. Читать его
+            до waitFor нельзя: readText() возвращается только когда движок
+            закроет stdout, поэтому зависший «/down» держал бы нас вечно —
+            таймаут ниже до destroyForcibly просто не доходил. Просто не читать
+            тоже нельзя: движок уснёт на записи в заполненный буфер пайпа.
+            */
+            val output = ArrayBlockingQueue<String>(1)
+            Thread {
+                runCatching { process.inputStream.bufferedReader().use { output.put(it.readText()) } }
+            }.apply { isDaemon = true }.start()
+
+            if (!process.waitFor(timeoutSeconds, TimeUnit.SECONDS)) {
+                process.destroyForcibly()
+                return null
+            }
+            // stdout закрыт вместе с процессом, так что поток уже дочитывает;
+            // запас нужен только на то, чтобы он успел отдать результат.
+            val text = output.poll(2, TimeUnit.SECONDS) ?: return null
+            if (process.exitValue() != 0) null else text
+        } finally {
+            // Исключение при чтении раньше глотал runCatching, а процесс
+            // оставался висеть — некому было его снять.
+            if (process.isAlive) process.destroyForcibly()
         }
-        if (process.exitValue() != 0) null else output
     }.getOrNull()
 }
 

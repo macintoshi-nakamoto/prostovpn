@@ -80,7 +80,10 @@ fun LoginScreen(
     var login by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var showPassword by rememberSaveable { mutableStateOf(false) }
-    var errorText by remember { mutableStateOf("") }
+    // Причина, по которой человека сюда выкинуло: устройство отключили из
+    // кабинета. Занимает то же место, что и ошибка входа, — это ответ на
+    // тот же вопрос «почему я не внутри». Стирается первым же вводом.
+    var errorText by remember { mutableStateOf(state.consumeSignedOutReason()) }
     var isLoading by remember { mutableStateOf(false) }
     var isDone by remember { mutableStateOf(false) }
 
@@ -97,7 +100,7 @@ fun LoginScreen(
             errorText = s.errEmptyLogin
             return
         }
-        if (!credentials.startsWith("vpn://") && password.length < 4) {
+        if (password.length < 4) {
             errorText = s.errShortPassword
             return
         }
@@ -107,21 +110,23 @@ fun LoginScreen(
         isLoading = true
 
         scope.launch {
-            delay(1200)
-
-            val joined = credentials.filterNot { it.isWhitespace() }
-            if (joined.startsWith("vpn://") && KeyParser.extractServer(joined) == null) {
-                isLoading = false
-                errorText = s.errBadKey
-                return@launch
-            }
-
+            // Единственный способ войти — логин и пароль из панели, их
+            // выдают при покупке. Ключи vpn:// больше не принимаются:
+            // человек за весь срок видит ровно две строки.
+            val result = state.login(credentials, password)
             isLoading = false
-            isDone = true
-            haptics.success()
 
-            delay(450)
-            state.login(credentials)
+            result
+                .onSuccess {
+                    isDone = true
+                    haptics.success()
+                    delay(450)
+                }
+                .onFailure { error ->
+                    // Не текст панели: он русский, а интерфейс бывает
+                    // английским. Перевод выбирается по коду причины.
+                    errorText = state.loginError(error)
+                }
         }
     }
 
@@ -146,11 +151,18 @@ fun LoginScreen(
                     .padding(top = 56.dp, bottom = 36.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
+                // Отступ над знаком — такой же, как под ним: логотип встаёт по
+                // центру свободного поля между верхом окна и формой, а не
+                // липнет к самому верху.
+                Spacer(
+                    Modifier
+                        .weight(1f)
+                        .heightIn(min = 24.dp)
+                )
+
                 Header(
                     tagline = s.tagline,
-                    modifier = Modifier
-                        .padding(top = 20.dp)
-                        .fadeUp(),
+                    modifier = Modifier.fadeUp(),
                 )
 
                 Spacer(
@@ -208,23 +220,6 @@ fun LoginScreen(
                         onClick = ::submit,
                     )
 
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(40.dp)
-                            .scaleClickable(0.98f, enabled = !isLoading && !isDone) {
-                                focusManager.clearFocus()
-                                state.loginAsGuest()
-                            }
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = s.continueWithoutAccount,
-                            style = manrope(14.sp, W.semibold, Theme.textSecondary),
-                            textAlign = TextAlign.Center,
-                        )
-                    }
                 }
 
                 Footer(
@@ -245,19 +240,14 @@ private fun Header(tagline: String, modifier: Modifier = Modifier) {
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // Название отдельной строкой не пишем: его теперь несёт сам знак, а
+        // подпись под ним говорит, что это за сервис.
         LogoImage(
-            modifier = Modifier.size(width = 132.dp, height = 88.dp),
+            modifier = Modifier.size(width = 216.dp, height = 29.dp),
             glowAlpha = 0.28f,
         )
 
-        Spacer(Modifier.height(10.dp))
-
-        Text(
-            text = "Prosto VPN",
-            style = manrope(28.sp, W.extraBold, Theme.text, letterSpacing = 0.5.sp),
-        )
-
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(12.dp))
 
         Text(
             text = tagline,

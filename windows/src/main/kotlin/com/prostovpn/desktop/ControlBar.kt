@@ -22,6 +22,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -59,6 +60,8 @@ fun GlassControlBar(
     onMinimize: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Метка «есть обновление» на шестерёнке. */
+    settingsBadge: Boolean = false,
 ) {
     // Одна пружина на «погружение» и на сжатие капсулы — движение читается
     // как единое, а не как две независимые анимации.
@@ -101,7 +104,7 @@ fun GlassControlBar(
                 scaleOut(targetScale = 0.55f, animationSpec = sink) +
                 slideOutVertically(sinkOffset) { it / 2 },
         ) {
-            ControlButton(Glyph.Settings, onSettings)
+            ControlButton(Glyph.Settings, onSettings, badge = settingsBadge)
         }
 
         ControlButton(Glyph.Minimize, onMinimize)
@@ -110,7 +113,7 @@ fun GlassControlBar(
 }
 
 @Composable
-private fun ControlButton(glyph: Glyph, onClick: () -> Unit) {
+private fun ControlButton(glyph: Glyph, onClick: () -> Unit, badge: Boolean = false) {
     val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val hover by animateFloatAsState(
@@ -127,36 +130,72 @@ private fun ControlButton(glyph: Glyph, onClick: () -> Unit) {
     }
     val strokeColor = Theme.text.copy(alpha = 0.5f + 0.45f * hover)
 
-    Box(
-        modifier = Modifier
-            .size(36.dp)
-            .clip(CircleShape)
-            .background(hoverFill)
-            .pointerHoverIcon(PointerIcon.Hand)
-            .hoverable(interaction)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Canvas(Modifier.size(17.dp)) {
-            val stroke = 1.6.dp.toPx()
-            when (glyph) {
-                Glyph.Settings -> drawSliders(strokeColor, stroke)
-                Glyph.Minimize -> drawLine(
-                    color = strokeColor,
-                    start = Offset(size.width * 0.1f, size.height / 2f),
-                    end = Offset(size.width * 0.9f, size.height / 2f),
-                    strokeWidth = stroke,
-                    cap = StrokeCap.Round,
-                )
-                Glyph.Close -> {
-                    val a = size.width * 0.16f
-                    val b = size.width * 0.84f
-                    drawLine(strokeColor, Offset(a, a), Offset(b, b), stroke, StrokeCap.Round)
-                    drawLine(strokeColor, Offset(b, a), Offset(a, b), stroke, StrokeCap.Round)
+    // Внешняя коробка не обрезается по кругу: метка должна лежать на самом
+    // углу кнопки, а внутри круглой обрезки её срезало бы наполовину.
+    Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .background(hoverFill)
+                .pointerHoverIcon(PointerIcon.Hand)
+                .hoverable(interaction)
+                .clickable(interactionSource = interaction, indication = null, onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(Modifier.size(17.dp)) {
+                val stroke = 1.6.dp.toPx()
+                when (glyph) {
+                    Glyph.Settings -> drawSliders(strokeColor, stroke)
+                    Glyph.Minimize -> drawLine(
+                        color = strokeColor,
+                        start = Offset(size.width * 0.1f, size.height / 2f),
+                        end = Offset(size.width * 0.9f, size.height / 2f),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round,
+                    )
+                    Glyph.Close -> {
+                        val a = size.width * 0.16f
+                        val b = size.width * 0.84f
+                        drawLine(strokeColor, Offset(a, a), Offset(b, b), stroke, StrokeCap.Round)
+                        drawLine(strokeColor, Offset(b, a), Offset(a, b), stroke, StrokeCap.Round)
+                    }
                 }
             }
         }
+
+        // Кружок с восклицательным знаком в углу: появляется сам, когда
+        // панель сказала, что вышла версия новее.
+        AnimatedVisibility(
+            visible = badge,
+            enter = fadeIn(tween(220)) + scaleIn(initialScale = 0.4f, animationSpec = tween(260)),
+            exit = fadeOut(tween(140)) + scaleOut(targetScale = 0.4f, animationSpec = tween(160)),
+            modifier = Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 4.dp),
+        ) {
+            Canvas(Modifier.size(10.dp)) { drawBang(Theme.accent) }
+        }
     }
+}
+
+/**
+ * Восклицательный знак в кружке — метка обновления.
+ *
+ * Рисуем, а не берём готовую иконку: на девяти точках любой шрифтовой глиф
+ * превращается в кашу, а две фигуры остаются читаемыми.
+ */
+private fun DrawScope.drawBang(color: Color) {
+    val radius = size.minDimension / 2f
+    drawCircle(color = color, radius = radius, center = center)
+
+    val bar = radius * 0.24f
+    drawLine(
+        color = Color.White,
+        start = Offset(center.x, center.y - radius * 0.46f),
+        end = Offset(center.x, center.y + radius * 0.08f),
+        strokeWidth = bar,
+        cap = StrokeCap.Round,
+    )
+    drawCircle(color = Color.White, radius = bar * 0.6f, center = Offset(center.x, center.y + radius * 0.46f))
 }
 
 /**

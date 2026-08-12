@@ -170,6 +170,13 @@ private fun MainPage(
                     .padding(bottom = 10.dp),
             )
 
+            SubscriptionBanner(
+                state = state,
+                modifier = Modifier
+                    .padding(horizontal = Layout.screenPadding)
+                    .padding(bottom = 10.dp),
+            )
+
             CurrentServerCard(
                 state = state,
                 backdrop = backdrop,
@@ -207,7 +214,7 @@ private fun Header(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             GlassCircleButton(backdrop = backdrop, onClick = onOpenSupport) {
-                LogoImage(
+                LogoMark(
                     modifier = Modifier.size(26.dp),
                     glowAlpha = 0.45f,
                 )
@@ -467,6 +474,112 @@ private fun SpinnerRing(modifier: Modifier = Modifier) {
 }
 
 /** Баннер ошибки подключения — появляется над карточкой сервера. */
+/**
+ * Состояние подписки на главном экране: сколько дней осталось, сколько
+ * трафика ушло, и кнопка продления, когда пора.
+ *
+ * До этого приложение не показывало ни того, ни другого. Человек узнавал,
+ * что подписка кончилась, в момент, когда переставали выдаваться страны, —
+ * и выглядело это как поломка, а не как «пора заплатить». Кнопка ведёт в
+ * личный кабинет: там он войдёт теми же логином и паролем и нажмёт
+ * «Продлить», не вводя ничего заново.
+ */
+@Composable
+private fun SubscriptionBanner(state: AppState, modifier: Modifier = Modifier) {
+    val s = state.s
+    val days = state.subscriptionDaysLeft
+    val notice = state.panelNotice
+
+    // Трафик выбран до нуля — отдельное состояние, а не «осталось мало:
+    // 0 МБ». Ноль — это не мало, это конец: доступ уже закрыт, и человеку
+    // нужно знать, что делать, а не сколько осталось.
+    val trafficOver = state.trafficLimitBytes >= 0 && state.trafficLeftBytes == 0L
+
+    // Показываем только когда есть что сказать: в обычный день человеку не
+    // нужен постоянный баннер о том, что всё в порядке.
+    val urgent = state.expiresSoon || state.trafficLow || trafficOver || notice.isNotEmpty()
+    if (!urgent) return
+
+    val headline = when {
+        trafficOver -> s.trafficOverTitle
+        notice.isNotEmpty() -> notice
+        state.trafficLow && state.trafficLeftBytes >= 0 ->
+            s.trafficLowTitle + " " + formatBytes(state.trafficLeftBytes)
+        days <= 0 -> s.subEnded
+        else -> s.subEndsIn + " " + plural(days, s.dayOne, s.dayFew, s.dayMany)
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(Theme.accentTint12)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = headline,
+            style = manrope(12.5.sp, W.semibold, Theme.accentSoft).copy(lineHeight = 17.sp),
+        )
+
+        if (state.trafficLimitBytes >= 0) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = s.trafficUsed + " " + formatBytes(state.trafficUsedBytes) +
+                    " " + s.outOf + " " + formatBytes(state.trafficLimitBytes),
+                style = manrope(11.5.sp, W.medium, Theme.textMuted),
+            )
+        }
+
+        if (state.renewUrl.isNotEmpty()) {
+            Spacer(Modifier.height(10.dp))
+            PrimaryButton(
+                text = s.renewNow,
+                height = 42.dp,
+                cornerRadius = 13.dp,
+                onClick = { openInBrowser(state.renewUrl) },
+            )
+        }
+    }
+}
+
+/**
+ * Открывает ссылку в браузере.
+ *
+ * Тихо игнорирует отказ: в окружении без графической оболочки Desktop
+ * недоступен, и падать из-за кнопки «продлить» приложение не должно.
+ */
+private fun openInBrowser(url: String) {
+    runCatching {
+        val desktop = java.awt.Desktop.getDesktop()
+        if (java.awt.Desktop.isDesktopSupported() &&
+            desktop.isSupported(java.awt.Desktop.Action.BROWSE)
+        ) {
+            desktop.browse(java.net.URI(url))
+        }
+    }
+}
+
+/** Гигабайты и мегабайты — единицы, в которых человек думает о трафике. */
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0) return "0 МБ"
+    val gb = bytes / 1024.0 / 1024.0 / 1024.0
+    if (gb >= 1) return String.format("%.1f ГБ", gb)
+    return String.format("%.0f МБ", bytes / 1024.0 / 1024.0)
+}
+
+/** Русские окончания: 1 день, 2 дня, 5 дней. */
+private fun plural(count: Int, one: String, few: String, many: String): String {
+    val n = kotlin.math.abs(count) % 100
+    val n1 = n % 10
+    val word = when {
+        n in 11..19 -> many
+        n1 in 2..4 -> few
+        n1 == 1 -> one
+        else -> many
+    }
+    return "$count $word"
+}
+
 @Composable
 private fun ConnectionErrorBanner(
     message: String?,

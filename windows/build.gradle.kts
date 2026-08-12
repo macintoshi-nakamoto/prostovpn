@@ -41,32 +41,134 @@ java {
 val tunnelResourcesDir = layout.projectDirectory.dir("resources/windows")
 
 /**
- * Номер сборки для версии установщика: число коммитов в истории.
- * MSI разрешает 0..65535 в третьем поле версии.
+ * Версия приложения.
+ *
+ * Задана явно в gradle.properties и растёт руками. Раньше третье поле
+ * считалось числом коммитов в истории — и это молча сломало обновления:
+ * историю свернули в один коммит, сборка стала называть себя 1.0.1, а у
+ * людей уже стояла 1.0.16. Панель сравнивает версии по числам, честно
+ * отвечала «установлена последняя», и кнопка обновления не появлялась
+ * вообще — при том, что новая сборка была выложена.
+ *
+ * На сборке переопределяется: `-PappVersion=1.0.18` или PROSTO_VERSION.
  */
-val buildNumber: Int = (System.getenv("PROSTO_BUILD")?.toIntOrNull()
-    ?: runCatching {
-        val process = ProcessBuilder("git", "rev-list", "--count", "HEAD")
-            .directory(rootDir)
-            .redirectErrorStream(true)
-            .start()
-        val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
-        process.waitFor()
-        output.toInt()
-    }.getOrDefault(1)).coerceIn(1, 65535)
+val appVersion: String = ((project.findProperty("appVersion") as String?)
+    ?: System.getenv("PROSTO_VERSION")
+    ?: project.findProperty("prostoVersion") as String?
+    ?: error("не задана версия приложения: prostoVersion в gradle.properties")).trim()
+
+/*
+ * Проверяем здесь, а не после сборки установщика: WiX на неверной версии
+ * падает сообщением про ProductVersion, по которому неочевидно, что дело
+ * в одном числе из gradle.properties. Пределы — те, что разрешает MSI.
+ */
+run {
+    val parts = appVersion.split(".")
+    val limits = listOf(255, 255, 65535)
+    check(parts.size == 3 && parts.withIndex().all { (i, p) ->
+        p.toIntOrNull()?.let { it in 0..limits[i] } == true
+    }) {
+        "версия «$appVersion» не годится для MSI: нужны три числа, " +
+            "major 0..255, minor 0..255, build 0..65535"
+    }
+}
+
+/*
+ * Версия и адрес панели, доступные из кода.
+ *
+ * В десктопном проекте нет BuildConfig — это понятие Android. Генерируем
+ * крошечный файл на этапе сборки, иначе версию пришлось бы держать
+ * строкой в двух местах, и она разъезжалась бы с установщиком.
+ */
+// Адрес панели задаётся сборкой и в репозитории не хранится: он
+// принадлежит конкретной установке, а не коду.
+//
+//   ./gradlew packageMsi -PpanelUrl=https://панель.ваш-домен
+//
+// Обязательно домен, а не голый IP: на IP публичный сертификат не
+// выпускается, а с самоподписанным клиент обрывает соединение до запроса —
+// вход молча не проходит, и человек видит «ввожу логин и пароль, ничего не
+// работает». Значение по умолчанию заведомо нерабочее, чтобы забытый
+// параметр сборки было видно сразу, а не после выкладки.
+val panelUrl: String = (project.findProperty("panelUrl") as String?)
+    ?: System.getenv("PANEL_URL")
+    ?: "https://panel.example.com"
+
+/*
+Собрать установщик с заглушкой нельзя — только запустить из Gradle.
+
+Это не перестраховка: такой установщик уже один раз уехал человеку.
+Приложение выглядело собранным, ставилось и открывалось, но ходило на
+несуществующий panel.example.com — и в обновлениях вечно показывало
+«нет сети», а вход не работал. Ошибка сборки честнее ошибки в рантайме:
+её видит тот, кто собирает, а не тот, кто установил.
+*/
+gradle.taskGraph.whenReady {
+    val packaging = allTasks.any { it.name.startsWith("package") && it.project == project }
+    if (packaging && panelUrl == "https://panel.example.com") {
+        throw GradleException(
+            "Установщик собирается без адреса панели: он уйдёт людям с зашитым " +
+                "panel.example.com, и приложение не сможет ни войти, ни обновиться. " +
+                "Соберите так: ./gradlew packageMsi -PpanelUrl=https://ваш-домен"
+        )
+    }
+}
+
+val generateBuildInfo = tasks.register("generateBuildInfo") {
+    val outputDir = layout.buildDirectory.dir("generated/buildinfo")
+    val version = appVersion
+    val url = panelUrl
+    // Версия и адрес — входные данные задачи. Без этого Gradle считает её
+    // выполненной и не перегенерирует файл при смене номера сборки: пакет
+    // получает новый номер, а приложение продолжает считать себя старым и
+    // предлагает обновиться само на себя без конца.
+    inputs.property("version", version)
+    inputs.property("panelUrl", url)
+    outputs.dir(outputDir)
+    doLast {
+        val dir = outputDir.get().asFile.resolve("com/prostovpn/desktop")
+        dir.mkdirs()
+        dir.resolve("BuildInfo.kt").writeText(
+            """
+            package com.prostovpn.desktop
+
+            /** Создаётся сборкой. Руками не править. */
+            object BuildInfo {
+                const val VERSION = "$version"
+                const val PANEL_URL = "$url"
+            }
+            """.trimIndent() + System.lineSeparator()
+        )
+    }
+}
+
+kotlin.sourceSets["main"].kotlin.srcDir(generateBuildInfo)
 
 compose.desktop {
     application {
         mainClass = "com.prostovpn.desktop.MainKt"
 
+        /*
+        Каким JDK упаковывать (jpackage). По умолчанию — тем же, на котором
+        идёт Gradle, но это не всегда возможно: у JetBrains Runtime из
+        Android Studio jpackage вырезан, а на слишком новом JDK не
+        запускается сам Gradle. Свойство разводит эти роли:
+
+          ./gradlew packageMsi -PpackagingJdk="C:/Program Files/Java/jdk-25"
+
+        Внутрь установщика уходит рантайм именно этого JDK; код собран под
+        JVM 17 и на более новом рантайме работает без оговорок.
+        */
+        (project.findProperty("packagingJdk") as String?)?.let { javaHome = it }
+
         nativeDistributions {
             appResourcesRootDir.set(layout.projectDirectory.dir("resources"))
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Prosto VPN"
-            // Номер сборки растёт с каждым коммитом: MSI отказывается ставиться
+            // Та же версия, что видит приложение: MSI отказывается ставиться
             // поверх той же версии («Another version is already installed»),
             // а с большей версией штатно обновляет установленную.
-            packageVersion = "1.0.$buildNumber"
+            packageVersion = appVersion
             // Только ASCII: WiX собирает MSI в кодовой странице 1252,
             // кириллица в метаданных валит light.exe с ошибкой LGHT0311
             description = "Prosto VPN - free and secure internet"
@@ -213,4 +315,16 @@ tasks.register<JavaExec>("keyprobe") {
     group = "verification"
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.prostovpn.desktop.DevKeyProbeKt")
+}
+
+tasks.register<JavaExec>("panelcheck") {
+    group = "verification"
+    description = "Проверяет вход в панель без запуска окна"
+    mainClass.set("com.prostovpn.desktop.PanelCheck")
+    classpath = sourceSets["main"].runtimeClasspath
+    args = listOf(
+        (project.findProperty("panel") as String?) ?: panelUrl,
+        (project.findProperty("login") as String?) ?: "",
+        (project.findProperty("pass") as String?) ?: "",
+    )
 }

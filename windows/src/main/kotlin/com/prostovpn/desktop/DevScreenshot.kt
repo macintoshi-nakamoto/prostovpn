@@ -50,6 +50,9 @@ fun main() {
     snap("05-support") { Shell(page = Page.SUPPORT) }
     snap("06-servers-sheet") { Shell(phase = Phase.ON, openServers = true) }
     snap("07-files-sheet") { Shell(page = Page.SETTINGS, openFiles = true) }
+    // Метка обновления на шестерёнке: её видно только в этом состоянии,
+    // а проверять её тоже надо глазами.
+    snap("08-home-update") { Shell(updateBadge = true) }
 }
 
 /**
@@ -63,10 +66,11 @@ private fun Shell(
     phase: Phase = Phase.OFF,
     openServers: Boolean = false,
     openFiles: Boolean = false,
+    updateBadge: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val state = remember { AppState(scope) }
-    state.previewAs(guest = loggedIn, previewPhase = phase)
+    state.previewAs(loggedIn = loggedIn, previewPhase = phase)
     if (openFiles) state.previewOpenFileSheet()
     if (openServers) state.previewOpenServerSheet()
 
@@ -101,6 +105,7 @@ private fun Shell(
         GlassControlBar(
             backdrop = backdrop,
             showSettings = loggedIn && page == Page.MAIN,
+            settingsBadge = updateBadge,
             onSettings = {},
             onMinimize = {},
             onClose = {},

@@ -64,11 +64,14 @@ object WgConfig {
      * Оставляет только понятные Windows ключи и добивает обязательные поля.
      * Возвращает null, если конфиг непригоден (нет ключа или пира).
      *
-     * [killSwitchOn] — взводить ли блокирующие правила брандмауэра при
-     * полном туннеле. Ключ «KillSwitch» из входного текста всегда
-     * выбрасывается: решает настройка приложения, а не содержимое ключа.
+     * Kill switch выключен всегда и настройкой больше не управляется.
+     * Блокирующие правила брандмауэра, которые он взводит, конфликтуют с
+     * zapret и другими обходами на WinDivert: подключение при этом молча не
+     * состоится, а человек видит только «не работает» и не может связать
+     * это с переключателем в настройках. Ключ «KillSwitch» из входного
+     * текста выбрасывается — решает приложение, а не содержимое конфига.
      */
-    fun sanitize(configText: String, killSwitchOn: Boolean = true): String? {
+    fun sanitize(configText: String): String? {
         var section = ""
         var hasAddress = false
         var hasMtu = false
@@ -115,8 +118,9 @@ object WgConfig {
 
         if (!hasPrivateKey || !hasPeer || !hasEndpoint || !hasAddress) return null
         if (!hasMtu) interfaceLines += "MTU = $DEFAULT_MTU"
-        // «off» пишем явно, «on» — поведение движка по умолчанию
-        if (!killSwitchOn) interfaceLines += "KillSwitch = off"
+        // Пишем явно: «on» — поведение движка по умолчанию, и без этой
+        // строки блокирующие правила взведутся сами.
+        interfaceLines += "KillSwitch = off"
 
         return buildString {
             appendLine("[Interface]")

@@ -22,12 +22,17 @@ export function SiteFooter() {
           <div>
             <Link to="/faq">{t("footer.faq")}</Link>
             <Link to="/contacts">{t("footer.support")}</Link>
-            {/* Канал, а не поддержка: за помощью ведёт соседняя ссылка. */}
-            <a href="https://t.me/prostovpn_tg" target="_blank" rel="noreferrer">
-              {t("footer.channel")}
-            </a>
+            {/*
+            Три разных телеграма, и путать их нельзя: бот оформляет подписку
+            и отдаёт доступ, канал — новости, поддержка — живой человек.
+            Бот стоит первым: это единственная из трёх ссылок, по которой
+            что-то делают, а не читают.
+            */}
             <a href="https://t.me/prostovpnn_bot" target="_blank" rel="noreferrer">
               {t("footer.bot")}
+            </a>
+            <a href="https://t.me/prostovpn_tg" target="_blank" rel="noreferrer">
+              {t("footer.channel")}
             </a>
           </div>
           <div>
@@ -35,12 +40,15 @@ export function SiteFooter() {
             <Link to="/privacy">{t("footer.privacy")}</Link>
             <Link to="/contacts">{t("footer.contacts")}</Link>
           </div>
+          {/* В кабинет, а не на форму входа: вошедшего она отправляла
+              вводить логин заново, хотя он уже вошёл. Гостя туда же не
+              пустит Private и вернёт сюда после входа. */}
           <div className="sf-stores">
-            <Link to="/login" className="btn btn-dark sf-store">
+            <Link to="/account?tab=setup" className="btn btn-dark sf-store">
               <Picture src="/assets/ic-appstore.png" />
               App Store
             </Link>
-            <Link to="/login" className="btn btn-dark sf-store">
+            <Link to="/account?tab=setup" className="btn btn-dark sf-store">
               <Picture src="/assets/ic-googleplay.png" />
               Google Play
             </Link>

@@ -5,6 +5,7 @@ import { SiteFooter } from "../components/SiteFooter.jsx";
 import { Reveal, ArtImage } from "../components/Reveal.jsx";
 import { HeroOrbit } from "../components/HeroOrbit.jsx";
 import { Picture } from "../components/Picture.jsx";
+import { useSession } from "../lib/session.jsx";
 import { useTilt } from "../lib/hooks";
 import { useAnchorReveal } from "../lib/anchors";
 import { api } from "../lib/api";
@@ -29,6 +30,18 @@ const FEATURES = [
 
 /** Адреса документов — рядом с порядком карточек в словаре. */
 const DOC_LINKS = ["/privacy", "/terms", "/faq", "/contacts"];
+
+/*
+ * Кнопки действия ведут в кабинет, а не на форму входа.
+ *
+ * Раньше здесь стояло `/login` у всех до единой, и вошедший человек, нажав
+ * «Выбрать» на тарифе, снова видел форму входа — при том, что шапка той же
+ * страницы уже показывала ему «Кабинет». Теперь адрес один для всех: гостя
+ * до кабинета не пустит Private из App.jsx, отправит на вход и после него
+ * вернёт ровно сюда, вместе с выбранным тарифом в запросе.
+ */
+const PLAN_TAB = "/account?tab=plan";
+const SETUP_TAB = "/account?tab=setup";
 
 /** «30 дней» → «1 месяц», «365 дней» → «1 год»: срок словами, а не в днях. */
 function termLabel(days, t) {
@@ -189,6 +202,7 @@ function Feature({ icon, plain, title, text, delay }) {
 
 export function Landing() {
   const { t, raw, f } = useI18n();
+  const { authed } = useSession();
   const [plans, setPlans] = useState(null);
 
   useAnchorReveal();
@@ -334,11 +348,11 @@ export function Landing() {
             </h2>
             <p>{t("landing.app.text")}</p>
             <div className="ld-app-stores">
-              <Link to="/login" className="btn btn-dark ld-store">
+              <Link to={SETUP_TAB} className="btn btn-dark ld-store">
                 <Picture src="/assets/ic-appstore.png" />
                 App Store
               </Link>
-              <Link to="/login" className="btn btn-dark ld-store">
+              <Link to={SETUP_TAB} className="btn btn-dark ld-store">
                 <Picture src="/assets/ic-googleplay.png" />
                 Google Play
               </Link>
@@ -432,8 +446,17 @@ export function Landing() {
                 </h3>
                 <p>{trial.note || t("landing.plans.trialNote")}</p>
               </div>
-              <Link to="/login" className="btn btn-primary ld-trial-btn">
-                {t("landing.plans.trialButton")}
+              {/*
+              Пробный период получают регистрацией, поэтому гостя ведём
+              сразу на её вкладку, а не на форму входа: учётки у него ещё
+              нет. Вошедшему предлагать «попробовать» нечего — он уже внутри,
+              и кнопка открывает его тариф.
+              */}
+              <Link
+                to={authed ? PLAN_TAB : "/login?mode=signup"}
+                className="btn btn-primary ld-trial-btn"
+              >
+                {authed ? t("landing.plans.trialButtonAuthed") : t("landing.plans.trialButton")}
               </Link>
             </Reveal>
           )}
@@ -458,7 +481,7 @@ export function Landing() {
                   ))}
                 </ul>
                 <Link
-                  to="/login"
+                  to={`${PLAN_TAB}&plan=${encodeURIComponent(p.code || "")}`}
                   className={`btn ld-plan-btn ${p.featured ? "btn-primary" : "btn-outline"}`}
                 >
                   {t("landing.plans.choose")}

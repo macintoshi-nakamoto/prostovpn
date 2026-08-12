@@ -94,6 +94,9 @@ export const PLATFORM_LABELS = {
   ios: "iOS",
   macos: "macOS",
   linux: "Linux",
+  // Не бренд, а вход в кабинет. Место в лимите тарифа он не занимает —
+  // см. WEB_PLATFORMS в backend/app/models.py.
+  web: "Браузер",
 };
 
 export function platformLabel(platform) {

@@ -362,19 +362,35 @@ function Payments({ user }) {
 
 function Sessions({ user, onChanged }) {
   const [busy, setBusy] = useState(null);
+  const [warning, setWarning] = useState("");
   if (!user.sessions.length) return <Empty>Входов пока не было</Empty>;
 
+  /*
+  Отключение снимает пира этого устройства с узлов, а не только гасит токен,
+  поэтому и подпись, и предупреждение говорят про VPN, а не про «сессию»:
+  человек на том конце теряет туннель в ту же секунду. Для входа из
+  браузера снимать нечего — там и обещание другое.
+  */
   const kill = async (session) => {
+    const live = session.isDevice !== false;
     const ok = await confirmDialog({
-      title: "Завершить сессию?",
-      message: "Приложение на этом устройстве попросит войти заново.",
-      confirmText: "Завершить",
+      title: live ? "Отключить устройство?" : "Завершить вход?",
+      message: live
+        ? "Туннель на этом устройстве упадёт сразу, приложение попросит войти заново."
+        : "Кабинет в этом браузере попросит войти заново.",
+      confirmText: live ? "Отключить" : "Завершить",
       danger: true,
     });
     if (!ok) return;
     setBusy(session.id);
+    setWarning("");
     try {
-      await usersApi.killSession(user.id, session.id);
+      const result = await usersApi.killSession(user.id, session.id);
+      // Узел не ответил — доступ там мог остаться. Молча показывать успех
+      // в этом случае нельзя: администратор решит, что доступ закрыт.
+      if (result?.warnings?.length) {
+        setWarning(`Токен погашен, но пир снят не везде: ${result.warnings.join("; ")}`);
+      }
       const fresh = await usersApi.get(user.id);
       onChanged(fresh);
     } finally {
@@ -384,6 +400,11 @@ function Sessions({ user, onChanged }) {
 
   return (
     <Card pad>
+      {warning && (
+        <div className="gd-cellsub" style={{ color: "var(--gd-neg)", marginBottom: 12 }}>
+          {warning}
+        </div>
+      )}
       <div className="gd-rows">
         {user.sessions.map((session) => (
           <div key={session.id} className="gd-r">
@@ -391,7 +412,11 @@ function Sessions({ user, onChanged }) {
               <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
                 {session.deviceName || platformLabel(session.platform)}
                 {session.appVersion && <span className="gd-chip">{session.appVersion}</span>}
-                {session.isOnline && <Chip color="var(--gd-pos)">онлайн</Chip>}
+                {/* «В VPN» — про туннель, «онлайн» — про открытое приложение.
+                    Две разные вещи, и администратору нужны обе. */}
+                {session.isConnected && <Chip color="var(--gd-pos)">в VPN</Chip>}
+                {session.isOnline && !session.isConnected && <Chip color="var(--gd-faint)">онлайн</Chip>}
+                {session.isDevice === false && <Chip color="var(--gd-faint)">не устройство</Chip>}
                 {session.revokedAt && <Chip color="var(--gd-faint)">завершена</Chip>}
               </div>
               <div className="gd-cellsub">
@@ -402,7 +427,7 @@ function Sessions({ user, onChanged }) {
               {ago(session.lastSeenAt)}
               {!session.revokedAt && (
                 <Button size="sm" variant="danger" disabled={busy === session.id} onClick={() => kill(session)}>
-                  Завершить
+                  {session.isDevice === false ? "Завершить" : "Отключить"}
                 </Button>
               )}
             </div>
@@ -413,13 +438,30 @@ function Sessions({ user, onChanged }) {
   );
 }
 
+/**
+ * Чьё это устройство — словами, а не идентификатором установки.
+ *
+ * Идентификатор — случайная строка, по ней ничего не понять. Ищем вход с
+ * тем же идентификатором и берём его имя; пустой — общий ключ учётки,
+ * которым ходят приложения, ещё не присылающие поле.
+ */
+function deviceLabel(user, deviceId) {
+  if (!deviceId) return "общий ключ учётки";
+  const session = user.sessions.find((s) => s.deviceId === deviceId);
+  if (!session) return "устройство без входа";
+  return session.deviceName || platformLabel(session.platform);
+}
+
 function Servers({ user }) {
   const live = user.keys.filter((k) => !k.revokedAt);
   if (!live.length) return <Empty>Ключей на серверах нет</Empty>;
 
   return (
     <Card pad>
-      <Section title="Ключи на серверах" sub="Клиент видит только страну — ни адреса, ни ключа">
+      <Section
+        title="Ключи на серверах"
+        sub="По одному пиру на устройство — поэтому отключить можно одно, не трогая остальные"
+      >
         <div className="gd-rows">
           {live.map((key) => (
             <div key={key.id} className="gd-r">
@@ -430,7 +472,8 @@ function Servers({ user }) {
                   {key.city ? `, ${key.city}` : ""}
                 </div>
                 <div className="gd-cellsub gd-mono">
-                  {key.address || "общий ключ"} · {key.serverName}
+                  {key.address || "общий ключ"} · {key.serverName} ·{" "}
+                  {deviceLabel(user, key.deviceId)}
                 </div>
               </div>
               <div className="r">

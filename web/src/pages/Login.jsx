@@ -19,9 +19,20 @@ export function Login() {
   const { signIn, signUp, authed } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = location.state?.from?.pathname || "/account";
+  /*
+  Возвращаемся ровно туда, откуда человека сюда отправили, — вместе с
+  запросом. Без search терялся выбранный тариф: с лендинга жали «Выбрать» на
+  годовом, а после входа кабинет открывался на общей вкладке, и выбор
+  приходилось делать заново.
+  */
+  const back = location.state?.from;
+  const from = back ? `${back.pathname}${back.search || ""}` : "/account";
 
-  const [mode, setMode] = useState("login");
+  // Кнопка пробного периода ведёт сразу на регистрацию: человеку, который
+  // ещё не завёл учётку, форма входа — тупик.
+  const [mode, setMode] = useState(() =>
+    new URLSearchParams(location.search).get("mode") === "signup" ? "register" : "login",
+  );
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");

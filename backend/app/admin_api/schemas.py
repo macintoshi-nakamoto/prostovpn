@@ -132,6 +132,10 @@ class SessionOut(Schema):
     expires_at: dt.datetime
     revoked_at: dt.datetime | None
     is_online: bool
+    # Занимает ли этот вход место в лимите тарифа. Кабинет в браузере — нет.
+    is_device: bool = True
+    # Поднят ли туннель через это устройство прямо сейчас.
+    is_connected: bool = False
 
 
 class PaymentOut(Schema):
@@ -159,6 +163,9 @@ class UserKeyOut(Schema):
     id: int
     server_id: int
     server_name: str
+    # Устройство, которому принадлежит пир. Пустая строка — «ключ учётки»:
+    # им ходят приложения, ещё не присылающие идентификатор установки.
+    device_id: str = ""
     country: str | None
     country_code: str | None
     city: str | None
@@ -414,6 +421,7 @@ class KeyRow(Schema):
     country_code: str | None
     city: str | None
     provisioning: str
+    device_id: str = ""
     address: str | None
     public_key: str | None
     rx_bytes: int

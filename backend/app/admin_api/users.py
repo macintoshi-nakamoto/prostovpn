@@ -383,13 +383,25 @@ def kill_session(
     db: OrmSession = Depends(get_db),
     admin: Admin = Depends(current_admin),
 ) -> schemas.ActionResult:
-    session = db.get(Session, session_id)
-    if session is None or session.user_id != user_id:
+    """
+    Отключить устройство человека.
+
+    Токен гасится и пир этого устройства снимается с узлов: до появления
+    пиров на устройство отсюда уходил один `revoked_at`, приложение
+    показывало «войдите заново», а туннель продолжал работать до
+    перезагрузки. Тот же код, что и в кабинете, — иначе две кнопки с одной
+    подписью однажды начали бы делать разное.
+    """
+    user = _load(db, user_id)
+    problems = services.disconnect_device_by_id(db, user, session_id)
+    if problems is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "сессия не найдена")
-    session.revoked_at = utcnow()
-    db.commit()
     audit(db, admin, "session.kill", str(session_id))
-    return schemas.ActionResult(ok=True)
+    return schemas.ActionResult(
+        ok=True,
+        warnings=problems,
+        message="устройство отключено" if not problems else "токен погашен, но узлы ответили не все",
+    )
 
 
 @router.delete("/{user_id}", response_model=schemas.ActionResult)

@@ -27,6 +27,10 @@ def run(engine: Engine) -> None:
     """Создаёт недостающие таблицы, колонки и индексы, потом чинит данные."""
     Base.metadata.create_all(engine)
     _add_missing_columns(engine)
+    # Единственное исключение из правила «не менять то, что уже есть»: см.
+    # _widen_user_keys_unique. Ограничение снимается до всего остального,
+    # иначе выдача ключей второму устройству падает с IntegrityError.
+    _widen_user_keys_unique(engine)
     # Дубли адресов разводим до индексов, а не в backfill: тот идёт уже после
     # создания индексов, и уникальный индекс по (server_id, address) на такой
     # базе просто не встал бы — _create_missing_indexes только пишет об этом
@@ -131,6 +135,77 @@ def _create_missing_indexes(engine: Engine) -> None:
                 # Уникальный индекс не встанет, если в базе уже есть дубли.
                 # Это повод разобраться руками, а не повод не запускаться.
                 log.error("индекс %s не создан: %s", index.name, exc)
+
+
+def _widen_user_keys_unique(engine: Engine) -> None:
+    """
+    Снимает с `user_keys` старую уникальность по паре (user_id, server_id).
+
+    Ровно то, чего этот механизм обычно не делает, — и делается один раз, с
+    причиной. Пока пара была уникальной, у человека физически не могло быть
+    двух ключей на одном сервере, то есть двух пиров, то есть отключить одно
+    устройство, не отключив остальные, было нечем. Теперь уникальность — по
+    тройке с `device_id`, и старое ограничение обязано уйти, иначе выдача
+    ключа второму устройству падает на вставке.
+
+    В SQLite ограничение записано в самом CREATE TABLE и отдельной командой
+    не снимается — таблицу приходится пересобирать. Данные при этом никуда
+    не деваются: сначала полная копия, потом чистая таблица из моделей,
+    потом обратная заливка, и всё это в одной транзакции.
+    """
+    inspector = inspect(engine)
+    table = UserKey.__table__
+    if not inspector.has_table(table.name):
+        return
+
+    stale = [
+        constraint
+        for constraint in inspector.get_unique_constraints(table.name)
+        if set(constraint["column_names"]) == {"user_id", "server_id"}
+    ]
+    if not stale:
+        return
+
+    if engine.dialect.name != "sqlite":
+        with engine.begin() as conn:
+            for constraint in stale:
+                conn.execute(
+                    text(f'ALTER TABLE {table.name} DROP CONSTRAINT "{constraint["name"]}"')
+                )
+        log.warning("миграция: снята уникальность (user_id, server_id) с %s", table.name)
+        return
+
+    present = {column["name"] for column in inspector.get_columns(table.name)}
+    columns = [column.name for column in table.columns if column.name in present]
+    column_list = ", ".join(f'"{name}"' for name in columns)
+    # `device_id` мог приехать в старую таблицу отдельной колонкой и остаться
+    # пустым: NOT NULL к непустой таблице не добавляют. В новой схеме он
+    # обязателен, поэтому пустоту превращаем в «ключ учётки» на переливке.
+    select_list = ", ".join(
+        'COALESCE("device_id", \'\')' if name == "device_id" else f'"{name}"' for name in columns
+    )
+
+    with engine.begin() as conn:
+        # Копия без индексов и ограничений: она нужна ровно на время
+        # пересборки и переживёт удаление исходной таблицы вместе с её
+        # индексами, имена которых иначе столкнулись бы с новыми.
+        conn.execute(text(f"CREATE TABLE _user_keys_rebuild AS SELECT * FROM {table.name}"))
+        conn.execute(text(f"DROP TABLE {table.name}"))
+        table.create(conn)
+        conn.execute(
+            text(
+                f"INSERT INTO {table.name} ({column_list}) "
+                f"SELECT {select_list} FROM _user_keys_rebuild"
+            )
+        )
+        moved = conn.execute(text(f"SELECT count(*) FROM {table.name}")).scalar_one()
+        conn.execute(text("DROP TABLE _user_keys_rebuild"))
+
+    log.warning(
+        "миграция: %s пересобрана под ключи на устройство, перенесено строк: %d",
+        table.name,
+        moved,
+    )
 
 
 def _dedupe_key_addresses(engine: Engine) -> None:

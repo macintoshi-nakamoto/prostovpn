@@ -523,9 +523,50 @@ def test_account_shows_devices_and_no_technical_fields(client):
     body = account.json()
     assert body["login"] == status["login"]
     assert body["device_limit"] == 3
-    assert len(body["devices"]) == 1
+    # Браузер, из которого открыт сам кабинет, устройством не считается:
+    # туннеля в нём нет и отключать нечего.
+    assert body["devices"] == []
     # В кабинете нет ни ключей, ни конфигов — только срок и устройства.
     assert "config" not in account.text and "PrivateKey" not in account.text
+
+
+def test_browser_does_not_take_a_device_slot(client):
+    """
+    Вход в кабинет не занимает место в лимите тарифа.
+
+    Проверяем ровно тот случай, из-за которого это писалось: человек вошёл
+    с телефона, потом открыл кабинет в браузере — телефон обязан остаться
+    подключённым и остаться в списке устройств.
+    """
+    order = _order(client, "slots@example.com")
+    _deliver_webhook(client, order["id"])
+    status = client.get(f"/api/v1/orders/{order['id']}/status").json()
+
+    def login(platform: str, device: str) -> str:
+        r = client.post(
+            "/api/v1/login",
+            json={
+                "login": status["login"],
+                "password": status["password"],
+                "platform": platform,
+                "device_id": device,
+                "device_name": device,
+            },
+        )
+        assert r.status_code == 200, r.text
+        return r.json()["token"]
+
+    phone = login("android", "phone-1")
+    for _ in range(4):
+        # Четыре захода в кабинет с разных браузеров при лимите в три
+        # устройства: раньше на третьем телефон выкидывало.
+        login("web", f"browser-{_}")
+
+    account = client.get("/api/v1/account", headers={"Authorization": f"Bearer {phone}"})
+    assert account.status_code == 200, account.text
+    devices = account.json()["devices"]
+    assert [d["platform"] for d in devices] == ["android"]
+    assert devices[0]["is_current"] is True
 
 
 def test_device_limit_drops_oldest_session(client):

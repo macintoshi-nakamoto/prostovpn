@@ -110,6 +110,7 @@ export const ru = {
       trialHead: "{title}: {term} и {traffic}",
       trialNote: "Заведите аккаунт — доступ откроется сразу, платёжная карта не нужна.",
       trialButton: "Попробовать бесплатно",
+      trialButtonAuthed: "Мой тариф",
       perMonth: "/ мес",
       choose: "Выбрать",
       priceFor: "{price} за {term}",
@@ -169,8 +170,8 @@ export const ru = {
     security: "Безопасность",
     faq: "FAQ",
     support: "Поддержка",
-    channel: "Telegram-канал",
     bot: "Telegram-бот",
+    channel: "Telegram-канал",
     terms: "Условия",
     privacy: "Конфиденциальность",
     contacts: "Контакты",
@@ -262,9 +263,14 @@ export const ru = {
     devicesTitle: "Подключённые устройства",
     devicesAdd: "Добавить",
     devicesEmpty:
-      "Пока ни одного входа. Установите приложение и войдите теми же логином и паролем.",
+      "Пока ни одного устройства. Установите приложение и войдите теми же логином и паролем.",
     thisDevice: "это устройство",
     disconnect: "Отключить",
+    disconnectConfirm: "Точно отключить",
+    disconnectPartly:
+      "Токен погашен, но один из серверов не ответил — доступ там может пропасть не сразу.",
+    disconnectFailed: "Не удалось отключить устройство",
+    deviceConnected: "в сети",
     deviceFallback: "Устройство",
     platformWeb: "Браузер",
 
@@ -293,6 +299,9 @@ export const ru = {
     renewCreated:
       "Заказ на продление создан. Оплата подключается — мы напишем, когда она заработает.",
     renewFailed: "Не удалось создать заказ",
+    switchTitle: "Перейти на тариф «{plan}»",
+    switchText: "Оплата откроет {term} доступа. Стоимость — {price}.",
+    switchAction: "Оформить",
     paymentsTitle: "История платежей",
     paymentsEmpty: "Платежей пока не было.",
     payDate: "Дата",

@@ -324,12 +324,43 @@
   gap: 3px;
 }
 .ac-device-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 16px;
   font-weight: 600;
+}
+/* Единственная зелёная точка на экране: она отвечает на вопрос, ради
+   которого сюда и заходят, — идёт ли трафик через это устройство. */
+.ac-device-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #2f9e44;
+}
+.ac-device-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .ac-device-sub {
   font-size: 14px;
   color: var(--text-dim);
+}
+.ac-device-error {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--danger);
+}
+.ac-device-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
 }
 .ac-device-off {
   border: none;
@@ -339,9 +370,22 @@
   font-weight: 500;
   color: var(--text-dim);
   transition: color 0.15s ease;
+  /* Тач-таргет: строка плотная, а без запаса по высоте кнопка на телефоне
+     промахивается мимо пальца. */
+  min-height: 44px;
+  padding: 0 2px;
 }
-.ac-device-off:hover {
+.ac-device-off:hover,
+.ac-device-off:focus-visible {
   color: var(--accent-dark);
+}
+.ac-device-confirm .ac-device-off {
+  color: var(--danger);
+  font-weight: 600;
+}
+.ac-device-off:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .ac-kvs {

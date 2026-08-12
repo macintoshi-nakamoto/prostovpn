@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
 import { useDismiss } from "../lib/hooks";
@@ -17,7 +17,18 @@ export function Account() {
   const { t, raw } = useI18n();
   const { signOut } = useSession();
   const navigate = useNavigate();
-  const [tab, setTab] = useState("account");
+  /*
+  Вкладка и выбранный тариф приходят в адресе.
+
+  С лендинга сюда ведут кнопки «Выбрать» на карточках тарифов и «App Store»
+  из подвала: человек уже сказал, за чем пришёл, и открывать ему общую
+  вкладку значит просить сказать это второй раз. Гость по дороге проходит
+  через форму входа, и запрос переживает её — см. Login.jsx.
+  */
+  const [params] = useSearchParams();
+  const wantedTab = TABS.includes(params.get("tab")) ? params.get("tab") : "account";
+  const wantedPlan = params.get("plan") || "";
+  const [tab, setTab] = useState(wantedTab);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -120,7 +131,9 @@ export function Account() {
             onChanged={load}
           />
         )}
-        {data && tab === "plan" && <PlanTab data={data} onChanged={load} />}
+        {data && tab === "plan" && (
+          <PlanTab data={data} preselected={wantedPlan} onChanged={load} />
+        )}
         {data && tab === "setup" && <SetupGuide login={data.login} />}
       </main>
 
@@ -327,18 +340,35 @@ function EmailRow({ email, onChanged }) {
   );
 }
 
+/**
+ * Устройство в списке.
+ *
+ * «Отключить» здесь означает отключить: сервер гасит токен и снимает пира
+ * этого устройства с узлов, то есть туннель на нём падает сразу. Поэтому
+ * спрашиваем подтверждение — действие видно человеку на другом конце — и
+ * поэтому же честно говорим, если узел не ответил и доступ мог остаться.
+ */
 function DeviceRow({ device, onChanged }) {
   const { t, f } = useI18n();
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState("");
+
   const unlink = async () => {
     setBusy(true);
+    setError("");
     try {
-      await api.unlinkDevice(device.id);
+      const result = await api.unlinkDevice(device.id);
+      if (result?.problems?.length) setError(t("account.disconnectPartly"));
+      setAsking(false);
       onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("account.disconnectFailed"));
     } finally {
       setBusy(false);
     }
   };
+
   // Названия платформ не переводятся — кроме браузера, который не бренд.
   const platform = {
     windows: "Windows",
@@ -347,11 +377,18 @@ function DeviceRow({ device, onChanged }) {
     macos: "macOS",
     web: t("account.platformWeb"),
   };
+
   return (
     <div className="ac-device">
       <span className="ac-device-body">
         <span className="ac-device-name">
           {device.name || platform[device.platform] || t("account.deviceFallback")}
+          {device.is_connected && (
+            <span className="ac-device-live">
+              <span className="ac-device-live-dot" />
+              {t("account.deviceConnected")}
+            </span>
+          )}
         </span>
         <span className="ac-device-sub">
           {(platform[device.platform] || device.platform || "").toString()}
@@ -359,26 +396,63 @@ function DeviceRow({ device, onChanged }) {
             ? ` · ${t("account.thisDevice")}`
             : ` · ${f.ago(device.last_seen_at)}`}
         </span>
+        {error && <span className="ac-device-error">{error}</span>}
       </span>
-      {!device.is_current && (
-        <button className="ac-device-off" disabled={busy} onClick={unlink}>
-          {t("account.disconnect")}
-        </button>
-      )}
+      {!device.is_current &&
+        (asking ? (
+          <span className="ac-device-confirm">
+            <button className="ac-device-off" disabled={busy} onClick={unlink}>
+              {busy ? "…" : t("account.disconnectConfirm")}
+            </button>
+            <button className="ac-link" disabled={busy} onClick={() => setAsking(false)}>
+              {t("account.cancel")}
+            </button>
+          </span>
+        ) : (
+          <button className="ac-device-off" onClick={() => setAsking(true)}>
+            {t("account.disconnect")}
+          </button>
+        ))}
     </div>
   );
 }
 
-function PlanTab({ data, onChanged }) {
+function PlanTab({ data, preselected, onChanged }) {
   const { t, f } = useI18n();
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [chosen, setChosen] = useState(null);
+
+  /*
+  Тариф, выбранный на лендинге.
+
+  Название и цену берём из панели, а не из адреса: в адресе только код, и
+  писать рядом с ним цену значит однажды показать здесь одну сумму, а
+  выставить счёт на другую. Пока тариф не подгрузился, кнопка продлевает
+  текущий — как и раньше.
+  */
+  useEffect(() => {
+    if (!preselected || preselected === data.plan) return;
+    let alive = true;
+    api
+      .plans()
+      .then((list) => {
+        if (!alive || !Array.isArray(list)) return;
+        setChosen(list.find((p) => p.code === preselected && p.purchasable) || null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [preselected, data.plan]);
+
+  const target = chosen ? chosen.code : data.plan;
 
   const renew = async () => {
     setBusy(true);
     setNotice("");
     try {
-      await api.renew(data.plan);
+      await api.renew(target);
       setNotice(t("account.renewCreated"));
       onChanged();
     } catch (err) {
@@ -413,18 +487,22 @@ function PlanTab({ data, onChanged }) {
 
       <div className="ac-card ac-renew">
         <div className="ac-renew-body">
-          <h2>{t("account.renewTitle")}</h2>
+          <h2>{chosen ? t("account.switchTitle", { plan: chosen.title }) : t("account.renewTitle")}</h2>
           <p>
-            {t("account.renewText", {
-              term: data.period_days
-                ? f.days(data.period_days)
-                : t("account.renewTermFallback"),
-            })}
-            {data.price ? t("account.renewPrice", { price: f.money(data.price) }) : ""}
+            {chosen
+              ? t("account.switchText", {
+                  term: f.days(chosen.duration_days),
+                  price: f.moneyFromKopecks(chosen.price_kopecks, chosen.currency),
+                })
+              : t("account.renewText", {
+                  term: data.period_days
+                    ? f.days(data.period_days)
+                    : t("account.renewTermFallback"),
+                }) + (data.price ? t("account.renewPrice", { price: f.money(data.price) }) : "")}
           </p>
         </div>
         <button className="btn btn-primary ac-renew-btn" disabled={busy} onClick={renew}>
-          {busy ? t("account.renewBusy") : t("account.renew")}
+          {busy ? t("account.renewBusy") : chosen ? t("account.switchAction") : t("account.renew")}
         </button>
       </div>
       {notice && <div className="ac-notice">{notice}</div>}

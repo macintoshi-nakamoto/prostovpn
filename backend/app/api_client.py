@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -209,22 +210,26 @@ def _renew_url() -> str:
     return f"{settings().site_url.rstrip('/')}/account.html"
 
 
-def _provision_missing_keys(user_id: int) -> None:
+def _provision_missing_keys(user_id: int, device_id: str) -> None:
     """
     Досоздаёт недостающие ключи в фоне, уже после ответа приложению.
 
     Раньше это делалось прямо в запросе, и вход занимал столько, сколько
     тупит самый медленный сервер: недоступный узел добавляет секунды
-    ожидания на каждого. Ключи обычно уже есть — их выдают при создании
-    пользователя, — а те, что появились из-за нового сервера, подтянутся
-    к следующему запросу списка.
+    ожидания на каждого. Ключи обычно уже есть — их выдают при входе, — а
+    те, что появились из-за нового сервера, подтянутся к следующему запросу
+    списка.
+
+    Устройство одно, своё: досоздавать пиры соседним телефонам того же
+    человека по запросу с этого — лишние заходы по SSH за чужой доступ,
+    который и так появится при их собственном входе.
     """
     from .db import SessionLocal
 
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if user is not None and user.has_access():
-            services.ensure_keys(db, user)
+            services.ensure_keys(db, user, devices={device_id})
 
 
 def _notice_for(db: OrmSession, user: User, servers: list[ServerOut]) -> str | None:
@@ -268,17 +273,31 @@ def _notice_for(db: OrmSession, user: User, servers: list[ServerOut]) -> str | N
     return "Готовим подключение, это займёт около минуты. Потяните экран, чтобы обновить."
 
 
-def _servers_out(db: OrmSession, user: User, background: BackgroundTasks | None = None) -> list[ServerOut]:
+def _servers_out(
+    db: OrmSession,
+    user: User,
+    session: Session | None = None,
+    background: BackgroundTasks | None = None,
+) -> list[ServerOut]:
     """
-    Серверы, доступные пользователю прямо сейчас.
+    Серверы, доступные этому устройству прямо сейчас.
 
     Без действующей подписки список пустой: платящий и неплатящий не должны
     получать одно и то же.
+
+    Конфиг берётся по устройству, а не по учётке: у каждого свой пир, и
+    отдать телефону конфиг ноутбука значит вернуть ровно ту общую пару
+    ключей, из-за которой отключение одного устройства было невозможно.
     """
     if not user.has_access():
         return []
 
-    by_server = {key.server_id: key for key in user.keys if key.revoked_at is None}
+    device_id = session.device_key if session is not None else ""
+    by_server = {
+        key.server_id: key
+        for key in user.keys
+        if key.revoked_at is None and (key.device_id or "") == device_id
+    }
 
     # Чего-то не хватает — досоздадим после ответа, не задерживая человека.
     if background is not None:
@@ -287,7 +306,7 @@ def _servers_out(db: OrmSession, user: User, background: BackgroundTasks | None 
             for server in services.active_servers(db)
         )
         if missing:
-            background.add_task(_provision_missing_keys, user.id)
+            background.add_task(_provision_missing_keys, user.id, device_id)
 
     out: list[ServerOut] = []
     for server in services.active_servers(db):
@@ -364,7 +383,8 @@ def login(
 
     session = services.session_for_token(db, token)
     assert session is not None
-    servers = _servers_out(db, user, background)
+    _provision_for_login(db, user, session)
+    servers = _servers_out(db, user, session, background)
     return LoginResponse(
         token=token,
         expires_at=session.expires_at,
@@ -373,6 +393,33 @@ def login(
         servers=servers,
         notice=_notice_for(db, user, servers),
     )
+
+
+# Сколько вход готов ждать выдачу пира новому устройству. Не «сколько
+# нужно», а «сколько человек стерпит»: не успели — список приедет следующим
+# запросом, о чём приложению скажет notice.
+LOGIN_PROVISION_SECONDS = 8
+
+
+def _provision_for_login(db: OrmSession, user: User, session: Session) -> None:
+    """
+    Заводит пира этому устройству прямо во время входа.
+
+    В фоне это делать нельзя: у нового устройства своего пира ещё нет, и
+    ответ на вход оказался бы пустым списком стран — человек ввёл логин с
+    паролем и упёрся в «серверов нет». Знакомому устройству эта проверка
+    ничего не стоит: ключ уже есть, до SSH дело не доходит.
+    """
+    if not user.has_access() or not session.is_device:
+        return
+    warnings = services.ensure_keys(
+        db,
+        user,
+        devices={session.device_key},
+        deadline=time.monotonic() + LOGIN_PROVISION_SECONDS,
+    )
+    for warning in warnings:
+        log.warning("вход %s: %s", user.public_id, warning)
 
 
 class RegisterRequest(BaseModel):
@@ -461,7 +508,8 @@ def register(
     )
     session = services.session_for_token(db, token)
     assert session is not None
-    servers = _servers_out(db, user, background)
+    _provision_for_login(db, user, session)
+    servers = _servers_out(db, user, session, background)
     return LoginResponse(
         token=token,
         expires_at=session.expires_at,
@@ -481,7 +529,7 @@ def servers(
 ) -> ServersResponse:
     services.touch(db, session, client_ip(request))
     user = session.user
-    servers = _servers_out(db, user, background)
+    servers = _servers_out(db, user, session, background)
     return ServersResponse(
         subscription=_subscription_out(user),
         servers=servers,

@@ -106,6 +106,7 @@ export const en = {
       trialHead: "{title}: {term} and {traffic}",
       trialNote: "Create an account — access opens right away, no payment card needed.",
       trialButton: "Try for free",
+      trialButtonAuthed: "My plan",
       perMonth: "/ mo",
       choose: "Choose",
       priceFor: "{price} for {term}",
@@ -163,8 +164,8 @@ export const en = {
     security: "Security",
     faq: "FAQ",
     support: "Support",
-    channel: "Telegram channel",
     bot: "Telegram bot",
+    channel: "Telegram channel",
     terms: "Terms",
     privacy: "Privacy",
     contacts: "Contacts",
@@ -256,9 +257,14 @@ export const en = {
     devicesTitle: "Connected devices",
     devicesAdd: "Add",
     devicesEmpty:
-      "No sign-ins yet. Install the app and sign in with the same login and password.",
+      "No devices yet. Install the app and sign in with the same login and password.",
     thisDevice: "this device",
     disconnect: "Disconnect",
+    disconnectConfirm: "Yes, disconnect",
+    disconnectPartly:
+      "The token is revoked, but one server did not answer — access there may take a moment to drop.",
+    disconnectFailed: "Could not disconnect the device",
+    deviceConnected: "online",
     deviceFallback: "Device",
     platformWeb: "Browser",
 
@@ -287,6 +293,9 @@ export const en = {
     renewCreated:
       "The renewal order has been created. Payment is being connected — we'll write when it works.",
     renewFailed: "Couldn't create the order",
+    switchTitle: "Switch to {plan}",
+    switchText: "Payment opens {term} of access. Price — {price}.",
+    switchAction: "Buy",
     paymentsTitle: "Payment history",
     paymentsEmpty: "No payments yet.",
     payDate: "Date",

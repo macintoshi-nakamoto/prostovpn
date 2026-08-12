@@ -25,6 +25,7 @@ from . import payments, services
 from .config import settings
 from .db import get_db
 from .models import (
+    HANDSHAKE_WINDOW,
     AppRelease,
     AuditLog,
     Order,
@@ -380,6 +381,9 @@ class DeviceOut(BaseModel):
     last_seen_at: dt.datetime
     created_at: dt.datetime
     is_current: bool = False
+    # Идёт ли через это устройство трафик прямо сейчас. По рукопожатию пира,
+    # а не по тому, открыто ли приложение: это разные события.
+    is_connected: bool = False
 
 
 class PaymentOut(BaseModel):
@@ -407,6 +411,21 @@ class AccountOut(BaseModel):
     payments: list[PaymentOut] = []
 
 
+def _device_connected(user: User, device_id: str, now: dt.datetime) -> bool:
+    """
+    Есть ли свежее рукопожатие у пиров этого устройства.
+
+    Спрашиваем узел, а не приложение: приложение может быть закрыто при
+    поднятом туннеле и открыто при опущенном.
+    """
+    for key in user.keys:
+        if key.revoked_at is not None or (key.device_id or "") != device_id:
+            continue
+        if key.last_handshake_at is not None and key.last_handshake_at > now - HANDSHAKE_WINDOW:
+            return True
+    return False
+
+
 def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
     subscription = user.active_subscription()
     plan = subscription.plan_ref if subscription else None
@@ -426,11 +445,9 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         expires_at=subscription.expires_at if subscription else None,
         days_left=max(0, (subscription.expires_at - now).days) if subscription else None,
         device_limit=user.device_limit(now),
-        # Устройства — это приложения, а не вкладки браузера. Вход в кабинет
-        # открывает такую же сессию с platform="web", и она показывалась в
-        # списке рядом с телефоном: человек видел «Браузер» среди устройств и
-        # резонно считал это ошибкой. Веб-сессии живут своей жизнью — их не
-        # показываем и в лимит не считаем (см. _enforce_device_limit).
+        # Только приложения. Вкладка браузера, из которой человек читает эту
+        # самую страницу, устройством не является: туннеля в ней нет,
+        # отключать нечего, а место в лимите тарифа она занимала.
         devices=[
             DeviceOut(
                 id=session.id,
@@ -440,9 +457,11 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
                 last_seen_at=session.last_seen_at,
                 created_at=session.created_at,
                 is_current=session.id == current.id,
+                is_connected=_device_connected(user, session.device_key, now),
             )
-            for session in sorted(user.live_sessions(now), key=lambda s: s.last_seen_at, reverse=True)
-            if session.platform != "web"
+            for session in sorted(
+                user.device_sessions(now), key=lambda s: s.last_seen_at, reverse=True
+            )
         ],
         traffic_used_bytes=user.traffic_used_bytes,
         traffic_limit_bytes=user.effective_traffic_limit(now),
@@ -535,14 +554,22 @@ def unlink_device(
     device_id: int,
     who: tuple[User, Session] = Depends(current_user),
     db: OrmSession = Depends(get_db),
-) -> dict[str, bool]:
+) -> dict[str, object]:
+    """
+    Отключить устройство из кабинета.
+
+    Не «забыть о нём», а отключить: токен гаснет и пир уходит с узлов, то
+    есть туннель на том устройстве падает сразу. Раньше здесь стоял один
+    `revoked_at`, строка пропадала из списка, а человек на том ноутбуке
+    продолжал сидеть в VPN — кнопка обещала больше, чем делала.
+    """
     user, _ = who
-    target = db.get(Session, device_id)
-    if target is None or target.user_id != user.id:
+    problems = services.disconnect_device_by_id(db, user, device_id)
+    if problems is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "устройство не найдено")
-    target.revoked_at = utcnow()
-    db.commit()
-    return {"ok": True}
+    # Узел не ответил — доступ там мог остаться, и молчать об этом нельзя.
+    # Сессия при этом уже погашена, поэтому это предупреждение, а не отказ.
+    return {"ok": True, "problems": problems}
 
 
 class RenewIn(BaseModel):

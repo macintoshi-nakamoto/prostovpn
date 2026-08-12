@@ -96,14 +96,74 @@ def _deliver_webhook(client, order_id: str, event: str = "succeeded", attempt: i
 
 
 def test_plans_come_from_database(client):
-    """Цены на сайте берутся из базы, а не из вёрстки."""
+    """
+    Цены, сроки, трафик и устройства на сайте — из базы, а не из вёрстки.
+
+    Сверяемся с самой базой, а не с числами в тексте теста: тогда правка
+    тарифа в панели не ломает тест, но забытое поле в ответе — ломает. Это
+    и есть проверяемое: сайт показывает то, что завели в панели.
+    """
     r = client.get("/api/v1/plans")
     assert r.status_code == 200
     plans = {p["code"]: p for p in r.json()}
-    assert plans["basic"]["price_kopecks"] == 30_000
-    assert plans["basic"]["device_limit"] == 3
-    # Непубличный тариф на витрину не попадает.
-    assert "trial" not in plans
+
+    with SessionLocal() as db:
+        for plan in db.scalars(select(Plan).where(Plan.is_public.is_(True))):
+            shown = plans[plan.code]
+            assert shown["price_kopecks"] == plan.price_kopecks
+            assert shown["duration_days"] == plan.period_days
+            assert shown["device_limit"] == plan.device_limit
+            assert shown["server_limit"] == plan.server_limit
+            assert shown["traffic_limit_bytes"] == plan.traffic_limit_bytes
+
+    # Безлимит — отсутствие числа, а не ноль: ноль сайт показал бы как «0 ГБ».
+    assert plans["year"]["traffic_limit_bytes"] is None
+
+
+def test_default_lineup_matches_the_announced_prices():
+    """
+    Тарифы новой установки — те же, что объявлены: 199, 499, 899 и 1499.
+
+    Проверяем сам список, а не базу: база живая, цены в ней правит
+    администратор, и тест на неё привязывать нельзя. А вот с чего начинает
+    свежий сервер — это решение в коде, и уехать оно не должно.
+    """
+    from app.db import GB, DEFAULT_PLANS
+
+    lineup = {row[0]: row for row in DEFAULT_PLANS}
+
+    assert lineup["basic"][2] == 19_900
+    assert lineup["3months"][2] == 49_900
+    assert lineup["preyear"][2] == 89_900
+    assert lineup["year"][2] == 149_900
+
+    assert (lineup["basic"][3], lineup["3months"][3]) == (30, 90)
+    assert (lineup["preyear"][3], lineup["year"][3]) == (180, 365)
+
+    # Пробный: два дня и десять гигабайт, и он бесплатный.
+    assert lineup["trial"][2] == 0
+    assert lineup["trial"][3] == 2
+    assert lineup["trial"][4] == 10 * GB
+
+
+def test_trial_is_on_the_shelf_but_not_for_sale(client):
+    """
+    Пробный период виден сайту, но не продаётся.
+
+    Срок и объём трафика человек хочет знать до регистрации, а завести их
+    можно только в панели, — значит витрина обязана их отдать. Кнопки
+    оплаты при этом быть не должно: заказ на ноль рублей не создаётся.
+    """
+    plans = {p["code"]: p for p in client.get("/api/v1/plans").json()}
+
+    trial = plans["trial"]
+    assert trial["purchasable"] is False
+    assert trial["duration_days"] == 2
+    assert trial["traffic_limit_bytes"] == 10 * 1024**3
+    assert plans["basic"]["purchasable"] is True
+
+    r = client.post("/api/v1/orders", json={"plan_code": "trial", "email": "t@example.com"})
+    assert r.status_code == 400, r.text
 
 
 # --- главное обещание: один платёж — одна учётка ------------------------------

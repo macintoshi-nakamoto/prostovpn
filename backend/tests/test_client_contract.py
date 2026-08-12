@@ -56,7 +56,7 @@ def account(client):
     headers = {"Authorization": f"Bearer {r.json()['token']}"}
     created = client.post(
         "/api/admin/users",
-        json={"name": "Клиент Windows", "planCode": "plus", "trafficLimitBytes": 100 * GB},
+        json={"name": "Клиент Windows", "planCode": "3months", "trafficLimitBytes": 100 * GB},
         headers=headers,
     ).json()
     return created["user"]["login"], created["password"], headers
@@ -92,7 +92,7 @@ def test_unlimited_traffic_is_null_not_zero(client):
     r = client.post("/api/admin/login", json={"login": "admin", "password": "admin"})
     headers = {"Authorization": f"Bearer {r.json()['token']}"}
     created = client.post(
-        "/api/admin/users", json={"name": "Безлимитный", "planCode": "plus"}, headers=headers
+        "/api/admin/users", json={"name": "Безлимитный", "planCode": "3months"}, headers=headers
     ).json()
     client.post(
         f"/api/admin/users/{created['user']['id']}/traffic-limit",

@@ -30,7 +30,15 @@ from .billing import (
 )
 from .errors import PanelError
 from .keys import active_servers, ensure_keys, issue_key, revoke_key
-from .orders import OrderError, create_order, expire_stale, fulfil, public_plans, refund
+from .orders import (
+    OrderError,
+    create_order,
+    expire_stale,
+    fulfil,
+    public_plans,
+    refund,
+    site_plans,
+)
 from .releases import check as check_update, latest_for, upsert as upsert_release
 from .traffic import enforce_access, sync_server_traffic, sync_all_traffic
 from .users import (
@@ -98,6 +106,7 @@ __all__ = [
     "expire_stale",
     "fulfil",
     "public_plans",
+    "site_plans",
     "refund",
     # версии приложения
     "check_update",

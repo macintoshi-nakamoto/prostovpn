@@ -71,6 +71,9 @@ enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
 /** Что сейчас происходит с обновлением. */
 enum class UpdateStage { CHECKING, IDLE, DOWNLOADING, INSTALLING }
 
+/** Как часто перечитывать подписку, пока приложение открыто. */
+private const val ACCOUNT_POLL_MS = 5 * 60 * 1000L
+
 /**
  * Состояние приложения. Подключение в тестовой сборке для Windows —
  * симуляция (как в iOS-демо); точка интеграции реального туннеля — startConnect().
@@ -498,6 +501,7 @@ class AppState(private val scope: CoroutineScope) {
         // Сессия могла протухнуть, а список стран — измениться, пока
         // приложение было закрыто.
         refreshPanelServers()
+        startAccountWatch()
         // Обновление ставится в другой каталог, и в автозагрузке остаётся
         // путь до прежнего exe — автозапуск молча ломается. Поэтому сверяем
         // сохранённый путь с фактическим, а не наличие значения.
@@ -586,8 +590,12 @@ class AppState(private val scope: CoroutineScope) {
         scope.launch {
             PanelApi.servers(token)
                 .onSuccess { session ->
+                    // Страны были, а теперь их нет — доступ закрыли, пока
+                    // приложение работало: кончился трафик или срок.
+                    val lostAccess = session.servers.isEmpty() && panelServers.isNotEmpty()
                     applySubscription(session)
                     applyPanelServers(session.servers)
+                    if (lostAccess) dropTunnelWithoutAccess()
                 }
                 .onFailure { error ->
                     // Разлогиниваем ТОЛЬКО когда панель прямо сказала, что
@@ -601,6 +609,42 @@ class AppState(private val scope: CoroutineScope) {
                     if (status == 401 || status == 403) logout()
                 }
         }
+    }
+
+    /**
+     * Периодический опрос панели, пока приложение открыто.
+     *
+     * До этого подписка перечитывалась ровно один раз — на старте. Человек,
+     * оставивший приложение открытым, узнавал о кончившемся трафике только
+     * после перезапуска: предупреждение «осталось меньше 5 ГБ» не появлялось
+     * никогда, а туннель продолжал работать, пока панель не снимет пира с
+     * узла своим обходом.
+     *
+     * Пять минут — компромисс: чаще незачем (расход трафика считается по
+     * обходу узлов, а он идёт раз в минуту), реже — предупреждение теряет
+     * смысл.
+     */
+    private fun startAccountWatch() {
+        scope.launch {
+            while (true) {
+                delay(ACCOUNT_POLL_MS)
+                if (panelToken.isNotEmpty()) refreshPanelServers()
+            }
+        }
+    }
+
+    /**
+     * Доступа больше нет — снимаем туннель.
+     *
+     * Панель убирает пира с узла своим обходом, но между тем, как трафик
+     * кончился, и тем, как узел об этом узнает, туннель на компьютере
+     * продолжает стоять поднятым: соединение уже не работает, а приложение
+     * показывает «подключено». Причину человек прочитает в баннере — она
+     * пришла в том же ответе (panelNotice).
+     */
+    private fun dropTunnelWithoutAccess() {
+        if (phase == Phase.OFF || phase == Phase.DISCONNECTING) return
+        disconnect()
     }
 
     /**

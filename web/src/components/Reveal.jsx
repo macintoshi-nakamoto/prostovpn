@@ -28,7 +28,7 @@ export function Reveal({
       ref={ref}
       data-reveal={variant}
       className={className}
-      style={{ transitionDelay: delay ? `${delay}ms` : undefined, ...style }}
+      style={{ "--reveal-delay": delay ? `${delay}ms` : undefined, ...style }}
       {...rest}
     >
       {children}
@@ -77,7 +77,7 @@ export function ArtImage({
             src={src}
             alt={alt}
             className="art-img"
-            style={{ transitionDelay: delay ? `${delay}ms` : undefined }}
+            style={{ "--reveal-delay": delay ? `${delay}ms` : undefined }}
             loading="lazy"
             {...rest}
           />

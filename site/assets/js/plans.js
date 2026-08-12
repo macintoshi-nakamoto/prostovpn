@@ -41,7 +41,10 @@ function planRow(plan) {
 async function render() {
   if (!holder) return;
   try {
-    const plans = await api.plans();
+    /* Пробный период с витрины приходит вместе с платными, но покупкой не
+       является: ссылка на оформление заказа упёрлась бы в отказ создать
+       заказ на ноль рублей. Здесь показываем только то, что продаётся. */
+    const plans = (await api.plans()).filter((plan) => plan.purchasable !== false);
     if (!plans.length) {
       holder.innerHTML =
         '<p class="muted" style="padding:28px 0">Тарифы временно недоступны. Напишите нам — подберём вручную.</p>';

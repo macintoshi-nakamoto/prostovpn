@@ -62,6 +62,9 @@ class PlanOut(BaseModel):
     device_limit: int
     allowed_regions: list[str] | None = None
     traffic_limit_bytes: int | None = None
+    # Можно ли оформить заказ. У пробного периода — нет: его выдаёт
+    # регистрация, а платёжная форма на ноль рублей не открывается.
+    purchasable: bool = True
 
 
 def _plan_out(plan: Plan) -> PlanOut:
@@ -76,13 +79,20 @@ def _plan_out(plan: Plan) -> PlanOut:
         device_limit=plan.device_limit,
         allowed_regions=plan.allowed_regions,
         traffic_limit_bytes=plan.traffic_limit_bytes,
+        purchasable=plan.price_kopecks > 0,
     )
 
 
 @router.get("/plans", response_model=list[PlanOut])
 def list_plans(db: OrmSession = Depends(get_db)) -> list[PlanOut]:
-    """Витрина тарифов. Сайт берёт цены отсюда, а не из своей вёрстки."""
-    return [_plan_out(plan) for plan in services.public_plans(db)]
+    """
+    Витрина тарифов. Сайт берёт отсюда цены, сроки, трафик и устройства, а
+    не из своей вёрстки: иначе правка в панели до страницы не доезжает.
+
+    Пробный период тоже здесь — с `purchasable: false`. Витрина показывает
+    его отдельной полосой, а не карточкой с кнопкой оплаты.
+    """
+    return [_plan_out(plan) for plan in services.site_plans(db)]
 
 
 # --- заказы -------------------------------------------------------------------

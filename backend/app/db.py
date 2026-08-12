@@ -18,12 +18,20 @@ from .security import hash_password
 # дальше они правятся в разделе «Тарифы», и сайт берёт их оттуда, а не из
 # кода. Ставить цену в шаблон страницы нельзя — она разойдётся с той, по
 # которой выставлен счёт.
+#
+# Пробный тариф публичный намеренно: его показывает лендинг и выдаёт
+# регистрация с сайта (PANEL_SIGNUP_PLAN_CODE). Продать его нельзя — цена
+# ноль, и заказ на него не создаётся, — поэтому в ряд платных карточек он
+# не попадает, см. site_plans в services/orders.py.
+GB = 1024**3
+
 DEFAULT_PLANS = [
-    # code, название, копейки, дней, серверов, устройств, публичный, подпись
-    ("trial", "Пробный", 0, 7, 3, 1, False, "Неделя для проверки"),
-    ("basic", "Базовый", 30_000, 30, 3, 3, True, "Три страны, три устройства"),
-    ("plus", "На три месяца", 80_000, 90, 3, 3, True, "Те же условия, дешевле в месяц"),
-    ("max", "На год", 270_000, 365, 3, 5, True, "Максимальная выгода и пять устройств"),
+    # code, название, копейки, дней, трафик (None — безлимит), стран, устройств, публичный, подпись
+    ("trial", "Пробный", 0, 2, 10 * GB, 3, 5, True, "Два дня и 10 ГБ на проверку"),
+    ("basic", "Базовый", 19_900, 30, 250 * GB, 3, 2, True, None),
+    ("3months", "Сезонная", 49_900, 90, None, 3, 4, True, None),
+    ("preyear", "Полугодовая", 89_900, 180, None, 3, 6, True, None),
+    ("year", "Годовая", 149_900, 365, None, 3, 10, True, None),
 ]
 
 _url = settings().database_url
@@ -74,12 +82,13 @@ def init_db() -> None:
         # не должен возвращаться при каждом перезапуске.
         if db.scalar(select(Plan).limit(1)) is None:
             for order, row in enumerate(DEFAULT_PLANS):
-                code, name, kopecks, days, servers, devices, public, tagline = row
+                code, name, kopecks, days, traffic, servers, devices, public, tagline = row
                 plan = Plan(
                     code=code,
                     name=name,
                     currency=config.currency,
                     period_days=days,
+                    traffic_limit_bytes=traffic,
                     server_limit=servers,
                     device_limit=devices,
                     is_public=public,

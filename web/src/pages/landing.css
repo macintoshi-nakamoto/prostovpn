@@ -457,20 +457,77 @@
   line-height: 1.5;
   color: var(--text-muted);
 }
+/* ── Пробный период ───────────────────────────────────────────────────────── */
+/*
+ * Полоса, а не карточка в общем ряду: пробный период не покупают, и стоять
+ * в ряду с ценами ему нечем. Отдельная форма сразу говорит, что правила у
+ * него другие.
+ */
+.ld-trial {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1.5px dashed rgba(250, 76, 22, 0.4);
+  border-radius: 24px;
+  padding: 26px 32px;
+}
+.ld-trial-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ld-trial-tag {
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+.ld-trial h3 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.ld-trial p {
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  max-width: 560px;
+}
+.ld-trial-btn {
+  flex: none;
+  font-size: 16px;
+  padding: 15px 28px;
+}
+
 .ld-plans-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
+  /*
+   * Ширина задана явно, и это не лишняя строка. `.ld-plans-in` —
+   * колоночный флекс, и прежний `margin: 0 auto` на телефоне отменял
+   * растягивание по поперечной оси: сетка съёживалась до ширины своего
+   * содержимого — колонка в 200 точек посреди экрана в 375, те самые
+   * узкие карточки. Явная ширина не даст этому вернуться.
+   */
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
   align-items: stretch;
 }
 .ld-plan {
   position: relative;
   background: #fff;
   border-radius: 28px;
-  padding: 38px 34px;
+  padding: 34px 28px;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 18px;
   transition: transform 0.4s var(--ease-out), box-shadow 0.4s var(--ease-out);
 }
 .ld-plan:hover {
@@ -514,7 +571,7 @@
   gap: 8px;
 }
 .ld-plan-sum {
-  font-size: 52px;
+  font-size: 46px;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
@@ -533,12 +590,61 @@
 .ld-plan-featured .ld-plan-note {
   color: rgba(255, 255, 255, 0.72);
 }
+/*
+ * Что тариф разрешает. Числа приходят из панели, поэтому строк ровно
+ * столько, сколько прислали, и подпирать их фиксированной высотой нельзя —
+ * ряд выравнивает сама сетка (align-items: stretch).
+ */
+.ld-plan-limits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.ld-plan-limits li {
+  position: relative;
+  padding-left: 24px;
+}
+/* Галочка нарисована фоном, а не буквой: шрифт не обязан её знать. */
+.ld-plan-limits li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent-tint)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.2l2.1 2.2 4.7-4.8' fill='none' stroke='%23fa4c16' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 11px 11px no-repeat;
+}
+.ld-plan-featured .ld-plan-limits {
+  color: rgba(255, 255, 255, 0.92);
+}
+.ld-plan-featured .ld-plan-limits li::before {
+  background-color: rgba(255, 255, 255, 0.16);
+}
 .ld-plan-btn {
   margin-top: auto;
 }
 .ld-plan-featured .btn-outline {
   border-color: rgba(255, 255, 255, 0.5);
   color: #fff;
+}
+/* Мелким шрифтом — правила, о которых спрашивают после покупки. */
+.ld-plans-fine {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-dim);
 }
 
 /* ── Щит ──────────────────────────────────────────────────────────────────── */
@@ -758,6 +864,10 @@
   .ld-hero-body h1 {
     font-size: 60px;
   }
+  /* Четыре тарифа в ряд перестают помещаться: цена начинает переноситься. */
+  .ld-plans-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .ld-app-grid,
   .ld-shield-grid,
   .ld-split-head {
@@ -782,11 +892,6 @@
   }
   .ld-split-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .ld-plans-grid {
-    grid-template-columns: 1fr;
-    max-width: 460px;
-    margin: 0 auto;
   }
   .ld-docs-grid {
     grid-template-columns: 1fr;
@@ -1022,12 +1127,48 @@
   .ld-plans-ribbon {
     display: none;
   }
+  /*
+   * По карточке на строку и во всю ширину экрана.
+   *
+   * Две колонки на 375 точках дают карточку в 160 — в неё не помещается ни
+   * цена, ни строка «Безлимитный трафик», и обе переносятся посреди слова.
+   */
+  .ld-plans-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
   .ld-plan {
-    padding: 26px 22px;
-    gap: 16px;
+    padding: 24px 20px;
+    gap: 14px;
   }
   .ld-plan-sum {
     font-size: 40px;
+  }
+  .ld-plan-limits {
+    font-size: 14.5px;
+    gap: 8px;
+  }
+  .ld-plans-fine {
+    font-size: 14px;
+    text-align: left;
+  }
+
+  /* Пробный период: подпись, заголовок, текст и кнопка одной колонкой. */
+  .ld-trial {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 22px 20px;
+    border-radius: 20px;
+  }
+  .ld-trial h3 {
+    font-size: 20px;
+  }
+  .ld-trial p {
+    font-size: 15px;
+  }
+  .ld-trial-btn {
+    width: 100%;
   }
   /* Выделенный тариф на телефоне не увеличиваем: он вылезал бы за край. */
   .ld-plan-featured,

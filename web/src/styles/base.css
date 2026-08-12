@@ -117,10 +117,22 @@ img {
 
 /* --- Появление при прокрутке -------------------------------------------------
  *
- * JS-хук снимает [data-reveal] и ставит [data-revealed], когда элемент
- * входит в область видимости; вся анимация — здесь. Значение атрибута
- * задаёт характер движения: текст всплывает, заголовок приближается,
+ * JS-хук снимает [data-reveal] и ставит [data-revealed] с тем же значением,
+ * когда элемент входит в область видимости; вся анимация — здесь. Значение
+ * атрибута задаёт характер движения: текст всплывает, заголовок приближается,
  * картинка выходит из размытия.
+ *
+ * Появление сделано анимацией, а не переходом, и это не вкусовщина.
+ * Переход живёт в свойстве transition самого элемента, и любая карточка со
+ * своим `transition: transform ...` затирала его целиком. Так и было: у
+ * карточек «Банки/Маркетплейсы/Госуслуги» и у карточек тарифов свойство
+ * opacity в переход не попадало вовсе — они не проявлялись, а возникали
+ * рывком в конце сдвига. Анимация лежит в отдельном свойстве, её не
+ * перебьёт ни одна карточка со своим наведением.
+ *
+ * У кадров задан только `from`. Конечное значение браузер берёт из каскада,
+ * поэтому выделенный тариф со своим `transform: scale(1.035)` доезжает до
+ * своего масштаба, а не до `none`, — и в конце ничего не дёргается.
  *
  * Пружинная кривая с лёгким перелётом: движение читается живым, а не
  * равномерным сползанием.
@@ -132,6 +144,8 @@ img {
 
 [data-reveal] {
   opacity: 0;
+  /* Подсказка нужна только пока элемент ждёт своей очереди: держать слой
+     под каждым из сорока с лишним появившихся блоков незачем. */
   will-change: transform, opacity;
 }
 [data-reveal="up"] {
@@ -153,20 +167,61 @@ img {
 }
 
 [data-revealed] {
-  opacity: 1;
-  transform: none;
-  filter: none;
-  transition:
-    opacity 0.8s var(--ease-out),
-    transform 0.9s var(--ease-spring),
-    filter 0.8s var(--ease-out);
+  /* backwards: пока идёт задержка каскада, элемент держит начальное
+     состояние, а не мигает готовым. */
+  animation-duration: 0.9s;
+  animation-timing-function: var(--ease-spring);
+  animation-delay: var(--reveal-delay, 0ms);
+  animation-fill-mode: backwards;
+}
+[data-revealed="up"] {
+  animation-name: reveal-up;
+}
+[data-revealed="zoom"] {
+  animation-name: reveal-zoom;
+}
+[data-revealed="left"] {
+  animation-name: reveal-left;
+}
+[data-revealed="right"] {
+  animation-name: reveal-right;
 }
 /* Картинке даём больше времени: движение крупное и должно ощущаться. */
-img[data-revealed] {
-  transition:
-    opacity 1s var(--ease-out),
-    transform 1.15s var(--ease-spring),
-    filter 0.95s var(--ease-out);
+[data-revealed="art"] {
+  animation-name: reveal-art;
+  animation-duration: 1.15s;
+}
+
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(34px);
+  }
+}
+@keyframes reveal-zoom {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.965);
+  }
+}
+@keyframes reveal-left {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+}
+@keyframes reveal-right {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+@keyframes reveal-art {
+  from {
+    opacity: 0;
+    transform: translateY(46px) scale(0.86) rotate(-5deg);
+    filter: blur(14px) saturate(0.7);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -175,7 +230,7 @@ img[data-revealed] {
     opacity: 1;
     transform: none;
     filter: none;
-    transition: none;
+    animation: none;
   }
 }
 

@@ -1,12 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
+ * Переводит элемент в «появился»: вариант движения переезжает из
+ * [data-reveal] в [data-revealed], и CSS проигрывает свои кадры.
+ *
+ * Вариант обязан сохраниться в значении атрибута — по нему выбирается
+ * анимация. Пустое значение оставило бы элемент видимым, но без движения.
+ */
+export function markRevealed(node) {
+  const variant = node.getAttribute("data-reveal") || node.getAttribute("data-revealed") || "up";
+  node.removeAttribute("data-reveal");
+  node.setAttribute("data-revealed", variant);
+}
+
+/**
  * Появление при прокрутке.
  *
- * Ставит на элемент [data-reveal] сразу и снимает его на [data-revealed],
- * когда элемент входит в область видимости, — CSS доводит анимацию. Один
- * IntersectionObserver на элемент, срабатывает один раз: повторно прятать
- * уже показанное незачем.
+ * Ставит на элемент [data-reveal] сразу и переносит вариант в
+ * [data-revealed], когда элемент входит в область видимости, — CSS доводит
+ * анимацию. Один IntersectionObserver на элемент, срабатывает один раз:
+ * повторно прятать уже показанное при обычной прокрутке незачем. Заново
+ * проигрывает только переход по пункту меню, см. lib/anchors.js.
  */
 export function useReveal(options = {}) {
   const ref = useRef(null);
@@ -17,8 +31,7 @@ export function useReveal(options = {}) {
 
     // Уважаем системную настройку «меньше движения».
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
-      node.removeAttribute("data-reveal");
-      node.setAttribute("data-revealed", "");
+      markRevealed(node);
       return undefined;
     }
 
@@ -26,8 +39,7 @@ export function useReveal(options = {}) {
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            entry.target.removeAttribute("data-reveal");
-            entry.target.setAttribute("data-revealed", "");
+            markRevealed(entry.target);
             observer.unobserve(entry.target);
           }
         }

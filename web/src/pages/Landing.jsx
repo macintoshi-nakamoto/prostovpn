@@ -6,14 +6,21 @@ import { Reveal, ArtImage } from "../components/Reveal.jsx";
 import { HeroOrbit } from "../components/HeroOrbit.jsx";
 import { Picture } from "../components/Picture.jsx";
 import { useTilt } from "../lib/hooks";
+import { useAnchorReveal } from "../lib/anchors";
 import { api } from "../lib/api";
-import { moneyFromKopecks } from "../lib/format";
+import { bytes, moneyFromKopecks, plural } from "../lib/format";
 import "./landing.css";
 
+/*
+ * Три плитки из четырёх — про сеть и её устройство, они не зависят от
+ * тарифов. Четвёртая, про устройства, зависит: сколько их разрешено,
+ * решает тариф в панели, и написать здесь число значит однажды разойтись
+ * с карточками, которые стоят ниже на этой же странице.
+ */
 const FEATURES = [
   { icon: "ic-arc.png", title: "До 1 Гбит/с", text: "Скорость не режется даже в час пик", plain: true },
   { icon: "ic-territory-2.png", title: "60+ стран", text: "Более 900 серверов на пяти континентах" },
-  { icon: "ic-devices-2.png", title: "5 устройств", text: "Одна подписка на всю семью" },
+  { icon: "ic-devices-2.png", key: "devices", title: "5 устройств", text: "Одна подписка на всю семью" },
   { icon: "ic-mask-2.png", title: "Без логов", text: "Мы не храним историю ваших подключений" },
 ];
 
@@ -46,30 +53,69 @@ const DOCS = [
   { title: "Контакты", text: "Поддержка и обратная связь", to: "/contacts" },
 ];
 
+/** «30 дней» → «1 месяц», «365 дней» → «1 год»: срок словами, а не в днях. */
+function termLabel(days) {
+  if (days >= 365 && days % 365 === 0) {
+    const years = days / 365;
+    return `${years} ${plural(years, ["год", "года", "лет"])}`;
+  }
+  if (days >= 28) {
+    const months = Math.round(days / 30);
+    return `${months} ${plural(months, ["месяц", "месяца", "месяцев"])}`;
+  }
+  return `${days} ${plural(days)}`;
+}
+
+/**
+ * Что тариф разрешает: трафик, устройства, страны.
+ *
+ * Все три числа живут в панели, и все три человек ищет глазами до того, как
+ * нажмёт «Выбрать». Пустого лимита трафика не бывает: отсутствие числа —
+ * это и есть безлимит, так и написано.
+ */
+function limitsOf(plan) {
+  const devices = plan.device_limit;
+  const countries = plan.server_limit;
+  return [
+    plan.traffic_limit_bytes == null
+      ? "Безлимитный трафик"
+      : `${bytes(plan.traffic_limit_bytes)} трафика`,
+    `${devices} ${plural(devices, ["устройство", "устройства", "устройств"])}`,
+    `${countries} ${plural(countries, ["страна", "страны", "стран"])}`,
+  ];
+}
+
 /**
  * Тарифы для карточек.
  *
- * Берём настоящие из панели: там их и заводят, и правят цены. Вёрстка от
- * макета остаётся — три карточки, средняя выделена, — а содержимое живое.
- * Цену показываем за месяц, как в макете: длинный тариф так выигрышнее
- * читается, а полная сумма уходит в подпись под ней.
+ * Берём настоящие из панели: там их и заводят, и правят цены, сроки, трафик
+ * и число устройств. Ни одного из этих чисел в вёрстке нет — иначе счёт на
+ * оплату и обещание на странице однажды разойдутся.
  *
- * Выделяем самый выгодный по цене месяца, а не средний по порядку: если
- * тарифы переставят в панели, выделение не должно уехать на случайный.
+ * Цену показываем за месяц: длинный тариф так выигрышнее читается, а полная
+ * сумма уходит в подпись под ней.
+ *
+ * Бесплатный тариф в общий ряд не ставим. Он не продаётся — его выдаёт
+ * регистрация, — и кнопка «Выбрать» вела бы в платёжную форму на ноль
+ * рублей. Ему своя полоса над карточками.
  */
 function toCards(list) {
-  const byDuration = [...list].sort((a, b) => a.duration_days - b.duration_days).slice(0, 3);
+  const paid = list
+    .filter((plan) => plan.price_kopecks > 0)
+    .sort((a, b) => a.duration_days - b.duration_days);
 
-  const cards = byDuration.map((plan) => {
+  const cards = paid.map((plan) => {
     const months = Math.max(1, Math.round(plan.duration_days / 30));
     const perMonth = Math.round(plan.price_kopecks / months);
     const full = moneyFromKopecks(plan.price_kopecks, plan.currency);
+    const term = termLabel(plan.duration_days);
     return {
       code: plan.code,
-      term: plan.title,
+      term,
       perMonth: moneyFromKopecks(perMonth, plan.currency),
       perMonthValue: perMonth,
-      note: plan.tagline || `${full} за ${plan.duration_days} дней`,
+      note: plan.tagline || `${full} за ${term}`,
+      limits: limitsOf(plan),
       featured: false,
     };
   });
@@ -78,8 +124,9 @@ function toCards(list) {
     /*
     Выделяем самый длинный срок — ровно то, о чём говорит заголовок секции:
     «чем длиннее срок, тем ниже цена месяца». Брать самый дешёвый месяц
-    нельзя: дешевле всех обычно начальный тариф, и он дешёвый не из-за
-    срока, а из-за лимитов, — выделять его как выгодный было бы неправдой.
+    нельзя: дешевле всех может оказаться начальный тариф, и он дешёвый не
+    из-за срока, а из-за лимитов, — выделять его как выгодный было бы
+    неправдой.
     */
     const longest = cards[cards.length - 1];
     longest.featured = true;
@@ -91,14 +138,72 @@ function toCards(list) {
     if (off >= 5) longest.badge = `−${off}%`;
   }
 
-  return cards;
+  const free = list.find((plan) => plan.price_kopecks === 0);
+  const trial = free
+    ? {
+        title: free.title,
+        term: termLabel(free.duration_days),
+        traffic:
+          free.traffic_limit_bytes == null
+            ? "без лимита трафика"
+            : `${bytes(free.traffic_limit_bytes)} трафика`,
+        note: free.tagline,
+      }
+    : null;
+
+  // Сколько устройств обещать в плитке преимуществ: столько, сколько даёт
+  // самый щедрый тариф, — меньшие числа стоят на своих карточках.
+  const devices = Math.max(0, ...list.map((plan) => plan.device_limit || 0));
+
+  return { cards, trial, devices };
 }
 
-const FALLBACK_PLANS = [
-  { term: "1 месяц", perMonth: "399 ₽", note: "Попробовать без обязательств", featured: false },
-  { term: "12 месяцев", perMonth: "169 ₽", note: "2 028 ₽ в год", featured: true, badge: "−58%" },
-  { term: "3 года", perMonth: "119 ₽", note: "4 284 ₽ за весь срок", featured: false },
-];
+/*
+ * Что показать, пока панель не ответила.
+ *
+ * Пустая секция цен хуже ориентировочной: человек уходит, не узнав порядок
+ * сумм. Значения здесь — те же, что заведены в панели, и живут ровно до
+ * первого успешного ответа.
+ */
+const FALLBACK = {
+  cards: [
+    {
+      code: "basic",
+      term: "1 месяц",
+      perMonth: "199 ₽",
+      note: "199 ₽ за 1 месяц",
+      limits: ["250 ГБ трафика", "2 устройства", "3 страны"],
+      featured: false,
+    },
+    {
+      code: "3months",
+      term: "3 месяца",
+      perMonth: "166 ₽",
+      note: "499 ₽ за 3 месяца",
+      limits: ["Безлимитный трафик", "4 устройства", "3 страны"],
+      featured: false,
+    },
+    {
+      code: "preyear",
+      term: "6 месяцев",
+      perMonth: "150 ₽",
+      note: "899 ₽ за 6 месяцев",
+      limits: ["Безлимитный трафик", "6 устройств", "3 страны"],
+      featured: false,
+    },
+    {
+      code: "year",
+      term: "1 год",
+      perMonth: "125 ₽",
+      note: "1 499 ₽ за 1 год",
+      limits: ["Безлимитный трафик", "10 устройств", "3 страны"],
+      featured: true,
+      badge: "−37%",
+    },
+  ],
+  trial: { title: "Пробный период", term: "2 дня", traffic: "10 ГБ трафика", note: null },
+  devices: 10,
+};
 
 /**
  * Карточка преимущества.
@@ -126,23 +231,31 @@ function Feature({ feature, delay }) {
 }
 
 export function Landing() {
-  const [plans, setPlans] = useState(FALLBACK_PLANS);
+  const [{ cards, trial, devices }, setPlans] = useState(FALLBACK);
+
+  useAnchorReveal();
 
   useEffect(() => {
     let alive = true;
     api
       .plans()
       .then((list) => {
-        // Панель недоступна или тарифов нет — остаются значения из макета:
+        // Панель недоступна или тарифов нет — остаются запасные значения:
         // пустая секция цен хуже, чем ориентировочная.
         if (!alive || !Array.isArray(list) || list.length === 0) return;
-        setPlans(toCards(list));
+        const next = toCards(list);
+        if (next.cards.length === 0) return;
+        setPlans(next);
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
   }, []);
+
+  // Число устройств в плитке преимуществ и в секции про устройства —
+  // из панели: два места на странице не должны обещать разное.
+  const devicesLabel = `до ${devices} ${plural(devices, ["устройства", "устройств", "устройств"])}`;
 
   return (
     <div className="ld">
@@ -166,9 +279,15 @@ export function Landing() {
                 без границ
               </Reveal>
             </h1>
+            {/*
+            «Без лимитов трафика» отсюда убрано намеренно: лимит есть на
+            начальном тарифе и на пробном периоде, и обещать обратное в
+            первом же абзаце значит спорить с собственными карточками,
+            которые стоят ниже на этой же странице.
+            */}
             <Reveal as="p" delay={340}>
               Подключение в одно нажатие, 60+ стран и скорость до 1 Гбит/с. Без логов, без
-              лимитов трафика и без настроек.
+              настроек и без ограничения скорости.
             </Reveal>
             <Reveal className="ld-hero-cta" delay={440}>
               <a href="#plans" className="btn ld-hero-primary">
@@ -189,7 +308,11 @@ export function Landing() {
       <section className="ld-features">
         <div className="wrap ld-features-grid">
           {FEATURES.map((f, i) => (
-            <Feature key={f.title} feature={f} delay={i * 110} />
+            <Feature
+              key={f.title}
+              feature={f.key === "devices" ? { ...f, title: devicesLabel } : f}
+              delay={i * 110}
+            />
           ))}
         </div>
       </section>
@@ -318,11 +441,35 @@ export function Landing() {
             </h2>
             <p>Чем длиннее срок, тем ниже цена месяца. Отменить можно в любой момент.</p>
           </Reveal>
+
+          {/*
+          Пробный период стоит перед платными карточками и выглядит иначе:
+          его не покупают, его получают регистрацией. Одинаковая карточка с
+          кнопкой «Выбрать» вела бы в платёжную форму на ноль рублей.
+          */}
+          {trial && (
+            <Reveal className="ld-trial">
+              <div className="ld-trial-body">
+                <span className="ld-trial-tag">Бесплатно</span>
+                <h3>
+                  {trial.title}: {trial.term} и {trial.traffic}
+                </h3>
+                <p>
+                  {trial.note ||
+                    "Заведите аккаунт — доступ откроется сразу, платёжная карта не нужна."}
+                </p>
+              </div>
+              <Link to="/login" className="btn btn-primary ld-trial-btn">
+                Попробовать бесплатно
+              </Link>
+            </Reveal>
+          )}
+
           <div className="ld-plans-grid">
-            {plans.map((p, i) => (
+            {cards.map((p, i) => (
               <Reveal
                 className={`ld-plan${p.featured ? " ld-plan-featured" : ""}`}
-                key={p.term}
+                key={p.code || p.term}
                 delay={i * 90}
               >
                 {p.badge && <span className="ld-plan-badge">{p.badge}</span>}
@@ -332,6 +479,11 @@ export function Landing() {
                   <span className="ld-plan-per">/ мес</span>
                 </div>
                 <p className="ld-plan-note">{p.note}</p>
+                <ul className="ld-plan-limits">
+                  {p.limits.map((limit) => (
+                    <li key={limit}>{limit}</li>
+                  ))}
+                </ul>
                 <Link
                   to="/login"
                   className={`btn ld-plan-btn ${p.featured ? "btn-primary" : "btn-outline"}`}
@@ -341,6 +493,13 @@ export function Landing() {
               </Reveal>
             ))}
           </div>
+
+          <Reveal className="ld-plans-fine" delay={120}>
+            Устройства считаются по одновременным входам: вход с лишнего отключает самое
+            старое, а не запрещает войти. Когда включённый трафик заканчивается, доступ
+            закрывается до продления — приложение предупреждает заранее, когда остаётся
+            меньше 5 ГБ.
+          </Reveal>
         </div>
       </section>
 
@@ -378,7 +537,7 @@ export function Landing() {
         <div className="wrap ld-devices-in">
           <Reveal className="ld-devices-body">
             <h3>Одна подписка — все устройства</h3>
-            <p>iPhone, Android, Mac и Windows. До пяти подключений одновременно.</p>
+            <p>iPhone, Android, Mac и Windows. Одновременных подключений — {devicesLabel}.</p>
           </Reveal>
           <Reveal className="ld-devices-tags" delay={120}>
             {["iOS", "Android", "macOS", "Windows"].map((t) => (

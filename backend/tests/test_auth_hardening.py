@@ -156,7 +156,7 @@ def test_token_is_extended_while_the_app_is_used(client, auth):
     показывала однажды.
     """
     created = client.post(
-        "/api/admin/users", json={"name": "Продление Токена", "planCode": "plus"}, headers=auth
+        "/api/admin/users", json={"name": "Продление Токена", "planCode": "3months"}, headers=auth
     ).json()
 
     r = client.post(
@@ -327,7 +327,7 @@ def test_login_by_name_survives_a_changing_address(client, auth):
     что переживает ротацию адреса.
     """
     created = client.post(
-        "/api/admin/users", json={"name": "Пул Адресов", "planCode": "plus"}, headers=auth
+        "/api/admin/users", json={"name": "Пул Адресов", "planCode": "3months"}, headers=auth
     ).json()
     login = created["user"]["login"]
 

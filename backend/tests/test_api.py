@@ -86,7 +86,7 @@ def plan_price(client, auth, code: str) -> Decimal:
 def test_create_user_generates_credentials(client, auth):
     r = client.post(
         "/api/admin/users",
-        json={"name": "Тестовый Клиент", "contact": "@test", "planCode": "plus"},
+        json={"name": "Тестовый Клиент", "contact": "@test", "planCode": "3months"},
         headers=auth,
     )
     assert r.status_code == 201, r.text
@@ -98,8 +98,8 @@ def test_create_user_generates_credentials(client, auth):
     assert user["login"].startswith("testovyy-klient-")
     assert len(password) >= 12
     assert user["publicId"].startswith("PV-")
-    assert user["plan"] == "plus"
-    assert Decimal(user["price"]) == plan_price(client, auth, "plus")
+    assert user["plan"] == "3months"
+    assert Decimal(user["price"]) == plan_price(client, auth, "3months")
     # Доступ есть, но к VPN человек ещё не подключался: статус отвечает на
     # вопрос «пользуется ли он сервисом сейчас», а не «оплачено ли».
     assert user["status"] == "offline"
@@ -127,7 +127,7 @@ def test_search_finds_by_name_and_public_id(client, auth):
 
 
 def test_traffic_limit_and_unlimited(client, auth):
-    uid = client.post("/api/admin/users", json={"name": "Лимит", "planCode": "plus"}, headers=auth).json()["user"]["id"]
+    uid = client.post("/api/admin/users", json={"name": "Лимит", "planCode": "3months"}, headers=auth).json()["user"]["id"]
 
     limited = client.post(
         f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": 250}, headers=auth
@@ -143,7 +143,7 @@ def test_traffic_limit_and_unlimited(client, auth):
 
 
 def test_traffic_exhausted_blocks_access(client, auth):
-    uid = client.post("/api/admin/users", json={"name": "Расход", "planCode": "plus"}, headers=auth).json()["user"]["id"]
+    uid = client.post("/api/admin/users", json={"name": "Расход", "planCode": "3months"}, headers=auth).json()["user"]["id"]
     client.post(f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": 1}, headers=auth)
 
     from app.models import User
@@ -184,20 +184,20 @@ def test_extend_registers_payment(client, auth):
     before = client.get(f"/api/admin/users/{uid}", headers=auth).json()
 
     after = client.post(
-        f"/api/admin/users/{uid}/extend", json={"planCode": "plus"}, headers=auth
+        f"/api/admin/users/{uid}/extend", json={"planCode": "3months"}, headers=auth
     ).json()
 
     # Продление — это и оплата: доступ и деньги не должны расходиться.
     assert len(after["payments"]) == len(before["payments"]) + 1
     assert Decimal(after["paidTotal"]) == Decimal(before["paidTotal"]) + plan_price(
-        client, auth, "plus"
+        client, auth, "3months"
     )
     assert after["daysLeft"] >= before["daysLeft"]
 
 
 def test_blocked_user_cannot_log_in(client, auth, shared_server):
     created = client.post(
-        "/api/admin/users", json={"name": "Бан", "planCode": "plus"}, headers=auth
+        "/api/admin/users", json={"name": "Бан", "planCode": "3months"}, headers=auth
     ).json()
     login, password = created["user"]["login"], created["password"]
 
@@ -211,7 +211,7 @@ def test_blocked_user_cannot_log_in(client, auth, shared_server):
 
 def test_client_login_returns_servers_without_ip_or_keys(client, auth, shared_server):
     created = client.post(
-        "/api/admin/users", json={"name": "Клиент Приложения", "planCode": "plus"}, headers=auth
+        "/api/admin/users", json={"name": "Клиент Приложения", "planCode": "3months"}, headers=auth
     ).json()
 
     r = client.post(
@@ -310,7 +310,7 @@ def test_renewed_past_period_is_not_expected_again(client, auth):
 
 def test_blocked_user_not_counted_as_expected(client, auth):
     created = client.post(
-        "/api/admin/users", json={"name": "Ушедший", "planCode": "plus"}, headers=auth
+        "/api/admin/users", json={"name": "Ушедший", "planCode": "3months"}, headers=auth
     ).json()["user"]
 
     # Смотрим тот месяц, в который попадает конец подписки: 30 дней от
@@ -659,3 +659,95 @@ def test_register_is_rate_limited_per_address(client):
     assert r.headers.get("X-Error-Code") == "throttled"
     # Приложению нужно знать, когда можно повторить, а не только что нельзя.
     assert r.headers.get("Retry-After")
+
+
+# --- трафик: предупреждение и отключение --------------------------------------
+
+
+def test_traffic_low_is_five_gigabytes_on_any_plan(client, auth, shared_server):
+    """
+    Предупреждение приходит за пять гигабайт до конца, а не за долю лимита.
+
+    Доля вела себя по-разному на разных тарифах: на 250 ГБ десятая часть —
+    это 25 ГБ, то есть человека пугали, когда у него оставалось больше, чем
+    весь пробный тариф.
+    """
+    from app.models import GB, User
+
+    created = client.post(
+        "/api/admin/users", json={"name": "Трафик Порог", "planCode": "3months"}, headers=auth
+    ).json()
+    uid, login, password = created["user"]["id"], created["user"]["login"], created["password"]
+    client.post(f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": 250}, headers=auth)
+
+    def subscription() -> dict:
+        r = client.post("/api/v1/login", json={"login": login, "password": password})
+        assert r.status_code == 200, r.text
+        return r.json()["subscription"]
+
+    # Осталось 20 ГБ — это больше пяти, предупреждать рано.
+    with SessionLocal() as db:
+        db.get(User, uid).traffic_used_bytes = 230 * GB
+        db.commit()
+    assert subscription()["traffic_low"] is False
+
+    # Осталось 4 ГБ — пора.
+    with SessionLocal() as db:
+        db.get(User, uid).traffic_used_bytes = 246 * GB
+        db.commit()
+    low = subscription()
+    assert low["traffic_low"] is True
+    assert low["traffic_left_bytes"] == 4 * GB
+
+
+def test_exhausted_traffic_revokes_keys_and_closes_access(client, auth, shared_server):
+    """
+    Выбранный трафик отключает по-настоящему: пир уходит с узла.
+
+    Без этого человек продолжал бы пользоваться уже поднятым туннелем: сам
+    туннель живёт на сервере и о лимите ничего не знает, а приложение к нему
+    больше не обращается.
+
+    Ключ заводим записью в базу, а не выдачей. Пиров по людям заводит только
+    режим SSH — он ходит на живой узел, которого в тестах нет; а снимает их
+    один и тот же `revoke_key` независимо от режима. Так проверяется именно
+    решение «доступа нет — ключ долой», а не доступность чужой машины.
+    """
+    from app.models import GB, User, UserKey
+    from app.services.traffic import enforce_access
+
+    created = client.post(
+        "/api/admin/users", json={"name": "Трафик Конец", "planCode": "3months"}, headers=auth
+    ).json()
+    uid, login, password = created["user"]["id"], created["user"]["login"], created["password"]
+    client.post(f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": 10}, headers=auth)
+
+    # Серверы приходят: доступ есть.
+    assert client.post("/api/v1/login", json={"login": login, "password": password}).json()["servers"]
+
+    with SessionLocal() as db:
+        db.add(
+            UserKey(
+                user_id=uid,
+                server_id=shared_server,
+                public_key="peer-of-exhausted-user",
+                config="[Interface]\nAddress = 10.0.0.9/32\n",
+            )
+        )
+        db.get(User, uid).traffic_used_bytes = 11 * GB
+        db.commit()
+
+    with SessionLocal() as db:
+        closed = enforce_access(db)
+    assert any(created["user"]["publicId"] in line for line in closed), closed
+    assert any("трафик" in line for line in closed), closed
+
+    with SessionLocal() as db:
+        user = db.get(User, uid)
+        assert user.has_access() is False
+        # Живых ключей не осталось — на узле пира больше нет.
+        assert [k for k in user.keys if k.revoked_at is None] == []
+
+    # И список серверов пуст: приложению отдавать нечего.
+    after = client.post("/api/v1/login", json={"login": login, "password": password})
+    assert after.json()["servers"] == []

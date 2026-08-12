@@ -133,10 +133,13 @@ def current_session(
     return session
 
 
-# Меньше этой доли лимита — приложение показывает предупреждение. Десятая
-# часть выбрана так, чтобы у человека оставалось время продлить, а не чтобы
-# он узнал об окончании в момент отключения.
-TRAFFIC_LOW_FRACTION = 0.1
+# Меньше этого остатка — приложение показывает предупреждение.
+#
+# Порог абсолютный, а не доля лимита. Доля давала разное поведение на разных
+# тарифах: на 250 ГБ десятая часть — это 25 ГБ, то есть человека пугали, когда
+# у него оставалось больше, чем весь пробный тариф. Пять гигабайт — это
+# примерно вечер видео: времени продлить хватает на любом тарифе.
+TRAFFIC_LOW_BYTES = 5 * 1024**3
 
 # За сколько дней до конца подписки приложение показывает кнопку продления.
 EXPIRES_SOON_DAYS = 3
@@ -148,7 +151,7 @@ def _subscription_out(user: User) -> SubscriptionOut:
     used = user.traffic_used_bytes
 
     left_bytes = max(0, limit - used) if limit is not None else None
-    traffic_low = left_bytes is not None and left_bytes <= limit * TRAFFIC_LOW_FRACTION
+    traffic_low = left_bytes is not None and left_bytes <= TRAFFIC_LOW_BYTES
 
     if sub is None:
         return SubscriptionOut(

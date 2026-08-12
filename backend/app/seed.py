@@ -154,11 +154,12 @@ def _make_users(
             # Как и у настоящих учёток: только шифротекст, никакого
             # открытого текста в базе даже у выдуманных людей.
             password_enc=crypto.encrypt_or_none(password),
-            email=f"{slugify(full_name)}{index}@example.com",
             name=full_name,
             contact=f"@{slugify(full_name).split('-')[0]}{rnd.randint(10, 99)}",
             created_at=created,
         )
+        # Как у настоящих: шифротекст и слепой индекс, не открытое поле.
+        user.set_email(f"{slugify(full_name)}{index}@example.com")
 
         # Пятеро с личным лимитом, остальные — по тарифу.
         if index % 5 == 0:

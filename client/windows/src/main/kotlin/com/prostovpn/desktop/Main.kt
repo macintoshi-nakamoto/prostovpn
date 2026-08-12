@@ -106,6 +106,9 @@ private fun runApp() = application {
     fun showWindow() {
         windowVisible = true
         windowState.isMinimized = false
+        // Окно достали из трея — человек сейчас будет смотреть на цифры.
+        // Свежий трафик и срок нужнее прямо сейчас, а не через минуту.
+        state.refreshPanelServers()
     }
 
     // Человек запустил приложение ещё раз — показываем окно вместо второго

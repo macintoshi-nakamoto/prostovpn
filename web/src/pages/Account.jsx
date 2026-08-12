@@ -224,10 +224,7 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged }) {
               <span>Пароль</span>
               <b>••••••••</b>
             </div>
-            <div className="ac-kv">
-              <span>Почта для чеков</span>
-              <b>{data.email || "не указана"}</b>
-            </div>
+            <EmailRow email={data.email} onChanged={onChanged} />
           </div>
           <button className="btn btn-outline btn-block" onClick={onPassword}>
             Сменить пароль
@@ -240,6 +237,95 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged }) {
 
 function plshort(n) {
   return `${n} ${["подключение", "подключения", "подключений"][n === 1 ? 0 : n > 1 && n < 5 ? 1 : 2]}`;
+}
+
+/**
+ * Почта для чеков: показать, добавить, сменить.
+ *
+ * Учётка из регистрации рождается без почты, и продление упиралось в
+ * «нет почты» без возможности её дать. Форма живёт прямо в строке: для
+ * одного поля отдельная модалка — это лишний экран.
+ */
+function EmailRow({ email, onChanged }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      await api.setEmail(value.trim());
+      setEditing(false);
+      setValue("");
+      onChanged();
+    } catch (err) {
+      // Код причины точнее сырого текста бэкенда: его можно перевести.
+      const code = err instanceof ApiError ? err.code : "";
+      setError(
+        code === "email_taken"
+          ? "Эта почта уже привязана к другой учётке"
+          : err instanceof ApiError
+            ? err.message
+            : "Не удалось сохранить почту",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <div className="ac-kv">
+        <span>Почта для чеков</span>
+        <b>
+          {email || "не указана"}{" "}
+          <button
+            className="ac-link"
+            type="button"
+            onClick={() => {
+              setValue(email || "");
+              setError("");
+              setEditing(true);
+            }}
+          >
+            {email ? "изменить" : "добавить"}
+          </button>
+        </b>
+      </div>
+    );
+  }
+
+  return (
+    <form className="ac-kv ac-kv-form" onSubmit={save}>
+      <span>Почта для чеков</span>
+      <div className="ac-email-edit">
+        <input
+          type="email"
+          required
+          autoFocus
+          placeholder="you@example.com"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          disabled={busy}
+        />
+        <button className="btn btn-primary" type="submit" disabled={busy}>
+          {busy ? "…" : "Сохранить"}
+        </button>
+        <button
+          className="btn btn-outline"
+          type="button"
+          disabled={busy}
+          onClick={() => setEditing(false)}
+        >
+          Отмена
+        </button>
+      </div>
+      {error && <p className="ac-email-error">{error}</p>}
+    </form>
+  );
 }
 
 function DeviceRow({ device, onChanged }) {

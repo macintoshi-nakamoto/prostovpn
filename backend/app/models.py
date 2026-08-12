@@ -272,7 +272,17 @@ class User(Base):
     # Почта — ключ, по которому повторная покупка находит человека и
     # продлевает подписку вместо создания второй учётки. Регистр приводится
     # к нижнему на записи, см. normalize_email.
+    #
+    # Открытым текстом почта больше не хранится: это поле — наследие, его
+    # чистит миграция, перекладывая адрес в пару ниже. Оставлено, чтобы
+    # обновление не потеряло данные раньше, чем они переедут.
     email: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, default=None)
+    # Адрес под AES-GCM ключом SECRETS_KEY — прочитать его может только
+    # панель, у которой есть ключ. Утечка базы адресов не отдаёт.
+    email_enc: Mapped[str | None] = mapped_column(Text, default=None)
+    # Слепой индекс (HMAC) для поиска точным совпадением: по нему повторная
+    # покупка находит учётку, не расшифровывая ни одного адреса.
+    email_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, default=None)
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, index=True, default=None)
 
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
@@ -343,6 +353,50 @@ class User(Base):
 
     def is_locked_out(self, now: dt.datetime | None = None) -> bool:
         return self.locked_until is not None and self.locked_until > (now or utcnow())
+
+    def set_email(self, address: str | None) -> None:
+        """
+        Единственное место, где почта попадает в базу.
+
+        Три поля обязаны меняться вместе: шифротекст, слепой индекс и
+        наследуемое открытое поле. Менять их врозь — значит однажды получить
+        учётку, которую повторная покупка не находит, или адрес, который
+        нельзя показать администратору.
+
+        Ключа шифрования нет — адрес ложится открытым, как раньше: потерять
+        почту клиента хуже, чем хранить её как хранили всегда. С ключом
+        открытое поле остаётся пустым.
+        """
+        from . import crypto
+
+        if address is None:
+            self.email = None
+            self.email_enc = None
+            self.email_hash = None
+            return
+
+        normalized = normalize_email(address)
+        self.email_hash = crypto.blind_index(normalized)
+        encrypted = crypto.encrypt_or_none(normalized)
+        self.email_enc = encrypted
+        self.email = None if encrypted else normalized
+
+    @property
+    def email_plain(self) -> str | None:
+        """
+        Адрес открытым текстом — для письма, продления и карточки в панели.
+
+        Шифротекст, который не читается (сменили ключ, залезли в базу), — это
+        отсутствие адреса, а не падение всего списка пользователей.
+        """
+        if self.email_enc:
+            from . import crypto
+
+            try:
+                return crypto.decrypt(self.email_enc)
+            except crypto.SecretsUnavailable:
+                return None
+        return self.email
 
     def last_handshake(self) -> dt.datetime | None:
         """Самое свежее рукопожатие среди действующих пиров."""

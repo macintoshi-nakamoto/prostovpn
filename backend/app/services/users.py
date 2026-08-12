@@ -129,12 +129,14 @@ def create_user(
         # Открытым текстом пароль в базе не лежит: только хэш для входа и
         # шифротекст для показа администратору, см. crypto.py.
         password_enc=crypto.encrypt_or_none(password),
-        email=normalize_email(email),
         name=name,
         contact=contact,
         note=note,
         traffic_limit_bytes=traffic_limit_bytes,
     )
+    # Через set_email, а не полем: почта хранится шифротекстом со слепым
+    # индексом, и трогать эти поля врозь нельзя.
+    user.set_email(email)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -146,6 +148,23 @@ def create_user(
     warnings = ensure_keys(db, user)
     db.refresh(user)
     return user, password, warnings
+
+
+def find_by_email(db: OrmSession, address: str | None) -> User | None:
+    """
+    Находит учётку по почте, не расшифровывая ни одного адреса.
+
+    Основной путь — слепой индекс. Открытое поле проверяется следом ради
+    базы, которую миграция ещё не переложила: терять продление из-за
+    порядка запуска нельзя.
+    """
+    normalized = normalize_email(address)
+    if not normalized:
+        return None
+    user = db.scalar(select(User).where(User.email_hash == crypto.blind_index(normalized)))
+    if user is None:
+        user = db.scalar(select(User).where(User.email == normalized))
+    return user
 
 
 def set_password(db: OrmSession, user: User, password: str | None = None) -> str:

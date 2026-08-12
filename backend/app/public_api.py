@@ -24,7 +24,17 @@ from sqlalchemy.orm import Session as OrmSession
 from . import payments, services
 from .config import settings
 from .db import get_db
-from .models import AppRelease, AuditLog, Order, OrderStatus, Plan, Session, User, utcnow
+from .models import (
+    AppRelease,
+    AuditLog,
+    Order,
+    OrderStatus,
+    Plan,
+    Session,
+    User,
+    normalize_email,
+    utcnow,
+)
 from .payments.base import WebhookRejected
 from .security import client_ip, verify_password
 
@@ -404,7 +414,9 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
 
     return AccountOut(
         login=user.login,
-        email=user.email,
+        # Свой адрес человек видеть может — шифрование защищает базу от
+        # утечки, а не почту от её владельца.
+        email=user.email_plain,
         public_id=user.public_id,
         plan=subscription.plan if subscription else None,
         plan_title=plan.name if plan else None,
@@ -475,6 +487,43 @@ def change_password(
     return {"ok": True, "relogin_required": True}
 
 
+class EmailIn(BaseModel):
+    email: str = Field(min_length=5, max_length=255, pattern=EMAIL_PATTERN)
+
+
+@router.post("/account/email")
+def set_account_email(
+    body: EmailIn,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> dict[str, object]:
+    """
+    Привязка почты из кабинета: на неё уходят чеки и доступ при продлении.
+
+    Учётка, купленная на сайте, рождается с почтой, а заведённая
+    регистрацией или администратором — может жить без неё. Без адреса
+    продление из кабинета упирается в «нет почты», и человеку некуда было
+    нажать. Хранится адрес так же, как у всех: шифротекстом со слепым
+    индексом, открытого поля в базе нет.
+    """
+    user, _ = who
+    address = normalize_email(body.email)
+
+    # Занятой почтой одного клиента нельзя пометить другого: продление по
+    # этому адресу ушло бы не туда.
+    taken = services.find_by_email(db, address)
+    if taken is not None and taken.id != user.id:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "эта почта уже привязана к другой учётке",
+            headers={"X-Error-Code": "email_taken"},
+        )
+
+    user.set_email(address)
+    db.commit()
+    return {"ok": True, "email": address}
+
+
 @router.delete("/account/devices/{device_id}")
 def unlink_device(
     device_id: int,
@@ -509,10 +558,12 @@ def renew(
     оплата и устроена так, как устроена.
     """
     user, _ = who
-    if not user.email:
+    email = user.email_plain
+    if not email:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "к учётке не привязана почта — напишите в поддержку",
+            "к учётке не привязана почта — добавьте её в кабинете",
+            headers={"X-Error-Code": "email_required"},
         )
 
     plan_code = body.plan_code
@@ -526,7 +577,7 @@ def renew(
         order = services.create_order(
             db,
             plan_code=plan_code,
-            email=user.email,
+            email=email,
             telegram_id=user.telegram_id,
             ip=client_ip(request),
         )

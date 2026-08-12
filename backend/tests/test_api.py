@@ -664,13 +664,15 @@ def test_register_is_rate_limited_per_address(client):
 # --- трафик: предупреждение и отключение --------------------------------------
 
 
-def test_traffic_low_is_five_gigabytes_on_any_plan(client, auth, shared_server):
+def test_traffic_low_threshold_scales_with_the_limit(client, auth, shared_server):
     """
-    Предупреждение приходит за пять гигабайт до конца, а не за долю лимита.
+    Порог предупреждения подстраивается под лимит: пятая часть, но не
+    больше пяти гигабайт.
 
-    Доля вела себя по-разному на разных тарифах: на 250 ГБ десятая часть —
-    это 25 ГБ, то есть человека пугали, когда у него оставалось больше, чем
-    весь пробный тариф.
+    Оба перекоса — настоящие. Доля без планки на 250 ГБ пугала за 25 ГБ до
+    конца — больше, чем весь пробный тариф. Абсолютные пять гигабайт при
+    лимите в один горели с первой секунды: «осталось мало: 1020 МБ» у
+    человека, израсходовавшего четыре мегабайта.
     """
     from app.models import GB, User
 
@@ -678,26 +680,37 @@ def test_traffic_low_is_five_gigabytes_on_any_plan(client, auth, shared_server):
         "/api/admin/users", json={"name": "Трафик Порог", "planCode": "3months"}, headers=auth
     ).json()
     uid, login, password = created["user"]["id"], created["user"]["login"], created["password"]
-    client.post(f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": 250}, headers=auth)
 
     def subscription() -> dict:
         r = client.post("/api/v1/login", json={"login": login, "password": password})
         assert r.status_code == 200, r.text
         return r.json()["subscription"]
 
-    # Осталось 20 ГБ — это больше пяти, предупреждать рано.
-    with SessionLocal() as db:
-        db.get(User, uid).traffic_used_bytes = 230 * GB
-        db.commit()
+    def set_state(limit_gb: int, used_bytes: int) -> None:
+        client.post(f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": limit_gb}, headers=auth)
+        with SessionLocal() as db:
+            db.get(User, uid).traffic_used_bytes = used_bytes
+            db.commit()
+
+    # Большой тариф: планка в пять гигабайт. За 20 ГБ до конца — рано.
+    set_state(250, 230 * GB)
     assert subscription()["traffic_low"] is False
 
-    # Осталось 4 ГБ — пора.
-    with SessionLocal() as db:
-        db.get(User, uid).traffic_used_bytes = 246 * GB
-        db.commit()
+    # Осталось 4 ГБ — пора; и человеку есть куда нажать.
+    set_state(250, 246 * GB)
     low = subscription()
     assert low["traffic_low"] is True
     assert low["traffic_left_bytes"] == 4 * GB
+    assert low["renew_url"]
+
+    # Маленький лимит: гигабайт. Израсходованы четыре мегабайта — свежая
+    # учётка не должна встречать человека словами «трафика осталось мало».
+    set_state(1, 4 * 1024 * 1024)
+    assert subscription()["traffic_low"] is False
+
+    # А вот когда осталась пятая часть (200 МБ) — пора.
+    set_state(1, GB - 200 * 1024 * 1024)
+    assert subscription()["traffic_low"] is True
 
 
 def test_exhausted_traffic_revokes_keys_and_closes_access(client, auth, shared_server):

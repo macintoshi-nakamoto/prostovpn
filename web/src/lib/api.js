@@ -93,6 +93,9 @@ export const api = {
   unlinkDevice: (deviceId) =>
     request(`/api/v1/account/devices/${deviceId}`, { method: "DELETE", auth: true }),
 
+  setEmail: (email) =>
+    request("/api/v1/account/email", { method: "POST", auth: true, body: { email } }),
+
   renew: (planCode) =>
     request("/api/v1/account/renew", {
       method: "POST",

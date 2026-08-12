@@ -66,7 +66,9 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         login=user.login,
         name=user.name,
         contact=user.contact,
-        email=user.email,
+        # Расшифровка адреса — почта в базе лежит шифротекстом. Панель —
+        # единственное место, где адрес показывается, и это осознанно.
+        email=user.email_plain,
         telegram_id=user.telegram_id,
         status=user_status(user, moment),
         is_active=user.is_active,

@@ -44,6 +44,7 @@ from .traffic import enforce_access, sync_server_traffic, sync_all_traffic
 from .users import (
     block_user,
     create_user,
+    find_by_email,
     generate_credentials,
     reveal_password,
     revoke_access,
@@ -103,6 +104,7 @@ __all__ = [
     "delivery",
     "OrderError",
     "create_order",
+    "find_by_email",
     "expire_stale",
     "fulfil",
     "public_plans",

@@ -133,16 +133,28 @@ def current_session(
     return session
 
 
-# Меньше этого остатка — приложение показывает предупреждение.
+# Верхняя планка порога «трафика осталось мало».
 #
-# Порог абсолютный, а не доля лимита. Доля давала разное поведение на разных
-# тарифах: на 250 ГБ десятая часть — это 25 ГБ, то есть человека пугали, когда
-# у него оставалось больше, чем весь пробный тариф. Пять гигабайт — это
-# примерно вечер видео: времени продлить хватает на любом тарифе.
-TRAFFIC_LOW_BYTES = 5 * 1024**3
+# Сам порог считает _traffic_low_threshold: он подстраивается под лимит.
+# Абсолютные пять гигабайт на любом тарифе не работали: при лимите в
+# гигабайт предупреждение горело с первой секунды — человеку писали
+# «осталось мало: 1020 МБ», когда он израсходовал четыре мегабайта.
+TRAFFIC_LOW_CAP_BYTES = 5 * 1024**3
 
 # За сколько дней до конца подписки приложение показывает кнопку продления.
 EXPIRES_SOON_DAYS = 3
+
+
+def _traffic_low_threshold(limit: int) -> int:
+    """
+    Когда включать «трафика осталось мало»: за пятую часть лимита, но не
+    больше пяти гигабайт.
+
+    Пятая часть — это ещё заметный запас, чтобы успеть продлить. Планка
+    сверху нужна большим тарифам: на 250 ГБ пятая часть — 50 ГБ, и пугать
+    человека за пятьдесят гигабайт до конца бессмысленно, там хватает пяти.
+    """
+    return min(TRAFFIC_LOW_CAP_BYTES, limit // 5)
 
 
 def _subscription_out(user: User) -> SubscriptionOut:
@@ -151,7 +163,8 @@ def _subscription_out(user: User) -> SubscriptionOut:
     used = user.traffic_used_bytes
 
     left_bytes = max(0, limit - used) if limit is not None else None
-    traffic_low = left_bytes is not None and left_bytes <= TRAFFIC_LOW_BYTES
+    traffic_low = left_bytes is not None and left_bytes <= _traffic_low_threshold(limit)
+    exhausted = left_bytes == 0
 
     if sub is None:
         return SubscriptionOut(
@@ -178,7 +191,9 @@ def _subscription_out(user: User) -> SubscriptionOut:
         traffic_left_bytes=left_bytes,
         traffic_low=traffic_low,
         expires_soon=expires_soon,
-        renew_url=_renew_url() if expires_soon else None,
+        # Кнопка продления нужна не только под конец срока: предупреждение о
+        # кончающемся трафике без неё — тупик, человеку некуда нажать.
+        renew_url=_renew_url() if expires_soon or traffic_low or exhausted else None,
     )
 
 

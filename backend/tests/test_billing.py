@@ -166,6 +166,22 @@ def test_trial_is_on_the_shelf_but_not_for_sale(client):
     assert r.status_code == 400, r.text
 
 
+def _users_by_email(db, address: str) -> list:
+    """Ищет учётки так, как теперь устроена база: по слепому индексу.
+
+    Открытого поля email у новых записей нет — оно шифротекстом, и запрос
+    по нему всегда возвращал бы пусто."""
+    from app.crypto import blind_index
+    from app.models import normalize_email
+
+    return list(db.scalars(select(User).where(User.email_hash == blind_index(normalize_email(address)))))
+
+
+def _user_by_email(db, address: str):
+    found = _users_by_email(db, address)
+    return found[0] if found else None
+
+
 # --- главное обещание: один платёж — одна учётка ------------------------------
 
 
@@ -178,7 +194,7 @@ def test_twenty_deliveries_give_exactly_one_account(client):
         assert r.status_code == 200, r.text
 
     with SessionLocal() as db:
-        users = list(db.scalars(select(User).where(User.email == "one@example.com")))
+        users = _users_by_email(db, "one@example.com")
         assert len(users) == 1, f"учёток создано {len(users)}, ожидалась одна"
 
         subs = list(db.scalars(select(Subscription).where(Subscription.user_id == users[0].id)))
@@ -218,7 +234,7 @@ def test_second_purchase_extends_instead_of_creating_second_user(client):
     _deliver_webhook(client, first["id"])
 
     with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.email == "renew@example.com"))
+        user = _user_by_email(db, "renew@example.com")
         user_id, login = user.id, user.login
         password_hash = user.password_hash
         expires_first = user.active_subscription().expires_at
@@ -227,7 +243,7 @@ def test_second_purchase_extends_instead_of_creating_second_user(client):
     _deliver_webhook(client, second["id"])
 
     with SessionLocal() as db:
-        users = list(db.scalars(select(User).where(User.email == "renew@example.com")))
+        users = _users_by_email(db, "renew@example.com")
         assert len(users) == 1, "повторная покупка завела второго пользователя"
 
         user = users[0]
@@ -272,7 +288,7 @@ def test_tampered_amount_is_rejected(client):
     assert r.json()["result"] == billing_webhook.AMOUNT_MISMATCH
 
     with SessionLocal() as db:
-        assert db.scalar(select(User).where(User.email == "fraud@example.com")) is None
+        assert _user_by_email(db, "fraud@example.com") is None
         failed = db.get(Order, order["id"])
         assert failed.status == OrderStatus.FAILED.value
         assert "сумма не совпала" in failed.failure_reason
@@ -287,7 +303,7 @@ def test_unsigned_webhook_is_forbidden(client):
     assert r.status_code == 403
 
     with SessionLocal() as db:
-        assert db.scalar(select(User).where(User.email == "unsigned@example.com")) is None
+        assert _user_by_email(db, "unsigned@example.com") is None
 
 
 # --- возврат ------------------------------------------------------------------
@@ -298,7 +314,7 @@ def test_refund_cancels_subscription_and_revokes_peers(client):
     _deliver_webhook(client, order["id"])
 
     with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.email == "refund@example.com"))
+        user = _user_by_email(db, "refund@example.com")
         assert user.has_access()
 
         # Пир заводим руками: тестовый сервер работает на общем ключе, а он
@@ -320,7 +336,7 @@ def test_refund_cancels_subscription_and_revokes_peers(client):
 
     with SessionLocal() as db:
         assert db.get(Order, order["id"]).status == OrderStatus.REFUNDED.value
-        user = db.scalar(select(User).where(User.email == "refund@example.com"))
+        user = _user_by_email(db, "refund@example.com")
         assert not user.has_access()
         assert all(sub.is_cancelled for sub in user.subscriptions)
         assert all(key.revoked_at is not None for key in user.keys)
@@ -338,7 +354,7 @@ def test_password_is_never_stored_or_logged_in_plaintext(client, caplog):
     assert password
 
     with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.email == "secret@example.com"))
+        user = _user_by_email(db, "secret@example.com")
         # Ни хэш, ни шифротекст не содержат пароля как подстроки.
         assert password not in user.password_hash
         assert user.password_hint is None
@@ -353,13 +369,86 @@ def test_password_is_never_stored_or_logged_in_plaintext(client, caplog):
     assert password not in logged, "пароль попал в лог"
 
 
+# --- почта не лежит открытым текстом ------------------------------------------
+
+
+def test_email_is_encrypted_at_rest(client):
+    """
+    Адрес в базе — шифротекст и слепой индекс, открытого поля нет.
+
+    Ровно то же обещание, что и у пароля: утечка файла базы без
+    PANEL_SECRETS_KEY не отдаёт ни одного адреса. При этом продление по
+    почте работает (см. тесты выше — они ищут по индексу), а панель может
+    показать адрес администратору расшифровкой.
+    """
+    address = "at-rest@example.com"
+    order = _order(client, address)
+    _deliver_webhook(client, order["id"])
+
+    with SessionLocal() as db:
+        user = _user_by_email(db, address)
+        assert user is not None
+        # Открытого адреса нет нигде: ни в поле-наследии, ни в контакте.
+        assert user.email is None
+        assert user.contact != address
+        # Шифротекст есть и адреса не содержит.
+        assert user.email_enc and address not in user.email_enc
+        # Индекс — не хэш самого адреса в лоб, а HMAC с ключом сервера.
+        import hashlib
+
+        assert user.email_hash != hashlib.sha256(address.encode()).hexdigest()
+        # А расшифровка возвращает адрес — панели есть что показать.
+        assert user.email_plain == address
+
+
+def test_account_email_can_be_added_and_is_unique(client):
+    """
+    Кабинет: почту можно привязать, чужую занять нельзя, продление её видит.
+
+    Учётка из регистрации рождается без почты, и продление из кабинета
+    упиралось в «нет почты» без возможности её дать. Теперь есть куда.
+    """
+    r = client.post(
+        "/api/v1/register",
+        json={"login": "email-adder", "password": "pass-1234", "platform": "web"},
+    )
+    assert r.status_code == 201, r.text
+    token = r.json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Почты нет — и кабинет это честно показывает.
+    assert client.get("/api/v1/account", headers=headers).json()["email"] is None
+
+    # Привязали — появилась, в базе шифротекстом.
+    r = client.post("/api/v1/account/email", json={"email": "Cheques@Example.com"}, headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["email"] == "cheques@example.com"
+    assert client.get("/api/v1/account", headers=headers).json()["email"] == "cheques@example.com"
+    with SessionLocal() as db:
+        user = _user_by_email(db, "cheques@example.com")
+        assert user is not None and user.email is None and user.email_enc
+
+    # Чужой адрес занять нельзя: продление по нему ушло бы не туда.
+    taken = _order(client, "occupied@example.com")
+    _deliver_webhook(client, taken["id"])
+    r = client.post("/api/v1/account/email", json={"email": "occupied@example.com"}, headers=headers)
+    assert r.status_code == 400
+    assert r.headers.get("X-Error-Code") == "email_taken"
+
+    # Продление из кабинета теперь находит адрес и создаёт заказ.
+    r = client.post("/api/v1/account/renew", json={"plan_code": "basic"}, headers=headers)
+    assert r.status_code == 201, r.text
+    with SessionLocal() as db:
+        assert db.get(Order, r.json()["id"]).email == "cheques@example.com"
+
+
 def test_admin_reveal_writes_audit(client, auth):
     order = _order(client, "reveal@example.com")
     _deliver_webhook(client, order["id"])
     password = client.get(f"/api/v1/orders/{order['id']}/status").json()["password"]
 
     with SessionLocal() as db:
-        user_id = db.scalar(select(User.id).where(User.email == "reveal@example.com"))
+        user_id = _user_by_email(db, "reveal@example.com").id
 
     r = client.post(f"/api/admin/users/{user_id}/reveal", headers=auth)
     assert r.status_code == 200, r.text
@@ -381,12 +470,12 @@ def test_manual_fulfilment_when_webhook_never_arrived(client, auth):
     assert r.json()["status"] == "paid"
 
     with SessionLocal() as db:
-        assert db.scalar(select(User).where(User.email == "manual@example.com")) is not None
+        assert _user_by_email(db, "manual@example.com") is not None
 
     # Запоздавший вебхук не должен создать вторую учётку.
     _deliver_webhook(client, order["id"])
     with SessionLocal() as db:
-        users = list(db.scalars(select(User).where(User.email == "manual@example.com")))
+        users = _users_by_email(db, "manual@example.com")
         assert len(users) == 1
 
 
@@ -586,7 +675,7 @@ def test_notice_names_the_real_reason_when_subscription_ended(client):
     token = r.json()["token"]
 
     with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.email == "expired-notice@example.com"))
+        user = _user_by_email(db, "expired-notice@example.com")
         for sub in user.subscriptions:
             sub.expires_at = utcnow() - dt.timedelta(days=1)
         db.commit()
@@ -608,7 +697,9 @@ def _paid_user(client, email: str):
     status = client.get(f"/api/v1/orders/{order['id']}/status").json()
 
     with SessionLocal() as db:
-        user = db.scalar(select(User).where(User.email == email))
+        from app.services.users import find_by_email
+
+        user = find_by_email(db, email)
         server = db.scalar(select(Server).where(Server.provisioning == Provisioning.SHARED))
         # Пир заводим руками: тестовый узел на общем ключе своих записей не
         # создаёт, а проверяем мы именно снятие пира.
@@ -712,7 +803,7 @@ def test_reissue_reuses_the_row_and_keeps_the_keypair(client, auth):
 
     try:
         with SessionLocal() as db:
-            user = db.scalar(select(User).where(User.email == "reissue@example.com"))
+            user = _user_by_email(db, "reissue@example.com")
             server = db.get(Server, server_id)
 
             first = issue_key(db, user, server)

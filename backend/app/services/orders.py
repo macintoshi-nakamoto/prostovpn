@@ -31,7 +31,7 @@ from ..models import (
     utcnow,
 )
 from ..security import hash_password
-from . import credentials
+from . import credentials, users
 from .billing import grant_subscription
 from .errors import PanelError
 
@@ -119,7 +119,7 @@ def create_order(
         # Продление или первая покупка — видно уже сейчас, по почте. Значение
         # ещё раз уточняется при выдаче: за сутки, пока висит неоплаченный
         # заказ, человек мог купить по той же почте с другого устройства.
-        is_renewal=db.scalar(select(User.id).where(User.email == address)) is not None,
+        is_renewal=users.find_by_email(db, address) is not None,
     )
     db.add(order)
     db.commit()
@@ -218,7 +218,7 @@ def fulfil(db: OrmSession, order: Order, manual_by: int | None = None) -> Fulfil
     if plan is None:
         raise PanelError(f"тариф «{order.plan_code}» удалён, выдать нечего")
 
-    existing = db.scalar(select(User).where(User.email == order.email))
+    existing = users.find_by_email(db, order.email)
     password: str | None = None
 
     if existing is not None:
@@ -239,10 +239,12 @@ def fulfil(db: OrmSession, order: Order, manual_by: int | None = None) -> Fulfil
             login=credentials.free_login(db),
             password_hash=hash_password(password),
             password_enc=crypto.encrypt_or_none(password),
-            email=order.email,
             telegram_id=order.telegram_id,
-            contact=order.email,
+            # Почту в contact больше не дублируем: она хранится шифротекстом,
+            # и открытая копия рядом обнуляла бы весь смысл шифрования.
         )
+        # Через set_email: шифротекст и слепой индекс, а не открытое поле.
+        user.set_email(order.email)
         db.add(user)
         db.flush()
 

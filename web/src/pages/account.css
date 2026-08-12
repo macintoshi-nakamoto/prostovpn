@@ -364,6 +364,35 @@
   font-weight: 600;
 }
 
+/* Строка почты раскрывается в форму: поле и две кнопки в один ряд. */
+.ac-email-edit {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ac-email-edit input {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  font-size: 15px;
+  background: var(--bg-field);
+}
+.ac-email-edit input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #fff;
+}
+.ac-email-edit .btn {
+  padding: 11px 16px;
+  font-size: 14px;
+}
+.ac-email-error {
+  font-size: 13.5px;
+  color: #c92a2a;
+}
+
 /* ── Подписка ─────────────────────────────────────────────────────────────── */
 .ac-plan-summary {
   background: #fff;

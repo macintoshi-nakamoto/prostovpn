@@ -44,6 +44,7 @@ def backfill(db: OrmSession) -> None:
     """
     _backfill_plan_kopecks(db)
     _encrypt_legacy_passwords(db)
+    _encrypt_legacy_emails(db)
     _measure_published_releases(db)
 
 
@@ -230,6 +231,42 @@ def _encrypt_legacy_passwords(db: OrmSession) -> None:
         user.password_hint = None
     db.commit()
     log.info("миграция: %d паролей зашифровано", len(stale))
+
+
+def _encrypt_legacy_emails(db: OrmSession) -> None:
+    """
+    Переносит почту из открытого `email` в шифротекст и слепой индекс.
+
+    Та же судьба, что у паролей: адреса лежали открытым текстом, а это
+    ровно то, что уходит первым при утечке базы. После переноса открытое
+    поле пустеет; поиск работает по HMAC-индексу, показ — по расшифровке.
+
+    Без ключа шифрования ничего не трогаем, но индекс всё равно считаем:
+    он нужен поиску при повторной покупке, а не только шифрованию.
+    """
+    from . import crypto
+    from .models import normalize_email
+
+    stale = list(db.scalars(select(User).where(User.email.isnot(None))))
+    if not stale:
+        return
+
+    if not crypto.available():
+        log.warning(
+            "%d адресов почты лежат открытым текстом, но PANEL_SECRETS_KEY не задан — "
+            "задайте ключ и перезапустите панель",
+            len(stale),
+        )
+        for user in stale:
+            if user.email_hash is None:
+                user.email_hash = crypto.blind_index(normalize_email(user.email))
+        db.commit()
+        return
+
+    for user in stale:
+        user.set_email(user.email)
+    db.commit()
+    log.info("миграция: %d адресов почты зашифровано", len(stale))
 
 
 def _measure_published_releases(db: OrmSession) -> None:

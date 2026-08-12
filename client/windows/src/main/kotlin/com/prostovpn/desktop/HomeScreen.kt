@@ -490,12 +490,18 @@ private fun SubscriptionBanner(state: AppState, modifier: Modifier = Modifier) {
     val days = state.subscriptionDaysLeft
     val notice = state.panelNotice
 
+    // Трафик выбран до нуля — отдельное состояние, а не «осталось мало:
+    // 0 МБ». Ноль — это не мало, это конец: доступ уже закрыт, и человеку
+    // нужно знать, что делать, а не сколько осталось.
+    val trafficOver = state.trafficLimitBytes >= 0 && state.trafficLeftBytes == 0L
+
     // Показываем только когда есть что сказать: в обычный день человеку не
     // нужен постоянный баннер о том, что всё в порядке.
-    val urgent = state.expiresSoon || state.trafficLow || notice.isNotEmpty()
+    val urgent = state.expiresSoon || state.trafficLow || trafficOver || notice.isNotEmpty()
     if (!urgent) return
 
     val headline = when {
+        trafficOver -> s.trafficOverTitle
         notice.isNotEmpty() -> notice
         state.trafficLow && state.trafficLeftBytes >= 0 ->
             s.trafficLowTitle + " " + formatBytes(state.trafficLeftBytes)

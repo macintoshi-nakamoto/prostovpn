@@ -34,8 +34,11 @@ def _orders(db: OrmSession, user: User) -> list[Order]:
     пишет «я заплатил, а доступа нет».
     """
     condition = Order.user_id == user.id
-    if user.email:
-        condition = condition | (Order.email == user.email)
+    # Почта в базе шифротекстом, а в заказах открытая: сравниваем с
+    # расшифрованной. Один адрес на карточку — это один decrypt, не N.
+    address = user.email_plain
+    if address:
+        condition = condition | (Order.email == address)
     return list(
         db.scalars(
             select(Order)
@@ -112,6 +115,10 @@ def list_users(
             or needle in r.login.lower()
             or needle in (r.name or "").lower()
             or needle in (r.contact or "").lower()
+            # Строка уже расшифрована маппером для показа — по ней и ищем:
+            # раньше почта находилась через открытую копию в contact, а
+            # копии больше нет.
+            or needle in (r.email or "").lower()
         ]
     if status_filter and status_filter != "all":
         rows = [r for r in rows if r.status == status_filter]
@@ -174,12 +181,13 @@ def update_user(
         address = normalize_email(body.email)
         # Почта — ключ, по которому повторная покупка находит человека.
         # Занятой почтой одного клиента нельзя пометить другого: продление
-        # ушло бы не туда.
-        if address and db.scalar(
-            select(User.id).where(User.email == address, User.id != user.id)
-        ):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "эта почта занята другой учёткой")
-        user.email = address
+        # ушло бы не туда. Ищем по слепому индексу — открытых адресов в
+        # базе нет.
+        if address:
+            taken = services.find_by_email(db, address)
+            if taken is not None and taken.id != user.id:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, "эта почта занята другой учёткой")
+        user.set_email(address)
     db.commit()
     audit(db, admin, "user.update", user.public_id)
     return _detail(db, user_id)

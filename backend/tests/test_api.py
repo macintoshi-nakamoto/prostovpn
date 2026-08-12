@@ -142,6 +142,50 @@ def test_traffic_limit_and_unlimited(client, auth):
     assert unlimited["trafficPct"] is None
 
 
+def test_personal_unlimited_beats_the_plan_limit(client, auth):
+    """
+    Безлимит человеку на тарифе С ЛИМИТОМ действительно снимает лимит.
+
+    Прежний тест этого не ловил: он брал тариф без лимита, и «безлимит»
+    выглядел сохранённым просто потому, что откатываться было не к чему.
+    А на тарифе с лимитом администратор выбирал «Безлимит», в базу шло
+    «своего лимита нет» — и лимит немедленно откатывался к тарифному.
+    В панели это читалось как «не сохраняется», а человек оставался
+    ограничен.
+    """
+    uid = client.post(
+        "/api/admin/users", json={"name": "Личный безлимит", "planCode": "basic"}, headers=auth
+    ).json()["user"]["id"]
+
+    # На тарифе basic лимит есть — он и показывается, пока личного нет.
+    plan_limited = client.get(f"/api/admin/users/{uid}", headers=auth).json()
+    assert plan_limited["trafficLimitBytes"] == 250 * GB
+
+    unlimited = client.post(
+        f"/api/admin/users/{uid}/traffic-limit", json={"unlimited": True}, headers=auth
+    ).json()
+    assert unlimited["trafficLimitBytes"] is None, "личный безлимит откатился к тарифному лимиту"
+
+    # И после перечитывания — тоже: панель открывают заново, а не смотрят
+    # только на ответ сохранения.
+    again = client.get(f"/api/admin/users/{uid}", headers=auth).json()
+    assert again["trafficLimitBytes"] is None, "безлимит не пережил перечитывание карточки"
+
+    # Расход больше тарифного лимита доступ не закрывает: безлимит же.
+    from app.models import User
+
+    with SessionLocal() as db:
+        db.get(User, uid).traffic_used_bytes = 500 * GB
+        db.commit()
+    assert client.get(f"/api/admin/users/{uid}", headers=auth).json()["status"] != "traffic"
+
+    # Обратно к тарифному лимиту: снимаем личный безлимит числом.
+    back = client.post(
+        f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": 10}, headers=auth
+    ).json()
+    assert back["trafficLimitBytes"] == 10 * GB, "личный лимит не встал обратно после безлимита"
+
+
 def test_traffic_exhausted_blocks_access(client, auth):
     uid = client.post("/api/admin/users", json={"name": "Расход", "planCode": "3months"}, headers=auth).json()["user"]["id"]
     client.post(f"/api/admin/users/{uid}/traffic-limit", json={"limitGb": 1}, headers=auth)

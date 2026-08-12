@@ -278,11 +278,24 @@ def unblock_user(db: OrmSession, user: User) -> list[str]:
     return warnings
 
 
-def set_traffic_limit(db: OrmSession, user: User, limit_bytes: int | None) -> None:
-    """`None` — безлимит. Отдельного флага нет: отсутствие лимита и есть он."""
+def set_traffic_limit(
+    db: OrmSession, user: User, limit_bytes: int | None, unlimited: bool = False
+) -> None:
+    """
+    Личный лимит трафика: число, безлимит или «как в тарифе».
+
+    Три состояния, а не два, и это существенно. `unlimited=True` — личный
+    безлимит, он сильнее тарифного лимита. Число — личный лимит. А
+    `limit_bytes=None` без флага означает «своего лимита нет, действует
+    тарифный»: именно этим значением раньше пытались выдать безлимит, и он
+    молча откатывался к лимиту тарифа.
+    """
     if limit_bytes is not None and limit_bytes < 0:
         raise PanelError("лимит не может быть отрицательным")
-    user.traffic_limit_bytes = limit_bytes
+    user.traffic_unlimited = unlimited
+    # Личное число и личный безлимит несовместимы: оставленное число сбило
+    # бы с толку и панель, и следующего администратора.
+    user.traffic_limit_bytes = None if unlimited else limit_bytes
     db.commit()
 
 

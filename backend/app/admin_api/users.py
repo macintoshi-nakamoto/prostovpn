@@ -274,7 +274,9 @@ def set_traffic_limit(
     user = _load(db, user_id)
     limit = None if body.unlimited or body.limit_gb is None else int(body.limit_gb * GB)
     try:
-        services.set_traffic_limit(db, user, limit)
+        # Флаг передаём отдельно: без него безлимит записывался как «лимита
+        # нет» и тут же откатывался к тарифному, см. set_traffic_limit.
+        services.set_traffic_limit(db, user, limit, unlimited=body.unlimited)
     except services.PanelError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     audit(db, admin, "user.traffic_limit", user.public_id, "безлимит" if limit is None else f"{body.limit_gb} ГБ")

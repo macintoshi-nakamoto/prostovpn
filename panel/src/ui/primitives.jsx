@@ -160,9 +160,15 @@ export function Avatar({ children }) {
 
 export function Bar({ pct, color }) {
   const clamped = Math.max(0, Math.min(100, Number(pct) || 0));
+  /*
+  Заполнение задаётся масштабом, а не шириной. Анимация width заставляет
+  браузер пересчитывать раскладку на каждом кадре, и в таблице, где таких
+  полос сотня, это заметно дёргает прокрутку. Масштаб живёт на слое
+  композитора и раскладку не трогает вовсе.
+  */
   return (
     <div className="gd-bar">
-      <span style={{ width: `${clamped}%`, background: color }} />
+      <span style={{ transform: `scaleX(${clamped / 100})`, background: color }} />
     </div>
   );
 }

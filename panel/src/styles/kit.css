@@ -479,11 +479,18 @@
   overflow: hidden;
   min-width: 60px;
 }
+/*
+ * Полоса растягивается масштабом от левого края, а не шириной: width
+ * пересчитывает раскладку на каждом кадре, а в таблице таких полос сотня.
+ * Ширина всегда 100%, видимую часть задаёт scaleX (см. Bar в primitives).
+ */
 .gd-bar > span {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: 3px;
-  transition: width 0.4s ease;
+  transform-origin: left center;
+  transition: transform 0.4s ease;
 }
 
 /* ── Пара ключ-значение ───────────────────────────────────────────────────── */
@@ -510,12 +517,20 @@
 }
 
 /* ── Шторка и модалка ─────────────────────────────────────────────────────── */
+/*
+ * Подложка без backdrop-filter, и это ради плавности, а не экономии строк.
+ *
+ * Размытие фона стоит дороже всего остального в панели вместе взятого:
+ * пока шторка едет, браузер пересчитывает блюр ВСЕЙ страницы под ней на
+ * каждом кадре — таблица на сотню строк, графики, тени. Отсюда и рывки
+ * при открытии карточки. Плотности фона хватает, чтобы отделить шторку от
+ * содержимого под ней: подложка стала темнее взамен размытия, контраст
+ * текста от этого только вырос.
+ */
 .gd-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10, 10, 11, 0.5);
-  backdrop-filter: blur(9px);
-  -webkit-backdrop-filter: blur(9px);
+  background: rgba(10, 10, 11, 0.66);
   z-index: 200;
   display: flex;
   animation: gd-fade 0.15s ease;
@@ -536,7 +551,12 @@
   background: var(--gd-bg);
   display: flex;
   flex-direction: column;
-  animation: gd-slide 0.42s cubic-bezier(0.16, 1, 0.3, 1);
+  /*
+  0.3s вместо 0.42s: почти полсекунды на выезд читаются как задержка
+  отклика, а не как плавность. Кривая та же — резкий старт и мягкое
+  торможение, — поэтому движение осталось тем же по характеру.
+  */
+  animation: gd-slide 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: -32px 0 70px -12px rgba(0, 0, 0, 0.55);
   will-change: transform;
 }
@@ -629,12 +649,11 @@
   color: var(--gd-text);
 }
 
+/* Без размытия фона — по той же причине, что и у шторки выше. */
 .gd-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10, 10, 11, 0.55);
-  backdrop-filter: blur(9px);
-  -webkit-backdrop-filter: blur(9px);
+  background: rgba(10, 10, 11, 0.68);
   z-index: 210;
   display: flex;
   align-items: center;
@@ -924,9 +943,15 @@
     align-items: flex-end !important;
     padding: 0 !important;
   }
+  /*
+  На телефоне анимации были самыми долгими (0.42s подложка, 0.52s лист) —
+  и именно там слабее процессор, так что «долго» складывалось с «тяжело».
+  Сокращено вдвое: лист успевает показать характер движения, но не
+  заставляет ждать.
+  */
   .gd-overlay,
   .gd-modal-overlay {
-    animation: gd-fade 0.42s ease both !important;
+    animation: gd-fade 0.22s ease both !important;
   }
   .gd-drawer,
   .gd-modal {
@@ -936,7 +961,7 @@
     border-radius: 28px 28px 0 0 !important;
     box-shadow: 0 -22px 55px rgba(0, 0, 0, 0.55) !important;
     will-change: transform;
-    animation: gd-sheet-up 0.52s cubic-bezier(0.19, 1, 0.22, 1) both !important;
+    animation: gd-sheet-up 0.3s cubic-bezier(0.19, 1, 0.22, 1) both !important;
   }
   .gd-drawer {
     height: 92dvh !important;

@@ -317,6 +317,15 @@ class User(Base):
 
     # Личный лимит трафика. None — берём из тарифа; тариф с None — безлимит.
     traffic_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
+    # Личный безлимит, сильнее тарифного лимита.
+    #
+    # Отдельный флаг, а не None в поле выше, и это не дублирование. У поля
+    # уже есть смысл: «своего лимита нет, бери из тарифа». Поэтому выдать
+    # безлимит человеку на тарифе с лимитом было НЕЧЕМ: администратор
+    # выбирал «Безлимит», панель записывала None, и лимит немедленно
+    # откатывался к тарифному — выглядело как «не сохраняется», а человек
+    # оставался ограничен.
+    traffic_unlimited: Mapped[bool] = mapped_column(Boolean, default=False)
     traffic_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     traffic_reset_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
@@ -341,7 +350,15 @@ class User(Base):
         return max(live, key=lambda s: s.expires_at, default=None)
 
     def effective_traffic_limit(self, now: dt.datetime | None = None) -> int | None:
-        """Личный лимит важнее тарифного; None — безлимит."""
+        """
+        Сколько трафика человеку положено; None — безлимит.
+
+        Порядок именно такой. Личный безлимит сильнее всего: его ставят
+        руками конкретному человеку, и тарифный лимит его перебивать не
+        должен. Дальше личное число, и только потом тариф.
+        """
+        if self.traffic_unlimited:
+            return None
         if self.traffic_limit_bytes is not None:
             return self.traffic_limit_bytes
         sub = self.active_subscription(now)

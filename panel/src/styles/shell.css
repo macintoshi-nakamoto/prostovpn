@@ -327,15 +327,18 @@ html[data-theme="light"] .ax-nav-item:hover {
     transform: none;
   }
 
+  /*
+   * Подложка меню без размытия: блюр на весь экран пересчитывается каждый
+   * кадр, пока подложка проявляется, — и как раз на телефоне, где процессор
+   * слабее. Плотность фона подняли взамен, отделение от содержимого то же.
+   */
   .ax-sidebar-overlay {
     display: block;
     position: fixed;
     inset: 0;
     z-index: 55;
-    background: rgba(6, 6, 8, 0.6);
-    backdrop-filter: blur(14px) saturate(120%);
-    -webkit-backdrop-filter: blur(14px) saturate(120%);
-    animation: ax-fade 0.42s ease;
+    background: rgba(6, 6, 8, 0.72);
+    animation: ax-fade 0.22s ease;
   }
 
   .ax-content {
@@ -434,18 +437,26 @@ html[data-theme="light"] .ax-nav-item:hover {
     transition: transform 0.5s cubic-bezier(0.34, 1.28, 0.44, 1);
     will-change: transform;
   }
+  /*
+   * Подсветка активной вкладки без backdrop-filter.
+   *
+   * Здесь было худшее из возможных сочетаний: элемент одновременно
+   * масштабируется анимацией и размывает фон под собой. Каждый кадр менялась
+   * область размытия, и браузер пересчитывал блюр заново — на переключении
+   * вкладок это чувствовалось рывком. Заливка с обводкой дают ту же
+   * «стеклянную» плашку, а анимация теперь идёт чистым transform на слое
+   * композитора.
+   */
   .ax-bb-glass {
     display: block;
     width: 100%;
     height: 100%;
     border-radius: 15px;
-    background: rgba(242, 194, 48, 0.17);
-    backdrop-filter: blur(7px) saturate(1.5);
-    -webkit-backdrop-filter: blur(7px) saturate(1.5);
+    background: rgba(242, 194, 48, 0.2);
     border: 1px solid rgba(242, 194, 48, 0.3);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 5px 16px rgba(242, 194, 48, 0.15);
     transform-origin: center;
-    animation: ax-bb-liquid 0.5s cubic-bezier(0.34, 1.28, 0.44, 1) both;
+    animation: ax-bb-liquid 0.38s cubic-bezier(0.34, 1.28, 0.44, 1) both;
   }
   @keyframes ax-bb-liquid {
     0% {

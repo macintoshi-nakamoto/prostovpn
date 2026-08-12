@@ -409,16 +409,19 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     private suspend fun buildConfigForConnect(base: String): String {
         /*
-        IPv6 заворачиваем в туннель только если у интерфейса есть v6-адрес.
-        Иначе ::/0 отправляет весь IPv6 в чёрную дыру: на мобильных сетях с
-        IPv6 (частых у российских операторов) это выглядит как «подключено,
-        а ничего не грузит» — система предпочитает IPv6 и упирается в него.
+        ::/0 в маршрутах туннеля стоит всегда, даже без IPv6-адреса у
+        интерфейса, — как и в ветке раздельного туннелирования ниже. Иначе
+        библиотека awg при полном отсутствии IPv6-маршрутов зовёт
+        allowFamily(AF_INET6), и весь IPv6 уходит МИМО туннеля с настоящим
+        адресом абонента: на мобильных сетях с IPv6 (обычных у операторов, и
+        особенно у Huawei) двухстековые сайты открывались напрямую и видели
+        реальную страну — «VPN как будто не работает». Прежняя ветка без ::/0
+        именно этот перекос и давала. Узел без IPv6-аплинка завёрнутый IPv6
+        гасит, и приложения переходят на IPv4 через туннель — без утечки.
         */
         val withDns = SplitTunnel.ensureMtu(SplitTunnel.ensureDns(base))
-        val ipv6 = SplitTunnel.hasIpv6Address(withDns)
         if (!splitTunnelEnabled) {
-            val all = if (ipv6) "0.0.0.0/0, ::/0" else "0.0.0.0/0"
-            return SplitTunnel.applyToConfig(withDns, all)
+            return SplitTunnel.applyToConfig(withDns, "0.0.0.0/0, ::/0")
         }
         val allowed = cachedAllowedIps ?: withContext(Dispatchers.Default) {
             SplitTunnel.allowedIpsExcept(excludeCidrs())

@@ -114,6 +114,32 @@ class SplitTunnelTest {
     }
 
     @Test
+    fun `applyToConfig заворачивает весь IPv6 при полном туннеле`() {
+        // Регресс-защита: сервер раздаёт AllowedIPs с ::/0, клиент при полном
+        // туннеле обязан его сохранить. Без ::/0 библиотека зовёт
+        // allowFamily(AF_INET6), и IPv6 утекает мимо VPN с реальным адресом —
+        // на Huawei с IPv6-сетью это «страна не меняется». Проверяем саму
+        // подстановку полного маршрута, на которой строится buildConfigForConnect.
+        val base = """
+            [Interface]
+            Address = 10.8.1.18/32
+            PrivateKey = aaa=
+
+            [Peer]
+            PublicKey = bbb=
+            AllowedIPs = 0.0.0.0/0, ::/0
+            Endpoint = 45.151.106.253:51820
+        """.trimIndent()
+
+        val full = SplitTunnel.applyToConfig(base, "0.0.0.0/0, ::/0")
+        val allowed = full.lineSequence().first { it.trim().startsWith("AllowedIPs") }
+        assertTrue("::/0 обязателен даже без v6-адреса, иначе IPv6 течёт мимо VPN", "::/0" in allowed)
+        assertTrue("IPv4 тоже должен идти в туннель", "0.0.0.0/0" in allowed)
+        // Ровно одна строка AllowedIPs: движок берёт первую, лишние — мусор.
+        assertEquals(1, full.lineSequence().count { it.trim().startsWith("AllowedIPs") })
+    }
+
+    @Test
     fun `MTU подставляется только когда сервер его не задал`() {
         val withoutMtu = """
             [Interface]

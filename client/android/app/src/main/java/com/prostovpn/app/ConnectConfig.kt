@@ -43,17 +43,32 @@ object ConnectConfig {
             ?: defaultListJson(context)
     }
 
-    /** Итоговый конфиг с учётом сплит-туннеля и наличия IPv6-адреса у интерфейса. */
+    /** Итоговый конфиг с учётом сплит-туннеля. */
     fun build(context: Context, base: String): String {
         val withDns = SplitTunnel.ensureMtu(SplitTunnel.ensureDns(base))
-        val ipv6 = SplitTunnel.hasIpv6Address(withDns)
-        val fullTunnel = if (ipv6) "0.0.0.0/0, ::/0" else "0.0.0.0/0"
         if (!prefs(context).getBoolean("split.enabled", false)) {
-            return SplitTunnel.applyToConfig(withDns, fullTunnel)
+            return SplitTunnel.applyToConfig(withDns, FULL_TUNNEL)
         }
         val content = activeListContent(context)
-            ?: return SplitTunnel.applyToConfig(withDns, fullTunnel)
+            ?: return SplitTunnel.applyToConfig(withDns, FULL_TUNNEL)
         val allowed = SplitTunnel.allowedIpsExcept(SplitTunnel.parseCidrList(content))
         return SplitTunnel.applyToConfig(withDns, allowed)
     }
+
+    /*
+    ::/0 в маршрутах туннеля обязателен, даже когда у интерфейса нет
+    IPv6-адреса, и это не опечатка. Библиотека awg при ПОЛНОМ отсутствии
+    IPv6-маршрутов зовёт allowFamily(AF_INET6) у VpnService — и весь IPv6
+    уходит МИМО туннеля, с настоящим адресом абонента. На мобильных сетях с
+    IPv6 (обычных у операторов и особенно заметных на Huawei) это выглядело
+    как «VPN не работает»: IPv4 шёл через туннель, а двухстековые сайты —
+    YouTube, Google — открывались напрямую по IPv6 и видели реальную страну.
+
+    Раньше при полном туннеле без v6-адреса ставилось только «0.0.0.0/0», и
+    ветка раздельного туннелирования (там ::/0 стоит всегда) вела себя иначе,
+    чем полный туннель, — ровно этот перекос и утекал. С ::/0 весь IPv6
+    заворачивается в туннель; узел без IPv6-аплинка его гасит, и приложения
+    сами переходят на IPv4 через туннель. Никакой утечки.
+    */
+    private const val FULL_TUNNEL = "0.0.0.0/0, ::/0"
 }

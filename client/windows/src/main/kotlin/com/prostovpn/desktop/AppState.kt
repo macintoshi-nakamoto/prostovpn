@@ -135,7 +135,20 @@ class AppState(private val scope: CoroutineScope) {
      * экран. Текст пишет панель, здесь его только показывают.
      */
     var panelNotice by mutableStateOf("")
+
+    /**
+     * Почему человека выкинуло на экран входа.
+     *
+     * Заполняется, когда панель погасила сессию, — устройство отключили из
+     * личного кабинета или админки. Без объяснения это выглядело как
+     * поломка: приложение молча оказывалось на форме входа, и человек шёл
+     * в поддержку со «слетел аккаунт». Читается один раз экраном входа.
+     */
+    var signedOutReason by mutableStateOf("")
         private set
+
+    /** Экран входа забирает причину: показывается она ровно один раз. */
+    fun consumeSignedOutReason(): String = signedOutReason.also { signedOutReason = "" }
 
     /** Страны, выданные панелью. Пусто — подписка кончилась. */
     var panelServers by mutableStateOf<List<ServerInfo>>(emptyList())
@@ -614,7 +627,12 @@ class AppState(private val scope: CoroutineScope) {
                     // настройками. Недоступная панель — это временно, а
                     // стирание сессии необратимо.
                     val status = (error as? PanelApi.PanelException)?.status ?: 0
-                    if (status == 401 || status == 403) logout()
+                    if (status == 401 || status == 403) {
+                        logout()
+                        // Уже после logout: он чистит состояние, а причина
+                        // должна дожить до экрана входа.
+                        signedOutReason = s.noticeRemoteSignout
+                    }
                 }
         }
     }

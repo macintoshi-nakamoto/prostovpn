@@ -1,0 +1,485 @@
+/* Каркас панели: сайдбар, топбар, контент и мобильная навигация. */
+
+html,
+body {
+  background: var(--ax-bg);
+  overscroll-behavior: none;
+}
+body {
+  margin: 0;
+}
+
+.ax-root,
+.ax-root * {
+  box-sizing: border-box;
+}
+.ax-root {
+  font-family: var(--ax-sans);
+  color: var(--ax-text);
+  background: var(--ax-bg);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.004em;
+}
+.ax-root ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.ax-root ::-webkit-scrollbar-thumb {
+  background: var(--ax-hair-2);
+  border-radius: 5px;
+  border: 2px solid var(--ax-bg);
+}
+.ax-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ax-shell {
+  display: grid;
+  grid-template-columns: 236px 1fr;
+  min-height: 100vh;
+}
+
+.ax-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  background: #141416;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+html[data-theme="light"] .ax-sidebar {
+  background: #ffffff;
+  border-color: var(--ax-border);
+}
+
+.ax-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 22px 22px 16px;
+}
+.ax-brand-name {
+  font-weight: 800;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--ax-accent);
+}
+.ax-brand-sub {
+  font-size: 11px;
+  color: var(--ax-text-faint);
+}
+
+.ax-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 14px 16px;
+}
+.ax-nav::-webkit-scrollbar {
+  width: 0;
+}
+.ax-nav-group-label {
+  padding: 16px 10px 7px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #55555b;
+}
+html[data-theme="light"] .ax-nav-group-label {
+  color: #96979f;
+}
+.ax-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  color: var(--ax-text-dim);
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 13.5px;
+  line-height: 18px;
+  margin: 2px 0;
+  transition: color 0.13s, background 0.13s;
+}
+.ax-nav-item svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+.ax-nav-item:hover {
+  color: var(--ax-text);
+  background: rgba(255, 255, 255, 0.035);
+}
+html[data-theme="light"] .ax-nav-item:hover {
+  background: #f3f4f6;
+}
+.ax-nav-item.active {
+  color: var(--ax-accent);
+  font-weight: 600;
+  background: var(--ax-accent-dim);
+}
+.ax-nav-item.active svg {
+  opacity: 1;
+}
+.ax-nav-badge {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-family: var(--ax-mono);
+  color: var(--gd-gold-ink);
+  background: var(--ax-accent);
+  padding: 3px 6px;
+  border-radius: 6px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.ax-sidebar-foot {
+  padding: 12px;
+  border-top: 1px solid var(--ax-border);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: var(--ax-text-dim);
+}
+
+.ax-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--ax-bg);
+}
+.ax-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 24px;
+  background: color-mix(in srgb, var(--ax-bg) 86%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--ax-hair);
+}
+.ax-topbar-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.ax-topbar-spacer {
+  flex: 1;
+}
+.ax-content {
+  padding: 24px;
+  max-width: 1560px;
+  width: 100%;
+  margin: 0 auto;
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+.ax-theme-toggle {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid var(--ax-border);
+  border-radius: 10px;
+  background: var(--ax-surface-2);
+  color: var(--ax-text-dim);
+  font: 500 12px/1 var(--ax-sans);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s, transform 0.15s;
+}
+.ax-theme-toggle:hover {
+  color: var(--ax-text);
+  border-color: var(--ax-border-2);
+  background: var(--ax-surface-3);
+}
+.ax-theme-toggle:active {
+  transform: scale(0.96);
+}
+
+.ax-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12;
+  color: var(--ax-text-faint);
+}
+.ax-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ax-pos);
+  box-shadow: 0 0 8px var(--ax-pos);
+  animation: ax-pulse 2s ease-in-out infinite;
+}
+@keyframes ax-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Мобильная навигация: на десктопе скрыта. */
+.ax-bottombar,
+.ax-sheet-handle,
+.ax-sheet-title,
+.ax-sidebar-overlay {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .ax-shell {
+    grid-template-columns: 1fr;
+  }
+  .ax-live-badge {
+    display: none !important;
+  }
+
+  /* Сайдбар превращается в лист, выезжающий снизу: под большой палец это
+     удобнее боковой шторки. */
+  .ax-sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 60;
+    width: 100%;
+    height: auto;
+    max-height: 82dvh;
+    transform: translateY(101%);
+    transition: transform 0.52s cubic-bezier(0.19, 1, 0.22, 1);
+    background: #161618;
+    border: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 28px 28px 0 0;
+    box-shadow: 0 -24px 60px rgba(0, 0, 0, 0.6);
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    overflow: hidden;
+  }
+  html[data-theme="light"] .ax-sidebar {
+    background: rgba(255, 255, 255, 0.98);
+  }
+  .ax-sidebar.open {
+    transform: none;
+  }
+  .ax-brand {
+    display: none;
+  }
+  .ax-sheet-handle {
+    display: block;
+    width: 40px;
+    height: 4.5px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.16);
+    margin: 11px auto 2px;
+  }
+  html[data-theme="light"] .ax-sheet-handle {
+    background: rgba(24, 24, 27, 0.18);
+  }
+  .ax-sheet-title {
+    display: block;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ax-text-dim);
+    padding: 4px 0 8px;
+  }
+  .ax-nav {
+    padding: 4px 16px 14px;
+  }
+  .ax-nav-item {
+    padding: 13px 14px;
+    font-size: 15px;
+    line-height: 20px;
+    border-radius: 15px;
+    gap: 13px;
+  }
+  .ax-nav-item svg {
+    width: 20px;
+    height: 20px;
+  }
+  .ax-sidebar .ax-nav {
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.4s ease 0.09s, transform 0.44s cubic-bezier(0.19, 1, 0.22, 1) 0.09s;
+  }
+  .ax-sidebar.open .ax-nav {
+    opacity: 1;
+    transform: none;
+  }
+
+  .ax-sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: rgba(6, 6, 8, 0.6);
+    backdrop-filter: blur(14px) saturate(120%);
+    -webkit-backdrop-filter: blur(14px) saturate(120%);
+    animation: ax-fade 0.42s ease;
+  }
+
+  .ax-content {
+    padding: 16px;
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  .ax-topbar {
+    padding: 12px 16px;
+    padding-top: calc(12px + env(safe-area-inset-top));
+  }
+  .ax-theme-toggle {
+    width: 34px;
+    padding: 0;
+  }
+  .ax-theme-toggle span {
+    display: none;
+  }
+
+  /* Нижний бар — плавающий «стеклянный» таб-бар. */
+  .ax-bottombar {
+    display: flex;
+    position: fixed;
+    z-index: 50;
+    left: 12px;
+    right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    justify-content: space-around;
+    align-items: stretch;
+    background: rgba(22, 22, 24, 0.82);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 22px;
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+  }
+  html[data-theme="light"] .ax-bottombar {
+    background: rgba(255, 255, 255, 0.88);
+    border-color: rgba(24, 24, 27, 0.1);
+  }
+  .ax-bb-item {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 4px 7px;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    color: var(--ax-text-faint);
+    text-decoration: none;
+    font-family: inherit;
+    position: relative;
+    z-index: 1;
+    transition: color 0.24s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ax-bb-item:active .ax-bb-ico {
+    transform: scale(0.86);
+  }
+  .ax-bb-ico {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .ax-bb-ico svg {
+    width: 21px;
+    height: 21px;
+  }
+  .ax-bb-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1;
+    white-space: nowrap;
+  }
+  .ax-bb-item.active {
+    color: var(--ax-accent);
+  }
+
+  /* «Капелька» пружинисто скользит к активному разделу. */
+  .ax-bb-pill {
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    left: 0;
+    padding: 0 7px;
+    z-index: 0;
+    pointer-events: none;
+    transition: transform 0.5s cubic-bezier(0.34, 1.28, 0.44, 1);
+    will-change: transform;
+  }
+  .ax-bb-glass {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: 15px;
+    background: rgba(242, 194, 48, 0.17);
+    backdrop-filter: blur(7px) saturate(1.5);
+    -webkit-backdrop-filter: blur(7px) saturate(1.5);
+    border: 1px solid rgba(242, 194, 48, 0.3);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 5px 16px rgba(242, 194, 48, 0.15);
+    transform-origin: center;
+    animation: ax-bb-liquid 0.5s cubic-bezier(0.34, 1.28, 0.44, 1) both;
+  }
+  @keyframes ax-bb-liquid {
+    0% {
+      transform: scaleX(0.6) scaleY(0.9);
+      opacity: 0.65;
+    }
+    42% {
+      transform: scaleX(1.34) scaleY(1.05);
+      opacity: 1;
+    }
+    72% {
+      transform: scaleX(0.93) scaleY(0.99);
+    }
+    100% {
+      transform: scaleX(1) scaleY(1);
+    }
+  }
+  .ax-bb-dot {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ax-neg);
+    border: 2px solid #161618;
+  }
+}
+
+@keyframes ax-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}

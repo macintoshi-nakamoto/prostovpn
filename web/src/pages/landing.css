@@ -1,0 +1,1289 @@
+.ld {
+  overflow-x: hidden;
+}
+
+/* ── Герой ────────────────────────────────────────────────────────────────── */
+.ld-hero {
+  position: relative;
+  background: linear-gradient(118deg, #ff7a3d 0%, #fa4c16 46%, #d93a05 100%);
+  color: #fff;
+  overflow: hidden;
+  border-bottom-left-radius: 44px;
+  border-bottom-right-radius: 44px;
+}
+.ld-hero-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 70% at 78% 40%, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0) 60%);
+  pointer-events: none;
+}
+.ld-hero-in {
+  position: relative;
+  padding: 164px 32px 120px;
+  display: flex;
+  align-items: center;
+  min-height: 520px;
+}
+.ld-hero-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 28px;
+}
+.ld-hero-body h1 {
+  font-size: 78px;
+  line-height: 0.98;
+  letter-spacing: -0.03em;
+  font-weight: 700;
+  /* Строки появляются по очереди, поэтому каждая — свой блок. */
+  display: flex;
+  flex-direction: column;
+}
+.ld-hero-line {
+  display: block;
+}
+/* Текст героя лежит над объектом справа. */
+.ld-hero-body {
+  position: relative;
+  z-index: 2;
+  max-width: 620px;
+}
+.ld-hero-body p {
+  max-width: 520px;
+  font-size: 20px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+}
+.ld-hero-cta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.ld-hero-primary {
+  background: #fff;
+  color: var(--accent-deep);
+  font-size: 17px;
+  padding: 19px 38px;
+  box-shadow: 0 10px 30px rgba(120, 30, 0, 0.18);
+}
+.ld-hero-primary:hover {
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+}
+.ld-hero-ghost {
+  border: 1.5px solid rgba(255, 255, 255, 0.6);
+  color: #fff;
+  font-size: 17px;
+  padding: 18px 32px;
+  background: transparent;
+}
+.ld-hero-ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+.ld-hero-plats {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* ── Преимущества ─────────────────────────────────────────────────────────── */
+.ld-features {
+  background: var(--bg-soft);
+  padding: 76px 0 84px;
+}
+.ld-features-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 40px;
+}
+.ld-feature-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  padding: 26px 18px 28px;
+  border-radius: 24px;
+  cursor: default;
+}
+/*
+ * Иконка живёт в коробке постоянной высоты и вписывается в неё.
+ *
+ * У четырёх иконок разные пропорции — от 0.83 до 1.38, — и при заданной
+ * одной ширине их высоты расходились на сорок точек. Заголовки под ними
+ * начинались на разной высоте, и ряд читался лесенкой.
+ */
+.ld-feature-art {
+  width: 100px;
+  height: 96px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Промежуточный слой (он везёт покачивание) тоже растягиваем, иначе
+   центрировать внутри него нечего. */
+.ld-feature-art .art-float,
+.ld-feature-art .art-still {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ld-feature-art picture {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.ld-feature-art img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.ld-feature-shadow img {
+  filter: drop-shadow(0 6px 14px rgba(20, 25, 35, 0.22));
+}
+/* Иконка чуть выходит вперёд при наведении — карточка получает объём. */
+.ld-feature-in .art {
+  transition: transform 0.45s var(--ease-out);
+}
+.ld-feature-in:hover .art {
+  transform: translateY(-8px) scale(1.06);
+}
+.ld-feature h3 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.ld-feature p {
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  max-width: 240px;
+}
+
+/* ── Ноль записей ─────────────────────────────────────────────────────────── */
+.ld-zero {
+  position: relative;
+  background: var(--bg-softer);
+  padding: 120px 0 130px;
+  overflow: hidden;
+}
+.ld-zero-obj {
+  position: absolute;
+}
+.ld-zero-obj img {
+  filter: saturate(1.14) hue-rotate(-6deg) drop-shadow(0 26px 44px rgba(120, 52, 14, 0.14));
+}
+.ld-zero-left {
+  left: -56px;
+  top: 96px;
+  width: 440px;
+}
+.ld-zero-right {
+  right: -48px;
+  top: 214px;
+  width: 330px;
+}
+.ld-zero-in {
+  position: relative;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 0 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 22px;
+}
+.ld-zero-num {
+  font-size: 156px;
+  line-height: 0.9;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+.ld-zero h2 {
+  font-size: 62px;
+  line-height: 1.04;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.ld-zero h2 span {
+  color: var(--accent);
+}
+.ld-zero p {
+  max-width: 560px;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.ld-zero-btn {
+  margin-top: 10px;
+  font-size: 17px;
+  padding: 19px 42px;
+}
+
+/* ── Приложение ───────────────────────────────────────────────────────────── */
+.ld-app {
+  background: var(--bg-soft);
+  padding: 110px 0 0;
+  overflow: hidden;
+}
+.ld-app-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  gap: 40px;
+  align-items: center;
+}
+.ld-app-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 26px;
+  padding-bottom: 110px;
+}
+.ld-app-body h2 {
+  font-size: 60px;
+  line-height: 1.03;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.ld-app-body p {
+  max-width: 470px;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.ld-app-stores {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+.ld-store {
+  font-size: 15px;
+  padding: 14px 24px;
+}
+/* Та же квадратная коробка, что и в подвале, — иконки сторов разной формы. */
+.ld-store picture {
+  display: flex;
+  flex: none;
+}
+.ld-store img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+.ld-app-art {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  min-height: 700px;
+}
+.ld-app-halo {
+  position: absolute;
+  width: 680px;
+  height: 680px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(250, 76, 22, 0.18) 0%, rgba(245, 246, 248, 0) 66%);
+  top: -20px;
+}
+.ld-app-laptop {
+  position: relative;
+  width: 100%;
+  max-width: 740px;
+  margin: 0 -40px -6px 0;
+}
+.ld-app-laptop img {
+  filter: drop-shadow(0 30px 50px rgba(30, 20, 10, 0.16));
+}
+
+/* ── Российские сервисы ───────────────────────────────────────────────────── */
+.ld-split {
+  position: relative;
+  background: #fff;
+  padding: 116px 0;
+  overflow: hidden;
+}
+.ld-split-deco {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ld-split-ribbon {
+  position: absolute;
+  right: -210px;
+  top: -130px;
+  width: 500px;
+  opacity: 0.42;
+}
+.ld-split-badge {
+  position: absolute;
+}
+.ld-split-badge img {
+  filter: drop-shadow(0 18px 30px rgba(120, 52, 14, 0.2));
+}
+.ld-split-badge-1 {
+  right: 74px;
+  top: 28px;
+  width: 104px;
+}
+.ld-split-badge-2 {
+  left: -34px;
+  bottom: 168px;
+  width: 128px;
+}
+.ld-split-in {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 52px;
+}
+.ld-split-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 60px;
+  align-items: end;
+}
+.ld-split-head h2 {
+  font-size: 60px;
+  line-height: 1.03;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.ld-split-head p {
+  max-width: 520px;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.ld-split-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+.ld-split-card {
+  background: var(--bg-soft);
+  border-radius: 22px;
+  padding: 28px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ld-split-card h3 {
+  font-size: 21px;
+  font-weight: 700;
+}
+.ld-split-card p {
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+/* Карточка приподнимается и светлеет — видно, что на неё смотрят. */
+.ld-split-card {
+  transition: transform 0.35s var(--ease-out), box-shadow 0.35s var(--ease-out),
+    background 0.35s ease;
+}
+.ld-split-card:hover {
+  transform: translateY(-6px);
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(20, 25, 35, 0.1);
+}
+.ld-split-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 24px;
+  padding: 30px 36px;
+}
+.ld-split-note span {
+  font-size: 19px;
+  line-height: 1.45;
+  max-width: 640px;
+}
+.ld-split-note-btn {
+  font-size: 16px;
+  padding: 15px 28px;
+}
+
+/* ── Тарифы ───────────────────────────────────────────────────────────────── */
+.ld-plans {
+  position: relative;
+  background: var(--bg-soft);
+  padding: 116px 0;
+  overflow: hidden;
+}
+.ld-plans-ribbon {
+  position: absolute;
+  left: -90px;
+  top: 90px;
+  width: 230px;
+  opacity: 0.45;
+  pointer-events: none;
+}
+.ld-plans-in {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 52px;
+}
+.ld-plans-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+}
+.ld-plans-head h2 {
+  font-size: 60px;
+  line-height: 1.04;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.ld-plans-head p {
+  max-width: 520px;
+  font-size: 19px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+/* ── Пробный период ───────────────────────────────────────────────────────── */
+/*
+ * Полоса, а не карточка в общем ряду: пробный период не покупают, и стоять
+ * в ряду с ценами ему нечем. Отдельная форма сразу говорит, что правила у
+ * него другие.
+ */
+.ld-trial {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  flex-wrap: wrap;
+  background: #fff;
+  border: 1.5px dashed rgba(250, 76, 22, 0.4);
+  border-radius: 24px;
+  padding: 26px 32px;
+}
+.ld-trial-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ld-trial-tag {
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 6px 12px;
+  border-radius: 999px;
+}
+.ld-trial h3 {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.ld-trial p {
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  max-width: 560px;
+}
+.ld-trial-btn {
+  flex: none;
+  font-size: 16px;
+  padding: 15px 28px;
+}
+
+.ld-plans-grid {
+  display: grid;
+  /*
+   * Ширина задана явно, и это не лишняя строка. `.ld-plans-in` —
+   * колоночный флекс, и прежний `margin: 0 auto` на телефоне отменял
+   * растягивание по поперечной оси: сетка съёживалась до ширины своего
+   * содержимого — колонка в 200 точек посреди экрана в 375, те самые
+   * узкие карточки. Явная ширина не даст этому вернуться.
+   */
+  width: 100%;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+.ld-plan {
+  position: relative;
+  background: #fff;
+  border-radius: 28px;
+  padding: 34px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  transition: transform 0.4s var(--ease-out), box-shadow 0.4s var(--ease-out);
+}
+.ld-plan:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 26px 54px rgba(20, 25, 35, 0.14);
+}
+/* Выделенный тариф заметно крупнее соседей и мягко дышит. */
+.ld-plan-featured {
+  transform: scale(1.035);
+}
+.ld-plan-featured:hover {
+  transform: translateY(-8px) scale(1.045);
+}
+.ld-plan-featured {
+  background: var(--ink);
+  color: #fff;
+}
+.ld-plan-badge {
+  position: absolute;
+  top: 26px;
+  right: 28px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+}
+.ld-plan-term {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+.ld-plan-featured .ld-plan-term {
+  color: rgba(255, 255, 255, 0.62);
+}
+.ld-plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.ld-plan-sum {
+  font-size: 46px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.ld-plan-per {
+  font-size: 16px;
+  color: var(--text-dim);
+}
+.ld-plan-featured .ld-plan-per {
+  color: rgba(255, 255, 255, 0.62);
+}
+.ld-plan-note {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.ld-plan-featured .ld-plan-note {
+  color: rgba(255, 255, 255, 0.72);
+}
+/*
+ * Что тариф разрешает. Числа приходят из панели, поэтому строк ровно
+ * столько, сколько прислали, и подпирать их фиксированной высотой нельзя —
+ * ряд выравнивает сама сетка (align-items: stretch).
+ */
+.ld-plan-limits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.ld-plan-limits li {
+  position: relative;
+  padding-left: 24px;
+}
+/* Галочка нарисована фоном, а не буквой: шрифт не обязан её знать. */
+.ld-plan-limits li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--accent-tint)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.6 6.2l2.1 2.2 4.7-4.8' fill='none' stroke='%23fa4c16' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 11px 11px no-repeat;
+}
+.ld-plan-featured .ld-plan-limits {
+  color: rgba(255, 255, 255, 0.92);
+}
+.ld-plan-featured .ld-plan-limits li::before {
+  background-color: rgba(255, 255, 255, 0.16);
+}
+.ld-plan-btn {
+  margin-top: auto;
+}
+.ld-plan-featured .btn-outline {
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
+/* Мелким шрифтом — правила, о которых спрашивают после покупки. */
+.ld-plans-fine {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+/* ── Щит ──────────────────────────────────────────────────────────────────── */
+.ld-shield {
+  background: var(--ink);
+  color: #fff;
+  padding: 120px 0;
+}
+.ld-shield-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 60px;
+  align-items: center;
+}
+.ld-shield-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 34px;
+}
+.ld-shield-body h2 {
+  font-size: 62px;
+  line-height: 1.02;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.ld-shield-list {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  max-width: 520px;
+}
+.ld-shield-list h3 {
+  font-size: 21px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.ld-shield-list p {
+  font-size: 17px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.66);
+}
+.ld-shield-btn {
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  color: #fff;
+  background: transparent;
+  font-size: 16px;
+  padding: 16px 32px;
+}
+.ld-shield-btn:hover {
+  background: #fff;
+  color: var(--ink);
+}
+.ld-shield-art {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 440px;
+}
+.ld-shield-halo {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(250, 76, 22, 0.28) 0%, rgba(10, 10, 10, 0) 65%);
+}
+.ld-shield-obj {
+  position: relative;
+  width: 400px;
+  max-width: 100%;
+}
+.ld-shield-obj img {
+  filter: drop-shadow(0 30px 60px rgba(0, 0, 0, 0.6));
+}
+
+/* ── Все устройства ───────────────────────────────────────────────────────── */
+.ld-devices {
+  position: relative;
+  background: #fff;
+  padding: 64px 0;
+  overflow: hidden;
+}
+.ld-devices-phone {
+  position: absolute;
+  right: 9%;
+  top: 6px;
+  width: 150px;
+  pointer-events: none;
+}
+.ld-devices-phone img {
+  transform: rotate(8deg);
+  filter: drop-shadow(0 22px 34px rgba(120, 52, 14, 0.18));
+}
+.ld-devices-in {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+.ld-devices-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 460px;
+}
+.ld-devices-body h3 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.ld-devices-body p {
+  font-size: 17px;
+  color: var(--text-muted);
+}
+.ld-devices-tags {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ld-devices-tags span {
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  padding: 11px 20px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+/* ── Документы ────────────────────────────────────────────────────────────── */
+.ld-docs {
+  position: relative;
+  background: var(--bg-soft);
+  padding: 110px 0 120px;
+  overflow: hidden;
+}
+.ld-docs-ribbon {
+  position: absolute;
+  right: -180px;
+  top: -30px;
+  width: 420px;
+  opacity: 0.32;
+  pointer-events: none;
+}
+.ld-docs-in {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+.ld-docs-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+}
+.ld-docs-head h2 {
+  font-size: 60px;
+  line-height: 1.04;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.ld-docs-head p {
+  font-size: 19px;
+  color: var(--text-muted);
+}
+.ld-docs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  max-width: 1060px;
+  margin: 0 auto;
+  width: 100%;
+}
+.ld-docs-card {
+  background: #fff;
+  border-radius: 22px;
+  padding: 30px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  color: var(--ink);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.ld-docs-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-soft);
+  color: var(--ink);
+}
+.ld-docs-title {
+  display: block;
+  font-size: 21px;
+  font-weight: 700;
+}
+.ld-docs-sub {
+  display: block;
+  margin-top: 6px;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.ld-docs-chev {
+  font-size: 22px;
+  color: #a6acb4;
+  transition: color 0.2s ease, transform 0.2s ease;
+}
+.ld-docs-card:hover .ld-docs-chev {
+  color: var(--accent);
+  transform: translateX(3px);
+}
+
+/* ── Адаптив ──────────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .ld-hero-body h1 {
+    font-size: 60px;
+  }
+  /* Четыре тарифа в ряд перестают помещаться: цена начинает переноситься. */
+  .ld-plans-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ld-app-grid,
+  .ld-shield-grid,
+  .ld-split-head {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .ld-app-body {
+    padding-bottom: 0;
+  }
+  .ld-app-art {
+    min-height: 0;
+    justify-content: center;
+  }
+  .ld-app-art img {
+    margin: 0;
+  }
+}
+@media (max-width: 820px) {
+  .ld-features-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 32px 20px;
+  }
+  .ld-split-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ld-docs-grid {
+    grid-template-columns: 1fr;
+  }
+  .ld-hero-in {
+    padding: 128px 32px 90px;
+  }
+  .ld-hero-body h1 {
+    font-size: 48px;
+  }
+  .ld-zero-num {
+    font-size: 110px;
+  }
+  .ld-zero h2,
+  .ld-app-body h2,
+  .ld-split-head h2,
+  .ld-plans-head h2,
+  .ld-shield-body h2,
+  .ld-docs-head h2 {
+    font-size: 42px;
+  }
+  .ld-devices-phone {
+    display: none;
+  }
+  .ld-zero-obj {
+    display: none;
+  }
+}
+/* ── Телефон ────────────────────────────────────────────────────────────────
+ *
+ * Секции сделаны под широкий экран: крупные заголовки, отступы по сто с
+ * лишним точек и объекты по краям. На телефоне всё это надо ужать, иначе
+ * страница превращается в бесконечную прокрутку с половиной букв за краем.
+ */
+@media (max-width: 640px) {
+  /* Только по бокам — сокращение сбросило бы вертикальные отступы секций. */
+  .wrap {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .ld-hero {
+    border-bottom-left-radius: 28px;
+    border-bottom-right-radius: 28px;
+  }
+  .ld-hero-in {
+    padding: 108px 20px 64px;
+    min-height: 0;
+  }
+  .ld-hero-body {
+    gap: 20px;
+  }
+  .ld-hero-body h1 {
+    font-size: 40px;
+    line-height: 1.02;
+  }
+  .ld-hero-body p {
+    font-size: 17px;
+  }
+  /* Кнопки во всю ширину: попасть пальцем в узкую — лотерея. */
+  .ld-hero-cta {
+    width: 100%;
+    gap: 10px;
+  }
+  .ld-hero-cta .btn {
+    width: 100%;
+    font-size: 16px;
+    padding: 16px 24px;
+  }
+
+  .ld-features {
+    padding: 44px 0 48px;
+  }
+  .ld-features-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 12px;
+  }
+  .ld-feature-in {
+    padding: 14px 8px 16px;
+    gap: 10px;
+  }
+  .ld-feature-art {
+    width: 72px;
+    height: 68px;
+  }
+  .ld-feature h3 {
+    font-size: 18px;
+  }
+  .ld-feature p {
+    font-size: 14px;
+  }
+
+  /*
+   * Объект встаёт над заголовком, а не по краю секции.
+   *
+   * Полей у краёв 20 точек, и любой предмет там наезжал бы на текст —
+   * именно так декор превращается в сор. В потоке же он получает своё место
+   * и читается началом секции: сначала предмет, потом крупная цифра.
+   *
+   * Второй объект убран: два предмета на 375 точках перегружают экран, а
+   * говорят они об одном и том же.
+   */
+  .ld-zero {
+    padding: 44px 0 68px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .ld-zero-left {
+    display: block;
+    position: static;
+    width: 150px;
+    margin: 0 0 4px;
+  }
+  .ld-zero-right {
+    display: none;
+  }
+  .ld-zero-num {
+    font-size: 92px;
+  }
+  .ld-zero h2 {
+    font-size: 32px;
+  }
+  .ld-zero p {
+    font-size: 16px;
+  }
+  .ld-zero-in {
+    gap: 16px;
+    padding: 0 20px;
+  }
+  .ld-zero-btn {
+    width: 100%;
+    font-size: 16px;
+    padding: 16px 24px;
+  }
+
+  .ld-app {
+    padding: 60px 0 0;
+  }
+  .ld-app-grid {
+    gap: 28px;
+  }
+  .ld-app-body {
+    gap: 18px;
+  }
+  .ld-app-body h2,
+  .ld-split-head h2,
+  .ld-plans-head h2,
+  .ld-shield-body h2,
+  .ld-docs-head h2 {
+    font-size: 32px;
+  }
+  .ld-app-body p,
+  .ld-split-head p,
+  .ld-plans-head p,
+  .ld-docs-head p {
+    font-size: 16px;
+  }
+  .ld-app-stores {
+    width: 100%;
+    gap: 10px;
+  }
+  .ld-app-stores .btn {
+    flex: 1;
+    padding: 13px 12px;
+    font-size: 14px;
+  }
+  .ld-app-halo {
+    width: 420px;
+    height: 420px;
+  }
+
+  .ld-split {
+    padding: 60px 0;
+  }
+  .ld-split-in {
+    gap: 30px;
+  }
+  .ld-split-head {
+    gap: 16px;
+  }
+  .ld-split-cards {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .ld-split-card {
+    padding: 20px 20px;
+  }
+  .ld-split-card h3 {
+    font-size: 18px;
+  }
+  .ld-split-card p {
+    font-size: 15px;
+  }
+  .ld-split-note {
+    padding: 22px 22px;
+    gap: 16px;
+  }
+  .ld-split-note span {
+    font-size: 16px;
+  }
+  .ld-split-note-btn {
+    width: 100%;
+  }
+  /*
+   * Ленты и значки VK/Telegram на телефоне убраны намеренно.
+   *
+   * При ширине 375 и полях по 20 точек текст занимает строку целиком —
+   * свободной полосы, куда лента могла бы лечь, не существует. Проверка
+   * пересечений это и показала: лента накрывала заголовок на треть. Фактура
+   * за буквами мешает читать, а даёт мало; лучше меньше предметов, но на
+   * своих местах — они остались в потоке: объект в герое, предмет над
+   * цифрой, телефон, ноутбук и щит.
+   *
+   * Это мелкие логотипы: на ширине 375 им остаётся 56–60 точек в полях
+   * секции, и они читаются не украшением, а сором у края. Лента остаётся —
+   * она абстрактная и на малой заметности работает фактурой фона, а не
+   * предметом, который спорит с текстом.
+   */
+  .ld-split-badge {
+    display: none;
+  }
+  .ld-split-ribbon {
+    display: none;
+  }
+
+  .ld-plans {
+    padding: 60px 0;
+  }
+  .ld-plans-in {
+    gap: 28px;
+  }
+  .ld-plans-ribbon {
+    display: none;
+  }
+  /*
+   * По карточке на строку и во всю ширину экрана.
+   *
+   * Две колонки на 375 точках дают карточку в 160 — в неё не помещается ни
+   * цена, ни строка «Безлимитный трафик», и обе переносятся посреди слова.
+   */
+  .ld-plans-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .ld-plan {
+    padding: 24px 20px;
+    gap: 14px;
+  }
+  .ld-plan-sum {
+    font-size: 40px;
+  }
+  .ld-plan-limits {
+    font-size: 14.5px;
+    gap: 8px;
+  }
+  .ld-plans-fine {
+    font-size: 14px;
+    text-align: left;
+  }
+
+  /* Пробный период: подпись, заголовок, текст и кнопка одной колонкой. */
+  .ld-trial {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+    padding: 22px 20px;
+    border-radius: 20px;
+  }
+  .ld-trial h3 {
+    font-size: 20px;
+  }
+  .ld-trial p {
+    font-size: 15px;
+  }
+  .ld-trial-btn {
+    width: 100%;
+  }
+  /* Выделенный тариф на телефоне не увеличиваем: он вылезал бы за край. */
+  .ld-plan-featured,
+  .ld-plan-featured:hover {
+    transform: none;
+  }
+  .ld-plan:hover {
+    transform: none;
+  }
+
+  .ld-shield {
+    padding: 60px 0;
+  }
+  .ld-shield-grid {
+    gap: 30px;
+  }
+  .ld-shield-body {
+    gap: 22px;
+  }
+  .ld-shield-list {
+    gap: 18px;
+  }
+  .ld-shield-list h3 {
+    font-size: 18px;
+  }
+  .ld-shield-list p {
+    font-size: 15px;
+  }
+  .ld-shield-btn {
+    width: 100%;
+  }
+  .ld-shield-art {
+    min-height: 0;
+  }
+  .ld-shield-obj {
+    width: 240px;
+  }
+  .ld-shield-halo {
+    width: 260px;
+    height: 260px;
+  }
+
+  /* Телефон над текстом о телефонах: предмет по смыслу, а не для красоты. */
+  .ld-devices {
+    padding: 36px 0 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  /*
+   * Телефон на боку на телефоне же и не показываем.
+   *
+   * У картинки пропорция 0.16 — это узкая полоска. В ширину она вырастала в
+   * колонку на 635 точек, а по высоте превращалась в штрих 22 на 132:
+   * предметом такое не читается, скорее случайной царапиной. Смысл секции и
+   * так несут плашки iOS · Android · macOS · Windows.
+   */
+  .ld-devices-phone {
+    display: none;
+  }
+  .ld-devices-in {
+    gap: 18px;
+  }
+  .ld-devices-body h3 {
+    font-size: 21px;
+  }
+  .ld-devices-body p {
+    font-size: 15px;
+  }
+  .ld-devices-tags span {
+    padding: 9px 16px;
+    font-size: 14px;
+  }
+
+  .ld-docs {
+    padding: 60px 0 64px;
+  }
+  .ld-docs-in {
+    gap: 26px;
+  }
+  .ld-docs-ribbon {
+    display: none;
+  }
+  .ld-docs-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .ld-docs-card {
+    padding: 20px 20px;
+  }
+  .ld-docs-title {
+    font-size: 18px;
+  }
+  .ld-docs-sub {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 400px) {
+  .ld-hero-body h1 {
+    font-size: 34px;
+  }
+  .ld-features-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .ld-zero-num {
+    font-size: 76px;
+  }
+  .ld-zero h2,
+  .ld-app-body h2,
+  .ld-split-head h2,
+  .ld-plans-head h2,
+  .ld-shield-body h2,
+  .ld-docs-head h2 {
+    font-size: 28px;
+  }
+}

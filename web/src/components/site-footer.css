@@ -1,0 +1,153 @@
+.sf {
+  background: #fff;
+  padding: 90px 0 60px;
+}
+.sf-in {
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+}
+.sf-logo {
+  align-self: flex-start;
+  display: block;
+}
+.sf-logo img {
+  height: 22px;
+  width: auto;
+  display: block;
+}
+.sf-cols {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 32px;
+  font-size: 16px;
+}
+.sf-cols > div {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-items: flex-start;
+}
+.sf-cols a {
+  color: var(--ink);
+}
+.sf-cols a:hover {
+  color: var(--accent);
+}
+.sf-stores {
+  gap: 12px !important;
+}
+/*
+ * Кнопки сторов стоят друг под другом и одинаковой ширины, поэтому
+ * содержимое прижато влево, а не отцентровано. При центровке иконки
+ * разъезжались по горизонтали: подписи разной длины («App Store» короче
+ * «Google Play»), и каждая иконка вставала на своём отступе — 40 и 31
+ * точка. Столбиком это читалось как кривая вёрстка.
+ */
+.sf-store {
+  width: 190px;
+  font-size: 15px;
+  padding: 13px 22px;
+  justify-content: flex-start;
+}
+/*
+ * Иконки сторов — разной формы: у одной пропорция 1.04, у другой 0.88.
+ * При заданной только высоте они получали разную ширину, и кнопки рядом
+ * выглядели кривыми. Поэтому обе кладём в одинаковую квадратную коробку и
+ * вписываем целиком: занимаемое место совпадает, рисунок не искажается.
+ */
+.sf-store picture {
+  display: flex;
+  flex: none;
+}
+.sf-store img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+.sf-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sf-contact a {
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.sf-contact a:hover {
+  color: var(--accent);
+}
+.sf-contact span {
+  font-size: 16px;
+  color: var(--text-faint);
+}
+.sf-bottom {
+  border-top: 1px solid var(--line);
+  padding-top: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  font-size: 15px;
+  color: var(--text-faint);
+}
+.sf-bottom a {
+  color: var(--text-faint);
+  margin-left: 24px;
+}
+.sf-bottom a:first-child {
+  margin-left: 0;
+}
+.sf-bottom a:hover {
+  color: var(--ink);
+}
+
+@media (max-width: 780px) {
+  .sf-cols {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  .sf {
+    padding: 52px 0 40px;
+  }
+  .sf-in {
+    gap: 32px;
+  }
+  .sf-cols {
+    gap: 24px 16px;
+    font-size: 15px;
+  }
+  .sf-cols > div {
+    gap: 14px;
+  }
+  /* Кнопки сторов занимают всю ширину столбца — так в них легче попасть. */
+  .sf-stores {
+    grid-column: 1 / -1;
+    flex-direction: row;
+  }
+  .sf-store {
+    width: auto;
+    flex: 1;
+    padding: 12px 16px;
+    font-size: 14px;
+    justify-content: center;
+  }
+  .sf-contact a {
+    font-size: 18px;
+  }
+  .sf-contact span {
+    font-size: 14px;
+  }
+  .sf-bottom {
+    gap: 14px;
+    font-size: 14px;
+  }
+  .sf-bottom a {
+    margin-left: 16px;
+  }
+}

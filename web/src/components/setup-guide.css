@@ -1,0 +1,154 @@
+.sg {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.sg-note {
+  background: #fff;
+  border-radius: 24px;
+  padding: 26px 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sg-note-l {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.sg-note p {
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.sg-note b {
+  color: var(--ink);
+}
+
+.sg-os {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sg-os button {
+  border: 1.5px solid var(--border);
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: 999px;
+  transition: all 0.18s ease;
+}
+.sg-os button:hover {
+  border-color: var(--ink);
+}
+.sg-os button.active {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+
+.sg-card {
+  background: #fff;
+  border-radius: 24px;
+  padding: 34px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.sg-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.sg-card-head h2 {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.sg-dl {
+  font-size: 15px;
+  padding: 13px 24px;
+}
+.sg-soon {
+  font-size: 15px;
+  color: var(--text-dim);
+  border: 1.5px dashed var(--border);
+  border-radius: 12px;
+  padding: 12px 22px;
+}
+
+.sg-steps {
+  display: flex;
+  flex-direction: column;
+}
+.sg-step {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  padding-bottom: 22px;
+  margin-bottom: 22px;
+  border-bottom: 1px solid var(--line-2);
+}
+.sg-step:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+.sg-num {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+.sg-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.sg-step-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+.sg-step-text {
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.sg-help {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: var(--bg-field);
+  border-radius: 18px;
+  padding: 20px 24px;
+}
+.sg-help span {
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.sg-help a {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .sg-card,
+  .sg-note {
+    padding: 24px 20px;
+  }
+}

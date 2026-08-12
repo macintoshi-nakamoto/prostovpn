@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Доступ готов — Prosto</title>
+    <meta name="robots" content="noindex" />
+    <meta name="theme-color" content="#0a0908" />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/css/site.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap top-in">
+        <a class="brand" href="/"><span class="brand-mark"></span>Prosto</a>
+        <nav class="nav">
+          <a href="download.html">Скачать</a>
+          <a href="account.html">Личный кабинет</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap" style="padding-top: 140px; padding-bottom: 80px; max-width: 640px">
+      <!-- Ожидание. Возврат с платёжной формы ничего не подтверждает — ждём
+           уведомления от платёжного сервиса и опрашиваем статус заказа. -->
+      <section id="waiting">
+        <div style="display: flex; align-items: center; gap: 18px">
+          <div class="spinner"></div>
+          <div>
+            <h1 style="font-size: clamp(1.5rem, 4vw, 2rem)">Подтверждаем оплату</h1>
+            <p class="muted" style="margin: 6px 0 0; font-size: 15px">
+              Обычно это занимает несколько секунд.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Успех: две строки, ради которых всё и делалось. -->
+      <section id="done" hidden>
+        <p class="eyebrow">Оплачено</p>
+        <h1 id="done-title" style="font-size: clamp(2rem, 5vw, 3rem)">Доступ готов</h1>
+        <p class="lead" id="done-sub" style="max-width: 46ch">
+          Сохраните эти две строки — их нужно ввести в приложении один раз.
+        </p>
+
+        <div style="margin-top: 34px">
+          <div class="cred">
+            <div class="cred-body">
+              <div class="cred-label">Логин</div>
+              <div class="cred-value" id="login">—</div>
+            </div>
+            <button class="copy" type="button" id="copy-login" data-copy="">Копировать</button>
+          </div>
+
+          <div class="cred" id="password-row">
+            <div class="cred-body">
+              <div class="cred-label">Пароль</div>
+              <div class="cred-value" id="password">—</div>
+            </div>
+            <button class="copy" type="button" id="copy-password" data-copy="">Копировать</button>
+          </div>
+        </div>
+
+        <p class="field-hint" id="expires" style="margin-top: 18px"></p>
+
+        <div style="margin-top: 36px; display: flex; gap: 12px; flex-wrap: wrap">
+          <a class="btn btn-lg" href="download.html">Скачать приложение</a>
+          <a class="btn btn-lg btn-ghost" href="account.html">Личный кабинет</a>
+        </div>
+
+        <div class="note-box" style="margin-top: 30px">
+          Те же логин и пароль отправлены на почту <span id="email-note"></span>. Если письма нет
+          через пять минут — загляните в «Спам» или напишите нам, поможем.
+        </div>
+      </section>
+
+      <!-- Долго. Не ошибка: деньги дошли, уведомление задерживается. -->
+      <section id="slow" hidden>
+        <p class="eyebrow">Оплата</p>
+        <h1 style="font-size: clamp(1.7rem, 4.4vw, 2.4rem)">Платёж обрабатывается</h1>
+        <p class="lead" style="max-width: 48ch">
+          Платёжный сервис ещё не прислал подтверждение. Это бывает — доступ придёт на почту в
+          течение пяти минут, закрывать страницу не нужно.
+        </p>
+        <div style="margin-top: 32px; display: flex; gap: 12px; flex-wrap: wrap">
+          <button class="btn btn-ghost" type="button" id="retry">Проверить ещё раз</button>
+          <a class="btn btn-ghost" href="contacts.html">Написать нам</a>
+        </div>
+        <p class="field-hint" style="margin-top: 20px">
+          Номер заказа: <span class="mono" id="order-id"></span> — назовите его, если будете
+          обращаться.
+        </p>
+      </section>
+
+      <!-- Заказ отклонён или отменён. -->
+      <section id="failed" hidden>
+        <p class="eyebrow">Оплата</p>
+        <h1 style="font-size: clamp(1.7rem, 4.4vw, 2.4rem)" id="failed-title">Платёж не прошёл</h1>
+        <p class="lead" id="failed-text" style="max-width: 48ch">
+          Деньги не списаны. Можно попробовать ещё раз — или написать нам, разберёмся.
+        </p>
+        <div style="margin-top: 32px; display: flex; gap: 12px; flex-wrap: wrap">
+          <a class="btn" href="/#tarify">Попробовать снова</a>
+          <a class="btn btn-ghost" href="contacts.html">Написать нам</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap">
+        <div class="foot-links">
+          <a href="/">Главная</a>
+          <a href="download.html">Скачать</a>
+          <a href="offer.html">Оферта</a>
+          <a href="contacts.html">Контакты</a>
+        </div>
+        <p class="foot-note">© <span data-year>2026</span> Prosto</p>
+      </div>
+    </footer>
+
+    <script type="module" src="assets/js/success.js"></script>
+    <script type="module" src="assets/js/site.js"></script>
+  </body>
+</html>

@@ -1,62 +1,279 @@
-# Nexa VPN
+# Prosto VPN — сайт, приём оплаты, панель и приложение
 
-<p align="center">
-  <img src="branding/nexa-master-icon.png" alt="Nexa VPN icon" width="160">
-</p>
+Пять частей одного сервиса:
 
-Nexa VPN is a GPL-3.0 cross-platform VPN client focused on self-hosted servers. It is a clearly attributed derivative of [Amnezia VPN](https://github.com/amnezia-vpn/amnezia-client), pinned to upstream commit [`e38a233904d9db148f620fdd30fd56a770b457e8`](https://github.com/amnezia-vpn/amnezia-client/commit/e38a233904d9db148f620fdd30fd56a770b457e8).
+| Папка      | Что это                                                                    |
+|------------|----------------------------------------------------------------------------|
+| `backend/` | FastAPI: база, приём оплаты, админское API `/api/admin/*`, публичное `/api/v1/*` |
+| `web/`     | Публичный сайт на React + Vite: лендинг, вход, личный кабинет — его и раздаёт боевой сервер |
+| `site/`    | Прежние статические страницы: оформление заказа и оплата, которых у нового сайта пока нет |
+| `panel/`   | Веб-панель на React + Vite — то, чем пользуется администратор               |
+| `client/`  | Приложение (форк AmneziaVPN) с входом по логину и паролю из панели          |
 
-This repository is currently a source-stage fork, not a published VPN service and not a set of audited release binaries. The product identity, application IDs, installer names and artwork have been changed to Nexa VPN. Upstream commercial-service entry points and automatic updates are disabled by default until Nexa has its own backend and signed update channel.
+Сайт, панель и бэкенд запускаются и работают прямо сейчас. Клиент —
+исходники с внесёнными изменениями: собирать его нужно Qt6 + компилятором
+платформы, см. `client/PANEL_LOGIN.md`.
 
-[Русская версия](README_RU.md)
+## Главный инвариант
 
-## What is included
+Пользователь за весь жизненный цикл видит **ровно две строки: логин и
+пароль**. Никаких ключей, файлов конфигурации, ссылок `vpn://` и QR-кодов —
+ни на сайте, ни в письме, ни в приложении. Ключи создаёт и отзывает
+бэкенд, администратор видит их в панели, клиент — никогда.
 
-- One Qt/QML interface for Windows, Linux, macOS, Android and iOS.
-- Automatic deployment of a personal VPN server over SSH and Docker.
-- AmneziaWG/AWG2, WireGuard, OpenVPN, Xray VLESS + REALITY and SSXray transports.
-- IKEv2/IPsec client support on Windows.
-- Split tunnelling, kill switch, DNS controls, profile import/export and QR import.
-- Original Nexa VPN artwork and platform-specific application icons.
-
-`AmneziaWG` is retained as the protocol's technical compatibility name. Existing `.vpn` profiles, `vpn://` links, serialized keys and deployed `amnezia-*` containers remain compatible. Legacy Cloak and direct Shadowsocks entries found in upstream documentation are not presented as supported transports in this fork.
-
-## Platform status
-
-| Platform | Source target | Release requirement |
-| --- | --- | --- |
-| Windows 10/11 | Desktop client + privileged service | Visual Studio/Qt toolchain and Authenticode certificate for public releases |
-| Linux | Desktop client + privileged service | Qt/Conan build environment; package per distribution |
-| Android 9+ | Native `VpnService` backends | JDK 17, Android SDK/NDK, Qt for Android and a permanent signing key |
-| macOS | Classic desktop or Network Extension target | macOS/Xcode, Developer ID, provisioning and notarization |
-| iPhone/iPad | Network Extension target | Apple Developer team, app/extension profiles and Network Extension entitlement |
-
-The exact upstream commit has passed upstream CI for Windows, Linux, classic macOS, Android and iOS compilation. Nexa's modified tree still needs clean builds, signing and device-level VPN tests on every target before distribution. See [Building](docs/BUILDING.md).
-
-## Get the source
+Проверяется тестом `tests/test_client_contract.py` и командой:
 
 ```bash
-git clone --recurse-submodules <your-nexa-repository-url>
-cd nexa-vpn
-git submodule update --init --recursive
+grep -riE '(private|preshared)key|vpn://|wg-quick' site/
 ```
 
-The upstream remote in this working tree is intentionally named `upstream`. Before distributing binaries, set your own public source and homepage URLs:
+## Как проходит покупка
+
+```
+сайт → тариф → почта → заказ (pending)
+     → платёжная форма провайдера
+     → провайдер шлёт вебхук POST /api/v1/billing/webhook/{provider}   ← единственный триггер выдачи
+         ├─ проверка подписи или адреса отправителя
+         ├─ идемпотентность по event_id
+         ├─ сверка суммы и валюты с заказом
+         ├─ одной транзакцией: user + subscription + payment + order + задания на доставку
+         └─ доставка после коммита: страница успеха, письмо, Telegram
+     → клиент вводит логин и пароль в приложении, пиры создаются сами
+```
+
+Возврат человека на `/success.html` **не** подтверждает оплату: страница
+опрашивает `GET /api/v1/orders/{id}/status`, пока заказ не станет `paid`.
+
+## Запуск
+
+Бэкенд вместе с сайтом:
 
 ```bash
-cmake -S . -B deploy/build \
-  -DNEXA_SOURCE_URL=https://github.com/your-org/nexa-vpn \
-  -DNEXA_HOMEPAGE_URL=https://your-project.example
+cd backend && .venv/Scripts/python.exe -m uvicorn app.main:app --port 8000
 ```
 
-Platform-specific dependencies and commands are documented in [docs/BUILDING.md](docs/BUILDING.md). Architecture and compatibility boundaries are documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/UPSTREAM.md](docs/UPSTREAM.md).
+Сайт — <http://127.0.0.1:8000>, панель — <http://127.0.0.1:8000/admin>,
+документация API — <http://127.0.0.1:8000/docs>.
 
-## Security status
+Панель в разработке:
 
-Do not treat the current source snapshot as an audited production VPN. Automatic upstream updates are off, but inherited high-priority work remains around SSH host verification, encrypted backup export, secret storage, privileged IPC and the server-image supply chain. Read [docs/SECURITY.md](docs/SECURITY.md) before running it against sensitive infrastructure.
+```bash
+cd panel && npm run dev
+```
 
-## Licensing and attribution
+На <http://localhost:5173/admin>, вход `admin` / `admin` (меняется в
+`backend/.env`).
 
-Nexa VPN is distributed under GPL-3.0 because it derives from Amnezia VPN. Keep [LICENSE](LICENSE), [NOTICE](NOTICE), source availability and all applicable third-party notices with every distribution. The names `AmneziaWG`, third-party library names and legacy configuration identifiers do not imply endorsement by the Amnezia project.
+Для боевого запуска панель собирается один раз (`npm run build`), и дальше
+бэкенд отдаёт её сам — отдельный веб-сервер не нужен, хотя перед ним
+обычно ставят nginx, см. `deploy/nginx.conf`.
 
-Before a public store release, complete [the release checklist](docs/RELEASE_CHECKLIST.md), including a trademark/name clearance: another Android application already uses the public name “Nexa VPN”.
+Пройти весь путь оплаты локально можно уже сейчас: при
+`PANEL_PAYMENT_PROVIDER=mock` вместо чужой платёжной формы открывается
+своя, помеченная как демонстрационная, а подтверждение уходит тем же
+кодом, который потом будет обрабатывать настоящую ЮKassa.
+
+## Что умеет панель
+
+**Пользователи.** Список со всем, за чем в него приходят: публичный номер
+клиента, тариф, сколько платит, израсходованный и доступный трафик, дата
+следующей оплаты и остаток дней, сумма всех оплат, статус. Сверху — поиск
+по номеру, логину, имени и контакту.
+
+В карточке — сессии (с какого устройства и когда заходили), история оплат
+с суммами и сроками, периоды подписки и ключи по серверам. Снизу блок
+управления: включить и выключить доступ, заблокировать, задать лимит
+трафика в гигабайтах или снять его совсем, обнулить расход, продлить
+подписку, сменить пароль, удалить.
+
+**Календарь прибыли.** Месяц, где в каждом дне видно полученное и
+ожидаемое отдельно. Складывать их в одно число нельзя: по прошедшим дням
+это факт, по будущим — прогноз. Клик по дню показывает, кто заплатил и от
+кого ждём продления. Сбоку сводка за день, неделю, месяц и год.
+
+**Серверы.** Добавление сервера сразу раздаёт ключи всем действующим
+клиентам. Два режима: своя генерация по SSH (панель сама создаёт пару
+ключей и заводит пира) и общий ключ для чужих серверов без root.
+
+**Ключи.** Кто на каком сервере и с каким ключом: перевыпуск и отзыв
+поштучно, снятие счётчиков трафика со всех серверов разом.
+
+**Тарифы.** Цена в копейках, срок, включённый трафик, сколько стран и
+устройств даёт тариф, показывать ли его на сайте. Цена лежит на тарифе: из
+неё считается и счёт на сайте, и ожидаемая часть календаря. В шаблонах
+сайта нет ни цен, ни гигабайтов, ни числа устройств — лендинг берёт всё это
+из `/api/v1/plans`, и правка в панели видна на странице сразу.
+
+Бесплатный тариф (цена ноль) продавать нельзя — платёжной формы на ноль
+рублей не бывает, — но на витрине он показывается: это пробный период, и
+его выдаёт регистрация с сайта (`PANEL_SIGNUP_PLAN_CODE`). В ответе витрины
+у него `purchasable: false`, и лендинг ставит его отдельной полосой, а не
+карточкой с кнопкой оплаты.
+
+**Заказы.** Оплаты с сайта: статус, дошло ли уведомление от провайдера,
+создалась ли учётка, ушло ли письмо. Кнопка «выдать вручную» — для случая,
+когда деньги получены, а вебхук не дошёл; кнопка «оформить возврат» —
+снимает подписку и пиры. Ниже сырой поток уведомлений провайдера: по нему
+видно, на чьей стороне проблема.
+
+**Журнал.** Кто из администраторов что сделал: создание, блокировки, сброс
+и показ пароля, ручная выдача заказа, отзыв ключа. Только чтение.
+
+## Учётные данные клиента
+
+Логин и пароль придумывает система — доступы, набранные руками, всегда
+слабее. Формат рассчитан на диктовку по телефону: логин `pv4820193`,
+пароль `k3np-7hqm-2rxa`, алфавит без `0`, `o`, `1`, `l` и `i`.
+
+В базе пароль лежит в двух видах: хэшем argon2id — по нему проверяется
+вход, — и зашифрованным AES-GCM на ключе `PANEL_SECRETS_KEY`, чтобы
+администратор мог назвать его клиенту, потерявшему письмо. Каждый показ
+пишется в журнал: кто, чей и когда. Открытым текстом пароль не хранится
+нигде, включая очередь доставки писем.
+
+Клиент входит в приложение этой парой и получает список стран. Ни адреса
+сервера, ни ключа, ни выданного адреса в подсети приложение наружу не
+показывает — это проверяется тестом `tests/test_client_contract.py`.
+
+## Учёт трафика
+
+Панель ходит на серверы по SSH и читает счётчики пиров AmneziaWG
+(`awg show awg0 dump`). Хранится прирост между замерами, а не абсолют:
+после перезагрузки сервера счётчик уезжает в ноль, и абсолютное значение
+дало бы отрицательную разницу.
+
+Обход идёт по расписанию (`PANEL_TRAFFIC_SYNC_MINUTES`, по умолчанию 15
+минут) и по кнопке в разделе «Ключи». Выбранный лимит закрывает доступ так
+же, как неоплата: пиры снимаются с серверов.
+
+Считать расход по людям умеет только режим SSH: при общем ключе на сервере
+все ходят под одним пиром, и разделить их нечем. На узлах с общим ключом
+лимит трафика не сработает — это ограничение самого режима, а не настройки.
+
+За пять гигабайт до конца приложение показывает предупреждение с остатком и
+кнопкой продления. Порог абсолютный, а не доля тарифа: десятая часть от 250
+ГБ — это 25 ГБ, то есть человека пугали бы, когда у него оставалось больше,
+чем весь пробный период. Подписку приложение перечитывает раз в пять минут,
+поэтому закрытый доступ снимает туннель сам, не дожидаясь перезапуска.
+
+## Настройка
+
+Всё через `backend/.env`, полный список — в `backend/.env.example`.
+
+| Переменная                     | Смысл                                          |
+|--------------------------------|------------------------------------------------|
+| `PANEL_DATABASE_URL`           | SQLite по умолчанию, для боевого — PostgreSQL   |
+| `PANEL_ADMIN_LOGIN/PASSWORD`   | первый администратор, создаётся при старте      |
+| `PANEL_SECRET_KEY`             | на боевом обязательно свой                      |
+| `PANEL_SECRETS_KEY`            | ключ шифрования паролей клиентов, **не менять** |
+| `PANEL_SITE_URL`               | публичный адрес: ссылки возврата и письма       |
+| `PANEL_SITE_DIR`               | каталог сайта; пусто — раздаёт nginx            |
+| `PANEL_PAYMENT_PROVIDER`       | `mock` / `yookassa` / `cryptocloud`             |
+| `PANEL_MAIL_PROVIDER`          | `console` / `smtp` / `resend`                   |
+| `PANEL_CORS_ORIGINS`           | откуда пускаем панель                           |
+| `PANEL_TRAFFIC_SYNC_MINUTES`   | как часто снимать счётчики, `0` — только вручную |
+| `PANEL_SEED_DEMO`              | демо-данные в пустую базу, на боевом `0`        |
+
+**Перед боевым запуском:** смените `PANEL_ADMIN_PASSWORD`,
+`PANEL_SECRET_KEY` и `PANEL_SECRETS_KEY`, поставьте `PANEL_SEED_DEMO=0`,
+пропишите ключи платёжного и почтового сервисов, закройте панель HTTPS —
+токен администратора ходит в заголовке и по HTTP читается по дороге.
+
+Панель на старте сама пишет в лог всё, что осталось по умолчанию и мешает
+выпускать её наружу, — читать `journalctl -u prosto-panel` после первого
+запуска обязательно.
+
+## Схема базы
+
+Миграции выполняются при старте: недостающие таблицы, колонки и индексы
+досоздаются сами, ничего вручную запускать не нужно. Alembic намеренно не
+используется — единственный вид изменений за всю жизнь панели это новая
+колонка, а цепочка ревизий ради него добавила бы шаг, который забывают.
+Переименование, удаление и смену типа механизм не делает: такие изменения
+редки, опасны и должны выполняться руками, с бэкапом.
+
+Обновление старой установки безопасно, но `PANEL_SECRETS_KEY` нужно
+задать **до** первого запуска новой версии: при старте она зашифрует
+пароли, лежавшие открытым текстом, и сотрёт исходники.
+
+## Тесты
+
+```bash
+cd backend && .venv/Scripts/python.exe -m pytest tests -q
+```
+
+43 теста. Управление доступом, лимиты трафика, календарь, контракт
+клиентского API — и отдельным файлом `test_billing.py` то, что стоит денег:
+
+* двадцать доставок одного вебхука дают одну учётку, а не двадцать;
+* повторная покупка на ту же почту продлевает, не создавая второго юзера;
+* платёж с подделанной суммой отклоняется и доступ не выдаёт;
+* неподписанный вебхук получает 403;
+* возврат снимает подписку и пиры;
+* пароль не появляется ни в базе, ни в логах открытым текстом;
+* показ пароля администратором попадает в журнал.
+
+## Демо-данные
+
+При `PANEL_SEED_DEMO=1` пустая база заполняется 24 клиентами с разными
+тарифами, статусами и историей оплат, пятью серверами и ключами.
+
+Адреса демо-серверов взяты из документационных диапазонов RFC 5737
+(`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`): они никому не
+принадлежат, и панель не пойдёт по SSH на чужую живую машину.
+
+## Структура
+
+```
+backend/app/
+├─ models.py            схема базы
+├─ migrations.py        доведение схемы до актуальной при старте
+├─ crypto.py            AES-GCM для сохранённого пароля клиента
+├─ security.py          argon2id, токены
+├─ payments/            по файлу на платёжный сервис
+│  ├─ base.py           PaymentProvider, PaymentSession, WebhookEvent
+│  ├─ mock.py           имитация: своя форма и вебхук самому себе
+│  ├─ yookassa.py       адрес отправителя + перепроверка через API
+│  └─ cryptocloud.py    проверка подписи JWT
+├─ services/            бизнес-логика по областям
+│  ├─ users.py          создание, блокировки, лимиты
+│  ├─ credentials.py    генерация логина и пароля
+│  ├─ orders.py         заказы, выдача, продление, возврат
+│  ├─ billing_webhook.py приём уведомлений: подпись, идемпотентность, сумма
+│  ├─ delivery.py       очередь доставки учётки
+│  ├─ mail.py           письмо с доступом
+│  ├─ telegram.py       дублирование доступа в Telegram
+│  ├─ ratelimit.py      счётчики попыток входа и заказов
+│  ├─ billing.py        подписки, платежи, календарь
+│  ├─ keys.py           раздача ключей по серверам
+│  ├─ traffic.py        счётчики по SSH
+│  └─ auth.py           вход клиентов и администраторов
+├─ admin_api/           JSON API панели, по файлу на раздел
+├─ public_api.py        сайт: тарифы, заказы, вебхуки, кабинет
+└─ api_client.py        API приложений: /api/v1
+
+web/src/                публичный сайт, его и раздаёт боевой сервер
+├─ pages/               лендинг, вход, кабинет, документы
+├─ components/          шапка, подвал, появление при прокрутке
+├─ lib/                 клиент API, форматирование, хуки, переходы по якорям
+└─ styles/base.css      дизайн-система сайта
+
+site/                   прежние статические страницы: оформление и оплата
+├─ checkout.html        оформление заказа
+├─ pay.html             демонстрационная оплата (только в режиме mock)
+├─ success.html         ожидание подтверждения и показ доступа
+└─ assets/              стили и скрипты
+
+panel/src/
+├─ styles/              токены и классы дизайн-системы
+├─ lib/                 клиент API, форматирование, хуки
+├─ ui/                  примитивы: таблица, шторка, модалка, графики
+├─ layout/              каркас, навигация
+└─ features/            по папке на раздел панели
+
+deploy/
+├─ bootstrap.sh         установка панели, сайта, nginx и TLS
+├─ setup-awg.sh         превращение машины в VPN-сервер
+├─ nginx.conf           развёрнутый пример: вебхуки, админка, кэширование
+└─ prosto-panel.service systemd-юнит
+```

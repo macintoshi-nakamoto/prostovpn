@@ -167,6 +167,19 @@ class AppState(application: Application) : AndroidViewModel(application) {
         VpnForegroundService.start(getApplication(), status, s.notifDisconnect)
     }
 
+    /**
+     * Foreground на время самого подключения, а не только после него.
+     *
+     * Рукопожатие с ретраями занимает до минуты, и всё это время процесс —
+     * обычный фоновый: человеку достаточно свернуть приложение (а на
+     * Huawei — просто погасить экран), чтобы оболочка убила процесс посреди
+     * подключения. Снаружи это выглядело как «вечное подключение»: спиннер
+     * крутится, процесс давно мёртв.
+     */
+    private fun startConnectingNotice() {
+        VpnForegroundService.start(getApplication(), s.connectingTxt, s.notifDisconnect)
+    }
+
     private fun stopForegroundNotice() {
         VpnForegroundService.stop(getApplication())
     }
@@ -341,7 +354,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         IPv6 (частых у российских операторов) это выглядит как «подключено,
         а ничего не грузит» — система предпочитает IPv6 и упирается в него.
         */
-        val withDns = SplitTunnel.ensureDns(base)
+        val withDns = SplitTunnel.ensureMtu(SplitTunnel.ensureDns(base))
         val ipv6 = SplitTunnel.hasIpv6Address(withDns)
         if (!splitTunnelEnabled) {
             val all = if (ipv6) "0.0.0.0/0, ::/0" else "0.0.0.0/0"
@@ -619,6 +632,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
     private fun startTunnel(config: String) {
         phase = Phase.CONNECTING
         connectionError = null
+        // Foreground с первой секунды: рукопожатие на плохой сети занимает до
+        // минуты, и без уведомления оболочка (особенно Huawei) успевает убить
+        // процесс, стоит человеку свернуть приложение или погасить экран.
+        startConnectingNotice()
         connectJob = viewModelScope.launch {
             val prepared = buildConfigForConnect(config)
             // Без withContext: connect сам сериализуется и сам уходит на IO,
@@ -635,10 +652,12 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     // этом, а не показываем ложное «подключено»
                     phase = Phase.OFF
                     connectionError = s.errNoHandshake
+                    stopForegroundNotice()
                 }
                 TunnelManager.Result.FAILED -> {
                     phase = Phase.OFF
                     connectionError = s.errTunnelFailed
+                    stopForegroundNotice()
                 }
             }
         }

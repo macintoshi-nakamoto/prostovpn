@@ -114,6 +114,30 @@ class SplitTunnelTest {
     }
 
     @Test
+    fun `MTU подставляется только когда сервер его не задал`() {
+        val withoutMtu = """
+            [Interface]
+            Address = 10.8.1.3/32
+            PrivateKey = aaa=
+
+            [Peer]
+            Endpoint = 1.2.3.4:51820
+        """.trimIndent()
+        val patched = SplitTunnel.ensureMtu(withoutMtu)
+        assertTrue("MTU должен появиться", "MTU = ${SplitTunnel.FALLBACK_MTU}" in patched)
+        // Строка обязана попасть в [Interface], иначе парсер её не увидит
+        val interfacePart = patched.substringAfter("[Interface]").substringBefore("[Peer]")
+        assertTrue("MTU оказался вне [Interface]", "MTU" in interfacePart)
+
+        val withMtu = """
+            [Interface]
+            Address = 10.8.1.3/32
+            MTU = 1420
+        """.trimIndent()
+        assertEquals("свой MTU сервера трогать нельзя", withMtu, SplitTunnel.ensureMtu(withMtu))
+    }
+
+    @Test
     fun `наличие IPv6-адреса определяется по конфигу`() {
         val v4only = """
             [Interface]

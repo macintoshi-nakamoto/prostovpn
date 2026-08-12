@@ -5,9 +5,11 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.amnezia.awg.backend.Backend
 import org.amnezia.awg.backend.GoBackend
 import org.amnezia.awg.backend.Tunnel
@@ -111,11 +113,29 @@ class TunnelManager(context: Context) {
         outcome
     }
 
-    private suspend fun bringUp(config: Config): Boolean = withContext(Dispatchers.IO) {
-        runCatching { backend.setState(tunnel, Tunnel.State.UP, config) }
-            .onFailure { Log.e(TAG, "setState(UP) не удался", it) }
-            .getOrNull() == Tunnel.State.UP
-    }
+    /**
+     * Поднимает интерфейс — со сроком и с правом на прерывание.
+     *
+     * Внутри setState(UP) есть места, где можно застрять надолго: ожидание
+     * старта VpnService (оболочки Huawei/Honor умеют его придержать) и
+     * разрешение имени эндпоинта через системный резолвер. Без срока это
+     * выглядело как бесконечное «подключение», причём замок туннеля
+     * оставался занятым — и следующее нажатие кнопки тоже висло уже на
+     * замке. runInterruptible переводит отмену корутины в прерывание
+     * потока, которое блокирующие ожидания внутри библиотеки понимают.
+     */
+    private suspend fun bringUp(config: Config): Boolean =
+        withTimeoutOrNull(BRING_UP_TIMEOUT_MS) {
+            runInterruptible(Dispatchers.IO) {
+                runCatching { backend.setState(tunnel, Tunnel.State.UP, config) }
+                    .onFailure { Log.e(TAG, "setState(UP) не удался", it) }
+                    .getOrNull() == Tunnel.State.UP
+            }
+        } ?: run {
+            Log.e(TAG, "setState(UP) не уложился в $BRING_UP_TIMEOUT_MS мс — снимаем")
+            tearDown()
+            false
+        }
 
     /** Снятие не должно срываться отменой: иначе туннель останется висеть. */
     private suspend fun tearDown() = withContext(NonCancellable + Dispatchers.IO) {
@@ -188,13 +208,26 @@ class TunnelManager(context: Context) {
         Было 20 секунд одной попыткой. WireGuard повторяет инициацию примерно раз
         в пять секунд, то есть окно давало всего четыре попытки — на загруженном
         мобильном канале этого не хватало, и исправное подключение объявлялось
-        отказом. Теперь два захода с пересозданием интерфейса между ними.
+        отказом.
+
+        Теперь три захода с пересозданием интерфейса между ними: каждый заход —
+        новый интерфейс, новая эфемерная пара и новое разрешение эндпоинта.
+        Третий добавлен по жалобам с телефонов Huawei: там первые секунды после
+        поднятия интерфейса сеть нередко «прогревается» (оболочка заново
+        решает, каким каналом пускать трафик), и двух заходов не хватало.
         */
-        private const val ATTEMPTS = 2
+        private const val ATTEMPTS = 3
         private const val FIRST_WINDOW_MS = 20_000L
         private const val RETRY_WINDOW_MS = 15_000L
         private const val RETRY_GAP_MS = 700L
         private const val POLL_MS = 500L
+
+        /*
+        Потолок на само поднятие интерфейса. Обычно оно занимает доли секунды;
+        двадцать — это уже «служба не стартует» или «резолвер молчит», и ждать
+        дальше бессмысленно: лучше честная ошибка, чем вечный спиннер.
+        */
+        private const val BRING_UP_TIMEOUT_MS = 20_000L
 
         @Volatile
         private var instance: TunnelManager? = null

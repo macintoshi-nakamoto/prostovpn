@@ -29,8 +29,8 @@ android {
         targetSdk = 35
         // Растёт с каждой выкладкой: с прежним versionCode установщик
         // Android может отказаться ставить сборку поверх старой
-        versionCode = 12
-        versionName = "1.0.12"
+        versionCode = 21
+        versionName = "1.1.1"
 
         // Адрес панели: вход по логину и паролю и проверка обновлений идут
         // туда. Для своей сборки перебивается через -PpanelUrl=...
@@ -71,7 +71,19 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            /*
+            R8 без обфускации (см. proguard-rules.pro): из APK уходит
+            неиспользуемая половина Compose и AndroidX — это меньше мегабайт
+            на диске и заметно быстрее холодный старт на слабых телефонах
+            из нижней половины парка. Имена классов не трогаем: JNI-мост
+            wg-go находит Java по строковым именам.
+            */
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             /*
             Отладочный ключ ломал установку там, где проверяют подпись: «Чистый режим»
             Huawei и AppGallery отклоняют APK с CN=Android Debug, Play Protect показывает

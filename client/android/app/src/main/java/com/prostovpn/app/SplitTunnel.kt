@@ -203,6 +203,47 @@ object SplitTunnel {
     const val FALLBACK_DNS = "1.1.1.1, 8.8.8.8"
 
     /**
+     * MTU по умолчанию, когда сервер своего не прислал.
+     *
+     * Без строки MTU библиотека берёт 1420. На мобильных сетях с CGNAT и
+     * на телефонах Huawei/Honor это регулярно даёт самую коварную поломку:
+     * рукопожатие проходит (оно маленькое), «подключено» горит, а страницы
+     * не открываются — большие пакеты молча тонут, потому что канал
+     * оператора не пропускает 1420 и не говорит об этом (PMTU-discovery
+     * через CGNAT не работает). 1280 — гарантированный минимум IPv6,
+     * который обязан пропускать любой канал. Цена — пара процентов
+     * пропускной способности; «работает везде» дороже.
+     */
+    const val FALLBACK_MTU = 1280
+
+    /**
+     * Дописывает `MTU` в секцию `[Interface]`, если сервер его не задал.
+     *
+     * Конфиг сервера важнее: задан MTU — не трогаем.
+     */
+    fun ensureMtu(configText: String, mtu: Int = FALLBACK_MTU): String {
+        var section = ""
+        for (rawLine in configText.lineSequence()) {
+            val line = rawLine.substringBefore('#').trim()
+            if (line.isEmpty()) continue
+            if (line.startsWith("[") && line.endsWith("]")) {
+                section = line.trim('[', ']').lowercase()
+                continue
+            }
+            if (section != "interface") continue
+            if (line.substringBefore('=', "").trim().equals("mtu", ignoreCase = true)) {
+                return configText
+            }
+        }
+
+        val header = Regex("(?im)^[ \\t]*\\[Interface\\][ \\t]*$")
+        val match = header.find(configText) ?: return configText
+        return configText.substring(0, match.range.last + 1) +
+            "\nMTU = $mtu" +
+            configText.substring(match.range.last + 1)
+    }
+
+    /**
      * Дописывает `DNS` в секцию `[Interface]`, если сервер его не задал.
      *
      * Библиотека зовёт `VpnService.Builder.addDnsServer` только из

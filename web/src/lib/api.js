@@ -2,9 +2,45 @@
 // (см. vite.config.js), поэтому здесь достаточно относительных путей.
 
 const TOKEN_KEY = "prosto_token";
+const DEVICE_KEY = "prosto_browser_id";
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
+}
+
+/**
+ * Постоянный идентификатор этого браузера.
+ *
+ * Не для лимита устройств — браузер в нём не участвует, — а чтобы повторный
+ * вход в кабинет заменял прежнюю сессию, а не добавлял к ней ещё одну.
+ * Иначе у человека, заходящего в кабинет раз в неделю, копится список
+ * живых токенов, каждый из которых — действующий доступ к его учётке.
+ */
+function browserId() {
+  let value = localStorage.getItem(DEVICE_KEY);
+  if (!value) {
+    value =
+      // randomUUID есть не везде (http-контекст, старые вебвью) — тогда
+      // хватит случайной строки: это идентификатор, а не секрет.
+      crypto.randomUUID?.() ?? `web-${Math.random().toString(36).slice(2)}${Date.now()}`;
+    localStorage.setItem(DEVICE_KEY, value);
+  }
+  return value;
+}
+
+/** Как назвать этот браузер в журнале входов. */
+function browserName() {
+  const ua = navigator.userAgent || "";
+  const name =
+    [
+      ["Edg/", "Edge"],
+      ["OPR/", "Opera"],
+      ["YaBrowser", "Yandex"],
+      ["Firefox", "Firefox"],
+      ["Chrome", "Chrome"],
+      ["Safari", "Safari"],
+    ].find(([mark]) => ua.includes(mark))?.[1] || "Браузер";
+  return name;
 }
 
 export function setToken(token) {
@@ -72,13 +108,26 @@ export const api = {
   login: (login, password) =>
     request("/api/v1/login", {
       method: "POST",
-      body: { login, password, platform: "web" },
+      body: {
+        login,
+        password,
+        platform: "web",
+        device_id: browserId(),
+        device_name: browserName(),
+      },
     }),
 
   register: (login, password, email) =>
     request("/api/v1/register", {
       method: "POST",
-      body: { login, password, email: email || null, platform: "web" },
+      body: {
+        login,
+        password,
+        email: email || null,
+        platform: "web",
+        device_id: browserId(),
+        device_name: browserName(),
+      },
     }),
 
   account: () => request("/api/v1/account", { auth: true }),

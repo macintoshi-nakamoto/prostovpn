@@ -136,7 +136,9 @@ fun SupportScreen(state: AppState, onBack: () -> Unit) {
                 Text(
                     text = s.privacy,
                     style = manrope(12.sp, W.regular, Theme.text.copy(alpha = 0.5f)),
-                    modifier = Modifier.noRippleClickable { open("$SITE/privacy.html") },
+                    modifier = Modifier
+                        .tvFocusHighlight(RoundedCornerShape(8.dp))
+                        .noRippleClickable { open("$SITE/privacy.html") },
                 )
                 Text(
                     text = " · ",
@@ -145,7 +147,9 @@ fun SupportScreen(state: AppState, onBack: () -> Unit) {
                 Text(
                     text = s.terms,
                     style = manrope(12.sp, W.regular, Theme.text.copy(alpha = 0.5f)),
-                    modifier = Modifier.noRippleClickable { open("$SITE/offer.html") },
+                    modifier = Modifier
+                        .tvFocusHighlight(RoundedCornerShape(8.dp))
+                        .noRippleClickable { open("$SITE/offer.html") },
                 )
             }
         }
@@ -162,6 +166,7 @@ private fun LinkRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .tvFocusHighlight(RoundedCornerShape(18.dp))
             .scaleClickable(0.98f, onClick = onClick)
             .clip(RoundedCornerShape(14.dp))
             .padding(vertical = 12.dp, horizontal = 10.dp),

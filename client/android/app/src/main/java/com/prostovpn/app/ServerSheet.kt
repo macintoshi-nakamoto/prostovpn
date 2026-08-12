@@ -47,6 +47,8 @@ fun CurrentServerCard(
         modifier = modifier
             .fillMaxWidth()
             .pressScale(interaction, 0.98f)
+            // С пульта карточка — главный вход в выбор сервера, фокус обязан быть виден
+            .tvFocusHighlight(RoundedCornerShape(26.dp))
             .clip(RoundedCornerShape(26.dp))
             .liquidGlass(backdrop, cornerRadius = 26.dp)
             .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
@@ -119,6 +121,8 @@ fun ServerListSheet(state: AppState, onDismiss: () -> Unit) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            // До scaleClickable: focus-узел создаёт clickable внутри него
+                            .tvFocusHighlight(RoundedCornerShape(16.dp))
                             .scaleClickable(0.98f, haptic = false) {
                                 haptics.selection()
                                 state.selectServer(index)

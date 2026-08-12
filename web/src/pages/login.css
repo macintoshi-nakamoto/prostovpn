@@ -89,15 +89,29 @@
 }
 
 .lg-panel {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 64px 40px;
 }
+/*
+ * Переключатели в углу, а не в потоке.
+ *
+ * Своей шапки у страницы входа нет, а обычным элементом рядом с карточкой они
+ * сдвинули бы её с центра: .lg-panel — flex по горизонтали, и второй ребёнок
+ * делит с карточкой ширину. В углу же они там, где их и ищут.
+ */
+.lg-controls {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  z-index: 2;
+}
 .lg-card {
   width: 100%;
   max-width: 456px;
-  background: #fff;
+  background: var(--surface);
   border-radius: 28px;
   padding: 44px 44px 40px;
   box-shadow: var(--shadow-card);
@@ -108,7 +122,7 @@
 
 .lg-tabs {
   display: flex;
-  background: #f0f2f5;
+  background: var(--bg-soft);
   border-radius: 999px;
   padding: 4px;
 }
@@ -121,11 +135,11 @@
   padding: 12px 16px;
   border-radius: 999px;
   background: transparent;
-  color: #6b717a;
+  color: var(--text-dim);
   transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 .lg-tabs button.active {
-  background: #fff;
+  background: var(--surface-2);
   color: var(--ink);
   box-shadow: 0 2px 8px rgba(20, 25, 35, 0.1);
 }
@@ -166,7 +180,7 @@
   width: 100%;
   border: 1.5px solid var(--border);
   border-radius: 14px;
-  background: #fff;
+  background: var(--field);
   padding: 15px 16px;
   font-size: 16px;
   color: var(--ink);
@@ -278,8 +292,19 @@
   }
 
   .lg-panel {
-    padding: 26px 16px 44px;
-    align-items: flex-start;
+    /* Колонкой: переключатели встают отдельной строкой над карточкой. В углу
+       им на телефоне не место — они легли бы поверх её верхнего края. */
+    flex-direction: column;
+    align-items: center;
+    padding: 18px 16px 44px;
+  }
+  .lg-controls {
+    position: static;
+    width: 100%;
+    max-width: 456px;
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
   }
   .lg-card {
     padding: 26px 20px 24px;

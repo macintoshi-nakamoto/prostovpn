@@ -80,7 +80,10 @@ fun LoginScreen(
     var login by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var showPassword by rememberSaveable { mutableStateOf(false) }
-    var errorText by remember { mutableStateOf("") }
+    // Причина, по которой человека сюда выкинуло: устройство отключили из
+    // кабинета. Занимает то же место, что и ошибка входа, — это ответ на
+    // тот же вопрос «почему я не внутри». Стирается первым же вводом.
+    var errorText by remember { mutableStateOf(state.consumeSignedOutReason()) }
     var isLoading by remember { mutableStateOf(false) }
     var isDone by remember { mutableStateOf(false) }
 

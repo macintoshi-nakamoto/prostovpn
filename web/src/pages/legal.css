@@ -1,5 +1,5 @@
 .lgl {
-  background: #fff;
+  background: var(--bg);
 }
 .lgl-hero {
   background: linear-gradient(118deg, #ff7a3d 0%, #fa4c16 46%, #d93a05 100%);
@@ -44,7 +44,7 @@
   gap: 20px;
 }
 .lgl-block {
-  background: #fff;
+  background: var(--surface);
   border-radius: 24px;
   padding: 34px 36px;
   display: flex;
@@ -72,8 +72,8 @@
   color: var(--text-muted);
 }
 .lgl-cta {
-  background: var(--ink);
-  color: #fff;
+  background: var(--invert-bg);
+  color: var(--invert-fg);
   border-radius: 24px;
   padding: 30px 36px;
   display: flex;

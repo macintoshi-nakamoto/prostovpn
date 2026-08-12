@@ -148,6 +148,19 @@ compose.desktop {
     application {
         mainClass = "com.prostovpn.desktop.MainKt"
 
+        /*
+        Каким JDK упаковывать (jpackage). По умолчанию — тем же, на котором
+        идёт Gradle, но это не всегда возможно: у JetBrains Runtime из
+        Android Studio jpackage вырезан, а на слишком новом JDK не
+        запускается сам Gradle. Свойство разводит эти роли:
+
+          ./gradlew packageMsi -PpackagingJdk="C:/Program Files/Java/jdk-25"
+
+        Внутрь установщика уходит рантайм именно этого JDK; код собран под
+        JVM 17 и на более новом рантайме работает без оговорок.
+        */
+        (project.findProperty("packagingJdk") as String?)?.let { javaHome = it }
+
         nativeDistributions {
             appResourcesRootDir.set(layout.projectDirectory.dir("resources"))
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)

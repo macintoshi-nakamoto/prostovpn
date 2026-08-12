@@ -69,6 +69,15 @@ data class TunnelFile(
  */
 enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
 
+/**
+ * Как часто перечитывать подписку, пока экран открыт.
+ *
+ * Тот же ритм, что у десктопного клиента и у стража сессии в TunnelManager:
+ * этим опросом приложение узнаёт, что устройство отвязали, кончился трафик
+ * или продлилась подписка.
+ */
+private const val ACCOUNT_POLL_MS = 60 * 1000L
+
 class AppState(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("prosto", 0)
@@ -126,9 +135,60 @@ class AppState(application: Application) : AndroidViewModel(application) {
     var trafficLimitBytes by mutableStateOf(prefs.getLong("trafficLimit", -1L))
         private set
 
+    /** -1 — безлимит. Остаток считает панель, а не приложение. */
+    var trafficLeftBytes by mutableStateOf(prefs.getLong("trafficLeft", -1L))
+        private set
+
+    /** Трафика осталось мало — на главном экране горит предупреждение. */
+    var trafficLow by mutableStateOf(prefs.getBoolean("trafficLow", false))
+        private set
+
+    /** Подписка кончается — пора показать кнопку продления. */
+    var expiresSoon by mutableStateOf(prefs.getBoolean("expiresSoon", false))
+        private set
+
+    /** Куда ведёт кнопка продления. Пусто — продлевать пока незачем. */
+    var renewUrl by mutableStateOf(prefs.getString("renewUrl", "").orEmpty())
+        private set
+
+    /**
+     * Почему панель не дала ни одной страны.
+     *
+     * Пустой список без объяснения человек читает как «приложение
+     * сломалось»: он ввёл логин с паролем, вход прошёл — и дальше пустой
+     * экран. Текст пишет панель, здесь его только показывают.
+     */
+    var panelNotice by mutableStateOf("")
+        private set
+
+    /**
+     * Почему человека выкинуло на экран входа.
+     *
+     * Заполняется, когда панель погасила сессию, — устройство отключили из
+     * личного кабинета или админки. Без объяснения это выглядело как
+     * поломка: приложение молча оказывалось на форме входа, и человек шёл
+     * в поддержку со «слетел аккаунт». Живёт только в памяти: logout()
+     * чистит prefs, а причина обязана его пережить. Читается один раз
+     * экраном входа.
+     */
+    var signedOutReason by mutableStateOf("")
+        private set
+
+    /** Экран входа забирает причину: показывается она ровно один раз. */
+    fun consumeSignedOutReason(): String = signedOutReason.also { signedOutReason = "" }
+
     /** Страны, выданные панелью. Пусто — подписка кончилась. */
     var panelServers by mutableStateOf<List<ServerInfo>>(emptyList())
         private set
+
+    /**
+     * Обновление приложения.
+     *
+     * Живёт здесь, а не на экране настроек: проверка стартует вместе с
+     * приложением, а баннер обязательного обновления рисуется на главном
+     * экране до всякого захода в настройки.
+     */
+    val updates: UpdateManager by lazy { UpdateManager(getApplication(), viewModelScope) }
 
     // Вход только по аккаунту: гостевого режима нет, страны выдаёт панель.
     val isLoggedIn get() = panelToken.isNotEmpty() || server != null
@@ -446,6 +506,14 @@ class AppState(application: Application) : AndroidViewModel(application) {
             selectServer(0)
         }
         restoreRunningTunnel()
+        // Сессия могла протухнуть, а список стран — измениться, пока
+        // приложение было закрыто. И дальше сверяемся раз в минуту.
+        refreshPanelServers()
+        startAccountWatch()
+        // Версию спрашиваем сразу, не дожидаясь захода в настройки:
+        // обязательное обновление должно встретить человека баннером на
+        // главном — и дойти даже до того, кто ещё не вошёл.
+        updates.check()
     }
 
     /**
@@ -495,29 +563,84 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     suspend fun login(login: String, password: String): Result<Unit> {
         val session = withContext(Dispatchers.IO) {
-            runCatching { PanelApi.login(login, password, BuildConfig.VERSION_NAME) }
+            runCatching {
+                PanelApi.login(
+                    login,
+                    password,
+                    BuildConfig.VERSION_NAME,
+                    deviceId = installId(),
+                    deviceName = deviceName(),
+                )
+            }
         }
         return session.map { applySession(it) }
+    }
+
+    /**
+     * Постоянный идентификатор установки — для лимита устройств.
+     *
+     * Без него панель считала переустановку приложения вторым телефоном:
+     * каждая переустановка съедала слот тарифа, и лимит забивался копиями
+     * одного и того же устройства. Случайный UUID, а не ANDROID_ID: тот
+     * привязан к прошивке и утекать ему в панель незачем.
+     */
+    private fun installId(): String {
+        prefs.getString("installId", null)?.let { return it }
+        val fresh = java.util.UUID.randomUUID().toString()
+        prefs.edit().putString("installId", fresh).apply()
+        return fresh
+    }
+
+    /** «Samsung SM-S911B» в списке устройств понятнее, чем пустая строка. */
+    private fun deviceName(): String {
+        val manufacturer = android.os.Build.MANUFACTURER.orEmpty()
+            .replaceFirstChar { it.uppercase() }
+        val model = android.os.Build.MODEL.orEmpty()
+        return listOf(manufacturer, model).filter { it.isNotBlank() }.joinToString(" ")
     }
 
     private fun applySession(session: PanelApi.Session) {
         panelToken = session.token
         accountName = session.name ?: session.login
         accountPublicId = session.publicId
-        subscriptionDaysLeft = session.daysLeft
-        trafficUsedBytes = session.trafficUsedBytes
-        trafficLimitBytes = session.trafficLimitBytes ?: -1L
 
         prefs.edit()
             .putString("panelToken", session.token)
             .putString("accountName", accountName)
             .putString("accountPublicId", accountPublicId)
-            .putInt("daysLeft", session.daysLeft)
-            .putLong("trafficUsed", session.trafficUsedBytes)
-            .putLong("trafficLimit", trafficLimitBytes)
             .apply()
 
+        applySubscription(session.subscription, session.notice)
         applyPanelServers(session.servers.map { it.toServerInfo() })
+    }
+
+    /**
+     * Переносит подписку из ответа панели в состояние и настройки.
+     *
+     * Одним местом на оба вызова — вход и обновление списка стран. Пока их
+     * было два, любое новое поле требовалось не забыть дважды.
+     */
+    private fun applySubscription(subscription: PanelApi.Subscription, notice: String?) {
+        subscriptionDaysLeft = subscription.daysLeft
+        trafficUsedBytes = subscription.trafficUsedBytes
+        trafficLimitBytes = subscription.trafficLimitBytes ?: -1L
+        trafficLeftBytes = subscription.trafficLeftBytes ?: -1L
+        trafficLow = subscription.trafficLow
+        expiresSoon = subscription.expiresSoon
+        renewUrl = subscription.renewUrl.orEmpty()
+        // notice в prefs не пишем: это объяснение конкретного ответа панели,
+        // протухшее показывать хуже, чем никакое
+        panelNotice = notice.orEmpty()
+
+        prefs.edit()
+            .putInt("daysLeft", subscription.daysLeft)
+            .putLong("trafficUsed", subscription.trafficUsedBytes)
+            .putLong("trafficLimit", trafficLimitBytes)
+            .putLong("trafficLeft", trafficLeftBytes)
+            .putBoolean("trafficLow", trafficLow)
+            .putBoolean("expiresSoon", expiresSoon)
+            .putString("renewUrl", renewUrl)
+            .apply()
     }
 
     private fun applyPanelServers(list: List<ServerInfo>) {
@@ -539,16 +662,52 @@ class AppState(application: Application) : AndroidViewModel(application) {
             val result = runCatching { PanelApi.servers(token) }
             withContext(Dispatchers.Main) {
                 result
-                    .onSuccess { (list, subscription) ->
-                        subscriptionDaysLeft = subscription.optInt("days_left")
-                        trafficUsedBytes = subscription.optLong("traffic_used_bytes")
-                        trafficLimitBytes =
-                            if (subscription.isNull("traffic_limit_bytes")) -1L
-                            else subscription.optLong("traffic_limit_bytes")
-                        applyPanelServers(list.map { it.toServerInfo() })
+                    .onSuccess { reply ->
+                        // Страны были, а теперь их нет — доступ закрыли, пока
+                        // приложение работало: кончился трафик, срок или
+                        // устройство отвязали из кабинета.
+                        val lostAccess = reply.servers.isEmpty() && panelServers.isNotEmpty()
+                        applySubscription(reply.subscription, reply.notice)
+                        applyPanelServers(reply.servers.map { it.toServerInfo() })
+                        if (lostAccess && (phase == Phase.ON || phase == Phase.CONNECTING)) {
+                            disconnect()
+                        }
                     }
-                    // Сессию погасили в панели — просим войти заново.
-                    .onFailure { logout() }
+                    .onFailure { error ->
+                        // Разлогиниваем ТОЛЬКО когда панель прямо сказала, что
+                        // токен не годится. Раньше сюда попадала любая неудача:
+                        // пятисотка, перезапуск панели, моргнувшая сеть — и
+                        // человек, ничего не делавший, обнаруживал себя на
+                        // экране входа с потёртыми настройками. Недоступная
+                        // панель — это временно, а стирание сессии необратимо.
+                        val status = (error as? PanelApi.PanelException)?.status ?: 0
+                        if (status == 401 || status == 403) {
+                            logout()
+                            // Именно ПОСЛЕ logout: он чистит prefs и состояние,
+                            // а причина живёт в памяти и должна дожить до
+                            // экрана входа.
+                            signedOutReason = s.noticeRemoteSignout
+                        }
+                    }
+            }
+        }
+    }
+
+    /**
+     * Периодический опрос панели, пока экран жив.
+     *
+     * До этого refreshPanelServers не звал вообще никто: список стран
+     * замирал на момент входа, отвязанное из кабинета устройство работало
+     * до переустановки, а о кончившемся трафике человек узнавал только по
+     * переставшему работать интернету. Минута — тот же ритм, что у
+     * десктопного клиента и у стража в [TunnelManager]; сам запрос — лёгкий
+     * GET, посильный панели даже от тысяч приложений.
+     */
+    private fun startAccountWatch() {
+        viewModelScope.launch {
+            while (true) {
+                delay(ACCOUNT_POLL_MS)
+                if (panelToken.isNotEmpty()) refreshPanelServers()
             }
         }
     }
@@ -566,6 +725,11 @@ class AppState(application: Application) : AndroidViewModel(application) {
         subscriptionDaysLeft = 0
         trafficUsedBytes = 0L
         trafficLimitBytes = -1L
+        trafficLeftBytes = -1L
+        trafficLow = false
+        expiresSoon = false
+        renewUrl = ""
+        panelNotice = ""
         selectedServerIndex = 0
         val language = lang
         prefs.edit().clear().apply()

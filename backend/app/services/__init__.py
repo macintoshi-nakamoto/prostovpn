@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from . import billing_webhook, credentials, delivery, diagnostics, orders, ratelimit
+from . import billing_webhook, credentials, delivery, devices, diagnostics, orders, ratelimit
 from .diagnostics import can_serve, check as check_server
 from .auth import (
     LoginThrottled,
@@ -29,7 +29,8 @@ from .billing import (
     revenue_summary,
 )
 from .errors import PanelError
-from .keys import active_servers, ensure_keys, issue_key, revoke_key
+from .devices import disconnect as disconnect_device, disconnect_by_id as disconnect_device_by_id
+from .keys import active_servers, ensure_keys, find_key, issue_key, known_devices, revoke_key
 from .orders import (
     OrderError,
     create_order,
@@ -83,8 +84,14 @@ __all__ = [
     # keys
     "active_servers",
     "ensure_keys",
+    "find_key",
     "issue_key",
+    "known_devices",
     "revoke_key",
+    # устройства
+    "devices",
+    "disconnect_device",
+    "disconnect_device_by_id",
     # проверка узлов
     "diagnostics",
     "can_serve",

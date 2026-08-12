@@ -192,25 +192,44 @@ def _enforce_device_limit(db: OrmSession, user: User, current: Session) -> None:
     телефоне, — верный способ получить обращение в поддержку вместо
     работающего сервиса. Тот, кого выкинули, увидит это на своём устройстве
     и войдёт заново, если оно ему нужно.
-    """
-    limit = user.device_limit()
-    if limit <= 0:
-        return
 
+    Личный кабинет в браузере лимит не занимает и под него не попадает:
+    туннеля там нет, отключать нечего. Пока браузер считался устройством,
+    человек заходил в кабинет посмотреть срок подписки — и выкидывал этим
+    собственный телефон из VPN.
+    """
+    now = utcnow()
     live = [s for s in user.live_sessions() if s.id != current.id]
 
     # Повторный вход с того же устройства — не второе устройство. Гасим
     # прежний сеанс этой установки, чтобы переустановка не съедала лимит.
+    # Браузеру это тоже нужно, и по той же причине: иначе каждый вход в
+    # кабинет оставлял бы в списке ещё одну живую строку.
     if current.device_id:
-        same = [s for s in live if s.device_id == current.device_id]
-        for session in same:
-            session.revoked_at = utcnow()
+        for session in live:
+            if session.device_id == current.device_id:
+                session.revoked_at = now
         live = [s for s in live if s.device_id != current.device_id]
 
-    excess = len(live) + 1 - limit
+    if not current.is_device:
+        db.commit()
+        return
+
+    limit = user.device_limit()
+    if limit <= 0:
+        db.commit()
+        return
+
+    devices = [s for s in live if s.is_device]
+    excess = len(devices) + 1 - limit
     if excess > 0:
-        for session in sorted(live, key=lambda s: s.last_seen_at)[:excess]:
-            session.revoked_at = utcnow()
+        for session in sorted(devices, key=lambda s: s.last_seen_at)[:excess]:
+            # Не просто гасим токен, а отключаем по-настоящему: пир
+            # выкинутого устройства обязан уйти с узла, иначе оно продолжит
+            # ходить в VPN уже поднятым туннелем.
+            from .devices import disconnect
+
+            disconnect(db, session, reason="лимит тарифа")
             log.info("устройство отвязано по лимиту тарифа: пользователь %s", user.public_id)
     db.commit()
 

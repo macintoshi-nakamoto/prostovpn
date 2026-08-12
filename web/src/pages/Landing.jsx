@@ -1,14 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { SiteHeader } from "../components/SiteHeader.jsx";
 import { SiteFooter } from "../components/SiteFooter.jsx";
 import { Reveal, ArtImage } from "../components/Reveal.jsx";
 import { HeroOrbit } from "../components/HeroOrbit.jsx";
 import { Picture } from "../components/Picture.jsx";
+import { useSession } from "../lib/session.jsx";
 import { useTilt } from "../lib/hooks";
 import { useAnchorReveal } from "../lib/anchors";
 import { api } from "../lib/api";
-import { bytes, moneyFromKopecks, plural } from "../lib/format";
+import { capitalize, useI18n } from "../lib/i18n/index.jsx";
 import "./landing.css";
 
 /*
@@ -16,54 +17,41 @@ import "./landing.css";
  * тарифов. Четвёртая, про устройства, зависит: сколько их разрешено,
  * решает тариф в панели, и написать здесь число значит однажды разойтись
  * с карточками, которые стоят ниже на этой же странице.
+ *
+ * В массиве только картинка и ключ: подписи живут в словаре, иначе они не
+ * переводятся.
  */
 const FEATURES = [
-  { icon: "ic-arc.png", title: "До 1 Гбит/с", text: "Скорость не режется даже в час пик", plain: true },
-  { icon: "ic-territory-2.png", title: "60+ стран", text: "Более 900 серверов на пяти континентах" },
-  { icon: "ic-devices-2.png", key: "devices", title: "5 устройств", text: "Одна подписка на всю семью" },
-  { icon: "ic-mask-2.png", title: "Без логов", text: "Мы не храним историю ваших подключений" },
+  { icon: "ic-arc.png", key: "speed", plain: true },
+  { icon: "ic-territory-2.png", key: "countries" },
+  { icon: "ic-devices-2.png", key: "devices" },
+  { icon: "ic-mask-2.png", key: "logs" },
 ];
 
-const BYPASS = [
-  { title: "Банки", text: "Приложения и переводы открываются без ошибок геолокации" },
-  { title: "Маркетплейсы", text: "Заказы, оплата и доставка работают в обычном режиме" },
-  { title: "Госуслуги", text: "Вход по СМС и подтверждения проходят с первого раза" },
-  { title: "Такси и доставка", text: "Карты и адреса определяются по вашему реальному городу" },
-];
+/** Адреса документов — рядом с порядком карточек в словаре. */
+const DOC_LINKS = ["/privacy", "/terms", "/faq", "/contacts"];
 
-const SHIELD = [
-  {
-    title: "Шифрование AES-256",
-    text: "Тот же стандарт, что используют банки. Протоколы WireGuard и OpenVPN на выбор.",
-  },
-  {
-    title: "Защита от утечек DNS",
-    text: "Запросы уходят только через туннель: провайдер не видит, какие сайты вы открываете.",
-  },
-  {
-    title: "Независимый аудит",
-    text: "Инфраструктуру и политику отсутствия логов ежегодно проверяет внешняя команда.",
-  },
-];
-
-const DOCS = [
-  { title: "Политика без логов", text: "Какие данные мы не собираем и почему", to: "/privacy" },
-  { title: "Условия подписки", text: "Оплата, продление и возврат средств", to: "/terms" },
-  { title: "FAQ", text: "Как работает VPN и что делать при сбоях", to: "/faq" },
-  { title: "Контакты", text: "Поддержка и обратная связь", to: "/contacts" },
-];
+/*
+ * Кнопки действия ведут в кабинет, а не на форму входа.
+ *
+ * Раньше здесь стояло `/login` у всех до единой, и вошедший человек, нажав
+ * «Выбрать» на тарифе, снова видел форму входа — при том, что шапка той же
+ * страницы уже показывала ему «Кабинет». Теперь адрес один для всех: гостя
+ * до кабинета не пустит Private из App.jsx, отправит на вход и после него
+ * вернёт ровно сюда, вместе с выбранным тарифом в запросе.
+ */
+const PLAN_TAB = "/account?tab=plan";
+const SETUP_TAB = "/account?tab=setup";
 
 /** «30 дней» → «1 месяц», «365 дней» → «1 год»: срок словами, а не в днях. */
-function termLabel(days) {
+function termLabel(days, t) {
   if (days >= 365 && days % 365 === 0) {
-    const years = days / 365;
-    return `${years} ${plural(years, ["год", "года", "лет"])}`;
+    return t("units.years", { count: days / 365 });
   }
   if (days >= 28) {
-    const months = Math.round(days / 30);
-    return `${months} ${plural(months, ["месяц", "месяца", "месяцев"])}`;
+    return t("units.months", { count: Math.round(days / 30) });
   }
-  return `${days} ${plural(days)}`;
+  return t("units.days", { count: days });
 }
 
 /**
@@ -73,15 +61,13 @@ function termLabel(days) {
  * нажмёт «Выбрать». Пустого лимита трафика не бывает: отсутствие числа —
  * это и есть безлимит, так и написано.
  */
-function limitsOf(plan) {
-  const devices = plan.device_limit;
-  const countries = plan.server_limit;
+function limitsOf(plan, t, f) {
   return [
     plan.traffic_limit_bytes == null
-      ? "Безлимитный трафик"
-      : `${bytes(plan.traffic_limit_bytes)} трафика`,
-    `${devices} ${plural(devices, ["устройство", "устройства", "устройств"])}`,
-    `${countries} ${plural(countries, ["страна", "страны", "стран"])}`,
+      ? t("landing.plans.unlimited")
+      : t("landing.plans.traffic", { size: f.bytes(plan.traffic_limit_bytes) }),
+    t("units.devices", { count: plan.device_limit }),
+    t("units.countries", { count: plan.server_limit }),
   ];
 }
 
@@ -99,7 +85,7 @@ function limitsOf(plan) {
  * регистрация, — и кнопка «Выбрать» вела бы в платёжную форму на ноль
  * рублей. Ему своя полоса над карточками.
  */
-function toCards(list) {
+function toCards(list, t, f) {
   const paid = list
     .filter((plan) => plan.price_kopecks > 0)
     .sort((a, b) => a.duration_days - b.duration_days);
@@ -107,15 +93,15 @@ function toCards(list) {
   const cards = paid.map((plan) => {
     const months = Math.max(1, Math.round(plan.duration_days / 30));
     const perMonth = Math.round(plan.price_kopecks / months);
-    const full = moneyFromKopecks(plan.price_kopecks, plan.currency);
-    const term = termLabel(plan.duration_days);
+    const full = f.moneyFromKopecks(plan.price_kopecks, plan.currency);
+    const term = termLabel(plan.duration_days, t);
     return {
       code: plan.code,
       term,
-      perMonth: moneyFromKopecks(perMonth, plan.currency),
+      perMonth: f.moneyFromKopecks(perMonth, plan.currency),
       perMonthValue: perMonth,
-      note: plan.tagline || `${full} за ${term}`,
-      limits: limitsOf(plan),
+      note: plan.tagline || t("landing.plans.priceFor", { price: full, term }),
+      limits: limitsOf(plan, t, f),
       featured: false,
     };
   });
@@ -141,12 +127,23 @@ function toCards(list) {
   const free = list.find((plan) => plan.price_kopecks === 0);
   const trial = free
     ? {
-        title: free.title,
-        term: termLabel(free.duration_days),
+        /*
+        Заголовок пробной полосы берём из словаря, а не из панели.
+
+        В панели у бесплатного тарифа стоит «Пробный», и подставляется он в
+        середину фразы: «Пробный: 2 дня и 10 ГБ трафика». По-русски это ещё
+        читается, а в английском получалось «Пробный: 2 days and 10 GB of
+        traffic» — русское слово посреди английского предложения. Название
+        здесь не имя продукта, а роль карточки, и знаем мы её сами; всё
+        остальное на карточке — сроки, трафик, текст под заголовком — как было,
+        из панели.
+        */
+        title: t("landing.plans.trialTitle"),
+        term: termLabel(free.duration_days, t),
         traffic:
           free.traffic_limit_bytes == null
-            ? "без лимита трафика"
-            : `${bytes(free.traffic_limit_bytes)} трафика`,
+            ? t("landing.plans.unlimitedShort")
+            : t("landing.plans.traffic", { size: f.bytes(free.traffic_limit_bytes) }),
         note: free.tagline,
       }
     : null;
@@ -164,46 +161,19 @@ function toCards(list) {
  * Пустая секция цен хуже ориентировочной: человек уходит, не узнав порядок
  * сумм. Значения здесь — те же, что заведены в панели, и живут ровно до
  * первого успешного ответа.
+ *
+ * Это сырые тарифы, а не готовые карточки: подписи к ним собирает тот же
+ * toCards, что и для настоящих, — иначе запасные пришлось бы переводить
+ * отдельно и они разошлись бы с боевыми при первой же правке.
  */
-const FALLBACK = {
-  cards: [
-    {
-      code: "basic",
-      term: "1 месяц",
-      perMonth: "199 ₽",
-      note: "199 ₽ за 1 месяц",
-      limits: ["250 ГБ трафика", "2 устройства", "3 страны"],
-      featured: false,
-    },
-    {
-      code: "3months",
-      term: "3 месяца",
-      perMonth: "166 ₽",
-      note: "499 ₽ за 3 месяца",
-      limits: ["Безлимитный трафик", "4 устройства", "3 страны"],
-      featured: false,
-    },
-    {
-      code: "preyear",
-      term: "6 месяцев",
-      perMonth: "150 ₽",
-      note: "899 ₽ за 6 месяцев",
-      limits: ["Безлимитный трафик", "6 устройств", "3 страны"],
-      featured: false,
-    },
-    {
-      code: "year",
-      term: "1 год",
-      perMonth: "125 ₽",
-      note: "1 499 ₽ за 1 год",
-      limits: ["Безлимитный трафик", "10 устройств", "3 страны"],
-      featured: true,
-      badge: "−37%",
-    },
-  ],
-  trial: { title: "Пробный период", term: "2 дня", traffic: "10 ГБ трафика", note: null },
-  devices: 10,
-};
+const GB = 1024 * 1024 * 1024;
+const FALLBACK_PLANS = [
+  { code: "basic", duration_days: 30, price_kopecks: 19900, currency: "RUB", traffic_limit_bytes: 250 * GB, device_limit: 2, server_limit: 3 },
+  { code: "3months", duration_days: 90, price_kopecks: 49900, currency: "RUB", traffic_limit_bytes: null, device_limit: 4, server_limit: 3 },
+  { code: "preyear", duration_days: 180, price_kopecks: 89900, currency: "RUB", traffic_limit_bytes: null, device_limit: 6, server_limit: 3 },
+  { code: "year", duration_days: 365, price_kopecks: 149900, currency: "RUB", traffic_limit_bytes: null, device_limit: 10, server_limit: 3 },
+  { code: "trial", duration_days: 2, price_kopecks: 0, currency: "RUB", traffic_limit_bytes: 10 * GB, device_limit: 1, server_limit: 3 },
+];
 
 /**
  * Карточка преимущества.
@@ -212,26 +182,28 @@ const FALLBACK = {
  * наклоном и подсветкой — четыре одинаковых блока перестают быть просто
  * рядом картинок.
  */
-function Feature({ feature, delay }) {
+function Feature({ icon, plain, title, text, delay }) {
   const tilt = useTilt(9);
   return (
     <Reveal className="ld-feature" delay={delay}>
       <div className="ld-feature-in tilt tilt-glow" ref={tilt}>
         <ArtImage
-          src={`/assets/${feature.icon}`}
-          className={`ld-feature-art${feature.plain ? "" : " ld-feature-shadow"}`}
+          src={`/assets/${icon}`}
+          className={`ld-feature-art${plain ? "" : " ld-feature-shadow"}`}
           speed={0.05}
           delay={delay + 90}
         />
-        <h3>{feature.title}</h3>
-        <p>{feature.text}</p>
+        <h3>{title}</h3>
+        <p>{text}</p>
       </div>
     </Reveal>
   );
 }
 
 export function Landing() {
-  const [{ cards, trial, devices }, setPlans] = useState(FALLBACK);
+  const { t, raw, f } = useI18n();
+  const { authed } = useSession();
+  const [plans, setPlans] = useState(null);
 
   useAnchorReveal();
 
@@ -240,12 +212,11 @@ export function Landing() {
     api
       .plans()
       .then((list) => {
-        // Панель недоступна или тарифов нет — остаются запасные значения:
-        // пустая секция цен хуже, чем ориентировочная.
+        // Панель недоступна или платных тарифов нет — остаются запасные
+        // значения: пустая секция цен хуже, чем ориентировочная.
         if (!alive || !Array.isArray(list) || list.length === 0) return;
-        const next = toCards(list);
-        if (next.cards.length === 0) return;
-        setPlans(next);
+        if (!list.some((plan) => plan.price_kopecks > 0)) return;
+        setPlans(list);
       })
       .catch(() => {});
     return () => {
@@ -253,12 +224,19 @@ export function Landing() {
     };
   }, []);
 
+  // Пересобираем подписи при смене языка: числа те же, слова вокруг них —
+  // другие. t и f меняются только вместе с языком, лишних пересчётов нет.
+  const { cards, trial, devices } = useMemo(
+    () => toCards(plans || FALLBACK_PLANS, t, f),
+    [plans, t, f],
+  );
+
   // Число устройств в плитке преимуществ и в секции про устройства —
   // из панели: два места на странице не должны обещать разное. Плитке нужна
   // прописная: она стоит в ряду с «До 1 Гбит/с» и «60+ стран», а в середине
   // предложения ниже прописная была бы ошибкой.
-  const devicesLabel = `до ${devices} ${plural(devices, ["устройства", "устройств", "устройств"])}`;
-  const devicesTitle = devicesLabel[0].toUpperCase() + devicesLabel.slice(1);
+  const devicesLabel = t("landing.upTo", { value: t("units.devicesGen", { count: devices }) });
+  const devicesTitle = capitalize(devicesLabel);
 
   return (
     <div className="ld">
@@ -276,10 +254,10 @@ export function Landing() {
           <div className="ld-hero-body">
             <h1>
               <Reveal as="span" className="ld-hero-line" delay={60}>
-                Интернет
+                {t("landing.hero.line1")}
               </Reveal>
               <Reveal as="span" className="ld-hero-line" delay={180}>
-                без границ
+                {t("landing.hero.line2")}
               </Reveal>
             </h1>
             {/*
@@ -289,19 +267,18 @@ export function Landing() {
             которые стоят ниже на этой же странице.
             */}
             <Reveal as="p" delay={340}>
-              Подключение в одно нажатие, 60+ стран и скорость до 1 Гбит/с. Без логов, без
-              настроек и без ограничения скорости.
+              {t("landing.hero.lead")}
             </Reveal>
             <Reveal className="ld-hero-cta" delay={440}>
               <a href="#plans" className="btn ld-hero-primary">
-                Начать использовать
+                {t("landing.hero.primary")}
               </a>
               <a href="#app" className="btn ld-hero-ghost">
-                Как это работает
+                {t("landing.hero.ghost")}
               </a>
             </Reveal>
             <Reveal as="span" className="ld-hero-plats" delay={560}>
-              iOS · Android · macOS · Windows
+              {t("landing.hero.platforms")}
             </Reveal>
           </div>
         </div>
@@ -310,10 +287,17 @@ export function Landing() {
       {/* Четыре преимущества */}
       <section className="ld-features">
         <div className="wrap ld-features-grid">
-          {FEATURES.map((f, i) => (
+          {FEATURES.map((feature, i) => (
             <Feature
-              key={f.title}
-              feature={f.key === "devices" ? { ...f, title: devicesTitle } : f}
+              key={feature.key}
+              icon={feature.icon}
+              plain={feature.plain}
+              title={
+                feature.key === "devices"
+                  ? devicesTitle
+                  : t(`landing.features.${feature.key}.title`)
+              }
+              text={t(`landing.features.${feature.key}.text`)}
               delay={i * 110}
             />
           ))}
@@ -340,16 +324,13 @@ export function Landing() {
         <Reveal className="ld-zero-in" variant="zoom">
           <div className="ld-zero-num">0</div>
           <h2>
-            записей
+            {t("landing.zero.title")}
             <br />
-            <span>о вашем трафике</span>
+            <span>{t("landing.zero.subtitle")}</span>
           </h2>
-          <p>
-            Серверы работают в оперативной памяти: после перезагрузки на них не остаётся
-            ничего. Политику подтверждает независимый аудит.
-          </p>
+          <p>{t("landing.zero.text")}</p>
           <a href="#plans" className="btn btn-primary ld-zero-btn">
-            Подключить Prosto VPN
+            {t("landing.zero.button")}
           </a>
         </Reveal>
       </section>
@@ -359,22 +340,19 @@ export function Landing() {
         <div className="wrap ld-app-grid">
           <Reveal className="ld-app-body">
             <h2>
-              Приложение,
+              {t("landing.app.line1")}
               <br />
-              которое просто
+              {t("landing.app.line2")}
               <br />
-              работает
+              {t("landing.app.line3")}
             </h2>
-            <p>
-              Одна кнопка на главном экране. Всё остальное — автоматически: лучший сервер,
-              обход блокировок и защита при переключении на Wi-Fi.
-            </p>
+            <p>{t("landing.app.text")}</p>
             <div className="ld-app-stores">
-              <Link to="/login" className="btn btn-dark ld-store">
+              <Link to={SETUP_TAB} className="btn btn-dark ld-store">
                 <Picture src="/assets/ic-appstore.png" />
                 App Store
               </Link>
-              <Link to="/login" className="btn btn-dark ld-store">
+              <Link to={SETUP_TAB} className="btn btn-dark ld-store">
                 <Picture src="/assets/ic-googleplay.png" />
                 Google Play
               </Link>
@@ -385,7 +363,7 @@ export function Landing() {
             <ArtImage
               className="ld-app-laptop"
               src="/assets/obj-laptop-orange.png"
-              alt="Prosto VPN на ноутбуке"
+              alt={t("landing.app.laptopAlt")}
               speed={0.1}
               float={false}
             />
@@ -397,23 +375,31 @@ export function Landing() {
       <section id="split" className="ld-split">
         <div className="ld-split-deco" aria-hidden="true">
           <ArtImage className="ld-split-ribbon" src="/assets/ribbon-diagonal.png" speed={-0.2} rotate={-1.4} float={false} />
-          <ArtImage className="ld-split-badge ld-split-badge-1" src="/assets/logo-t.png" speed={0.26} rotate={1.8} />
-          <ArtImage className="ld-split-badge ld-split-badge-2" src="/assets/logo-vk.png" speed={0.18} rotate={-1.6} delay={100} />
+          {/*
+          У бейджей проставлены настоящие размеры файлов, и это не украшение
+          разметки. Ширину задаёт css, высота — auto; пока картинка не
+          загрузилась и пропорция неизвестна, высота считается нулевой, а у
+          пустой коробки доля пересечения всегда 0 — наблюдатель появления
+          не срабатывает и бейдж навсегда остаётся прозрачным. С width/height
+          пропорция известна сразу, до загрузки.
+
+          Ход параллакса у первого меньше соседей: он стоит у верхнего края
+          секции, а она обрезает содержимое — см. .ld-split-badge-1 в css.
+          */}
+          <ArtImage className="ld-split-badge ld-split-badge-1" src="/assets/logo-t.png" width={208} height={221} speed={0.1} rotate={1.8} />
+          <ArtImage className="ld-split-badge ld-split-badge-2" src="/assets/logo-vk.png" width={256} height={189} speed={0.18} rotate={-1.6} delay={100} />
         </div>
         <div className="wrap ld-split-in">
           <Reveal className="ld-split-head">
             <h2>
-              Российские сервисы
+              {t("landing.split.line1")}
               <br />
-              работают как обычно
+              {t("landing.split.line2")}
             </h2>
-            <p>
-              Встроенный обход держит банки, маркетплейсы и госуслуги на прямом подключении,
-              пока остальной трафик идёт через VPN. Ничего не нужно включать вручную.
-            </p>
+            <p>{t("landing.split.text")}</p>
           </Reveal>
           <div className="ld-split-cards">
-            {BYPASS.map((c, i) => (
+            {raw("landing.split.cards").map((c, i) => (
               <Reveal className="ld-split-card" key={c.title} delay={i * 70}>
                 <h3>{c.title}</h3>
                 <p>{c.text}</p>
@@ -421,12 +407,9 @@ export function Landing() {
             ))}
           </div>
           <Reveal className="ld-split-note">
-            <span>
-              Список сервисов обновляется автоматически — новые приложения попадают в
-              исключения без обновления VPN.
-            </span>
+            <span>{t("landing.split.note")}</span>
             <a href="#plans" className="btn btn-primary ld-split-note-btn">
-              Подключить
+              {t("landing.split.button")}
             </a>
           </Reveal>
         </div>
@@ -438,11 +421,11 @@ export function Landing() {
         <div className="wrap ld-plans-in">
           <Reveal className="ld-plans-head">
             <h2>
-              Один тариф.
+              {t("landing.plans.line1")}
               <br />
-              Все возможности
+              {t("landing.plans.line2")}
             </h2>
-            <p>Чем длиннее срок, тем ниже цена месяца. Отменить можно в любой момент.</p>
+            <p>{t("landing.plans.lead")}</p>
           </Reveal>
 
           {/*
@@ -453,17 +436,27 @@ export function Landing() {
           {trial && (
             <Reveal className="ld-trial">
               <div className="ld-trial-body">
-                <span className="ld-trial-tag">Бесплатно</span>
+                <span className="ld-trial-tag">{t("landing.plans.trialTag")}</span>
                 <h3>
-                  {trial.title}: {trial.term} и {trial.traffic}
+                  {t("landing.plans.trialHead", {
+                    title: trial.title,
+                    term: trial.term,
+                    traffic: trial.traffic,
+                  })}
                 </h3>
-                <p>
-                  {trial.note ||
-                    "Заведите аккаунт — доступ откроется сразу, платёжная карта не нужна."}
-                </p>
+                <p>{trial.note || t("landing.plans.trialNote")}</p>
               </div>
-              <Link to="/login" className="btn btn-primary ld-trial-btn">
-                Попробовать бесплатно
+              {/*
+              Пробный период получают регистрацией, поэтому гостя ведём
+              сразу на её вкладку, а не на форму входа: учётки у него ещё
+              нет. Вошедшему предлагать «попробовать» нечего — он уже внутри,
+              и кнопка открывает его тариф.
+              */}
+              <Link
+                to={authed ? PLAN_TAB : "/login?mode=signup"}
+                className="btn btn-primary ld-trial-btn"
+              >
+                {authed ? t("landing.plans.trialButtonAuthed") : t("landing.plans.trialButton")}
               </Link>
             </Reveal>
           )}
@@ -479,7 +472,7 @@ export function Landing() {
                 <span className="ld-plan-term">{p.term}</span>
                 <div className="ld-plan-price">
                   <span className="ld-plan-sum">{p.perMonth}</span>
-                  <span className="ld-plan-per">/ мес</span>
+                  <span className="ld-plan-per">{t("landing.plans.perMonth")}</span>
                 </div>
                 <p className="ld-plan-note">{p.note}</p>
                 <ul className="ld-plan-limits">
@@ -488,20 +481,17 @@ export function Landing() {
                   ))}
                 </ul>
                 <Link
-                  to="/login"
+                  to={`${PLAN_TAB}&plan=${encodeURIComponent(p.code || "")}`}
                   className={`btn ld-plan-btn ${p.featured ? "btn-primary" : "btn-outline"}`}
                 >
-                  Выбрать
+                  {t("landing.plans.choose")}
                 </Link>
               </Reveal>
             ))}
           </div>
 
           <Reveal className="ld-plans-fine" delay={120}>
-            Устройства считаются по одновременным входам: вход с лишнего отключает самое
-            старое, а не запрещает войти. Когда включённый трафик заканчивается, доступ
-            закрывается до продления — приложение предупреждает заранее, когда остаётся
-            меньше 5 ГБ.
+            {t("landing.plans.fine")}
           </Reveal>
         </div>
       </section>
@@ -511,12 +501,12 @@ export function Landing() {
         <div className="wrap ld-shield-grid">
           <Reveal className="ld-shield-body">
             <h2>
-              Щит
+              {t("landing.shield.line1")}
               <br />
-              Prosto
+              {t("landing.shield.line2")}
             </h2>
             <div className="ld-shield-list">
-              {SHIELD.map((item) => (
+              {raw("landing.shield.items").map((item) => (
                 <div key={item.title}>
                   <h3>{item.title}</h3>
                   <p>{item.text}</p>
@@ -524,7 +514,7 @@ export function Landing() {
               ))}
             </div>
             <Link to="/faq" className="btn ld-shield-btn">
-              Подробнее
+              {t("landing.shield.button")}
             </Link>
           </Reveal>
           <div className="ld-shield-art">
@@ -539,12 +529,12 @@ export function Landing() {
         <ArtImage className="ld-devices-phone" src="/assets/obj-iphone-side.png" speed={0.3} rotate={1.2} />
         <div className="wrap ld-devices-in">
           <Reveal className="ld-devices-body">
-            <h3>Одна подписка — все устройства</h3>
-            <p>iPhone, Android, Mac и Windows. Одновременных подключений — {devicesLabel}.</p>
+            <h3>{t("landing.devices.title")}</h3>
+            <p>{t("landing.devices.text", { devices: devicesLabel })}</p>
           </Reveal>
           <Reveal className="ld-devices-tags" delay={120}>
-            {["iOS", "Android", "macOS", "Windows"].map((t) => (
-              <span key={t}>{t}</span>
+            {["iOS", "Android", "macOS", "Windows"].map((tag) => (
+              <span key={tag}>{tag}</span>
             ))}
           </Reveal>
         </div>
@@ -556,16 +546,16 @@ export function Landing() {
         <div className="wrap ld-docs-in">
           <Reveal className="ld-docs-head">
             <h2>
-              Прозрачно
+              {t("landing.docs.line1")}
               <br />
-              во всём
+              {t("landing.docs.line2")}
             </h2>
-            <p>Всё, что стоит прочитать до подключения</p>
+            <p>{t("landing.docs.lead")}</p>
           </Reveal>
           <div className="ld-docs-grid">
-            {DOCS.map((d, i) => (
+            {raw("landing.docs.items").map((d, i) => (
               <Reveal as="div" key={d.title} delay={i * 70}>
-                <Link to={d.to} className="ld-docs-card">
+                <Link to={DOC_LINKS[i]} className="ld-docs-card">
                   <span>
                     <span className="ld-docs-title">{d.title}</span>
                     <span className="ld-docs-sub">{d.text}</span>

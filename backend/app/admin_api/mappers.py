@@ -12,7 +12,17 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session as OrmSession
 
-from ..models import AuditLog, DeliveryJob, Order, Server, Session, User, UserKey, utcnow
+from ..models import (
+    HANDSHAKE_WINDOW,
+    AuditLog,
+    DeliveryJob,
+    Order,
+    Server,
+    Session,
+    User,
+    UserKey,
+    utcnow,
+)
 from . import schemas
 
 # Сессия считается живой, если приложение отмечалось последние 10 минут.
@@ -46,6 +56,25 @@ def user_status(user: User, now: dt.datetime | None = None) -> str:
 
 def _is_online(session: Session, now: dt.datetime) -> bool:
     return session.revoked_at is None and session.last_seen_at >= now - ONLINE_WINDOW
+
+
+def _session_connected(user: User, session: Session, now: dt.datetime) -> bool:
+    """
+    Идёт ли через это устройство трафик прямо сейчас.
+
+    «Приложение открыто» и «туннель поднят» — разные вещи, и в списке
+    устройств администратору нужна вторая: отключать имеет смысл того, кто
+    в VPN. Смотрим по рукопожатию пиров этого устройства.
+    """
+    if session.revoked_at is not None or not session.is_device:
+        return False
+    device_id = session.device_key
+    for key in user.keys:
+        if key.revoked_at is not None or (key.device_id or "") != device_id:
+            continue
+        if key.last_handshake_at is not None and key.last_handshake_at > now - HANDSHAKE_WINDOW:
+            return True
+    return False
 
 
 def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
@@ -93,7 +122,9 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         app_online=any(_is_online(s, moment) for s in sessions),
         last_handshake_at=user.last_handshake(),
         sessions_count=sum(1 for s in sessions if s.revoked_at is None),
-        devices_used=len(user.live_sessions(moment)),
+        # Лимит тарифа считает устройства, а не входы: вкладка кабинета в
+        # браузере места в нём не занимает — см. models.WEB_PLATFORMS.
+        devices_used=len(user.device_sessions(moment)),
         device_limit=user.device_limit(moment),
         servers_count=sum(1 for k in user.keys if k.revoked_at is None),
         created_at=user.created_at,
@@ -161,6 +192,7 @@ def key_out(key: UserKey) -> schemas.UserKeyOut:
         country_code=server.country_code,
         city=server.city,
         provisioning=server.provisioning.value,
+        device_id=key.device_id or "",
         address=key.address,
         public_key=key.public_key,
         rx_bytes=key.rx_bytes,
@@ -198,6 +230,8 @@ def user_detail(
                 expires_at=s.expires_at,
                 revoked_at=s.revoked_at,
                 is_online=_is_online(s, moment),
+                is_device=s.is_device,
+                is_connected=_session_connected(user, s, moment),
             )
             for s in sorted(user.sessions, key=lambda s: s.last_seen_at, reverse=True)
         ],

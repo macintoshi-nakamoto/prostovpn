@@ -5,7 +5,7 @@
 
 /* ── Шапка ────────────────────────────────────────────────────────────────── */
 .ac-header {
-  background: #fff;
+  background: var(--bg);
   border-bottom: 1px solid var(--line);
   border-bottom-left-radius: 44px;
   border-bottom-right-radius: 44px;
@@ -44,7 +44,7 @@
 }
 .ac-tabs button.active {
   background: var(--accent-tint);
-  color: var(--accent-deep);
+  color: var(--tint-fg);
 }
 
 .ac-user {
@@ -67,7 +67,7 @@
 }
 .ac-user-btn:hover,
 .ac-user-btn.open {
-  background: #f0f2f5;
+  background: var(--bg-soft);
 }
 .ac-avatar {
   width: 34px;
@@ -92,7 +92,7 @@
   right: 0;
   top: 54px;
   min-width: 230px;
-  background: #fff;
+  background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: 0 18px 40px rgba(20, 25, 35, 0.14);
@@ -230,7 +230,7 @@
   transition: background 0.2s ease;
 }
 .ac-hero-btn:hover {
-  background: var(--accent-tint);
+  background: var(--brand-tint);
 }
 
 .ac-stats {
@@ -239,7 +239,7 @@
   gap: 20px;
 }
 .ac-stat {
-  background: #fff;
+  background: var(--surface);
   border-radius: 22px;
   padding: 26px 28px;
   display: flex;
@@ -272,7 +272,7 @@
   align-items: start;
 }
 .ac-card {
-  background: #fff;
+  background: var(--surface);
   border-radius: 24px;
   padding: 30px 32px;
   display: flex;
@@ -324,12 +324,43 @@
   gap: 3px;
 }
 .ac-device-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 16px;
   font-weight: 600;
+}
+/* Единственная зелёная точка на экране: она отвечает на вопрос, ради
+   которого сюда и заходят, — идёт ли трафик через это устройство. */
+.ac-device-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: #2f9e44;
+}
+.ac-device-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .ac-device-sub {
   font-size: 14px;
   color: var(--text-dim);
+}
+.ac-device-error {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--danger);
+}
+.ac-device-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  white-space: nowrap;
 }
 .ac-device-off {
   border: none;
@@ -339,9 +370,22 @@
   font-weight: 500;
   color: var(--text-dim);
   transition: color 0.15s ease;
+  /* Тач-таргет: строка плотная, а без запаса по высоте кнопка на телефоне
+     промахивается мимо пальца. */
+  min-height: 44px;
+  padding: 0 2px;
 }
-.ac-device-off:hover {
+.ac-device-off:hover,
+.ac-device-off:focus-visible {
   color: var(--accent-dark);
+}
+.ac-device-confirm .ac-device-off {
+  color: var(--danger);
+  font-weight: 600;
+}
+.ac-device-off:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .ac-kvs {
@@ -382,7 +426,7 @@
 .ac-email-edit input:focus {
   outline: none;
   border-color: var(--accent);
-  background: #fff;
+  background: var(--field);
 }
 .ac-email-edit .btn {
   padding: 11px 16px;
@@ -390,12 +434,12 @@
 }
 .ac-email-error {
   font-size: 13.5px;
-  color: #c92a2a;
+  color: var(--danger);
 }
 
 /* ── Подписка ─────────────────────────────────────────────────────────────── */
 .ac-plan-summary {
-  background: #fff;
+  background: var(--surface);
   border-radius: 24px;
   padding: 32px 34px;
   display: grid;

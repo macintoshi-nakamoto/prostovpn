@@ -37,6 +37,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,11 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
     val s = state.s
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showFileSheet by remember { mutableStateOf(false) }
+
+    // Тихий повтор проверки версии: первая идёт на старте приложения (см.
+    // AppState.init), но настройки открывают и через часы после запуска —
+    // без повтора карточка показывала бы устаревший ответ.
+    LaunchedEffect(Unit) { state.updates.check(silent = true) }
 
     val backdrop = rememberBackdropState()
 
@@ -107,6 +113,7 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
                     onAddFile = { showFileSheet = true },
                 )
                 LanguageCard(state)
+                UpdateCard(state)
                 Spacer(Modifier.height(0.dp))
             }
 
@@ -116,6 +123,7 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp)
+                    .tvFocusHighlight(RoundedCornerShape(20.dp))
                     .scaleClickable(0.98f) { showLogoutConfirm = true }
                     .clip(RoundedCornerShape(20.dp))
                     .background(Theme.accentTint08),
@@ -200,6 +208,7 @@ private fun BackgroundWorkRow(state: AppState) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .tvFocusHighlight(RoundedCornerShape(12.dp))
             .noRippleClickable {
                 if (unrestricted) {
                     // Оптимизация уже снята — остаётся вендорский автозапуск,
@@ -254,6 +263,65 @@ private fun LanguageCard(state: AppState) {
     }
 }
 
+/**
+ * Карточка обновления приложения.
+ *
+ * Все пять состояний по-честному: «установлена последняя версия» не
+ * показывается, пока проверка идёт или провалилась, — на Windows ровно так
+ * чинили ложное «всё актуально» при недоступной панели. Само состояние
+ * живёт в [AppState.updates]: скачивание не должно обрываться уходом с
+ * экрана, а баннер обязательного обновления рисуется и на главном.
+ */
+@Composable
+private fun UpdateCard(state: AppState) {
+    val s = state.s
+    val updates = state.updates
+
+    CardGroup {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 13.dp, horizontal = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = when (updates.stage) {
+                    UpdateManager.Stage.CHECKING -> s.updateChecking
+                    UpdateManager.Stage.UP_TO_DATE -> s.updateNone
+                    UpdateManager.Stage.AVAILABLE ->
+                        s.updateAvailable.format(updates.info?.version.orEmpty())
+                    UpdateManager.Stage.DOWNLOADING -> s.updateDownloading.format(updates.percent)
+                    UpdateManager.Stage.INSTALLING -> s.updateInstalling
+                    UpdateManager.Stage.FAILED -> s.updateFailed
+                },
+                style = manrope(
+                    15.sp,
+                    W.bold,
+                    if (updates.stage == UpdateManager.Stage.FAILED) Theme.accentSoft else Theme.text,
+                ),
+            )
+            Text(
+                text = s.updateCurrent.format(BuildConfig.VERSION_NAME),
+                style = manrope(12.5.sp, W.medium, Theme.textMuted),
+            )
+        }
+
+        // Кнопка только когда нажатие что-то даст: во время скачивания и
+        // установки прогресс уже в заголовке, торопить процесс нечем
+        val actionable = updates.stage == UpdateManager.Stage.AVAILABLE ||
+            updates.stage == UpdateManager.Stage.FAILED
+        if (actionable) {
+            PrimaryButton(
+                text = s.updateButton,
+                height = 46.dp,
+                cornerRadius = 15.dp,
+                onClick = { updates.retry() },
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 2.dp, bottom = 10.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun LangButton(title: String, active: Boolean, onClick: () -> Unit) {
     val haptics = rememberHaptics()
@@ -269,6 +337,7 @@ private fun LangButton(title: String, active: Boolean, onClick: () -> Unit) {
     )
     Box(
         modifier = Modifier
+            .tvFocusHighlight(RoundedCornerShape(9.dp))
             .clip(RoundedCornerShape(9.dp))
             .background(bg)
             .noRippleClickable {
@@ -479,6 +548,7 @@ private fun FileRow(
         modifier = Modifier
             .fillMaxWidth()
             .pressScale(interaction, 0.98f)
+            .tvFocusHighlight(RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .background(if (isActive) Theme.accentTint10 else Color.White.copy(alpha = 0.04f))
             .combinedClickable(

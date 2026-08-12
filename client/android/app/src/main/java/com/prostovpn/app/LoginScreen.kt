@@ -80,7 +80,11 @@ fun LoginScreen(state: AppState) {
     var login by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var showPassword by rememberSaveable { mutableStateOf(false) }
-    var errorText by remember { mutableStateOf("") }
+    // Стартовое значение — причина принудительного выхода: панель погасила
+    // сессию (устройство отключили из кабинета), и без объяснения экран
+    // входа выглядит как поломка. Показывается там же, где ошибки входа,
+    // читается из состояния один раз и стирается первым вводом.
+    var errorText by remember { mutableStateOf(state.consumeSignedOutReason()) }
     var isLoading by remember { mutableStateOf(false) }
     var isDone by remember { mutableStateOf(false) }
 
@@ -318,6 +322,7 @@ private fun FormBlock(
                 Box(
                     modifier = Modifier
                         .size(width = 32.dp, height = 44.dp)
+                        .tvFocusHighlight(CircleShape)
                         .clip(CircleShape)
                         .noRippleClickable(onClick = onTogglePassword),
                     contentAlignment = Alignment.Center,
@@ -439,6 +444,7 @@ private fun SubmitButton(
             // масштаб — в начале цепочки, чтобы сжималась вся кнопка с тенью
             .pressScale(interaction, 0.98f)
             .softShadow(Theme.accent.copy(alpha = 0.35f), 14.dp, 18.dp, yOffset = 8.dp)
+            .tvFocusHighlight(RoundedCornerShape(18.dp))
             .clip(RoundedCornerShape(18.dp))
             .background(Theme.accentGradient)
             .drawWithContent {

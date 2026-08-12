@@ -19,6 +19,48 @@
       href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <!--
+      Тема и язык до первого кадра.
+
+      Скрипт синхронный и стоит в <head> намеренно: React грузится отдельным
+      файлом, и пока он идёт по сети, страница уже нарисована. Поставь атрибут
+      в компоненте — человеку с тёмной темой сначала мигнёт белый лист. Здесь
+      же считается ровно то, что потом посчитает readTheme()/readLang(): для
+      темы — «сохранённая, иначе светлая» (системную не читаем — сайт по
+      умолчанию светлый), для языка — «сохранённый → язык браузера → русский».
+      Разойдись эти правила — первый кадр спорил бы со вторым.
+    -->
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var stored = null;
+        var lang = null;
+        try {
+          stored = localStorage.getItem("prosto_theme");
+          lang = localStorage.getItem("prosto_lang");
+        } catch (e) {
+          // Приватный режим запрещает хранилище — остаются значения по умолчанию.
+        }
+        var dark = stored === "dark";
+        root.setAttribute("data-theme", dark ? "dark" : "light");
+        if (dark) {
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", "#12141a");
+        }
+        if (lang !== "ru" && lang !== "en") {
+          var nav = navigator.languages || [navigator.language || "ru"];
+          lang = "ru";
+          for (var i = 0; i < nav.length; i++) {
+            var code = String(nav[i] || "").slice(0, 2).toLowerCase();
+            if (code === "ru" || code === "en") {
+              lang = code;
+              break;
+            }
+          }
+        }
+        root.lang = lang;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

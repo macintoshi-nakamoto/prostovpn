@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
+import { useT } from "../lib/i18n/index.jsx";
 import "./password-dialog.css";
 
 /**
@@ -10,6 +11,7 @@ import "./password-dialog.css";
  * предупреждаем: человек введёт новый пароль заново на каждом устройстве.
  */
 export function PasswordDialog({ open, onClose, onDone }) {
+  const t = useT();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -41,11 +43,11 @@ export function PasswordDialog({ open, onClose, onDone }) {
     e.preventDefault();
     if (busy) return;
     if (next.length < 8) {
-      setError("Новый пароль должен быть не короче 8 символов");
+      setError(t("password.short"));
       return;
     }
     if (next !== repeat) {
-      setError("Пароли не совпадают");
+      setError(t("password.mismatch"));
       return;
     }
     setBusy(true);
@@ -54,7 +56,7 @@ export function PasswordDialog({ open, onClose, onDone }) {
       await api.changePassword(current, next);
       onDone();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось сменить пароль");
+      setError(err instanceof ApiError ? err.message : t("password.failed"));
       setBusy(false);
     }
   };
@@ -62,14 +64,11 @@ export function PasswordDialog({ open, onClose, onDone }) {
   return (
     <div className="pd-overlay" onMouseDown={onClose}>
       <form className="pd" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
-        <h2>Смена пароля</h2>
-        <p className="pd-sub">
-          После смены выйдут все устройства — новый пароль нужно будет ввести заново в каждом
-          приложении.
-        </p>
+        <h2>{t("password.title")}</h2>
+        <p className="pd-sub">{t("password.sub")}</p>
 
         <label className="pd-field">
-          <span>Текущий пароль</span>
+          <span>{t("password.current")}</span>
           <input
             type="password"
             value={current}
@@ -79,17 +78,17 @@ export function PasswordDialog({ open, onClose, onDone }) {
           />
         </label>
         <label className="pd-field">
-          <span>Новый пароль</span>
+          <span>{t("password.next")}</span>
           <input
             type="password"
             value={next}
             onChange={(e) => setNext(e.target.value)}
-            placeholder="Минимум 8 символов"
+            placeholder={t("password.placeholder")}
             autoComplete="new-password"
           />
         </label>
         <label className="pd-field">
-          <span>Повторите новый</span>
+          <span>{t("password.repeat")}</span>
           <input
             type="password"
             value={repeat}
@@ -102,10 +101,10 @@ export function PasswordDialog({ open, onClose, onDone }) {
 
         <div className="pd-actions">
           <button type="button" className="btn btn-outline" onClick={onClose}>
-            Отмена
+            {t("password.cancel")}
           </button>
           <button type="submit" className="btn btn-primary" disabled={busy}>
-            {busy ? "Меняем…" : "Сменить"}
+            {busy ? t("password.busy") : t("password.submit")}
           </button>
         </div>
       </form>

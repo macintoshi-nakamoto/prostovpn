@@ -1,10 +1,15 @@
 package com.prostovpn.app
 
 import android.content.Context
+import android.content.Intent
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -18,6 +23,8 @@ import java.io.BufferedReader
 import java.io.StringReader
 
 class TunnelManager(context: Context) {
+
+    private val appContext = context.applicationContext
 
     /**
      * Чем закончилось подключение.
@@ -84,6 +91,7 @@ class TunnelManager(context: Context) {
             when (awaitHandshake(window)) {
                 Handshake.OK -> {
                     Log.i(TAG, "рукопожатие получено с попытки $attempt")
+                    startSessionWatch()
                     return@withLock Result.CONNECTED
                 }
                 Handshake.INTERFACE_DOWN -> {
@@ -194,6 +202,8 @@ class TunnelManager(context: Context) {
      * пакеты. Ответ нужен интерфейсу, чтобы дождаться.
      */
     suspend fun disconnect(): Boolean = mutex.withLock {
+        watchJob?.cancel()
+        watchJob = null
         tearDown()
         !isUp
     }
@@ -201,8 +211,70 @@ class TunnelManager(context: Context) {
     val isUp: Boolean
         get() = runCatching { backend.getState(tunnel) == Tunnel.State.UP }.getOrDefault(false)
 
+    // --- страж сессии -------------------------------------------------------
+
+    /** Свой scope, а не viewModelScope: живёт с процессом, а не с экраном. */
+    private val watchScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private var watchJob: Job? = null
+
+    /**
+     * Страж сессии: пока туннель поднят, раз в минуту сверяется с панелью.
+     *
+     * «Отключить» в кабинете и в админке гасит сессию на сервере, но туннель —
+     * это ключи WireGuard, о сессии он ничего не знает и продолжал бы работать
+     * до перезапуска приложения. Экранный опрос ([AppState]) живёт вместе с
+     * Activity и умирает вместе с ней, а процесс с туннелем переживает
+     * закрытие окна — поэтому страж стоит здесь, в синглтоне процесса, и
+     * заводится самим подключением.
+     *
+     * Туннель рвётся ровно в двух случаях: панель прямо сказала, что токен
+     * отозван (401/403), или отдала пустой список стран — доступ закрыт:
+     * кончился срок, трафик или устройство отвязали. Всё остальное — сетевые
+     * ошибки и пятисотки — терпим молча: недоступная панель не повод рвать
+     * работающий VPN.
+     */
+    private fun startSessionWatch() {
+        watchJob?.cancel()
+        watchJob = watchScope.launch {
+            while (true) {
+                delay(WATCH_INTERVAL_MS)
+                if (!isUp) return@launch
+
+                // Токен читаем каждый раз: выход из аккаунта на экране стирает
+                // его, и стражу после этого проверять нечего.
+                val token = appContext.getSharedPreferences("prosto", 0)
+                    .getString("panelToken", "").orEmpty()
+                if (token.isEmpty()) return@launch
+
+                val revoked = try {
+                    val (servers, _) = PanelApi.servers(token)
+                    servers.isEmpty()
+                } catch (error: PanelApi.PanelException) {
+                    error.status == 401 || error.status == 403
+                } catch (_: Exception) {
+                    false
+                }
+
+                if (revoked) {
+                    Log.i(TAG, "сессия отозвана панелью — снимаем туннель")
+                    // Сервис уведомления гасим отдельно: о туннеле он не
+                    // узнает сам, и «подключено» висело бы над мёртвым VPN.
+                    disconnect()
+                    runCatching {
+                        appContext.stopService(Intent(appContext, VpnForegroundService::class.java))
+                    }
+                    return@launch
+                }
+            }
+        }
+    }
+
     companion object {
         private const val TAG = "ProstoTunnel"
+
+        /** Как часто страж сверяется с панелью. Та же минута, что у экрана. */
+        private const val WATCH_INTERVAL_MS = 60_000L
 
         /*
         Было 20 секунд одной попыткой. WireGuard повторяет инициацию примерно раз

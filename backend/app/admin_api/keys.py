@@ -59,6 +59,7 @@ def list_keys(
                 country_code=server.country_code,
                 city=server.city,
                 provisioning=server.provisioning.value,
+                device_id=key.device_id or "",
                 address=key.address,
                 public_key=key.public_key,
                 rx_bytes=key.rx_bytes,
@@ -108,10 +109,13 @@ def reissue(
     admin: Admin = Depends(current_admin),
 ) -> schemas.ActionResult:
     """
-    Перевыпуск: старый пир снимаем, новый заводим.
+    Перевыпуск: старые пиры снимаем, новые заводим.
 
     Нужен, когда конфиг утёк — менять его должно быть так же просто, как
-    сменить пароль.
+    сменить пароль. Пиров у человека на сервере столько, сколько у него
+    устройств, и перевыпускать надо все: утёкшим считается доступ, а не
+    один телефон. Устройства получат новый конфиг при ближайшем обращении
+    приложения к списку серверов.
     """
     from ..models import Server
 
@@ -120,24 +124,34 @@ def reissue(
     if user is None or server is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "пользователь или сервер не найден")
 
-    existing = db.scalar(
-        select(UserKey).where(
-            UserKey.user_id == user_id, UserKey.server_id == server_id, UserKey.revoked_at.is_(None)
+    existing = list(
+        db.scalars(
+            select(UserKey).where(
+                UserKey.user_id == user_id,
+                UserKey.server_id == server_id,
+                UserKey.revoked_at.is_(None),
+            )
         )
     )
-    if existing is not None:
+    # Устройства, которым доступ положен, — плюс те, у кого уже есть ключ:
+    # ключ мог остаться от устройства, которое сейчас не в сети, и молча
+    # не перевыпустить именно его значит оставить утёкший конфиг рабочим.
+    devices = services.known_devices(user) | {key.device_id or "" for key in existing}
+
+    for key in existing:
         try:
-            services.revoke_key(db, existing)
+            services.revoke_key(db, key)
         except Exception as exc:
             raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"старый ключ не снят: {exc}") from exc
 
-    try:
-        # rotate=True: здесь пара ключей меняется намеренно. При обычном
-        # возвращении доступа она сохраняется, иначе конфиг, лежащий у
-        # человека в приложении, превратился бы в мусор.
-        services.issue_key(db, user, server, rotate=True)
-    except Exception as exc:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"новый ключ не создан: {exc}") from exc
+    for device_id in sorted(devices):
+        try:
+            # rotate=True: здесь пара ключей меняется намеренно. При обычном
+            # возвращении доступа она сохраняется, иначе конфиг, лежащий у
+            # человека в приложении, превратился бы в мусор.
+            services.issue_key(db, user, server, rotate=True, device_id=device_id)
+        except Exception as exc:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"новый ключ не создан: {exc}") from exc
 
     audit(db, admin, "key.reissue", f"{user.public_id}@{server.name}")
     return schemas.ActionResult(ok=True)

@@ -4,7 +4,7 @@
   gap: 20px;
 }
 .sg-note {
-  background: #fff;
+  background: var(--surface);
   border-radius: 24px;
   padding: 26px 30px;
   display: flex;
@@ -32,7 +32,7 @@
 }
 .sg-os button {
   border: 1.5px solid var(--border);
-  background: #fff;
+  background: var(--surface);
   color: var(--ink);
   cursor: pointer;
   font-size: 15px;
@@ -47,11 +47,11 @@
 .sg-os button.active {
   background: var(--ink);
   border-color: var(--ink);
-  color: #fff;
+  color: var(--on-ink);
 }
 
 .sg-card {
-  background: #fff;
+  background: var(--surface);
   border-radius: 24px;
   padding: 34px 36px;
   display: flex;
@@ -105,7 +105,7 @@
   height: 34px;
   border-radius: 50%;
   background: var(--accent-tint);
-  color: var(--accent-deep);
+  color: var(--tint-fg);
   display: flex;
   align-items: center;
   justify-content: center;

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Пути, которые FileProvider имеет право отдавать наружу. Только каталог
+     обновлений: раздавать весь files/ значит однажды отдать чужому
+     приложению конфиг туннеля. -->
+<paths>
+    <files-path name="updates" path="updates/" />
+    <external-files-path name="ext_updates" path="updates/" />
+</paths>

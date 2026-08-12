@@ -184,6 +184,21 @@ fun Modifier.liquidGlass(
     highlightAlpha: Float = 0.20f,
 ): Modifier = composed {
     val position = remember { mutableStateOf(Offset.Zero) }
+    /*
+    Телевизоры и другие слабые устройства получают fallback без сэмплинга.
+
+    Дело не в версии Android — типовой ТВ-бокс на Android 13 формально умеет
+    RenderEffect, — а в его GPU: Mali панели с одним гигабайтом памяти
+    рисует blur+AGSL трёх стеклянных элементов медленнее кадра, и главный
+    экран начинает дёргаться заметнее, чем он красив. isLowRamDevice
+    ловит ту же категорию железа среди телефонов.
+    */
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val weakGpu = remember {
+        context.isTv() ||
+            (context.getSystemService(android.content.Context.ACTIVITY_SERVICE)
+                as? android.app.ActivityManager)?.isLowRamDevice == true
+    }
     // Относительный сдвиг фон→элемент: во время слайд-переходов обе позиции меняются
     // синхронно, delta не меняется — стекло не перерисовывает blur+шейдер каждый кадр.
     val delta = remember {
@@ -203,7 +218,7 @@ fun Modifier.liquidGlass(
                 (size.width + padPx * 2f).toInt(),
                 (size.height + padPx * 2f).toInt(),
             )
-            val sampled = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+            val sampled = !weakGpu && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
             val glassLayer = if (sampled) {
                 obtainGraphicsLayer().apply {
                     clip = true

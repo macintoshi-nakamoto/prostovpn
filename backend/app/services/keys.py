@@ -38,13 +38,36 @@ def active_servers(db: OrmSession) -> list[Server]:
     )
 
 
-def ensure_keys(db: OrmSession, user: User, deadline: float | None = None) -> list[str]:
+def known_devices(user: User) -> set[str]:
+    """
+    Устройства, которым положен пир прямо сейчас.
+
+    Пустая строка есть всегда — это «ключ учётки»: им пользуются приложения
+    старых версий, не присылающие идентификатор установки, и он же выдаётся
+    при заведении пользователя, когда устройств ещё нет. Остальное — живые
+    входы с приложений; браузер в кабинете сюда не попадает, туннеля у него
+    нет и выдавать ему нечего.
+    """
+    return {""} | {key for key in user.devices() if key}
+
+
+def ensure_keys(
+    db: OrmSession,
+    user: User,
+    devices: set[str] | None = None,
+    deadline: float | None = None,
+) -> list[str]:
     """
     Досоздаёт пользователю ключи на всех включённых серверах.
 
     Вызывается и при создании пользователя, и при добавлении сервера, и при
-    каждом запросе списка серверов из приложения: так новый сервер
-    появляется у всех сам, без ручной раздачи.
+    входе из приложения: так новый сервер появляется у всех сам, без ручной
+    раздачи.
+
+    `devices` — для каких устройств. По умолчанию для всех известных, то
+    есть при разблокировке или включении человек получает обратно пиры на
+    все свои устройства, а не только «ключ учётки». Вход передаёт сюда одно
+    своё устройство: остальные его не ждут.
 
     `deadline` — момент `time.monotonic()`, после которого раздачу пора
     прекратить. Передаётся теми, кто зовёт ensure_keys в цикле по многим
@@ -55,32 +78,49 @@ def ensure_keys(db: OrmSession, user: User, deadline: float | None = None) -> li
     не повод валить всю операцию: остальные серверы человек получить должен.
     """
     warnings: list[str] = []
-    existing = {key.server_id for key in user.keys if key.revoked_at is None}
+    wanted = known_devices(user) if devices is None else {(d or "").strip() for d in devices}
+    existing = {
+        (key.server_id, key.device_id or "") for key in user.keys if key.revoked_at is None
+    }
     if deadline is None:
         deadline = time.monotonic() + ENSURE_DEADLINE_SECONDS
 
     for server in active_servers(db):
-        if server.id in existing:
-            continue
         if server.provisioning == Provisioning.SHARED:
             # Общий ключ лежит на самом сервере, отдельная запись не нужна
             continue
-        # Запас на один заход: проверка только перед попыткой позволяла
-        # перескочить срок на целый сеанс SSH с недоступным узлом.
-        if time.monotonic() + provisioning.CONNECT_TIMEOUT >= deadline:
-            # Дальше не идём: пользователь уже создан и с частью серверов
-            # работает, а остальные подтянутся сами при следующем входе.
-            warnings.append(f"{server.name}: не успели за отведённое время, ключ будет создан позже")
-            continue
-        try:
-            issue_key(db, user, server)
-        except Exception as exc:  # сервер недоступен или шаблон кривой
-            warnings.append(f"{server.name}: {exc}")
+        for device_id in sorted(wanted):
+            if (server.id, device_id) in existing:
+                continue
+            # Запас на один заход: проверка только перед попыткой позволяла
+            # перескочить срок на целый сеанс SSH с недоступным узлом.
+            if time.monotonic() + provisioning.CONNECT_TIMEOUT >= deadline:
+                # Дальше не идём: пользователь уже создан и с частью серверов
+                # работает, а остальные подтянутся сами при следующем входе.
+                warnings.append(
+                    f"{server.name}: не успели за отведённое время, ключ будет создан позже"
+                )
+                return warnings
+            try:
+                issue_key(db, user, server, device_id=device_id)
+            except Exception as exc:  # сервер недоступен или шаблон кривой
+                warnings.append(f"{server.name}: {exc}")
     return warnings
 
 
+def find_key(db: OrmSession, user: User, server: Server, device_id: str = "") -> UserKey | None:
+    """Ключ этого устройства на этом сервере — живой или отозванный."""
+    return db.scalar(
+        select(UserKey).where(
+            UserKey.user_id == user.id,
+            UserKey.server_id == server.id,
+            UserKey.device_id == (device_id or ""),
+        )
+    )
+
+
 def issue_key(
-    db: OrmSession, user: User, server: Server, rotate: bool = False
+    db: OrmSession, user: User, server: Server, rotate: bool = False, device_id: str = ""
 ) -> UserKey:
     """
     Заводит пира на сервере и выдаёт пользователю конфиг.
@@ -107,9 +147,8 @@ def issue_key(
     if not server.awg_template:
         raise PanelError("не задан шаблон конфига")
 
-    key = db.scalar(
-        select(UserKey).where(UserKey.user_id == user.id, UserKey.server_id == server.id)
-    )
+    device_id = (device_id or "").strip()
+    key = find_key(db, user, server, device_id)
 
     # Возвращаем прежний доступ: всё, что нужно, уже лежит в строке.
     reuse = not rotate and key is not None and key.config and key.public_key and key.address
@@ -122,7 +161,7 @@ def issue_key(
 
     address = key.address if key is not None and key.address else None
     if address is None:
-        key, address = _reserve_address(db, key, user, server)
+        key, address = _reserve_address(db, key, user, server, device_id)
 
     private_key, public_key = provisioning.generate_keypair()
     config = provisioning.render_from_template(server.awg_template, private_key, address)
@@ -155,7 +194,7 @@ def issue_key(
 
 
 def _reserve_address(
-    db: OrmSession, key: UserKey | None, user: User, server: Server
+    db: OrmSession, key: UserKey | None, user: User, server: Server, device_id: str = ""
 ) -> tuple[UserKey, str]:
     """
     Занимает свободный адрес в базе ДО захода по SSH.
@@ -185,7 +224,7 @@ def _reserve_address(
         address = provisioning.next_address(taken)
 
         if key is None:
-            key = UserKey(user_id=user.id, server_id=server.id)
+            key = UserKey(user_id=user.id, server_id=server.id, device_id=device_id or "")
             db.add(key)
         key.address = address
         key.config = key.config or ""  # колонка NOT NULL, а конфига ещё нет
@@ -196,11 +235,7 @@ def _reserve_address(
             # Адрес увели между выбором и коммитом — уникальный индекс по
             # (server_id, address) для того и стоит. Берём следующий.
             db.rollback()
-            key = db.scalar(
-                select(UserKey).where(
-                    UserKey.user_id == user.id, UserKey.server_id == server.id
-                )
-            )
+            key = find_key(db, user, server, device_id)
             continue
         return key, address
 

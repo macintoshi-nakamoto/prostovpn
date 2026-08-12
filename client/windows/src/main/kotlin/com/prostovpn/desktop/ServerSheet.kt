@@ -94,7 +94,12 @@ fun ServerListSheet(
                         .fillMaxWidth()
                         .scaleClickable(0.98f) {
                             haptics.selection()
-                            state.selectServer(index)
+                            // switchServer, а не selectServer: при поднятом
+                            // туннеле выбор страны обязан переподключить.
+                            // selectServer менял только карточку, и экран
+                            // показывал Германию, пока трафик шёл через
+                            // Нидерланды, — молчаливый обман о геолокации.
+                            state.switchServer(index)
                             onDismiss()
                         }
                         .clip(RoundedCornerShape(18.dp))

@@ -83,6 +83,26 @@ GB = 1024 ** 3
 # идёт трафик; три минуты — штатный интервал плюс запас на опоздавший обход.
 HANDSHAKE_WINDOW = dt.timedelta(minutes=3)
 
+# Платформы, у которых нет туннеля.
+#
+# Личный кабинет открывают в браузере, и это вход, а не устройство: VPN там
+# не поднимается, конфига браузеру не выдаётся, отключать нечего. Пока такой
+# вход считался устройством, человек, зашедший в кабинет с телефона и с
+# ноутбука, съедал две трети тарифа на два браузера и не понимал, почему
+# приложение на телефоне просит войти заново.
+WEB_PLATFORMS = frozenset({"web", "site", "browser"})
+
+
+def is_device_platform(platform: str | None) -> bool:
+    """
+    Считается ли вход с этой платформы устройством.
+
+    Неизвестная и пустая платформа — устройство: так входят старые версии
+    приложений, не присылающие поле вовсе, и потерять их из списка хуже,
+    чем показать лишнюю строку.
+    """
+    return (platform or "").strip().lower() not in WEB_PLATFORMS
+
 
 def normalize_email(value: str | None) -> str | None:
     """
@@ -347,9 +367,35 @@ class User(Base):
         return plan.allowed_regions if plan is not None else None
 
     def live_sessions(self, now: dt.datetime | None = None) -> list["Session"]:
-        """Незакрытые и непросроченные входы — они же «устройства»."""
+        """Незакрытые и непросроченные входы — включая браузерные."""
         moment = now or utcnow()
         return [s for s in self.sessions if s.revoked_at is None and s.expires_at > moment]
+
+    def device_sessions(self, now: dt.datetime | None = None) -> list["Session"]:
+        """
+        Живые входы с устройств — то, что считает лимит тарифа.
+
+        Браузер сюда не попадает: см. WEB_PLATFORMS. Именно этот список
+        видит человек в кабинете под заголовком «Устройства», и именно по
+        нему считается «занято 2 из 3».
+        """
+        return [s for s in self.live_sessions(now) if s.is_device]
+
+    def devices(self, now: dt.datetime | None = None) -> dict[str, "Session"]:
+        """
+        Живые устройства по их постоянному идентификатору установки.
+
+        Ключ — `Session.device_key`: у приложения это его `device_id`, у
+        старых версий, поля не присылающих, — пустая строка. Нужна раздаче
+        пиров: пир заводится на устройство, а не на сессию, иначе каждый
+        повторный вход занимал бы новый адрес в подсети.
+        """
+        found: dict[str, Session] = {}
+        for session in self.device_sessions(now):
+            current = found.get(session.device_key)
+            if current is None or session.last_seen_at > current.last_seen_at:
+                found[session.device_key] = session
+        return found
 
     def is_locked_out(self, now: dt.datetime | None = None) -> bool:
         return self.locked_until is not None and self.locked_until > (now or utcnow())
@@ -442,11 +488,26 @@ class User(Base):
 
 
 class UserKey(Base):
-    """Конфиг конкретного пользователя на конкретном сервере."""
+    """
+    Конфиг конкретного устройства на конкретном сервере.
+
+    Раньше ключ был один на пару «пользователь + сервер», и все устройства
+    человека ходили одним пиром. Из-за этого «Отключить устройство» не могло
+    отключить: погасить чужой токен — да, снять пира — нет, потому что пир
+    общий и вместе с ним отвалились бы остальные. Теперь у каждого
+    устройства свой пир, и отключение снимает ровно его.
+
+    `device_id` — постоянный идентификатор установки, который присылает
+    приложение. Пустая строка — «ключ учётки»: им пользуются версии
+    приложений, поля ещё не присылающие, и он же выдаётся при заведении
+    пользователя, когда устройств ещё нет.
+    """
 
     __tablename__ = "user_keys"
     __table_args__ = (
-        UniqueConstraint("user_id", "server_id", name="uq_user_server_key"),
+        # Уникальность по тройке, а не по паре: у одного человека на одном
+        # сервере столько пиров, сколько у него устройств.
+        UniqueConstraint("user_id", "server_id", "device_id", name="uq_user_server_device_key"),
         # Один адрес в подсети принадлежит ровно одному пиру: AmneziaWG
         # маршрутизирует по allowed-ips, и второй пир с тем же адресом молча
         # отбирает его у первого — туннель поднимается, трафик не идёт.
@@ -459,6 +520,11 @@ class UserKey(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), index=True)
+    # Пустая строка, а не NULL, намеренно: в уникальном индексе NULL не равен
+    # NULL, и «ключей учётки» на одну пару завелось бы сколько угодно.
+    device_id: Mapped[str] = mapped_column(
+        String(64), default="", server_default="", index=True
+    )
 
     # Текст wg-quick либо ссылка vpn:// — приложение принимает оба вида.
     config: Mapped[str] = mapped_column(Text)
@@ -556,8 +622,8 @@ class Payment(Base):
 
 class Session(Base):
     """
-    Вход приложения. Токен хранится только хэшем: утечка базы не должна
-    отдавать живые доступы.
+    Вход приложения или браузера. Токен хранится только хэшем: утечка базы
+    не должна отдавать живые доступы.
     """
 
     __tablename__ = "sessions"
@@ -581,6 +647,22 @@ class Session(Base):
     revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     user: Mapped[User] = relationship(back_populates="sessions")
+
+    @property
+    def is_device(self) -> bool:
+        """Занимает ли этот вход место в лимите устройств."""
+        return is_device_platform(self.platform)
+
+    @property
+    def device_key(self) -> str:
+        """
+        Идентификатор установки для раздачи пиров.
+
+        Пустая строка — приложение старой версии, поля не присылающее: все
+        такие входы одного человека делят «ключ учётки», как было до
+        появления пиров на устройство.
+        """
+        return (self.device_id or "").strip()
 
 
 class AppRelease(Base):

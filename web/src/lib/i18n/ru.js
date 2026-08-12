@@ -170,6 +170,7 @@ export const ru = {
     faq: "FAQ",
     support: "Поддержка",
     channel: "Telegram-канал",
+    bot: "Telegram-бот",
     terms: "Условия",
     privacy: "Конфиденциальность",
     contacts: "Контакты",

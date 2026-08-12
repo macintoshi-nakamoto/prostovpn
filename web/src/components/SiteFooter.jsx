@@ -26,6 +26,9 @@ export function SiteFooter() {
             <a href="https://t.me/prostovpn_tg" target="_blank" rel="noreferrer">
               {t("footer.channel")}
             </a>
+            <a href="https://t.me/prostovpnn_bot" target="_blank" rel="noreferrer">
+              {t("footer.bot")}
+            </a>
           </div>
           <div>
             <Link to="/terms">{t("footer.terms")}</Link>

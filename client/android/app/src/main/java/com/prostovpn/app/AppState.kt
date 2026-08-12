@@ -69,6 +69,15 @@ data class TunnelFile(
  */
 enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
 
+/**
+ * Как часто перечитывать подписку, пока экран открыт.
+ *
+ * Тот же ритм, что у десктопного клиента и у стража сессии в TunnelManager:
+ * этим опросом приложение узнаёт, что устройство отвязали, кончился трафик
+ * или продлилась подписка.
+ */
+private const val ACCOUNT_POLL_MS = 60 * 1000L
+
 class AppState(application: Application) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("prosto", 0)
@@ -433,6 +442,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
             selectServer(0)
         }
         restoreRunningTunnel()
+        // Сессия могла протухнуть, а список стран — измениться, пока
+        // приложение было закрыто. И дальше сверяемся раз в минуту.
+        refreshPanelServers()
+        startAccountWatch()
     }
 
     /**
@@ -482,9 +495,40 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     suspend fun login(login: String, password: String): Result<Unit> {
         val session = withContext(Dispatchers.IO) {
-            runCatching { PanelApi.login(login, password, BuildConfig.VERSION_NAME) }
+            runCatching {
+                PanelApi.login(
+                    login,
+                    password,
+                    BuildConfig.VERSION_NAME,
+                    deviceId = installId(),
+                    deviceName = deviceName(),
+                )
+            }
         }
         return session.map { applySession(it) }
+    }
+
+    /**
+     * Постоянный идентификатор установки — для лимита устройств.
+     *
+     * Без него панель считала переустановку приложения вторым телефоном:
+     * каждая переустановка съедала слот тарифа, и лимит забивался копиями
+     * одного и того же устройства. Случайный UUID, а не ANDROID_ID: тот
+     * привязан к прошивке и утекать ему в панель незачем.
+     */
+    private fun installId(): String {
+        prefs.getString("installId", null)?.let { return it }
+        val fresh = java.util.UUID.randomUUID().toString()
+        prefs.edit().putString("installId", fresh).apply()
+        return fresh
+    }
+
+    /** «Samsung SM-S911B» в списке устройств понятнее, чем пустая строка. */
+    private fun deviceName(): String {
+        val manufacturer = android.os.Build.MANUFACTURER.orEmpty()
+            .replaceFirstChar { it.uppercase() }
+        val model = android.os.Build.MODEL.orEmpty()
+        return listOf(manufacturer, model).filter { it.isNotBlank() }.joinToString(" ")
     }
 
     private fun applySession(session: PanelApi.Session) {
@@ -527,15 +571,49 @@ class AppState(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.Main) {
                 result
                     .onSuccess { (list, subscription) ->
+                        // Страны были, а теперь их нет — доступ закрыли, пока
+                        // приложение работало: кончился трафик, срок или
+                        // устройство отвязали из кабинета.
+                        val lostAccess = list.isEmpty() && panelServers.isNotEmpty()
                         subscriptionDaysLeft = subscription.optInt("days_left")
                         trafficUsedBytes = subscription.optLong("traffic_used_bytes")
                         trafficLimitBytes =
                             if (subscription.isNull("traffic_limit_bytes")) -1L
                             else subscription.optLong("traffic_limit_bytes")
                         applyPanelServers(list.map { it.toServerInfo() })
+                        if (lostAccess && (phase == Phase.ON || phase == Phase.CONNECTING)) {
+                            disconnect()
+                        }
                     }
-                    // Сессию погасили в панели — просим войти заново.
-                    .onFailure { logout() }
+                    .onFailure { error ->
+                        // Разлогиниваем ТОЛЬКО когда панель прямо сказала, что
+                        // токен не годится. Раньше сюда попадала любая неудача:
+                        // пятисотка, перезапуск панели, моргнувшая сеть — и
+                        // человек, ничего не делавший, обнаруживал себя на
+                        // экране входа с потёртыми настройками. Недоступная
+                        // панель — это временно, а стирание сессии необратимо.
+                        val status = (error as? PanelApi.PanelException)?.status ?: 0
+                        if (status == 401 || status == 403) logout()
+                    }
+            }
+        }
+    }
+
+    /**
+     * Периодический опрос панели, пока экран жив.
+     *
+     * До этого refreshPanelServers не звал вообще никто: список стран
+     * замирал на момент входа, отвязанное из кабинета устройство работало
+     * до переустановки, а о кончившемся трафике человек узнавал только по
+     * переставшему работать интернету. Минута — тот же ритм, что у
+     * десктопного клиента и у стража в [TunnelManager]; сам запрос — лёгкий
+     * GET, посильный панели даже от тысяч приложений.
+     */
+    private fun startAccountWatch() {
+        viewModelScope.launch {
+            while (true) {
+                delay(ACCOUNT_POLL_MS)
+                if (panelToken.isNotEmpty()) refreshPanelServers()
             }
         }
     }

@@ -57,17 +57,37 @@ object PanelApi {
         val mandatory: Boolean,
     )
 
-    /** Ошибка с текстом, который панель написала для человека. */
-    class PanelException(message: String) : IOException(message)
+    /**
+     * Ошибка с текстом, который панель написала для человека.
+     *
+     * Статус — не украшение: по нему различают «токен отозван» (401/403,
+     * пора на экран входа) и «панель прилегла или сеть моргнула» (всё
+     * остальное, просто пробуем позже). Ноль — ответа не было вовсе.
+     */
+    class PanelException(
+        message: String,
+        val status: Int = 0,
+        val code: String? = null,
+    ) : IOException(message)
 
     // --- вход -----------------------------------------------------------
 
-    fun login(login: String, password: String, appVersion: String): Session {
+    fun login(
+        login: String,
+        password: String,
+        appVersion: String,
+        deviceId: String? = null,
+        deviceName: String? = null,
+    ): Session {
         val payload = JSONObject()
             .put("login", login)
             .put("password", password)
             .put("platform", "android")
             .put("app_version", appVersion)
+        // Постоянный идентификатор установки: без него переустановка
+        // приложения выглядит для лимита устройств вторым телефоном.
+        deviceId?.let { payload.put("device_id", it) }
+        deviceName?.let { payload.put("device_name", it.take(96)) }
 
         val body = post("/api/v1/login", payload, token = null)
         return parseSession(body)
@@ -168,7 +188,11 @@ object PanelApi {
                 // Панель кладёт человеческий текст в detail — показываем его
                 // как есть, он написан для пользователя, а не для лога.
                 val detail = runCatching { JSONObject(text).optString("detail") }.getOrNull()
-                throw PanelException(detail.takeUnless { it.isNullOrBlank() } ?: "Ошибка $code")
+                throw PanelException(
+                    detail.takeUnless { it.isNullOrBlank() } ?: "Ошибка $code",
+                    status = code,
+                    code = connection.getHeaderField("X-Error-Code"),
+                )
             }
             return JSONObject(text)
         } finally {

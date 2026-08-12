@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { Picture } from "../components/Picture.jsx";
 import { Controls } from "../components/Controls.jsx";
-import { ApiError } from "../lib/api";
+import { ApiError, getToken } from "../lib/api";
 import { useT } from "../lib/i18n/index.jsx";
 import "./login.css";
 
@@ -16,7 +16,7 @@ import "./login.css";
  */
 export function Login() {
   const t = useT();
-  const { signIn, signUp } = useSession();
+  const { signIn, signUp, authed } = useSession();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/account";
@@ -32,6 +32,22 @@ export function Login() {
   const [busy, setBusy] = useState(false);
 
   const isLogin = mode === "login";
+
+  /*
+  Вошедшего форма не встречает — его сразу уводит в кабинет.
+
+  Сюда ведут все кнопки сайта: «Выбрать» на тарифах, «Попробовать
+  бесплатно», значки сторов. Человек с живой сессией, нажав «Выбрать»,
+  попадал на форму входа и решал, что его разлогинило, — хотя сессия
+  лежала рядом нетронутой.
+
+  Рядом с флагом сессии проверяется и сам токен, и это защита от цикла.
+  На протухшем токене кабинет получает 401: api.js стирает токен и кабинет
+  уводит сюда, но флаг authed в контексте остаётся старым до перезагрузки.
+  Редирект по одному флагу гонял бы человека /login → /account → /login
+  без остановки; пустой токен разрывает круг — форма показывается.
+  */
+  if (authed && getToken()) return <Navigate to={from} replace />;
 
   const switchMode = (next) => {
     setMode(next);

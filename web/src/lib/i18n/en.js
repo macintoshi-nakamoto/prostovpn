@@ -164,6 +164,7 @@ export const en = {
     faq: "FAQ",
     support: "Support",
     channel: "Telegram channel",
+    bot: "Telegram bot",
     terms: "Terms",
     privacy: "Privacy",
     contacts: "Contacts",

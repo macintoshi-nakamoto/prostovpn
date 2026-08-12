@@ -426,6 +426,11 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         expires_at=subscription.expires_at if subscription else None,
         days_left=max(0, (subscription.expires_at - now).days) if subscription else None,
         device_limit=user.device_limit(now),
+        # Устройства — это приложения, а не вкладки браузера. Вход в кабинет
+        # открывает такую же сессию с platform="web", и она показывалась в
+        # списке рядом с телефоном: человек видел «Браузер» среди устройств и
+        # резонно считал это ошибкой. Веб-сессии живут своей жизнью — их не
+        # показываем и в лимит не считаем (см. _enforce_device_limit).
         devices=[
             DeviceOut(
                 id=session.id,
@@ -437,6 +442,7 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
                 is_current=session.id == current.id,
             )
             for session in sorted(user.live_sessions(now), key=lambda s: s.last_seen_at, reverse=True)
+            if session.platform != "web"
         ],
         traffic_used_bytes=user.traffic_used_bytes,
         traffic_limit_bytes=user.effective_traffic_limit(now),

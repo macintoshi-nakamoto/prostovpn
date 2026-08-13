@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { SiteHeader } from "../components/SiteHeader.jsx";
@@ -47,6 +47,18 @@ export function Login() {
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  /*
+  Метка на <html> на время этого экрана.
+
+  Оттянутая страница показывает не её фон, а холст под ней — а он белый по
+  теме, и на оранжевом экране это выглядит дырой. Красить холст глобально
+  нельзя: на остальных страницах он верный. Стили метки — в login.css.
+  */
+  useEffect(() => {
+    document.documentElement.classList.add("lg-page");
+    return () => document.documentElement.classList.remove("lg-page");
+  }, []);
 
   const isLogin = mode === "login";
 

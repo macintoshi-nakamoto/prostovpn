@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
-import { Picture } from "../components/Picture.jsx";
-import { Controls } from "../components/Controls.jsx";
+import { SiteHeader } from "../components/SiteHeader.jsx";
+import { HeroOrbit } from "../components/HeroOrbit.jsx";
 import { ApiError, getToken } from "../lib/api";
 import { useT } from "../lib/i18n/index.jsx";
 import "./login.css";
 
 /**
- * Вход и регистрация в одной карточке, как в макете.
+ * Вход и регистрация — цельный оранжевый экран, как в макете.
+ *
+ * Формы в белой карточке больше нет: поля лежат прямо на фирменном фоне
+ * белыми плашками, справа парит ключ. Экран читается как продолжение героя
+ * на главной, а не как отдельная страница чужого вида.
  *
  * Регистрация настоящая: бэкенд заводит учётку на пробном тарифе и сразу
  * возвращает токен, поэтому после неё — прямиком в кабинет, без второго
@@ -36,8 +40,10 @@ export function Login() {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
-  const [email, setEmail] = useState("");
   const [showPass, setShowPass] = useState(false);
+  // Со снятой галкой токен живёт до закрытия вкладки — это про чужой
+  // компьютер. По умолчанию включена: свой браузер у большинства.
+  const [remember, setRemember] = useState(true);
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -108,8 +114,8 @@ export function Login() {
     setBusy(true);
     setError("");
     try {
-      if (isLogin) await signIn(login.trim(), password);
-      else await signUp(login.trim(), password, email.trim());
+      if (isLogin) await signIn(login.trim(), password, remember);
+      else await signUp(login.trim(), password);
       navigate(from, { replace: true });
     } catch (err) {
       setError(messageFor(err));
@@ -118,94 +124,68 @@ export function Login() {
   };
 
   return (
-    <div className="lg-root">
-      <aside className="lg-side">
-        <div className="lg-side-glow" aria-hidden="true" />
-        <Link to="/" className="lg-side-logo">
-          <Picture src="/assets/logo.png" alt="PROSTO" />
-        </Link>
-        <div className="lg-side-body">
-          <h1>
-            {t("login.sideLine1")}
-            <br />
-            {t("login.sideLine2")}
-          </h1>
-          <p>{t("login.sideLead")}</p>
-          <ul className="lg-side-list">
-            {["0", "1", "2"].map((i) => (
-              <li key={i}>{t(`login.sideList.${i}`)}</li>
-            ))}
-          </ul>
-        </div>
-        <div className="lg-side-help">
-          {t("login.help")} <Link to="/contacts">{t("login.helpLink")}</Link>
-        </div>
-      </aside>
+    <>
+      {/* Шапка та же, что на лендинге, и в том же прозрачном виде: фон под
+          ней теперь такой же оранжевый, как герой на главной. */}
+      <SiteHeader />
+      <main className="lg">
+        <div className="lg-glow" aria-hidden="true" />
+        {/* Те же размытые объекты, что на главной, — они держат глубину за
+            формой и подхватывают движение ключа. */}
+        <img className="lg-far lg-far-arc" src="/assets/ic-arc.webp" alt="" aria-hidden="true" />
+        <img
+          className="lg-far lg-far-devices"
+          src="/assets/ic-devices.webp"
+          alt=""
+          aria-hidden="true"
+        />
 
-      <div className="lg-panel">
-        <div className="lg-controls">
-          <Controls />
-        </div>
-        <form className="lg-card" onSubmit={submit}>
-          <div className="lg-tabs">
-            <button
-              type="button"
-              className={isLogin ? "active" : ""}
-              onClick={() => switchMode("login")}
-            >
-              {t("login.tabSignin")}
-            </button>
-            <button
-              type="button"
-              className={!isLogin ? "active" : ""}
-              onClick={() => switchMode("register")}
-            >
-              {t("login.tabSignup")}
-            </button>
-          </div>
+        <div className="wrap lg-in">
+          <div className="lg-form">
+            <h1 className="lg-title">{isLogin ? t("login.title") : t("login.titleSignup")}</h1>
+            <p className="lg-sub">{isLogin ? t("login.subSignin") : t("login.subSignup")}</p>
 
-          <div className="lg-head">
-            <h2>{isLogin ? t("login.headSignin") : t("login.headSignup")}</h2>
-            <p>{isLogin ? t("login.subSignin") : t("login.subSignup")}</p>
-          </div>
-
-          <div className="lg-fields">
-            <label className="lg-field">
-              <span>{t("login.fieldLogin")}</span>
-              <input
-                type="text"
-                value={login}
-                onChange={(e) => {
-                  setLogin(e.target.value);
-                  setError("");
-                }}
-                placeholder="prosto_user"
-                autoComplete="username"
-                autoFocus
-              />
-            </label>
-
-            <label className="lg-field">
-              <span>{t("login.fieldPassword")}</span>
-              <div className="lg-pass">
+            <form onSubmit={submit} noValidate>
+              <label className="lg-field">
+                <span>{t("login.fieldLogin")}</span>
                 <input
-                  type={showPass ? "text" : "password"}
-                  value={password}
+                  type="text"
+                  value={login}
                   onChange={(e) => {
-                    setPassword(e.target.value);
+                    setLogin(e.target.value);
                     setError("");
                   }}
-                  placeholder={isLogin ? t("login.placeholderPassword") : t("login.placeholderNewPassword")}
-                  autoComplete={isLogin ? "current-password" : "new-password"}
+                  placeholder="prosto_user"
+                  autoComplete="username"
+                  autoFocus
                 />
-                <button type="button" onClick={() => setShowPass((v) => !v)}>
-                  {showPass ? t("login.hide") : t("login.show")}
-                </button>
-              </div>
-            </label>
+              </label>
 
-            {!isLogin && (
-              <>
+              <label className="lg-field">
+                <span>{t("login.fieldPassword")}</span>
+                <div className="lg-pass">
+                  <input
+                    type={showPass ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setError("");
+                    }}
+                    placeholder={
+                      isLogin ? t("login.placeholderPassword") : t("login.placeholderNewPassword")
+                    }
+                    autoComplete={isLogin ? "current-password" : "new-password"}
+                  />
+                  <button type="button" onClick={() => setShowPass((v) => !v)}>
+                    {showPass ? t("login.hide") : t("login.show")}
+                  </button>
+                </div>
+              </label>
+
+              {/* Почту здесь не спрашиваем: она нужна только для чеков, и
+                  добавить её можно в кабинете — на входе это лишнее поле
+                  между человеком и его аккаунтом. */}
+              {!isLogin && (
                 <label className="lg-field">
                   <span>{t("login.fieldRepeat")}</span>
                   <input
@@ -219,57 +199,85 @@ export function Login() {
                     autoComplete="new-password"
                   />
                 </label>
-                <label className="lg-field">
-                  <span>{t("login.fieldEmail")}</span>
+              )}
+
+              {isLogin && (
+                <div className="lg-row">
+                  <label className="lg-remember">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(e) => setRemember(e.target.checked)}
+                    />
+                    <span>{t("login.remember")}</span>
+                  </label>
+                  {/* Восстановления пароля у нас нет — его возвращает
+                      поддержка, поэтому ссылка ведёт к ней, а не в мёртвый
+                      якорь. */}
+                  <Link to="/contacts" className="lg-forgot">
+                    {t("login.forgot")}
+                  </Link>
+                </div>
+              )}
+
+              {!isLogin && (
+                <label className="lg-check">
                   <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    autoComplete="email"
+                    type="checkbox"
+                    checked={accepted}
+                    onChange={(e) => {
+                      setAccepted(e.target.checked);
+                      setError("");
+                    }}
                   />
+                  <span>
+                    {t("login.acceptBefore")} <Link to="/terms">{t("login.acceptTerms")}</Link>{" "}
+                    {t("login.acceptAnd")} <Link to="/privacy">{t("login.acceptPrivacy")}</Link>
+                  </span>
                 </label>
-              </>
-            )}
+              )}
+
+              {error && (
+                <div className="lg-error" role="alert">
+                  {error}
+                </div>
+              )}
+
+              <div className="lg-actions">
+                <button type="submit" className="lg-submit" disabled={busy}>
+                  {busy
+                    ? isLogin
+                      ? t("login.busySignin")
+                      : t("login.busySignup")
+                    : isLogin
+                      ? t("login.submitSignin")
+                      : t("login.submitSignup")}
+                </button>
+                <button
+                  type="button"
+                  className="lg-switch"
+                  onClick={() => switchMode(isLogin ? "register" : "login")}
+                >
+                  {isLogin ? t("login.submitSignup") : t("login.submitSignin")}
+                </button>
+              </div>
+            </form>
+
+            <p className="lg-help">
+              {t("login.help")} <Link to="/contacts">{t("login.helpLink")}</Link>
+            </p>
           </div>
 
-          {!isLogin && (
-            <label className="lg-check">
-              <input
-                type="checkbox"
-                checked={accepted}
-                onChange={(e) => {
-                  setAccepted(e.target.checked);
-                  setError("");
-                }}
-              />
-              <span>
-                {t("login.acceptBefore")} <Link to="/terms">{t("login.acceptTerms")}</Link>{" "}
-                {t("login.acceptAnd")} <Link to="/privacy">{t("login.acceptPrivacy")}</Link>
-              </span>
-            </label>
-          )}
-
-          {error && <div className="lg-error">{error}</div>}
-
-          <button type="submit" className="btn btn-primary btn-block lg-submit" disabled={busy}>
-            {busy
-              ? isLogin
-                ? t("login.busySignin")
-                : t("login.busySignup")
-              : isLogin
-                ? t("login.submitSignin")
-                : t("login.submitSignup")}
-          </button>
-
-          <div className="lg-switch">
-            {isLogin ? t("login.switchToSignup") : t("login.switchToSignin")}{" "}
-            <button type="button" onClick={() => switchMode(isLogin ? "register" : "login")}>
-              {isLogin ? t("login.submitSignup") : t("login.submitSignin")}
-            </button>
+          {/* Кольца — из макета: две плоские орбиты, по которым ключ и
+              «висит». Они постоянные, поэтому вращение очень медленное:
+              заметить его можно, только задержавшись взглядом. */}
+          <div className="lg-key">
+            <span className="lg-ring lg-ring-1" aria-hidden="true" />
+            <span className="lg-ring lg-ring-2" aria-hidden="true" />
+            <HeroOrbit src="/assets/obj-key.png" />
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      </main>
+    </>
   );
 }

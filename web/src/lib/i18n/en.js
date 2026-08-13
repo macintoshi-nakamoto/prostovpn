@@ -173,16 +173,8 @@ export const en = {
   },
 
   login: {
-    sideLine1: "Your",
-    sideLine2: "account",
-    sideLead:
-      "Subscription, devices and sign-in details in one place. Login and password only — " +
-      "no phone number required.",
-    sideList: [
-      "Subscription status and renewal",
-      "Up to five devices per account",
-      "Setup guides for every platform",
-    ],
+    title: "Sign in to your account",
+    titleSignup: "Create an account",
     help: "Need help?",
     helpLink: "support",
     tabSignin: "Sign in",
@@ -194,10 +186,11 @@ export const en = {
     fieldLogin: "Login",
     fieldPassword: "Password",
     fieldRepeat: "Repeat password",
-    fieldEmail: "Email for receipts · optional",
     placeholderPassword: "Your password",
     placeholderNewPassword: "At least 8 characters",
     placeholderRepeat: "The same password again",
+    remember: "Keep me signed in",
+    forgot: "Forgot password?",
     show: "Show",
     hide: "Hide",
     acceptBefore: "I accept the",

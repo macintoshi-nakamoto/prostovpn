@@ -1,214 +1,251 @@
-/* Экран входа: слева оранжевая панель, справа карточка. Точно из макета. */
+/*
+ * Экран входа: цельный фирменный фон, форма слева, ключ справа.
+ *
+ * Белой карточки больше нет — поля лежат прямо на оранжевом белыми плашками,
+ * как в макете. Экран читается продолжением героя на главной, и прозрачная
+ * шапка над ним работает ровно так же, как там.
+ */
 
-.lg-root {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  background: var(--bg-soft);
-}
-
-.lg-side {
+.lg {
   position: relative;
-  background: linear-gradient(150deg, #ff7a3d 0%, #fa4c16 46%, #d93a05 100%);
-  color: #fff;
-  overflow: hidden;
-  border-top-right-radius: 44px;
-  border-bottom-right-radius: 44px;
-  padding: 46px 56px 52px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 60px;
   min-height: 100vh;
+  /*
+   * clip, а не hidden. hidden делает блок прокручиваемым, и браузер, ставя
+   * курсор в поле логина при загрузке, честно «подкручивал» его внутрь —
+   * заголовок при этом уезжал под шапку. clip обрезает вылеты объектов так
+   * же, но прокручивать нечего. Строкой выше — запас для старых браузеров.
+   */
+  overflow: hidden;
+  overflow: clip;
+  background: linear-gradient(118deg, #ff7a3d 0%, #fa4c16 46%, #d93a05 100%);
+  color: #fff;
+  /*
+   * Экран фирменно-оранжевый в обеих темах, поэтому и всё внутри считает
+   * себя светлым: без этого в тёмной теме браузер рисовал галку тёмным
+   * квадратом на оранжевом, а акценты уезжали в свои ночные оттенки.
+   */
+  color-scheme: light;
+  --accent: #fa4c16;
+  --accent-dark: #c93607;
 }
-.lg-side-glow {
+
+/* Свет от ключа — он же и разводит по яркости правую половину и левую. */
+.lg-glow {
   position: absolute;
   inset: 0;
-  background: radial-gradient(60% 60% at 80% 30%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 62%);
+  background: radial-gradient(60% 70% at 74% 44%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0) 60%);
   pointer-events: none;
 }
-.lg-side-logo {
+
+/*
+ * Светотень: слева темнее, потому что свет идёт от ключа справа.
+ *
+ * Это не украшение. Белые подписи 15px на светлом краю градиента давали
+ * контраст 3.9:1 — ниже нормы; затенение поднимает его до 4.7:1. Наклон
+ * повторяет угол основного градиента, поэтому читается объёмом, а не
+ * пятном поверх фона.
+ */
+.lg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(120, 25, 0, 0.4) 0%,
+    rgba(120, 25, 0, 0.22) 32%,
+    rgba(120, 25, 0, 0) 58%
+  );
+  pointer-events: none;
+}
+
+/* Дальний план: те же объекты, что на главной, размытые и почти прозрачные. */
+.lg-far {
+  position: absolute;
+  filter: blur(4px);
+  pointer-events: none;
+  user-select: none;
+}
+.lg-far-arc {
+  left: 2%;
+  top: 88px;
+  width: 170px;
+  opacity: 0.13;
+  animation: lgDriftA 26s ease-in-out infinite;
+}
+.lg-far-devices {
+  left: 9%;
+  bottom: -60px;
+  width: 270px;
+  opacity: 0.11;
+  animation: lgDriftB 32s ease-in-out infinite;
+}
+
+@keyframes lgDriftA {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate(8deg);
+  }
+}
+@keyframes lgDriftB {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(24px) rotate(-10deg);
+  }
+}
+
+.lg-in {
   position: relative;
-  flex: none;
+  z-index: 1;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 520px) minmax(0, 1fr);
+  align-items: center;
+  gap: 40px;
+  /* Сверху — шапка, она fixed и места в потоке не занимает. */
+  padding-top: 108px;
+  padding-bottom: 64px;
 }
-.lg-side-logo img {
-  height: 19px;
-  width: auto;
-  display: block;
-  filter: brightness(0) invert(1);
+
+.lg-form {
+  max-width: 460px;
 }
-.lg-side-body {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
-}
-.lg-side-body h1 {
-  font-size: 54px;
+
+.lg-title {
+  font-size: clamp(34px, 4.4vw, 60px);
   line-height: 1.02;
   letter-spacing: -0.03em;
   font-weight: 700;
+  text-wrap: balance;
 }
-.lg-side-body p {
-  max-width: 380px;
-  font-size: 18px;
-  line-height: 1.5;
-  color: rgba(255, 255, 255, 0.9);
-}
-.lg-side-list {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.88);
-}
-.lg-side-list li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.lg-side-list li::before {
-  content: "";
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #fff;
-  flex: none;
-}
-.lg-side-help {
-  position: relative;
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.78);
-}
-.lg-side-help a {
-  color: #fff;
-  text-decoration: underline;
-}
-
-.lg-panel {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 64px 40px;
-}
-/*
- * Переключатели в углу, а не в потоке.
- *
- * Своей шапки у страницы входа нет, а обычным элементом рядом с карточкой они
- * сдвинули бы её с центра: .lg-panel — flex по горизонтали, и второй ребёнок
- * делит с карточкой ширину. В углу же они там, где их и ищут.
- */
-.lg-controls {
-  position: absolute;
-  top: 24px;
-  right: 28px;
-  z-index: 2;
-}
-.lg-card {
-  width: 100%;
-  max-width: 456px;
-  background: var(--surface);
-  border-radius: 28px;
-  padding: 44px 44px 40px;
-  box-shadow: var(--shadow-card);
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-.lg-tabs {
-  display: flex;
-  background: var(--bg-soft);
-  border-radius: 999px;
-  padding: 4px;
-}
-.lg-tabs button {
-  flex: 1;
-  border: none;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 600;
-  padding: 12px 16px;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-dim);
-  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
-}
-.lg-tabs button.active {
-  background: var(--surface-2);
-  color: var(--ink);
-  box-shadow: 0 2px 8px rgba(20, 25, 35, 0.1);
-}
-
-.lg-head {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.lg-head h2 {
-  font-size: 32px;
-  line-height: 1.1;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-.lg-head p {
-  font-size: 16px;
+.lg-sub {
+  margin-top: 12px;
+  font-size: 17px;
   line-height: 1.45;
-  color: var(--text-muted);
+  color: rgba(255, 255, 255, 0.9);
+  text-wrap: balance;
 }
 
-.lg-fields {
+.lg-form form {
+  margin-top: 28px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
+
 .lg-field {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 .lg-field > span {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--text-muted);
+  color: #fff;
 }
 .lg-field input {
   width: 100%;
-  border: 1.5px solid var(--border);
-  border-radius: 14px;
-  background: var(--field);
-  padding: 15px 16px;
-  font-size: 16px;
-  color: var(--ink);
+  border: 1.5px solid transparent;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 16px 20px;
+  font-size: 17px;
+  color: #0a0a0a;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 14px 34px rgba(120, 30, 0, 0.18);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-.lg-field input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(250, 76, 22, 0.12);
+.lg-field input::placeholder {
+  color: #a6acb4;
 }
+.lg-field input:hover {
+  background: #fff;
+}
+/* Фокус виден и с клавиатуры, и мышью: белое кольцо поверх оранжевого. */
+.lg-field input:focus-visible {
+  background: #fff;
+  border-color: #fff;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.45), 0 14px 34px rgba(120, 30, 0, 0.18);
+}
+
 .lg-pass {
   position: relative;
   display: flex;
   align-items: center;
 }
 .lg-pass input {
-  padding-right: 92px;
+  padding-right: 104px;
 }
 .lg-pass button {
   position: absolute;
-  right: 10px;
+  right: 12px;
   border: none;
   background: transparent;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--accent);
-  padding: 6px 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+.lg-pass button:hover {
+  color: var(--accent-dark);
+}
+.lg-pass button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.lg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 4px;
+}
+.lg-remember {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #fff;
+  cursor: pointer;
+}
+.lg-remember input,
+.lg-check input {
+  width: 18px;
+  height: 18px;
+  accent-color: #fff;
+  cursor: pointer;
+  flex: none;
+}
+.lg-remember input:focus-visible,
+.lg-check input:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+.lg-forgot {
+  font-size: 15px;
+  font-weight: 500;
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+.lg-forgot:hover {
+  color: #fff;
+  opacity: 0.82;
+}
+.lg-forgot:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+  border-radius: 6px;
 }
 
 .lg-check {
@@ -217,131 +254,236 @@
   gap: 10px;
   font-size: 15px;
   line-height: 1.45;
-  color: var(--text-muted);
+  color: #fff;
   cursor: pointer;
 }
 .lg-check input {
-  width: 18px;
-  height: 18px;
   margin-top: 2px;
-  accent-color: var(--accent);
-  cursor: pointer;
-  flex: none;
+}
+.lg-check a {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lg-check a:hover {
+  color: #fff;
+  opacity: 0.82;
 }
 
+/* Ошибка — белая плашка: на оранжевом красным о беде не скажешь. */
 .lg-error {
-  background: var(--accent-tint);
+  background: rgba(255, 255, 255, 0.96);
   color: var(--accent-dark);
   border-radius: 14px;
-  padding: 13px 16px;
+  padding: 13px 18px;
   font-size: 15px;
   line-height: 1.4;
+  box-shadow: 0 10px 26px rgba(120, 30, 0, 0.16);
 }
 
+.lg-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-top: 12px;
+}
+/* Главная кнопка белая: на оранжевом фоне это самое яркое, что можно дать. */
 .lg-submit {
-  font-size: 17px;
-  padding: 18px 24px;
+  border: none;
+  cursor: pointer;
+  background: #fff;
+  color: #d93a05;
+  font-size: 18px;
+  font-weight: 600;
+  padding: 18px 40px;
+  border-radius: 14px;
+  box-shadow: 0 12px 28px rgba(120, 30, 0, 0.2);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+.lg-submit:hover {
+  background: #fff6f2;
+  box-shadow: 0 16px 34px rgba(120, 30, 0, 0.26);
+}
+.lg-submit:active {
+  transform: translateY(1px);
+  box-shadow: 0 8px 20px rgba(120, 30, 0, 0.22);
+}
+.lg-submit:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.75);
+  outline-offset: 3px;
+}
+.lg-submit:disabled {
+  cursor: default;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+  transform: none;
 }
 
 .lg-switch {
-  text-align: center;
-  font-size: 15px;
-  color: var(--text-muted);
-}
-.lg-switch button {
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--accent);
-  padding: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+  padding: 8px 2px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.lg-switch:hover {
+  color: #fff;
+}
+.lg-switch:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.lg-help {
+  margin-top: 28px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.82);
+}
+.lg-help a {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/*
+ * Ключ.
+ *
+ * Компонент героя со всей его механикой — прилёт, кольца, покачивание,
+ * наклон за курсором. Его собственные правила расставляют объект по герою
+ * абсолютом, здесь же он просто занимает вторую колонку сетки.
+ */
+.lg-key {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lg-key .orbit {
+  position: static;
+  width: min(460px, 34vw);
+  margin: 0;
+  opacity: 1;
+}
+
+.lg-ring {
+  position: absolute;
+  left: 56%;
+  top: 50%;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.lg-ring-1 {
+  --lg-flat: 0.42;
+  width: min(560px, 42vw);
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  transform: translate(-50%, -50%) scaleY(0.42);
+  animation: lgSpin 54s linear infinite;
+}
+.lg-ring-2 {
+  --lg-flat: 0.34;
+  width: min(660px, 50vw);
+  aspect-ratio: 1;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  transform: translate(-50%, -50%) scaleY(0.34);
+  animation: lgSpin 78s linear infinite reverse;
+}
+
+@keyframes lgSpin {
+  from {
+    transform: translate(-50%, -50%) rotate(0deg) scaleY(var(--lg-flat));
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(360deg) scaleY(var(--lg-flat));
+  }
+}
+
+@media (max-width: 1100px) {
+  .lg-in {
+    grid-template-columns: minmax(0, 460px) minmax(0, 1fr);
+    gap: 24px;
+  }
+  .lg-key .orbit {
+    width: min(380px, 34vw);
+  }
+  .lg-ring-1 {
+    width: min(500px, 44vw);
+  }
+  .lg-ring-2 {
+    width: min(580px, 52vw);
+  }
 }
 
 /* ── Телефон ──────────────────────────────────────────────────────────────────
  *
- * Рассказ о кабинете с заголовком и списком занимал на телефоне почти весь
- * первый экран, и до полей входа приходилось прокручивать. Вместо него —
- * узкая оранжевая шапка со скруглением внизу и логотипом по центру: она
- * держит фирменный цвет, а форма оказывается сразу перед глазами.
+ * Ключ уходит: рядом с формой на 375 точках он не помещается, а под ней
+ * заставлял бы прокручивать экран ради картинки. Остаются фон, дальние
+ * объекты и сама форма — ради неё сюда и приходят.
  */
 @media (max-width: 900px) {
-  .lg-root {
+  .lg-in {
     grid-template-columns: 1fr;
-    background: var(--bg-soft);
-  }
-  .lg-side {
     min-height: 0;
-    border-radius: 0 0 28px 28px;
-    padding: 0 20px;
-    height: 72px;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
+    padding-top: 104px;
+    padding-bottom: 56px;
   }
-  /* Текст и подпись помощи на телефоне не нужны — остаётся только знак. */
-  .lg-side-body,
-  .lg-side-help,
-  .lg-side-glow {
+  .lg-key {
     display: none;
   }
-  .lg-side-logo img {
-    height: 20px;
+  .lg-form {
+    max-width: 100%;
   }
-
-  .lg-panel {
-    /* Колонкой: переключатели встают отдельной строкой над карточкой. В углу
-       им на телефоне не место — они легли бы поверх её верхнего края. */
-    flex-direction: column;
-    align-items: center;
-    padding: 18px 16px 44px;
+  .lg-far-arc {
+    top: 84px;
+    width: 150px;
   }
-  .lg-controls {
-    position: static;
-    width: 100%;
-    max-width: 456px;
+  .lg-far-devices {
+    width: 190px;
+  }
+  .lg-actions {
+    gap: 16px;
+  }
+  /* Палец попадает по строке целиком, а не по восемнадцати точкам галки. */
+  .lg-remember,
+  .lg-forgot {
+    min-height: 44px;
     display: flex;
-    justify-content: flex-end;
-    margin-bottom: 12px;
-  }
-  .lg-card {
-    padding: 26px 20px 24px;
-    border-radius: 24px;
-    gap: 20px;
-    box-shadow: 0 12px 34px rgba(20, 25, 35, 0.07);
-  }
-  .lg-head h2 {
-    font-size: 26px;
-  }
-  .lg-head p {
-    font-size: 15px;
-  }
-  .lg-tabs button {
-    padding: 11px 14px;
-    font-size: 14.5px;
+    align-items: center;
   }
   /* 16 точек в поле ввода — граница, ниже которой iOS увеличивает страницу
      при фокусе. Оставляем ровно её. */
   .lg-field input {
     font-size: 16px;
-    padding: 14px 15px;
+    padding: 15px 18px;
   }
   .lg-pass input {
-    padding-right: 88px;
-  }
-  .lg-submit {
-    font-size: 16px;
-    padding: 16px 22px;
+    padding-right: 96px;
   }
 }
 
-@media (max-width: 380px) {
-  .lg-card {
-    padding: 22px 16px 20px;
+@media (max-width: 420px) {
+  .lg-actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
   }
-  .lg-head h2 {
-    font-size: 24px;
+  .lg-submit {
+    width: 100%;
+    padding: 16px 24px;
+  }
+  .lg-switch {
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lg-far,
+  .lg-ring {
+    animation: none;
   }
 }

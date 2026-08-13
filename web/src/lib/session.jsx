@@ -13,9 +13,12 @@ const SessionContext = createContext(null);
 export function SessionProvider({ children }) {
   const [authed, setAuthed] = useState(() => Boolean(getToken()));
 
-  const signIn = useCallback(async (login, password) => {
+  // remember — та самая галка на форме входа: со снятой токен живёт до
+  // закрытия вкладки. Регистрацию не спрашиваем: свою учётку заводят на
+  // своём устройстве.
+  const signIn = useCallback(async (login, password, remember = true) => {
     const result = await api.login(login, password);
-    setToken(result.token);
+    setToken(result.token, { remember });
     setAuthed(true);
     return result;
   }, []);

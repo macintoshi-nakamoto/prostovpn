@@ -13,6 +13,10 @@ import "./site-header.css";
  * белой карточкой с тёмным логотипом, как в макете. Пункты меню ведут к
  * якорям секций. Кнопка справа зависит от того, вошёл ли посетитель: гостю —
  * «Подключить», вошедшему — «Кабинет».
+ *
+ * На странице входа кнопки нет вовсе: звать войти того, кто уже стоит перед
+ * формой входа, незачем, а вторая оранжевая кнопка рядом с главной отняла бы
+ * у неё половину внимания.
  */
 export function SiteHeader() {
   const scrolled = useScrolled(60);
@@ -20,6 +24,7 @@ export function SiteHeader() {
   const { pathname } = useLocation();
   const t = useT();
   const onLanding = pathname === "/";
+  const onLogin = pathname === "/login";
 
   /*
   Логотип всегда ведёт на главную. Раньше это была ссылка на якорь #top: на
@@ -54,9 +59,11 @@ export function SiteHeader() {
             пропадает, и без обёртки space-between растащил бы их по краям. */}
         <div className="sh-right">
           <Controls />
-          <Link to={authed ? "/account" : "/login"} className="sh-cta">
-            {authed ? t("nav.account") : t("nav.signin")}
-          </Link>
+          {!onLogin && (
+            <Link to={authed ? "/account" : "/login"} className="sh-cta">
+              {authed ? t("nav.account") : t("nav.signin")}
+            </Link>
+          )}
         </div>
       </div>
     </header>

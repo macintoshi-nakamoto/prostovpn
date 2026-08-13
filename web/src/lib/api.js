@@ -5,7 +5,7 @@ const TOKEN_KEY = "prosto_token";
 const DEVICE_KEY = "prosto_browser_id";
 
 export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY);
 }
 
 /**
@@ -43,9 +43,20 @@ function browserName() {
   return name;
 }
 
-export function setToken(token) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+/**
+ * Кладёт токен туда, где человек его и ждёт.
+ *
+ * Со снятой галкой «Запомнить меня» сессия живёт до закрытия вкладки —
+ * это и есть весь смысл галки на чужом компьютере. Перед записью чистим оба
+ * хранилища: иначе прежний «запомненный» токен пережил бы вход без галки.
+ */
+export function setToken(token, { remember = true } = {}) {
+  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
+
+  if (!token) return;
+
+  (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
 }
 
 export class ApiError extends Error {

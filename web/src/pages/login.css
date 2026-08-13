@@ -319,6 +319,8 @@
   transform: none;
 }
 
+/* Второй режим — соседняя дорога, а не вторая кнопка: без подчёркивания в
+   покое, чтобы рядом с белой кнопкой не читаться как ещё одна. */
 .lg-switch {
   border: none;
   background: none;
@@ -327,11 +329,11 @@
   font-weight: 500;
   color: rgba(255, 255, 255, 0.92);
   padding: 8px 2px;
-  text-decoration: underline;
   text-underline-offset: 4px;
 }
 .lg-switch:hover {
   color: #fff;
+  text-decoration: underline;
 }
 .lg-switch:focus-visible {
   outline: 2px solid #fff;

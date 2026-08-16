@@ -179,16 +179,8 @@ export const ru = {
   },
 
   login: {
-    sideLine1: "Личный",
-    sideLine2: "кабинет",
-    sideLead:
-      "Подписка, устройства и данные для входа в одном месте. Вход только по логину и " +
-      "паролю, без привязки телефона.",
-    sideList: [
-      "Статус подписки и продление",
-      "До пяти устройств на аккаунт",
-      "Инструкции для всех платформ",
-    ],
+    title: "Вход в аккаунт",
+    titleSignup: "Создать аккаунт",
     help: "Нужна помощь?",
     helpLink: "поддержка",
     tabSignin: "Вход",
@@ -200,10 +192,11 @@ export const ru = {
     fieldLogin: "Логин",
     fieldPassword: "Пароль",
     fieldRepeat: "Повторите пароль",
-    fieldEmail: "Почта для чеков · необязательно",
     placeholderPassword: "Ваш пароль",
     placeholderNewPassword: "Минимум 8 символов",
     placeholderRepeat: "Ещё раз тот же пароль",
+    remember: "Запомнить меня",
+    forgot: "Забыли пароль?",
     show: "Показать",
     hide: "Скрыть",
     acceptBefore: "Принимаю",

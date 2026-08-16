@@ -89,8 +89,8 @@ export function SetupGuide({ login }) {
         </div>
         <div className="sg-help">
           <span>{t("setup.helpText")}</span>
-          <a href="https://t.me/prosto_vpn_supp" target="_blank" rel="noreferrer">
-            @prosto_vpn_supp
+          <a href="https://t.me/prostovpnn_bot" target="_blank" rel="noreferrer">
+            @prostovpnn_bot
           </a>
         </div>
       </div>

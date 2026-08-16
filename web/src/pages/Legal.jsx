@@ -57,7 +57,7 @@ export function Legal({ doc }) {
             <span>{t("legal.notFoundAnswer")}</span>
             <a
               className="btn btn-primary"
-              href="https://t.me/prosto_vpn_supp"
+              href="https://t.me/prostovpnn_bot"
               target="_blank"
               rel="noreferrer"
             >

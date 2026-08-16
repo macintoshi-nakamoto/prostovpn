@@ -23,10 +23,15 @@ export function SiteFooter() {
             <Link to="/faq">{t("footer.faq")}</Link>
             <Link to="/contacts">{t("footer.support")}</Link>
             {/*
-            Три разных телеграма, и путать их нельзя: бот оформляет подписку
-            и отдаёт доступ, канал — новости, поддержка — живой человек.
-            Бот стоит первым: это единственная из трёх ссылок, по которой
-            что-то делают, а не читают.
+            Два телеграма, и путать их нельзя: бот оформляет подписку, отдаёт
+            доступ и принимает вопросы, канал — только новости. Бот стоит
+            первым: это единственная из двух ссылок, по которой что-то
+            делают, а не читают.
+
+            Раньше поддержка была отдельным аккаунтом живого человека. Теперь
+            это тот же бот: одно окно на всё — человеку не приходится
+            выбирать, куда писать, а обращение сразу попадает туда, где видно
+            его подписку.
             */}
             <a href="https://t.me/prostovpnn_bot" target="_blank" rel="noreferrer">
               {t("footer.bot")}
@@ -56,8 +61,8 @@ export function SiteFooter() {
         </div>
 
         <div className="sf-contact">
-          <a href="https://t.me/prosto_vpn_supp" target="_blank" rel="noreferrer">
-            @prosto_vpn_supp
+          <a href="https://t.me/prostovpnn_bot" target="_blank" rel="noreferrer">
+            @prostovpnn_bot
           </a>
           <span>{t("footer.supportNote")}</span>
         </div>

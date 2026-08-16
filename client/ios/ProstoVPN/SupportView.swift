@@ -37,8 +37,8 @@ struct SupportView: View {
                     linkRow(
                         icon: "paperplane.fill",
                         title: t.tgTitle,
-                        subtitle: "@prosto_vpn_supp",
-                        url: "https://t.me/prosto_vpn_supp"
+                        subtitle: "@prostovpnn_bot",
+                        url: "https://t.me/prostovpnn_bot"
                     )
                     CardDivider()
                     linkRow(

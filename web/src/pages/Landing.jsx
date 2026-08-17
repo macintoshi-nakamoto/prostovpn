@@ -568,6 +568,33 @@ export function Landing() {
         </div>
       </section>
 
+      {/*
+      Приватность — последним блоком перед подвалом.
+
+      Не карточки с иконками: обещание «мы вас не сдадим» тем убедительнее,
+      чем меньше вокруг него оформления. Поэтому чёрная лента, крупное
+      утверждение слева и три коротких абзаца справа — прочитывается за
+      двадцать секунд, а не разглядывается.
+      */}
+      <section id="privacy" className="ld-privacy">
+        <div className="wrap ld-privacy-in">
+          <Reveal className="ld-privacy-head">
+            <span className="ld-privacy-eyebrow">{t("landing.privacy.eyebrow")}</span>
+            <h2>
+              {t("landing.privacy.line1")}
+              <br />
+              {t("landing.privacy.line2")}
+            </h2>
+          </Reveal>
+          <Reveal className="ld-privacy-body" delay={90}>
+            {raw("landing.privacy.items").map((text) => (
+              <p key={text}>{text}</p>
+            ))}
+            <span className="ld-privacy-sign">{t("landing.privacy.sign")}</span>
+          </Reveal>
+        </div>
+      </section>
+
       <SiteFooter />
     </div>
   );

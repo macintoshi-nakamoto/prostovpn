@@ -1299,3 +1299,70 @@
     font-size: 28px;
   }
 }
+
+/*
+ * Приватность.
+ *
+ * Чёрная лента перед подвалом: утверждение слева, объяснения справа. Текста
+ * ровно столько, сколько прочитают на одном дыхании, — длинный манифест о
+ * приватности не читает никто, а короткий запоминают.
+ */
+.ld-privacy {
+  background: var(--invert-bg);
+  color: var(--invert-fg);
+  padding: 104px 0 110px;
+}
+.ld-privacy-in {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 56px;
+  align-items: start;
+}
+.ld-privacy-head {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.ld-privacy-eyebrow {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+.ld-privacy-head h2 {
+  margin: 0;
+  font-size: clamp(32px, 4.6vw, 54px);
+  line-height: 1.04;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.ld-privacy-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.ld-privacy-body p {
+  margin: 0;
+  font-size: clamp(16px, 2vw, 19px);
+  line-height: 1.55;
+  color: rgb(255 255 255 / 0.72);
+}
+/* Подпись — тише текста и с отбивкой: это не ещё один аргумент, а то, кем
+   всё написанное выше сказано. */
+.ld-privacy-sign {
+  margin-top: 10px;
+  padding-top: 20px;
+  border-top: 1px solid rgb(255 255 255 / 0.12);
+  font-size: 16px;
+  color: rgb(255 255 255 / 0.5);
+}
+
+@media (max-width: 900px) {
+  .ld-privacy {
+    padding: 76px 0 80px;
+  }
+  .ld-privacy-in {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+}

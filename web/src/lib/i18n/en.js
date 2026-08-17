@@ -145,6 +145,18 @@ export const en = {
       text: "iPhone, Android, Mac, Windows and TV. Simultaneous connections — {devices}.",
     },
 
+    privacy: {
+      eyebrow: "PRIVACY",
+      line1: "We have nothing",
+      line2: "to hand over",
+      items: [
+        "We don't see what you open. The app keeps no log of sites or addresses, and the nodes run in RAM: a reboot leaves nothing behind. There is nothing to hand over on request — whoever makes it — because what was never collected doesn't exist.",
+        "A login and a password are enough. No passport, no phone number, no social accounts. Email is optional — it only matters if you want renewal notices; pay in crypto and nothing ties you to a card.",
+        "We don't sell or share data — not with ad networks, not with analytics, not with any government. There are no third-party trackers on the site.",
+      ],
+      sign: "The project is run by anonymous enthusiasts: no office, no legal entity and no names anyone could be asked about.",
+    },
+
     docs: {
       line1: "Transparent",
       line2: "all the way",
@@ -529,7 +541,7 @@ export const en = {
           items: [
             [
               "I've paid. What now?",
-              "You get a login and a password. Download the app, type in those two lines — that's it. No config files and no keys: the app pulls the country list from your account itself.",
+              "You registered a login and a password. Download the app, type in those two lines — that's it. No config files and no keys: the app pulls the country list from your account itself. If anything is unclear, the Setup page walks through every step for Android, iPhone, Mac, Windows and TV, with screenshots.",
             ],
             [
               "How many devices can I sign in on?",

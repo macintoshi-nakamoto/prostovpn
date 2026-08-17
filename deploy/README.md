@@ -48,6 +48,19 @@ git clone <адрес-вашего-репозитория> /root/prosto-vpn
 scp -r C:\vpn-panel root@<адрес-сервера>:/root/prosto-vpn
 ```
 
+### 1.1. Обновление уже установленного
+
+Собранный сайт лежит в `web/dist`, и **перед пересборкой его нужно удалять**:
+
+```bash
+cd /opt/prosto-vpn/web && rm -rf dist && sudo -u prostovpn npx vite build
+```
+
+Vite копирует `public/` в `dist/`, но уже лежащие там файлы с теми же именами
+не перезаписывает. Из-за этого выкладка с новым логотипом однажды прошла
+«успешно», а сайт продолжал отдавать прежний: в исходниках знак был новый, в
+`dist` — старый. То же касается `panel/dist`.
+
 ### 2. Поставить панель
 
 ```bash
@@ -212,6 +225,30 @@ PANEL_SMTP_PASSWORD=...
 PANEL_MAIL_PROVIDER=resend
 PANEL_RESEND_API_KEY=...
 ```
+
+Для писем в российские ящики лучше российский отправитель: mail.ru,
+yandex.ru и rambler.ru относятся к зарубежным рассыльщикам строже, и то же
+письмо через них уезжает в спам чаще.
+
+```ini
+PANEL_MAIL_PROVIDER=smtpbz
+PANEL_SMTPBZ_API_KEY=...
+PANEL_MAIL_FROM=news@example.com
+PANEL_SUPPORT_EMAIL=support@example.com
+```
+
+Домен отправителя нужно подтвердить в панели сервиса — до этого API
+отвечает `Domain … not verified`, и письмо честно возвращается в очередь.
+Проверка канала одной командой:
+
+```bash
+cd /opt/prosto-vpn/backend
+set -a && . ./.env && set +a
+.venv/bin/python tools/send_test_mail.py кому@example.com
+```
+
+Значения с пробелами в `.env` закавычивайте (`PANEL_MAIL_FROM_NAME="Prosto VPN"`):
+systemd их принимает и без кавычек, а `. ./.env` в оболочке — нет.
 
 ### DNS-записи — обязательно
 

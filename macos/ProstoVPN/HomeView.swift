@@ -269,11 +269,22 @@ struct PanelBanners: View {
         return subscription.traffic_low || subscription.expires_soon
     }
 
+    /// Баннер ровно один, даже когда поводов несколько.
+    ///
+    /// Порядок — по тому, что раньше оставит человека без VPN: без
+    /// обязательного обновления не работает ничего, объяснение пустого списка
+    /// стран важнее напоминания о продлении, а до продления ещё есть дни. Три
+    /// оранжевых блока подряд в окне высотой 620 точек — это стена, в которой
+    /// не виден ни один из них.
     var body: some View {
-        VStack(spacing: 8) {
-            if state.updates.mandatory { MandatoryUpdateBanner() }
-            if !state.notice.isEmpty { NoticeBanner(text: state.notice) }
-            if showRenew { RenewBanner() }
+        Group {
+            if state.updates.mandatory {
+                MandatoryUpdateBanner()
+            } else if !state.notice.isEmpty {
+                NoticeBanner(text: state.notice)
+            } else if showRenew {
+                RenewBanner()
+            }
         }
         .animation(Theme.spring(0.3), value: state.notice)
         .animation(Theme.spring(0.3), value: showRenew)
@@ -292,7 +303,10 @@ private struct BannerCard<Content: View>: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(Theme.accentTint12)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        // Тот же радиус, что у карточек настроек: своя шкала скруглений на
+        // каждый новый блок — первое, по чему интерфейс читается как
+        // собранный из разных мест.
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 

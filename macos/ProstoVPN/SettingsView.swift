@@ -321,7 +321,7 @@ struct UpdateCard: View {
 
                 Spacer(minLength: 8)
 
-                if case .checking = updates.stage {
+                if isWorking {
                     ProgressView()
                         .controlSize(.small)
                         .padding(.top, 2)
@@ -336,7 +336,6 @@ struct UpdateCard: View {
                             .frame(height: 30)
                     }
                     .buttonStyle(PrimaryButtonStyle(cornerRadius: 9))
-                    .disabled(isWorking)
                 }
             }
 
@@ -368,7 +367,7 @@ struct UpdateCard: View {
         case .checking:
             return t.updateChecking
         case .upToDate:
-            return "\(t.updateNone) · \(t.updateCurrent) \(AppInfo.version)"
+            return "\(t.updateNone) · \(AppInfo.version)"
         case .available:
             return t.updateAvailable(updates.info?.version ?? "")
         case .downloading(let percent):
@@ -380,12 +379,13 @@ struct UpdateCard: View {
         }
     }
 
+    /// Пока идёт скачивание, кнопки нет вовсе: неактивная кнопка «Обновить»
+    /// рядом со строкой «Скачиваем… 40%» читается как зависшая, хотя работа
+    /// как раз идёт — о ней и рассказывает статус.
     private var actionTitle: String? {
         switch updates.stage {
-        case .available: return t.updateButton
-        case .downloading, .installing: return t.updateButton
-        case .failed: return t.updateButton
-        case .upToDate, .checking: return nil
+        case .available, .failed: return t.updateButton
+        case .downloading, .installing, .upToDate, .checking: return nil
         }
     }
 

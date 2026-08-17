@@ -4,7 +4,6 @@ import { SiteHeader } from "../components/SiteHeader.jsx";
 import { SiteFooter } from "../components/SiteFooter.jsx";
 import { Reveal, ArtImage } from "../components/Reveal.jsx";
 import { HeroOrbit } from "../components/HeroOrbit.jsx";
-import { Picture } from "../components/Picture.jsx";
 import { useSession } from "../lib/session.jsx";
 import { useTilt } from "../lib/hooks";
 import { useAnchorReveal } from "../lib/anchors";
@@ -41,7 +40,6 @@ const DOC_LINKS = ["/privacy", "/terms", "/faq", "/contacts"];
  * вернёт ровно сюда, вместе с выбранным тарифом в запросе.
  */
 const PLAN_TAB = "/account?tab=plan";
-const SETUP_TAB = "/account?tab=setup";
 
 /** «30 дней» → «1 месяц», «365 дней» → «1 год»: срок словами, а не в днях. */
 function termLabel(days, t) {
@@ -347,14 +345,13 @@ export function Landing() {
               {t("landing.app.line3")}
             </h2>
             <p>{t("landing.app.text")}</p>
+            {/* Одна кнопка вместо двух витрин магазинов: приложений в App
+                Store и Google Play нет — Android ставится файлом с сайта, на
+                iPhone подключаются ключом. Ведёт в инструкцию, где для каждой
+                платформы свои шаги и живая ссылка на установщик. */}
             <div className="ld-app-stores">
-              <Link to={SETUP_TAB} className="btn btn-dark ld-store">
-                <Picture src="/assets/ic-appstore.png" />
-                App Store
-              </Link>
-              <Link to={SETUP_TAB} className="btn btn-dark ld-store">
-                <Picture src="/assets/ic-googleplay.png" />
-                Google Play
+              <Link to="/guide" className="btn btn-dark ld-store">
+                {t("landing.app.button")}
               </Link>
             </div>
           </Reveal>

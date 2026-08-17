@@ -74,6 +74,7 @@ export const en = {
         "One button on the home screen. Everything else is automatic: the best server, " +
         "bypassing blocks and staying protected when you switch to Wi-Fi.",
       laptopAlt: "Prosto VPN on a laptop",
+      button: "Download the app",
     },
 
     split: {

@@ -46,7 +46,7 @@ export function SiteHeader() {
     <header className={`sh${scrolled ? " sh-solid" : ""}`}>
       <div className="wrap sh-in">
         <Link to="/" className="sh-logo" onClick={toTop}>
-          <Picture src="/assets/logo.png" alt="PROSTO" />
+          <Picture src="/assets/logo-v2.png" alt="PROSTO" />
         </Link>
         <nav className="sh-nav">
           <a href={section("speed")}>{t("nav.speed")}</a>

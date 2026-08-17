@@ -17,7 +17,7 @@ export function SiteFooter() {
   return (
     <footer className="sf">
       <div className="wrap sf-in">
-        <Picture className="sf-logo" src="/assets/logo.png" alt="PROSTO" />
+        <Picture className="sf-logo" src="/assets/logo-v2.png" alt="PROSTO" />
 
         <div className="sf-cols">
           <div>
@@ -56,19 +56,11 @@ export function SiteFooter() {
                 а платёжные вопросы всё равно приходят письмом. */}
             <a href={SUPPORT_MAILTO}>{t("footer.email")}</a>
           </div>
-          {/* В кабинет, а не на форму входа: вошедшего она отправляла
-              вводить логин заново, хотя он уже вошёл. Гостя туда же не
-              пустит Private и вернёт сюда после входа. */}
-          <div className="sf-stores">
-            <Link to="/account?tab=setup" className="btn btn-dark sf-store">
-              <Picture src="/assets/ic-appstore.png" />
-              App Store
-            </Link>
-            <Link to="/account?tab=setup" className="btn btn-dark sf-store">
-              <Picture src="/assets/ic-googleplay.png" />
-              Google Play
-            </Link>
-          </div>
+          {/* Кнопок сторов здесь нет намеренно: приложений в App Store и
+              Google Play у нас не публикуется — Android ставится файлом с
+              сайта, а на iPhone подключаются ключом. Кнопка в магазин, за
+              которой ничего нет, обманывает раньше, чем человек дочитает
+              подпись; вместо неё — ссылка на инструкцию. */}
         </div>
 
         <div className="sf-contact">

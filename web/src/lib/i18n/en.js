@@ -47,7 +47,7 @@ export const en = {
         "and no throttling.",
       primary: "Get started",
       ghost: "How it works",
-      platforms: "iOS · Android · macOS · Windows",
+      platforms: "iOS · Android · macOS · Windows · TV",
     },
 
     features: {
@@ -142,7 +142,7 @@ export const en = {
 
     devices: {
       title: "One subscription — every device",
-      text: "iPhone, Android, Mac and Windows. Simultaneous connections — {devices}.",
+      text: "iPhone, Android, Mac, Windows and TV. Simultaneous connections — {devices}.",
     },
 
     docs: {
@@ -290,12 +290,12 @@ export const en = {
       steps: [
         ["Download the address list", "In your account or in the bot — a file with Russian ranges."],
         ["Open split tunneling", "In AmneziaVPN the section lives in the connection settings."],
-        ["Choose the list mode", "«Only addresses from the list should open through the VPN» — everything else goes direct."],
+        ["Choose the list mode", "«Addresses from the list should not open through the VPN» — Russian networks go direct, the rest stays in the tunnel."],
         ["Import the file", "Advanced settings → Import → replace the site list. Done."],
       ],
       shots: [
         "The section in connection settings",
-        "Mode: only addresses from the list",
+        "Mode: list goes around the VPN",
         "Advanced settings → Import",
         "Replace the site list",
       ],

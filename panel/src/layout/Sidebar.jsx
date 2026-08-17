@@ -13,7 +13,7 @@ export function Sidebar({ open, onNavigate, admin, onLogout }) {
           и тот же логотип на обоих концах избавляет от вопроса «туда ли я
           попал». Путь с base — панель живёт на /admin/. */}
       <div className="ax-brand">
-        <img className="ax-brand-logo" src={`${import.meta.env.BASE_URL}logo.png`} alt="PROSTO" />
+        <img className="ax-brand-logo" src={`${import.meta.env.BASE_URL}logo-v2.png`} alt="PROSTO" />
         <span className="ax-brand-sub">панель</span>
       </div>
 

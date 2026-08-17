@@ -18,7 +18,7 @@
 }
 .sf-cols {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 32px;
   font-size: 16px;
 }
@@ -33,49 +33,6 @@
 }
 .sf-cols a:hover {
   color: var(--accent);
-}
-.sf-stores {
-  gap: 12px !important;
-}
-/*
- * Кнопки сторов стоят друг под другом и одинаковой ширины, поэтому
- * содержимое прижато влево, а не отцентровано. При центровке иконки
- * разъезжались по горизонтали: подписи разной длины («App Store» короче
- * «Google Play»), и каждая иконка вставала на своём отступе — 40 и 31
- * точка. Столбиком это читалось как кривая вёрстка.
- */
-.sf-store {
-  width: 190px;
-  font-size: 15px;
-  padding: 13px 22px;
-  justify-content: flex-start;
-}
-/*
- * Подпись на кнопке стора.
- *
- * Правило существует из-за соседнего `.sf-cols a`: у него специфичность выше,
- * чем у `.btn-dark`, и цвет ссылки перебивал цвет кнопки — тёмный текст на
- * тёмной заливке, то есть пустой прямоугольник. В светлой теме это было видно
- * и до тёмной, просто некому было заметить.
- */
-.sf-cols .sf-store,
-.sf-cols .sf-store:hover {
-  color: var(--on-ink);
-}
-/*
- * Иконки сторов — разной формы: у одной пропорция 1.04, у другой 0.88.
- * При заданной только высоте они получали разную ширину, и кнопки рядом
- * выглядели кривыми. Поэтому обе кладём в одинаковую квадратную коробку и
- * вписываем целиком: занимаемое место совпадает, рисунок не искажается.
- */
-.sf-store picture {
-  display: flex;
-  flex: none;
-}
-.sf-store img {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
 }
 .sf-contact {
   display: flex;
@@ -138,17 +95,6 @@
     gap: 14px;
   }
   /* Кнопки сторов занимают всю ширину столбца — так в них легче попасть. */
-  .sf-stores {
-    grid-column: 1 / -1;
-    flex-direction: row;
-  }
-  .sf-store {
-    width: auto;
-    flex: 1;
-    padding: 12px 16px;
-    font-size: 14px;
-    justify-content: center;
-  }
   .sf-contact a {
     font-size: 18px;
   }

@@ -533,7 +533,7 @@ export function Landing() {
             <p>{t("landing.devices.text", { devices: devicesLabel })}</p>
           </Reveal>
           <Reveal className="ld-devices-tags" delay={120}>
-            {["iOS", "Android", "macOS", "Windows"].map((tag) => (
+            {["iOS", "Android", "macOS", "Windows", "TV"].map((tag) => (
               <span key={tag}>{tag}</span>
             ))}
           </Reveal>

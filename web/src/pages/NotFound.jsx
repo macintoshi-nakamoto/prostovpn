@@ -6,7 +6,7 @@ export function NotFound() {
   const t = useT();
   return (
     <div className="nf">
-      <img className="nf-logo" src="/assets/logo.png" alt="PROSTO" />
+      <img className="nf-logo" src="/assets/logo-v2.png" alt="PROSTO" />
       <div className="nf-code">404</div>
       <h1>{t("notFound.title")}</h1>
       <p>{t("notFound.text")}</p>

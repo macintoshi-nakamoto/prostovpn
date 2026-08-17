@@ -142,6 +142,8 @@ def send(to: str, subject: str, text: str, html: str | None = None) -> None:
         _send_smtp(to, subject, text, html)
     elif provider == "resend":
         _send_resend(to, subject, text, html)
+    elif provider == "smtpbz":
+        _send_smtpbz(to, subject, text, html)
     elif provider == "cloudflare":
         _send_cloudflare(to, subject, text, html)
     elif provider == "console":
@@ -183,6 +185,78 @@ def _send_smtp(to: str, subject: str, text: str, html: str | None) -> None:
             server.send_message(message)
     except (smtplib.SMTPException, OSError) as exc:
         raise MailError(f"SMTP: {exc}") from exc
+
+
+def _send_smtpbz(to: str, subject: str, text: str, html: str | None) -> None:
+    """
+    Отправка через SMTP.bz.
+
+    Российский отправитель выбран не из принципа: письмо с логином и паролем
+    ждут в mail.ru, yandex.ru и rambler.ru, а они относятся к зарубежным
+    рассыльщикам заметно строже — то же письмо через американскую
+    инфраструктуру уезжает в спам чаще.
+
+    По API, а не по SMTP: у них это один и тот же аккаунт, но HTTPS проходит
+    там, где исходящий 587-й порт закрыт хостером, и ошибку возвращает
+    текстом, а не обрывом соединения.
+
+    Домен отправителя должен быть подтверждён в их панели — иначе приходит
+    внятный отказ, и письмо честно возвращается в очередь.
+    """
+    config = settings()
+    if not config.smtpbz_api_key:
+        raise MailError("PANEL_SMTPBZ_API_KEY не задан")
+
+    payload = {
+        "name": config.mail_from_name,
+        "from": config.mail_from,
+        "to": to,
+        "subject": subject,
+        "text": text,
+    }
+    if html:
+        payload["html"] = html
+    if config.support_email.strip():
+        # Отвечают люди, а не отправитель рассылки: ответ на письмо должен
+        # попадать в поддержку, а не в никуда.
+        payload["reply"] = config.support_email.strip()
+
+    try:
+        response = httpx.post(
+            "https://api.smtp.bz/v1/smtp/send",
+            data=payload,
+            headers={"Authorization": config.smtpbz_api_key},
+            timeout=30.0,
+        )
+    except httpx.HTTPError as exc:
+        raise MailError(f"SMTP.bz недоступен: {exc}") from exc
+
+    if response.status_code >= 400:
+        raise MailError(f"SMTP.bz вернул {response.status_code}: {_smtpbz_error(response)}")
+
+    # Двухсотка ещё не значит «принято»: отказ приезжает в теле.
+    body = _json_or_none(response)
+    if isinstance(body, dict) and body.get("result") is False:
+        raise MailError(f"SMTP.bz отказал: {_smtpbz_error(response)}")
+
+
+def _json_or_none(response: httpx.Response) -> object | None:
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
+def _smtpbz_error(response: httpx.Response) -> str:
+    """Человеческий текст отказа: у них он лежит в errors.message."""
+    body = _json_or_none(response)
+    if isinstance(body, dict):
+        errors = body.get("errors")
+        if isinstance(errors, dict) and errors.get("message"):
+            return str(errors["message"])
+        if isinstance(errors, str):
+            return errors
+    return response.text[:200]
 
 
 def _send_cloudflare(to: str, subject: str, text: str, html: str | None) -> None:

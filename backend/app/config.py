@@ -133,8 +133,8 @@ class Settings(BaseSettings):
 
     # --- доставка учётки ------------------------------------------------------
 
-    # smtp | resend | cloudflare | console. console печатает письмо в лог без
-    # пароля — для локальной разработки.
+    # smtp | smtpbz | resend | cloudflare | console. console печатает письмо в
+    # лог без пароля — для локальной разработки.
     mail_provider: str = "console"
     mail_from: str = "no-reply@example.com"
     mail_from_name: str = "Prosto"
@@ -153,6 +153,10 @@ class Settings(BaseSettings):
     smtp_ssl: bool = False
 
     resend_api_key: str = ""
+
+    # SMTP.bz — российский транзакционный отправитель. Ключ один и на API, и
+    # на SMTP: у них это один и тот же секрет.
+    smtpbz_api_key: str = ""
 
     # Cloudflare Email Service. Домен должен быть заведён в разделе
     # Email Sending дашборда: отправлять можно только с адреса того домена,

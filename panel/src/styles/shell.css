@@ -63,11 +63,10 @@ html[data-theme="light"] .ax-sidebar {
   gap: 8px;
   padding: 22px 22px 16px;
 }
-.ax-brand-name {
-  font-weight: 800;
-  font-size: 18px;
-  letter-spacing: -0.02em;
-  color: var(--ax-accent);
+.ax-brand-logo {
+  height: 16px;
+  width: auto;
+  display: block;
 }
 .ax-brand-sub {
   font-size: 11px;

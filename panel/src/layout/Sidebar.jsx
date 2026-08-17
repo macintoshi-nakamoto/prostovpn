@@ -9,8 +9,11 @@ export function Sidebar({ open, onNavigate, admin, onLogout }) {
       <div className="ax-sheet-handle" aria-hidden="true" />
       <div className="ax-sheet-title">Разделы</div>
 
+      {/* Знак, а не набранное имя: в админку заходят с того же сайта, и один
+          и тот же логотип на обоих концах избавляет от вопроса «туда ли я
+          попал». Путь с base — панель живёт на /admin/. */}
       <div className="ax-brand">
-        <span className="ax-brand-name">Prosto VPN</span>
+        <img className="ax-brand-logo" src={`${import.meta.env.BASE_URL}logo.png`} alt="PROSTO" />
         <span className="ax-brand-sub">панель</span>
       </div>
 

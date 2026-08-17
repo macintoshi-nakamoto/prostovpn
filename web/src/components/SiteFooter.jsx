@@ -51,6 +51,9 @@ export function SiteFooter() {
           <div>
             <Link to="/terms">{t("footer.terms")}</Link>
             <Link to="/privacy">{t("footer.privacy")}</Link>
+            <Link to="/aup">{t("footer.aup")}</Link>
+            <Link to="/refund">{t("footer.refund")}</Link>
+            <Link to="/licenses">{t("footer.licenses")}</Link>
             <Link to="/contacts">{t("footer.contacts")}</Link>
             {/* Почта рядом с телеграмом: писать в мессенджер готовы не все,
                 а платёжные вопросы всё равно приходят письмом. */}

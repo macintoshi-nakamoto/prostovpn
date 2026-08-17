@@ -6,6 +6,7 @@ import { Login } from "./pages/Login.jsx";
 import { Account } from "./pages/Account.jsx";
 import { Guide } from "./pages/Guide.jsx";
 import { Legal } from "./pages/Legal.jsx";
+import { LegalDoc } from "./pages/LegalDoc.jsx";
 import { NotFound } from "./pages/NotFound.jsx";
 
 /**
@@ -64,8 +65,13 @@ export function App() {
           }
         />
         <Route path="/guide" element={<Guide />} />
-        <Route path="/terms" element={<Legal doc="terms" />} />
-        <Route path="/privacy" element={<Legal doc="privacy" />} />
+        {/* Юридические документы — своими страницами: у каждого свой адрес,
+            на который он же и ссылается изнутри. */}
+        <Route path="/terms" element={<LegalDoc doc="terms" />} />
+        <Route path="/privacy" element={<LegalDoc doc="privacy" />} />
+        <Route path="/aup" element={<LegalDoc doc="aup" />} />
+        <Route path="/refund" element={<LegalDoc doc="refund" />} />
+        <Route path="/licenses" element={<LegalDoc doc="licenses" />} />
         <Route path="/faq" element={<Legal doc="faq" />} />
         <Route path="/contacts" element={<Legal doc="contacts" />} />
         <Route path="*" element={<NotFound />} />

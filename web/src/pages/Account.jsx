@@ -64,7 +64,7 @@ export function Account() {
       <header className="ac-header">
         <div className="wrap ac-header-in">
           <Link to="/" className="ac-logo">
-            <Picture src="/assets/logo-v2.png" alt="PROSTO" />
+            <Picture src="/assets/logo-v3.png" alt="PROSTO" />
           </Link>
           <nav className="ac-tabs">
             {TABS.map((id) => (

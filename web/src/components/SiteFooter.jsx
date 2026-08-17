@@ -17,7 +17,7 @@ export function SiteFooter() {
   return (
     <footer className="sf">
       <div className="wrap sf-in">
-        <Picture className="sf-logo" src="/assets/logo-v2.png" alt="PROSTO" />
+        <Picture className="sf-logo" src="/assets/logo-v3.png" alt="PROSTO" />
 
         <div className="sf-cols">
           <div>

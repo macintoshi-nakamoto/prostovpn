@@ -19,6 +19,7 @@ export const SUPPORT_TELEGRAM = "https://t.me/prostovpnn_bot";
 export const SUPPORT_TELEGRAM_NAME = "@prostovpnn_bot";
 
 /** Канал с новостями. Читают, а не пишут. */
-export const NEWS_TELEGRAM = "https://t.me/prostovpn_tg";
+export const NEWS_TELEGRAM = "https://t.me/myprostovpn";
+export const NEWS_TELEGRAM_NAME = "@myprostovpn";
 
 export const SUPPORT_MAILTO = `mailto:${SUPPORT_EMAIL}`;

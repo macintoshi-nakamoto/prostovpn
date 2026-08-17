@@ -7,7 +7,7 @@
  * по всем страницам и однажды забыть.
  */
 export function Picture({ src, alt = "", className, imgClassName, style, ...rest }) {
-  const webp = src.replace(/\.png$/i, ".webp");
+  const webp = src.replace(/\.(png|jpe?g)$/i, ".webp");
   const hasWebp = webp !== src;
 
   return (

@@ -30,6 +30,7 @@ export const en = {
     app: "App",
     plans: "Pricing",
     security: "Security",
+    guide: "Setup",
     faq: "FAQ",
     account: "Account",
     signin: "Sign in",
@@ -163,6 +164,7 @@ export const en = {
     servers: "Servers",
     security: "Security",
     faq: "FAQ",
+    guide: "Setup",
     support: "Support",
     bot: "Telegram bot",
     channel: "Telegram channel",
@@ -170,6 +172,147 @@ export const en = {
     privacy: "Privacy",
     contacts: "Contacts",
     supportNote: "Telegram support replies fast — a few minutes on average",
+    email: "Email",
+  },
+
+  guide: {
+    breadcrumbHome: "Home",
+    breadcrumbCurrent: "Setup",
+    title: "How to connect Prosto VPN",
+    lead: "A few steps and one minute on any device. Pick your platform — we'll show exactly your sequence.",
+    reading: "2 minute read",
+    updated: "Updated 18 August 2026",
+
+    platforms: {
+      android: "Android",
+      ios: "iPhone",
+      mac: "Mac",
+      win: "Windows",
+      tv: "TV",
+    },
+
+    soon: "Soon",
+    downloadFallback: "Download",
+
+    os: {
+      android: {
+        title: "Connecting on Android",
+        appTitle: "Prosto VPN for Android",
+        appText: "A single file from the site: no Google Play needed, updates come from the app itself.",
+        download: "Download APK",
+        steps: [
+          ["Download the APK", "Our Android app comes as one file from the site — Google Play is not involved."],
+          ["Allow the install", "Android will ask about installing from this source — confirm. The file is signed by us."],
+          ["Sign in", "Open the app and enter the login and password from your account."],
+          ["Confirm the system prompt", "Android will ask to create a VPN connection — tap OK."],
+          ["Press connect", "Split tunneling is already inside: Russian services go direct, everything else through the tunnel."],
+        ],
+      },
+      ios: {
+        title: "Connecting on iPhone and iPad",
+        appTitle: "AmneziaVPN for iPhone and iPad",
+        appText: "We don't have our own iPhone app yet, so you connect with a key through the free AmneziaVPN.",
+        download: "Open the App Store",
+        steps: [
+          ["Install AmneziaVPN", "Find AmneziaVPN in the App Store or open the link above right on the device. The app is free."],
+          ["Get your Prosto key", "We issue the key — it waits in your account and in the Telegram bot."],
+          ["Paste the key into the app", "On the Connection screen paste the string into Insert key and tap Insert. The config is recognised on its own."],
+          ["Tap Connect", "On the New connection screen confirm it. iOS will ask to allow the VPN profile — agree."],
+          ["Check the status", "The circle turns orange and says Connected, with the Prosto VPN server below."],
+        ],
+        shots: [
+          "Paste the key into Insert key and tap Insert",
+          "The app recognises the config — tap Connect",
+          "Done: Connected and the Prosto VPN server",
+        ],
+      },
+      mac: {
+        title: "Connecting on macOS",
+        appTitle: "Prosto VPN for macOS",
+        appText: "One image, works on Apple Silicon and Intel. Updates come from the app itself.",
+        download: "Download DMG",
+        steps: [
+          ["Download the image", "The .dmg works on both Apple Silicon and Intel."],
+          ["Move it to Applications", "Open the image and drag Prosto VPN into the Applications folder."],
+          ["Sign in", "Open the app and enter the login and password from your account."],
+          ["Allow the connection service", "On the first connect macOS asks for the administrator password once: a tunnel cannot be raised without root."],
+          ["Press connect", "Split tunneling is already inside: Russian services go direct, everything else through the tunnel."],
+        ],
+      },
+      win: {
+        title: "Connecting on Windows",
+        appTitle: "Prosto VPN for Windows",
+        appText: "One installer, Windows 10 and 11. The tunnel driver installs itself.",
+        download: "Download the installer",
+        steps: [
+          ["Download the installer", "Windows 10 and 11 are supported, no separate VPN client needed."],
+          ["Run the setup", "The tunnel driver installs automatically, no reboot required."],
+          ["Sign in", "Open the app and enter the login and password from your account."],
+          ["Confirm the system prompt", "Windows will ask permission to create a VPN connection — agree."],
+          ["Press connect", "Split tunneling is already inside: Russian services go direct, everything else through the tunnel."],
+        ],
+      },
+      tv: {
+        title: "Connecting on a TV",
+        appTitle: "Prosto VPN for Android TV",
+        appText: "The same file as for Android: no separate TV build needed.",
+        download: "Download APK",
+        steps: [
+          ["Download the APK on a computer", "The button above. It's the same file as for the phone."],
+          ["Copy it to a USB stick", "Put the APK on a regular USB stick and plug it into the TV."],
+          ["Install from the stick", "Open the file manager on the TV, find the APK and start the install. Allow unknown sources if asked."],
+          ["Sign in with login and password", "The same ones as in your account. The on-screen keyboard works from the remote; case matters."],
+          ["Confirm and connect", "The TV will ask permission for the VPN connection — confirm and press connect. For streaming pick the country of the catalogue you want."],
+        ],
+      },
+    },
+
+    shotsTitle: "How it looks in the app",
+    done: "Done. The connection icon turns orange — traffic goes through the encrypted tunnel.",
+    toAccount: "Account",
+
+    asideKeyTitle: "Where to get the key",
+    asideKeyText: "The key waits in your account and in the Telegram bot. One key works on every device of the account.",
+    asideLoginTitle: "Sign-in details",
+    asideLoginText: "You need the login and password of your Prosto VPN account — the same ones as in the dashboard. Forgot the password — change it there.",
+    asideBot: "Telegram bot",
+    asideNeedTitle: "What you'll need",
+    asideNeedText: "A Prosto VPN account, an internet connection and a minute. No card required.",
+    asideCreate: "Create an account",
+
+    split: {
+      eyebrow: "SPLIT TUNNELING",
+      title: "Russian services keep working",
+      lead1: "Split tunneling sends through the VPN only the addresses that need it. The rest goes direct, so banks, state portals, marketplaces and delivery keep working: they see a normal local address and don't block the login.",
+      lead2: "In our apps the list is already inside and on by default — nothing to set up. The steps below are for AmneziaVPN on iPhone, where the list is imported by hand.",
+      fileButton: "Get the list in your account",
+      botButton: "Get it from the bot",
+      steps: [
+        ["Download the address list", "In your account or in the bot — a file with Russian ranges."],
+        ["Open split tunneling", "In AmneziaVPN the section lives in the connection settings."],
+        ["Choose the list mode", "«Only addresses from the list should open through the VPN» — everything else goes direct."],
+        ["Import the file", "Advanced settings → Import → replace the site list. Done."],
+      ],
+      shots: [
+        "The section in connection settings",
+        "Mode: only addresses from the list",
+        "Advanced settings → Import",
+        "Replace the site list",
+      ],
+    },
+
+    help: {
+      title: "If something doesn't work",
+      lead: "Three reasons that close almost every request",
+      cards: [
+        ["It won't connect", "Switch the country in the server list and try again. Mobile data instead of Wi-Fi often helps too: networks block VPN differently."],
+        ["Slow speed", "Pick another country — the closest one isn't always the fastest. Speed depends on node load more than on distance."],
+        ["Banking apps fail", "Turn on split tunneling: local addresses go direct, and the apps stop seeing a foreign address."],
+      ],
+      askTitle: "Still have questions?",
+      askText: "Write to Telegram or email — we answer in both",
+      askBot: "Support in Telegram",
+    },
   },
 
   login: {
@@ -298,6 +441,7 @@ export const en = {
   },
 
   setup: {
+    moreGuide: "Full setup guide with screenshots",
     noteLabel: "Signing in to the app",
     note:
       "Signing in is the same on every platform: login {login} and the password for this " +
@@ -515,6 +659,7 @@ export const en = {
           h: "Where to write",
           items: [
             ["Telegram", "@prostovpnn_bot — the main support channel, we reply quickly."],
+            ["Email", "support@prostovpn.cc — when a messenger is inconvenient; the reply lands on the same address."],
             ["What to include", "Your login or the public ID from your account, the device, and whatever the app shows on screen."],
           ],
         },

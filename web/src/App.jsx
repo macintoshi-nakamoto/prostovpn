@@ -4,6 +4,7 @@ import { useSession } from "./lib/session.jsx";
 import { Landing } from "./pages/Landing.jsx";
 import { Login } from "./pages/Login.jsx";
 import { Account } from "./pages/Account.jsx";
+import { Guide } from "./pages/Guide.jsx";
 import { Legal } from "./pages/Legal.jsx";
 import { NotFound } from "./pages/NotFound.jsx";
 
@@ -62,6 +63,7 @@ export function App() {
             </Private>
           }
         />
+        <Route path="/guide" element={<Guide />} />
         <Route path="/terms" element={<Legal doc="terms" />} />
         <Route path="/privacy" element={<Legal doc="privacy" />} />
         <Route path="/faq" element={<Legal doc="faq" />} />

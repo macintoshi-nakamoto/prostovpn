@@ -50,6 +50,22 @@ def _links() -> str:
     return "\n".join(f"  {title}: {base}{path}" for title, path in _DOWNLOADS)
 
 
+def _support_line() -> str:
+    """Куда писать, если не получилось. Пусто — почты поддержки нет."""
+    address = settings().support_email.strip()
+    return f"Не получилось — напишите нам: {address}\n" if address else ""
+
+
+def _support_html() -> str:
+    address = settings().support_email.strip()
+    if not address:
+        return ""
+    return (
+        '<p style="font-size:13px;color:#8b8b93;margin:16px 0 0">Не получилось — напишите нам: '
+        f'<a href="mailto:{address}" style="color:#8b8b93">{address}</a></p>'
+    )
+
+
 def credentials_body(login: str, password: str, expires_at: str) -> tuple[str, str]:
     """Первое письмо: логин и пароль. Возвращает (текст, html)."""
     base = settings().site_url.rstrip("/")
@@ -69,6 +85,7 @@ def credentials_body(login: str, password: str, expires_at: str) -> tuple[str, s
 
 Пароль можно сменить в личном кабинете: {base}/account.html
 
+{_support_line()}
 Если письмо пришло вам по ошибке — просто удалите его.
 """
     html = f"""<!doctype html>
@@ -86,6 +103,7 @@ def credentials_body(login: str, password: str, expires_at: str) -> tuple[str, s
     {"<br>".join(f'<a href="{base}{path}" style="color:#ff6a1f;text-decoration:none">{title}</a>' for title, path in _DOWNLOADS)}
   </p>
   <p style="font-size:13px;color:#8b8b93;margin:0">Пароль можно сменить в <a href="{base}/account.html" style="color:#8b8b93">личном кабинете</a>.</p>
+  {_support_html()}
 </div></body></html>"""
     return text, html
 
@@ -101,13 +119,15 @@ def renewed_body(login: str, expires_at: str) -> tuple[str, str]:
 приложение продолжит работать само.
 
 Личный кабинет: {base}/account.html
-"""
+
+{_support_line()}"""
     html = f"""<!doctype html>
 <html lang="ru"><body style="margin:0;padding:32px 16px;background:#0b0b0c;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ea">
 <div style="max-width:520px;margin:0 auto">
   <p style="font-size:15px;line-height:1.6;margin:0 0 20px">Подписка продлена до <b style="color:#ff6a1f">{expires_at}</b>.</p>
   <p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">Логин прежний: <span style="font-family:ui-monospace,monospace">{login}</span>. Пароль тоже прежний — менять ничего не нужно, приложение продолжит работать само.</p>
   <p style="font-size:13px;color:#8b8b93;margin:0"><a href="{base}/account.html" style="color:#8b8b93">Личный кабинет</a></p>
+  {_support_html()}
 </div></body></html>"""
     return text, html
 
@@ -122,6 +142,8 @@ def send(to: str, subject: str, text: str, html: str | None = None) -> None:
         _send_smtp(to, subject, text, html)
     elif provider == "resend":
         _send_resend(to, subject, text, html)
+    elif provider == "cloudflare":
+        _send_cloudflare(to, subject, text, html)
     elif provider == "console":
         # Разработка: печатаем факт отправки, но не содержимое. Пароль в
         # логах не должен появляться даже в отладочном режиме.
@@ -161,6 +183,55 @@ def _send_smtp(to: str, subject: str, text: str, html: str | None) -> None:
             server.send_message(message)
     except (smtplib.SMTPException, OSError) as exc:
         raise MailError(f"SMTP: {exc}") from exc
+
+
+def _send_cloudflare(to: str, subject: str, text: str, html: str | None) -> None:
+    """
+    Отправка через Cloudflare Email Service.
+
+    Домен уже живёт в Cloudflare — там же его DNS, SPF и DKIM, — поэтому
+    письмо уходит подписанным без отдельного почтового провайдера и без
+    своего SMTP на VPS, с которого письма с паролем ушли бы в спам.
+
+    Отправитель обязан быть на домене, заведённом в разделе Email Sending:
+    на любой другой адрес API отвечает отказом, а не молча роняет письмо.
+    """
+    config = settings()
+    if not config.cloudflare_account_id or not config.cloudflare_api_token:
+        raise MailError("PANEL_CLOUDFLARE_ACCOUNT_ID или PANEL_CLOUDFLARE_API_TOKEN не заданы")
+
+    payload: dict[str, object] = {
+        "from": formataddr((config.mail_from_name, config.mail_from)),
+        "to": to,
+        "subject": subject,
+        "text": text,
+    }
+    if html:
+        payload["html"] = html
+
+    url = (
+        "https://api.cloudflare.com/client/v4/accounts/"
+        f"{config.cloudflare_account_id}/email/sending/send"
+    )
+    try:
+        response = httpx.post(
+            url,
+            json=payload,
+            headers={"Authorization": f"Bearer {config.cloudflare_api_token}"},
+            timeout=30.0,
+        )
+    except httpx.HTTPError as exc:
+        raise MailError(f"Cloudflare недоступен: {exc}") from exc
+
+    if response.status_code >= 400:
+        raise MailError(f"Cloudflare вернул {response.status_code}: {response.text[:200]}")
+
+    # Двухсотка ещё не значит «принято»: отказ приезжает в теле с success=false.
+    body = response.json() if response.content else {}
+    if not body.get("success", False):
+        errors = body.get("errors") or []
+        detail = "; ".join(str(item.get("message", item)) for item in errors) or response.text[:200]
+        raise MailError(f"Cloudflare отказал: {detail}")
 
 
 def _send_resend(to: str, subject: str, text: str, html: str | None) -> None:

@@ -53,6 +53,7 @@ export function SiteHeader() {
           <a href={section("app")}>{t("nav.app")}</a>
           <a href={section("plans")}>{t("nav.plans")}</a>
           <a href={section("security")}>{t("nav.security")}</a>
+          <Link to="/guide">{t("nav.guide")}</Link>
           <Link to="/faq">{t("nav.faq")}</Link>
         </nav>
         {/* Переключатели и кнопка входа — одной группой: на узком экране меню

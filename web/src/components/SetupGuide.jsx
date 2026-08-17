@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { useI18n } from "../lib/i18n/index.jsx";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO, SUPPORT_TELEGRAM, SUPPORT_TELEGRAM_NAME } from "../lib/contacts.js";
 import "./setup-guide.css";
 
 /**
@@ -87,11 +89,18 @@ export function SetupGuide({ login }) {
             </div>
           ))}
         </div>
+        {/* Развёрнутая инструкция — со скриншотами и разделом про раздельное
+            туннелирование: здесь только пять шагов, а вопросы обычно про то,
+            чего в них нет. */}
+        <div className="sg-help">
+          <Link to="/guide">{t("setup.moreGuide")}</Link>
+        </div>
         <div className="sg-help">
           <span>{t("setup.helpText")}</span>
-          <a href="https://t.me/prostovpnn_bot" target="_blank" rel="noreferrer">
-            @prostovpnn_bot
+          <a href={SUPPORT_TELEGRAM} target="_blank" rel="noreferrer">
+            {SUPPORT_TELEGRAM_NAME}
           </a>
+          <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a>
         </div>
       </div>
     </div>

@@ -133,11 +133,14 @@ class Settings(BaseSettings):
 
     # --- доставка учётки ------------------------------------------------------
 
-    # smtp | resend | console. console печатает письмо в лог без пароля —
-    # для локальной разработки.
+    # smtp | resend | cloudflare | console. console печатает письмо в лог без
+    # пароля — для локальной разработки.
     mail_provider: str = "console"
     mail_from: str = "no-reply@example.com"
     mail_from_name: str = "Prosto"
+    # Куда писать человеку, если что-то пошло не так. Показывается на сайте,
+    # в кабинете и в письмах; пустой — блок с почтой не рисуется вовсе.
+    support_email: str = ""
     # В теме письма намеренно нет слова VPN: российские почтовики режут такие
     # письма охотнее, а внутри всё равно только логин и пароль.
     mail_subject: str = "Ваш доступ к сервису Prosto"
@@ -150,6 +153,12 @@ class Settings(BaseSettings):
     smtp_ssl: bool = False
 
     resend_api_key: str = ""
+
+    # Cloudflare Email Service. Домен должен быть заведён в разделе
+    # Email Sending дашборда: отправлять можно только с адреса того домена,
+    # который там подтверждён, иначе API отвечает sending_disabled.
+    cloudflare_account_id: str = ""
+    cloudflare_api_token: str = ""
 
     telegram_bot_token: str = ""
 

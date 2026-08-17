@@ -21,7 +21,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as OrmSession
 
-from . import services
+from . import geo, services
 from .config import settings
 from .db import get_db
 from .models import Provisioning, Session, User
@@ -359,9 +359,19 @@ def _servers_out(
                 # «Нидерланды» человеку понятнее, чем «nl-ams-01».
                 name=server.country or server.name,
                 country=server.country,
-                country_en=server.country_en,
+                # Английское название достаём по коду страны, если своего в
+                # панели не завели. Иначе приложение с английским интерфейсом
+                # честно откатывалось на русское, и человек видел кириллицу в
+                # списке стран. Заполненное вручную поле важнее справочника:
+                # у администратора могут быть свои причины назвать иначе.
+                country_en=server.country_en or geo.country_en(server.country_code, server.country),
                 city=server.city,
-                city_en=server.city_en,
+                # Города в справочнике нет — их тысячи, и надёжного
+                # соответствия по коду не построить. Пустое английское
+                # название города откатывается на русское: показать
+                # «Амстердам» англичанину лучше, чем пустую строку под
+                # названием страны.
+                city_en=server.city_en or server.city,
                 country_code=server.country_code,
                 config=config,
             )

@@ -50,6 +50,7 @@ def _apply(server: Server, body: schemas.ServerIn) -> None:
     server.country = body.country
     server.country_en = body.country_en
     server.city = body.city
+    server.city_en = body.city_en
     server.country_code = (body.country_code or "").upper() or None
     server.host = body.host
     server.port = body.port

@@ -277,8 +277,13 @@ def server_out(db: OrmSession, server: Server) -> schemas.ServerOut:
         id=server.id,
         name=server.name,
         country=server.country,
+        # Английские названия отдаём как есть, без подстановки по коду:
+        # панель показывает их в форме, и справочное значение в поле ввода
+        # выглядело бы как заполненное вручную. Подставляет клиентское API,
+        # см. _servers_out.
         country_en=server.country_en,
         city=server.city,
+        city_en=server.city_en,
         country_code=server.country_code,
         host=server.host,
         port=server.port,

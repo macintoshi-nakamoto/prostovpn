@@ -253,6 +253,52 @@ def test_blocked_user_cannot_log_in(client, auth, shared_server):
     assert denied.status_code == 401
 
 
+def test_english_country_name_comes_from_the_code(client, auth, shared_server):
+    """
+    Приложению с английским интерфейсом не отдаём кириллицу.
+
+    Английское название страны администратор в панели не заполнял — поля
+    для него там просто не было, — и приложение честно откатывалось на
+    русское: человек с английским интерфейсом видел «Нидерланды» в списке
+    стран. Название берём по коду страны, который и так есть ради флага.
+
+    Заполненное вручную поле важнее справочника: у администратора могут
+    быть свои причины назвать иначе.
+    """
+    from app.models import Server
+
+    created = client.post(
+        "/api/admin/users", json={"name": "Английский", "planCode": "3months"}, headers=auth
+    ).json()
+    r = client.post(
+        "/api/v1/login",
+        json={"login": created["user"]["login"], "password": created["password"], "platform": "android"},
+    )
+    servers = {s["id"]: s for s in r.json()["servers"]}
+    mine = servers[shared_server]
+
+    # Своего английского названия нет — взяли по коду NL.
+    assert mine["country"] == "Нидерланды"
+    assert mine["country_en"] == "Netherlands"
+    # Города в справочнике нет: русское лучше пустоты под названием страны.
+    assert mine["city_en"] == mine["city"]
+
+    # Заполненное руками побеждает справочник.
+    with SessionLocal() as db:
+        db.get(Server, shared_server).country_en = "Holland"
+        db.commit()
+    r = client.post(
+        "/api/v1/login",
+        json={"login": created["user"]["login"], "password": created["password"], "platform": "android"},
+    )
+    mine = {s["id"]: s for s in r.json()["servers"]}[shared_server]
+    assert mine["country_en"] == "Holland", "своё название затёрто справочником"
+
+    with SessionLocal() as db:
+        db.get(Server, shared_server).country_en = None
+        db.commit()
+
+
 def test_client_login_returns_servers_without_ip_or_keys(client, auth, shared_server):
     created = client.post(
         "/api/admin/users", json={"name": "Клиент Приложения", "planCode": "3months"}, headers=auth

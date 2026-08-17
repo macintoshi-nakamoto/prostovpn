@@ -320,6 +320,7 @@ class ServerOut(Schema):
     country: str | None
     country_en: str | None
     city: str | None
+    city_en: str | None
     country_code: str | None
     host: str
     port: int
@@ -358,6 +359,7 @@ class ServerIn(Schema):
     country: str | None = None
     country_en: str | None = None
     city: str | None = None
+    city_en: str | None = None
     country_code: str | None = None
     host: str = Field(min_length=1, max_length=255)
     port: int = 51820

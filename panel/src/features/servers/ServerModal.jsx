@@ -19,6 +19,7 @@ const EMPTY = {
   country: "",
   countryEn: "",
   city: "",
+  cityEn: "",
   countryCode: "",
   host: "",
   port: 51820,
@@ -124,6 +125,25 @@ export function ServerModal({ server, onClose, onSaved }) {
           </Field>
           <Field label="Код">
             <input className="gd-input" value={form.countryCode || ""} onChange={set("countryCode")} placeholder="NL" maxLength={2} />
+          </Field>
+        </div>
+
+        {/*
+        Английские названия. Заполнять их необязательно: страну приложение
+        возьмёт по коду из справочника, город — покажет русским. Поля нужны
+        для случаев, где справочник не подходит: свои формулировки, город с
+        неочевидным написанием, узел в стране без кода.
+
+        До этого полей не было вовсе, и приложение с английским интерфейсом
+        показывало кириллицу в списке стран — заполнить их администратору
+        было нечем.
+        */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Страна по-английски" hint="Пусто — возьмём по коду">
+            <input className="gd-input" value={form.countryEn || ""} onChange={set("countryEn")} placeholder="Netherlands" />
+          </Field>
+          <Field label="Город по-английски" hint="Пусто — покажем русский">
+            <input className="gd-input" value={form.cityEn || ""} onChange={set("cityEn")} placeholder="Amsterdam" />
           </Field>
         </div>
 

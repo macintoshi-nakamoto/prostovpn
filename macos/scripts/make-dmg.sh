@@ -24,6 +24,22 @@ BUILD_ROOT="${BUILD_ROOT:-$HOME/Library/Caches/ProstoVPN-build}"
 DERIVED="$BUILD_ROOT/dd"
 STAGING="$BUILD_ROOT/dmg"
 OUTPUT_DIR="${OUTPUT_DIR:-$ROOT/dist}"
+
+# Чем подписываем.
+#
+# Ad-hoc подпись у каждой сборки своя, и связка ключей считает новую версию
+# чужой программой: после каждого обновления система спрашивает пароль от
+# связки, чтобы отдать приложению его же токен. Поэтому берём любой
+# постоянный сертификат, какой есть в системе, — Developer ID, иначе Apple
+# Development, — и только если нет ни одного, остаётся ad-hoc.
+if [ -z "${SIGN_IDENTITY:-}" ]; then
+    SIGN_IDENTITY="$(security find-identity -v -p codesigning \
+        | grep -o '"Developer ID Application: [^"]*"' | head -1 | tr -d '"' || true)"
+fi
+if [ -z "$SIGN_IDENTITY" ]; then
+    SIGN_IDENTITY="$(security find-identity -v -p codesigning \
+        | grep -o '"Apple Development: [^"]*"' | head -1 | tr -d '"' || true)"
+fi
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 
 echo "→ движок"

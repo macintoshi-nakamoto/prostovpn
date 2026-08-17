@@ -214,34 +214,25 @@ struct SettingsView: View {
 
             Spacer()
 
-            HStack(spacing: 4) {
-                langButton("RU", code: "ru")
-                langButton("EN", code: "en")
+            // Системный сегментированный переключатель: на macOS 26 он сам
+            // из того же стекла, что и остальные элементы управления, и
+            // работает с клавиатуры — самодельные капсулы не умели ни того,
+            // ни другого.
+            Picker("", selection: languageBinding) {
+                Text("RU").tag("ru")
+                Text("EN").tag("en")
             }
-            .padding(3)
-            .background(Color.white.opacity(0.05))
-            .clipShape(Capsule())
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .controlSize(.small)
+            .fixedSize()
         }
         .padding(12)
         .cardGroup()
     }
 
-    private func langButton(_ title: String, code: String) -> some View {
-        let selected = state.lang == code
-        return Button {
-            state.lang = code
-        } label: {
-            Text(title)
-                .manrope(11, .bold)
-                .foregroundColor(selected ? .white : Theme.textSecondary)
-                .padding(.horizontal, 11)
-                .frame(height: 24)
-                .background(selected ? AnyShapeStyle(Theme.accentGradient) : AnyShapeStyle(Color.clear))
-                .clipShape(Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .pointerCursor()
+    private var languageBinding: Binding<String> {
+        Binding(get: { state.lang }, set: { state.lang = $0 })
     }
 
     /// Разрешение спрашиваем сразу при включении: иначе человек включит
@@ -418,9 +409,14 @@ struct SettingRow: View {
 
             Spacer(minLength: 8)
 
+            // Системный переключатель, а не свой: на macOS 26 он и так живой —
+            // со стеклом, отдачей на нажатие и всеми состояниями, которые
+            // самодельный повторял приблизительно. Своим остаётся только цвет.
             Toggle("", isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(GlassToggleStyle())
+                .toggleStyle(.switch)
+                .tint(Theme.accent)
+                .controlSize(.small)
                 .disabled(!enabled)
         }
         .padding(.horizontal, 10)

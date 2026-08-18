@@ -409,6 +409,16 @@ def _servers_out(
 # перейти к следующему, а не скакать между портами внутри одной попытки.
 PORT_PROBE_SECONDS = 180
 
+# Сколько ключ живёт на основном порту, прежде чем начать перебор.
+#
+# Только что заведённый ключ — это чаще всего человек, который ещё ни разу не
+# нажал «подключиться», а не человек, у которого не выходит. Начинать с
+# перебора значит отправить новичка на запасной порт вместо основного, про
+# который точно известно, что он слушается. Десять минут — это несколько
+# полных заходов клиента (один занимает около полутора минут): кто подключится
+# штатно, перебора вообще не увидит, а кто застрял — дождётся его сам.
+PORT_PROBE_GRACE = dt.timedelta(minutes=10)
+
 
 def _with_chosen_port(
     db: OrmSession, server: Server, key: UserKey | None, config: str
@@ -434,14 +444,16 @@ def _with_chosen_port(
     if key is None or not ports:
         return config
 
-    if key.last_handshake_at is not None:
-        # Порт, на котором в прошлый раз получилось. Пока получается —
-        # ничего не меняем.
+    now = utcnow()
+    if key.last_handshake_at is not None or now - key.created_at < PORT_PROBE_GRACE:
+        # Либо рукопожатие уже было — и тогда работающее не чинят, — либо ключ
+        # совсем свежий и человек ещё даже не пробовал. И там и там отдаём то,
+        # что было: закреплённый порт, а если его нет — основной.
         chosen = key.endpoint_port or provisioning.endpoint_port(config) or server.port
         return provisioning.with_endpoint_port(config, chosen)
 
     wheel = [server.port] + ports
-    index = int(utcnow().timestamp() // PORT_PROBE_SECONDS) % len(wheel)
+    index = int(now.timestamp() // PORT_PROBE_SECONDS) % len(wheel)
     chosen = wheel[index]
     if key.endpoint_port != chosen:
         # Запоминаем, что именно отдали: когда рукопожатие наконец случится,

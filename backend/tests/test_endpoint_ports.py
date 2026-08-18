@@ -170,9 +170,30 @@ def _config_for(user_id: int, server_id: int, device_id: str = "probe-device") -
     return _server_out(user_id, server_id, device_id).config
 
 
+def test_fresh_key_is_not_probed_yet(setup):
+    """
+    Только что заведённый ключ получает основной порт, а не перебор.
+
+    Свежий ключ — это чаще всего человек, который ещё ни разу не нажал
+    «подключиться». Отправлять его на запасной порт вместо основного, про
+    который точно известно, что узел его слушает, — значит создавать поломку
+    там, где её не было.
+    """
+    server_id, user_id, _ = setup
+    assert provisioning.endpoint_port(_config_for(user_id, server_id)) == 51820
+
+
 def test_never_connected_key_gets_probed_ports(setup):
     """У кого рукопожатия не было — порт по кругу, и он запоминается."""
     server_id, user_id, key_id = setup
+
+    # Ключ должен быть достаточно старым: перебор включается не сразу.
+    import app.api_client as api_client
+
+    with SessionLocal() as db:
+        key = db.get(UserKey, key_id)
+        key.created_at = utcnow() - api_client.PORT_PROBE_GRACE - dt.timedelta(minutes=1)
+        db.commit()
 
     seen = set()
     # Колесо крутится от часов, поэтому просто дёргаем выдачу несколько раз
@@ -199,10 +220,13 @@ def test_working_key_keeps_its_port(setup):
     """У кого рукопожатие было — порт не меняется. Работающее не чинят."""
     server_id, user_id, key_id = setup
 
+    import app.api_client as api_client
+
     with SessionLocal() as db:
         key = db.get(UserKey, key_id)
         key.endpoint_port = 443
         key.last_handshake_at = utcnow()
+        key.created_at = utcnow() - api_client.PORT_PROBE_GRACE - dt.timedelta(minutes=1)
         db.commit()
 
     import app.api_client as api_client

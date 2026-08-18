@@ -41,7 +41,7 @@ export const en = {
 
     hero: {
       line1: "The internet",
-      line2: "without borders",
+      line2: "kept private",
       lead:
         "One tap to connect, 60+ countries and speeds up to 1 Gbps. No logs, no setup " +
         "and no throttling.",
@@ -72,7 +72,7 @@ export const en = {
       line3: "works",
       text:
         "One button on the home screen. Everything else is automatic: the best server, " +
-        "bypassing blocks and staying protected when you switch to Wi-Fi.",
+        "a stable connection and staying protected when you switch to Wi-Fi.",
       laptopAlt: "Prosto VPN on a laptop",
       button: "Download the app",
     },
@@ -132,7 +132,7 @@ export const en = {
         },
         {
           title: "DNS leak protection",
-          text: "Queries leave only through the tunnel: your ISP can't see the sites you open.",
+          text: "Queries leave only through the encrypted tunnel and never leak in the clear.",
         },
         {
           title: "Independent audit",
@@ -278,7 +278,7 @@ export const en = {
           ["Copy it to a USB stick", "Put the APK on a regular USB stick and plug it into the TV."],
           ["Install from the stick", "Open the file manager on the TV, find the APK and start the install. Allow unknown sources if asked."],
           ["Sign in with login and password", "The same ones as in your account. The on-screen keyboard works from the remote; case matters."],
-          ["Confirm and connect", "The TV will ask permission for the VPN connection — confirm and press connect. For streaming pick the country of the catalogue you want."],
+          ["Confirm and connect", "The TV will ask permission for the VPN connection — confirm and press connect. A nearby server usually gives the best speed."],
         ],
       },
     },
@@ -299,7 +299,7 @@ export const en = {
     split: {
       eyebrow: "SPLIT TUNNELING",
       title: "Russian services keep working",
-      lead1: "Split tunneling sends through the VPN only the addresses that need it. The rest goes direct, so banks, state portals, marketplaces and delivery keep working: they see a normal local address and don't block the login.",
+      lead1: "Split tunneling sends through the VPN only the addresses that need it. The rest goes direct, so banks, state portals, marketplaces and delivery keep working: they see a normal local address and keep working as usual.",
       lead2: "In our apps the list is already inside and on by default — nothing to set up. The steps below are for AmneziaVPN on iPhone, where the list is imported by hand.",
       fileButton: "Get the list in your account",
       botButton: "Get it from the bot",

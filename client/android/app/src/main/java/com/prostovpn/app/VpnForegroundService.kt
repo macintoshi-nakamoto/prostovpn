@@ -13,7 +13,6 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.runBlocking
 
 /**
  * Держит процесс живым, пока поднят туннель.
@@ -33,33 +32,48 @@ class VpnForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
-            // Отключение из шторки: процесс приложения может быть без Activity,
-            // поэтому дёргаем общий на процесс туннель напрямую. runBlocking здесь
-            // уместен — снятие занимает миллисекунды, а сервис всё равно уходит.
-            runCatching { runBlocking { TunnelManager.getInstance(applicationContext).disconnect() } }
-            stopForegroundCompat()
-            stopSelf()
+            /*
+            Отключение из шторки: процесс может быть без Activity, поэтому
+            дёргаем общий на процесс туннель напрямую — но НЕ блокируя.
+
+            Раньше здесь стоял runBlocking, и это был не «миллисекунды, а
+            сервис всё равно уходит», а вечный ANR: снятие ждёт замок
+            туннеля, замок держит идущее подключение, а подключению для
+            продолжения нужен главный поток — тот самый, который мы только
+            что заблокировали. Нажатие «Отключить» во время подключения
+            вешало приложение намертво.
+            */
+            status = stoppingLabel
+            runCatching {
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), fgsType())
+            }
+            TunnelManager.getInstance(applicationContext).requestDisconnect {
+                stopForegroundCompat()
+                stopSelf(startId)
+            }
             return START_NOT_STICKY
         }
 
         intent?.getStringExtra(EXTRA_STATUS)?.let { status = it }
         intent?.getStringExtra(EXTRA_STOP_LABEL)?.let { stopLabel = it }
 
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-        } else {
-            0
-        }
         /*
         Android 14+ роняет приложение с MissingForegroundServiceTypeException, если
         тип не объявлен; на 13+ уведомление не покажется без POST_NOTIFICATIONS —
         в обоих случаях падать нельзя, VPN важнее уведомления.
         */
         runCatching {
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), type)
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), fgsType())
         }
         return START_NOT_STICKY
     }
+
+    private fun fgsType(): Int =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        } else {
+            0
+        }
 
     override fun onDestroy() {
         stopForegroundCompat()
@@ -115,6 +129,9 @@ class VpnForegroundService : Service() {
         // Переживают пересоздание сервиса системой, чтобы уведомление не осталось пустым
         private var status: String = "Подключено"
         private var stopLabel: String = "Отключить"
+        // Показывается, пока идёт снятие: без него шторка молчала бы всё
+        // время, что туннель ещё жив, и человек жал бы кнопку второй раз.
+        private var stoppingLabel: String = "Отключаем…"
 
         private fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
@@ -136,6 +153,11 @@ class VpnForegroundService : Service() {
         }
 
         /** Поднимает уведомление. [status] и [stopLabel] уже локализованы вызывающим. */
+        /** Подпись «отключаем» приходит из локализации вместе с остальными. */
+        fun setStoppingLabel(text: String) {
+            stoppingLabel = text
+        }
+
         fun start(context: Context, status: String, stopLabel: String) {
             val intent = Intent(context, VpnForegroundService::class.java)
                 .putExtra(EXTRA_STATUS, status)

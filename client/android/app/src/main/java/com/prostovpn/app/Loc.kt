@@ -23,6 +23,7 @@ data class Strings(
     val errNoHandshake: String,
     val errTunnelFailed: String,
     val errTunnelDropped: String,
+    val errVpnDenied: String,
     val noticeRemoteSignout: String,
 
     // Подписка на главном экране: предупреждение и продление
@@ -108,6 +109,7 @@ private val RU = Strings(
     errNoHandshake = "Сервер не отвечает. Попробуйте другой сервер или мобильный интернет вместо Wi-Fi",
     errTunnelFailed = "Не удалось поднять туннель. Проверьте ключ и разрешение на VPN",
     errTunnelDropped = "Соединение с VPN прервалось",
+    errVpnDenied = "Android не дал разрешение на VPN. Нажмите «Подключиться» ещё раз и выберите «ОК»",
     noticeRemoteSignout = "Это устройство отключили в личном кабинете. Войдите снова, чтобы продолжить",
     trafficLowWarn = "Трафик заканчивается: осталось %s",
     expiresSoonWarn = "Подписка истекает через %s",
@@ -185,6 +187,7 @@ private val EN = Strings(
     errNoHandshake = "The server isn't responding. The network may be blocking VPN — try another server or mobile data instead of Wi-Fi",
     errTunnelFailed = "Couldn't bring the tunnel up. Check the key and VPN permission",
     errTunnelDropped = "VPN connection dropped",
+    errVpnDenied = "Android denied the VPN permission. Tap Connect again and choose OK",
     noticeRemoteSignout = "This device was disconnected in the account dashboard. Sign in again to continue",
     trafficLowWarn = "Traffic is running out: %s left",
     expiresSoonWarn = "Subscription expires in %s",

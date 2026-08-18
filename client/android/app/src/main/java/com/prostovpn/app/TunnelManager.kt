@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
@@ -75,6 +76,21 @@ class TunnelManager(context: Context) {
     в setState одновременно.
     */
     private val mutex = Mutex()
+
+    /*
+    Весь разговор с туннелем — на своём потоке, не на том, откуда позвали.
+
+    Звали его из viewModelScope, то есть с ГЛАВНОГО потока: там же крутилось
+    ожидание рукопожатия, каждые триста миллисекунд дёргая JNI. Пока замок
+    держал главный поток, кнопка «Отключить» в шторке делала runBlocking на
+    том же главном потоке — и приложение вставало намертво: корутине
+    подключения нужен главный поток, чтобы продолжиться и отпустить замок, а
+    он занят ожиданием этой самой корутины. Человек видел зависшее
+    приложение, закрывал его через «Стоп» — и оставался с поднятым туннелем
+    без хозяина, то есть вообще без интернета.
+    */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val tunnelDispatcher = Dispatchers.IO.limitedParallelism(1)
 
     private val tunnel = object : Tunnel {
         override fun getName(): String = "prosto"
@@ -157,7 +173,10 @@ class TunnelManager(context: Context) {
      * прошлый раз. Человеку, у которого проходит только запасной порт, незачем
      * терять полминуты на основном при каждом включении.
      */
-    private suspend fun attemptConnect(configText: String, alternativePorts: List<Int>): Result =
+    private suspend fun attemptConnect(
+        configText: String,
+        alternativePorts: List<Int>,
+    ): Result = withContext(tunnelDispatcher) {
         mutex.withLock {
             val basePort = Endpoints.portOf(configText)
             val ports = Endpoints.order(basePort, rememberedPort, alternativePorts)
@@ -167,31 +186,76 @@ class TunnelManager(context: Context) {
             // тогда работаем с конфигом как есть, одним заходом.
             val plan: List<Int?> = if (ports.isEmpty()) listOf(null) else ports
 
-            for (port in plan) {
-                val text = if (port == null) configText else Endpoints.withPort(configText, port)
-                val result = tryEndpoint(text, port)
-                if (result == Result.CONNECTED) {
-                    if (port != null) rememberedPort = port
-                    return@withLock Result.CONNECTED
+            try {
+                for ((index, port) in plan.withIndex()) {
+                    if (wanted == null) break
+                    val text =
+                        if (port == null) configText else Endpoints.withPort(configText, port)
+                    val result = tryEndpoint(text, port, first = index == 0, ofPorts = plan.size)
+                    if (result == Result.CONNECTED) {
+                        if (port != null) rememberedPort = port
+                        return@withLock Result.CONNECTED
+                    }
+                    // Конфиг не разобрался или VpnService отказал — другой порт
+                    // этого не исправит, дальше перебирать бессмысленно.
+                    if (result == Result.FAILED) return@withLock Result.FAILED
+                    outcome = result
                 }
-                // Конфиг не разобрался или VpnService отказал — другой порт
-                // этого не исправит, дальше перебирать бессмысленно.
-                if (result == Result.FAILED) return@withLock Result.FAILED
-                outcome = result
-            }
-            outcome
-        }
+                outcome
+            } finally {
+                /*
+                Снятие обязано случиться на ЛЮБОМ выходе, включая отмену.
 
-    /** Попытки на одном эндпоинте. Возвращает исход по этому порту. */
-    private suspend fun tryEndpoint(configText: String, port: Int?): Result {
+                Раньше tearDown() стоял обычной строкой после цикла. Отмена
+                корутины (человек закрыл приложение, смахнул его из задач,
+                нажал «назад») прилетала в delay внутри ожидания рукопожатия и
+                проносилась мимо — интерфейс с маршрутом 0.0.0.0/0 оставался
+                поднятым, рукопожатия не было, и ВЕСЬ трафик телефона уходил в
+                мёртвый туннель. Со стороны это «интернет пропал совсем», и
+                починить это человек мог только перезагрузкой.
+                */
+                if (!isUp || wanted == null) {
+                    // Уже снят или снимать больше некому.
+                    withContext(NonCancellable) { tearDown() }
+                } else if (!isHealthy(staleMillis = HANDSHAKE_FRESH_MS)) {
+                    withContext(NonCancellable) { tearDown() }
+                }
+            }
+        }
+    }
+
+    /**
+     * Попытки на одном эндпоинте. Возвращает исход по этому порту.
+     *
+     * Терпение делится между портами, а не умножается на них. С четырьмя
+     * попытками на каждый из четырёх портов человек смотрел бы на спиннер
+     * шесть с половиной минут и ушёл бы раньше, чем перебор дошёл до
+     * рабочего порта. Поэтому полный бюджет достаётся первому порту — тому,
+     * что уже работал или стоит в конфиге, — а на остальные приходится по
+     * одному короткому окну. Когда перебирать нечего (портов один), всё
+     * остаётся ровно как было: длинное первое окно и четыре захода.
+     */
+    private suspend fun tryEndpoint(
+        configText: String,
+        port: Int?,
+        first: Boolean = true,
+        ofPorts: Int = 1,
+    ): Result {
         val config = runCatching { parseConfig(configText) }
             // runCatching ловит и ошибки загрузки классов: без записи в лог такой
             // отказ выглядел бы как «просто не подключается» и не поддавался разбору
             .onFailure { Log.e(TAG, "не удалось разобрать конфиг", it) }
             .getOrNull() ?: return Result.FAILED
 
+        val attempts = when {
+            ofPorts <= 1 -> ATTEMPTS
+            first -> ATTEMPTS_FIRST_PORT
+            else -> ATTEMPTS_OTHER_PORT
+        }
+
         var outcome = Result.NO_HANDSHAKE
-        for (attempt in 1..ATTEMPTS) {
+        for (attempt in 1..attempts) {
+            if (wanted == null) return Result.NO_HANDSHAKE
             if (!bringUp(config)) return Result.FAILED
 
             /*
@@ -212,7 +276,11 @@ class TunnelManager(context: Context) {
             каждое пересоздание VpnService само роняет пакеты, пока заново
             расставляет маршруты.
             */
-            val window = if (attempt == 1) FIRST_WINDOW_MS else RETRY_WINDOW_MS
+            val window = when {
+                ofPorts > 1 && !first -> OTHER_PORT_WINDOW_MS
+                attempt == 1 -> FIRST_WINDOW_MS
+                else -> RETRY_WINDOW_MS
+            }
             when (awaitHandshake(window)) {
                 Handshake.OK -> {
                     Log.i(TAG, "рукопожатие получено, порт ${port ?: "из конфига"}, попытка $attempt")
@@ -225,14 +293,14 @@ class TunnelManager(context: Context) {
                 }
                 Handshake.TIMEOUT -> {
                     outcome = Result.NO_HANDSHAKE
-                    Log.w(TAG, "нет рукопожатия за $window мс (порт ${port ?: "-"}, попытка $attempt из $ATTEMPTS)")
+                    Log.w(TAG, "нет рукопожатия за $window мс (порт ${port ?: "-"}, попытка $attempt из $attempts)")
                     /*
                     Пересоздаём интерфейс: новая эфемерная пара и новый
                     исходящий порт с нуля проходят фильтры сети, если прежний
                     порт попал под блокировку DPI. Между попытками — пауза,
                     чтобы оболочка успела снять старый интерфейс до нового.
                     */
-                    if (attempt < ATTEMPTS) {
+                    if (attempt < attempts) {
                         tearDown()
                         delay(RETRY_GAP_MS)
                     }
@@ -242,7 +310,7 @@ class TunnelManager(context: Context) {
 
         // Не оставляем мёртвый туннель поднятым, иначе весь трафик уходит в него
         // и снаружи это выглядит как «интернета нет»
-        tearDown()
+        withContext(NonCancellable) { tearDown() }
         return outcome
     }
 
@@ -282,6 +350,9 @@ class TunnelManager(context: Context) {
             if (lastHandshakeMillis() > 0L) return Handshake.OK
             // Туннель мог отвалиться сам (отзыв разрешения, смена сети)
             if (!isUp) return Handshake.INTERFACE_DOWN
+            // Человек передумал — выходим за триста миллисекунд, а не за
+            // полминуты: замок туннеля нужен тому, кто нас отменил.
+            if (wanted == null) return Handshake.INTERFACE_DOWN
             delay(POLL_MS)
         }
         return Handshake.TIMEOUT
@@ -338,6 +409,23 @@ class TunnelManager(context: Context) {
         }
         _status.value = Status.OFF
         return down
+    }
+
+    /**
+     * Снятие для тех, кому нельзя ждать: уведомление в шторке.
+     *
+     * Сервис живёт на главном потоке, и `runBlocking { disconnect() }` там
+     * значил «повесить приложение до конца снятия», а в худшем случае —
+     * навсегда: снятие ждёт замок, замок держит подключение, подключению для
+     * продолжения нужен тот самый главный поток. Поэтому снимаем в фоне, а
+     * сервис гасим уже по факту.
+     */
+    fun requestDisconnect(onDone: () -> Unit) {
+        wanted = null
+        watchScope.launch {
+            withTimeoutOrNull(DISCONNECT_TIMEOUT_MS) { disconnect() }
+            onDone()
+        }
     }
 
     val isUp: Boolean
@@ -545,6 +633,22 @@ class TunnelManager(context: Context) {
         private const val FAILED_GIVE_UP = 3
 
         private const val ATTEMPTS = 4
+
+        /*
+        Когда портов несколько, терпение делится, а не умножается: полный
+        бюджет первому порту, короткое окно каждому следующему. Суммарно это
+        те же полторы минуты, что человек ждал раньше на одном порту.
+        */
+        private const val ATTEMPTS_FIRST_PORT = 2
+        private const val ATTEMPTS_OTHER_PORT = 1
+        private const val OTHER_PORT_WINDOW_MS = 12_000L
+
+        /** Свежесть рукопожатия, по которой считаем подключение удавшимся. */
+        private const val HANDSHAKE_FRESH_MS = 60_000L
+
+        /** Потолок ожидания снятия для шторки. */
+        private const val DISCONNECT_TIMEOUT_MS = 25_000L
+
         private const val STARTUP_SETTLE_MS = 1_000L
         private const val FIRST_WINDOW_MS = 30_000L
         private const val RETRY_WINDOW_MS = 20_000L

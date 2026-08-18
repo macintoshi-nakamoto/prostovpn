@@ -287,6 +287,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
      * Foreground-состояние — единственное, что они уважают.
      */
     private fun startForegroundNotice() {
+        VpnForegroundService.setStoppingLabel(s.disconnectingTxt)
         val where = currentServer?.name?.takeIf { it.isNotEmpty() }
         val status = if (where != null) "${s.connected} · $where" else s.connected
         VpnForegroundService.start(getApplication(), status, s.notifDisconnect)
@@ -855,12 +856,27 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Ответ на системный запрос разрешения VPN.
+     *
+     * Отказ раньше не приводил ни к чему: поле обнулялось, и всё. Человек
+     * жал «Подключиться», отклонял системное окно (или его отклоняла за него
+     * оболочка) и оставался перед экраном, где ничего не произошло — ни
+     * ошибки, ни подсказки. В панели это выглядит ровно как «вход есть,
+     * ключи созданы, рукопожатий ноль», то есть неотличимо от заблокированной
+     * сети. Молчание тут дороже всего: оно и человека оставляет без VPN, и
+     * поддержку уводит искать несуществующую проблему с сервером.
+     */
     fun onVpnPermissionResult(granted: Boolean) {
         pendingPermissionIntent = null
-        val config = pendingConfig
+        val config = pendingConfig ?: server?.config
         pendingConfig = null
-        if (granted && config != null) {
+        if (granted && !config.isNullOrBlank()) {
             startTunnel(config)
+            return
+        }
+        if (phase == Phase.OFF) {
+            connectionError = if (granted) s.errTunnelFailed else s.errVpnDenied
         }
     }
 

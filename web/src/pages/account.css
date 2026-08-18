@@ -810,3 +810,49 @@
     gap: 8px;
   }
 }
+
+/*
+ * Карточка файла обхода.
+ *
+ * В строку, а не столбиком: текст слева, кнопка справа. На узком экране
+ * кнопки уезжают на свою строку и расходятся по краям — иначе «Скачать» и
+ * «Как подключить» слипаются в одну кашу под пальцем.
+ */
+.ac-bypass {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 22px 24px;
+}
+/* Подпись под текстом карточки: дата обновления файла и его размер. */
+.ac-key-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.ac-bypass-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 340px;
+}
+.ac-bypass-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+/* Файла ещё нет: кнопку гасим, а не прячем — исчезнувшая выглядит поломкой. */
+.ac-btn-off {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+@media (max-width: 560px) {
+  .ac-bypass-actions {
+    flex: 1 1 100%;
+    justify-content: space-between;
+  }
+}

@@ -828,6 +828,38 @@ class Session(Base):
         return (self.device_id or "").strip()
 
 
+class PasswordReset(Base):
+    """
+    Разовая ссылка на смену пароля.
+
+    В базе лежит ХЭШ токена, а не сам токен — ровно как у сессий. Смысл тот
+    же: утёкшая база не должна давать возможность сменить пароль любому
+    клиенту. Сам токен существует только в письме.
+
+    Строку не удаляем после использования, а помечаем `used_at`: так видно,
+    что ссылкой воспользовались, и повторное нажатие в письме честно скажет
+    «ссылка уже использована» вместо «неверная ссылка».
+    """
+
+    __tablename__ = "password_resets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+    expires_at: Mapped[dt.datetime] = mapped_column(DateTime, index=True)
+    used_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    # Откуда просили. Нужен не для блокировок, а для разбора: «мне приходят
+    # письма о сбросе, я их не просил» — обычное обращение в поддержку.
+    requested_ip: Mapped[str | None] = mapped_column(String(64), default=None)
+
+    user: Mapped[User] = relationship()
+
+    def is_usable(self, now: dt.datetime | None = None) -> bool:
+        moment = now or utcnow()
+        return self.used_at is None and self.expires_at > moment
+
+
 class AppRelease(Base):
     """
     Версия приложения для конкретной платформы.
@@ -997,6 +1029,13 @@ class DeliveryJob(Base):
         ForeignKey("orders.id", ondelete="SET NULL"), index=True, default=None
     )
 
+    # Данные, нужные конкретному письму и больше никому: например, разовый
+    # токен ссылки на смену пароля. В базе от такой ссылки лежит только хэш,
+    # поэтому взять её при отправке больше неоткуда.
+    #
+    # Отдельное поле, а не `order_id`: тот — внешний ключ на заказы, и
+    # вставка постороннего значения туда просто не проходит.
+    payload: Mapped[str | None] = mapped_column(Text, default=None)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(Text, default=None)
     next_attempt_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)

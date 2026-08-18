@@ -16,6 +16,7 @@ from . import (
     ios,
     letters,
     orders,
+    passwords,
     ratelimit,
     tunnel,
 )
@@ -124,6 +125,7 @@ __all__ = [
     "dashboard_totals",
     # заказы и оплата с сайта
     "orders",
+    "passwords",
     "billing_webhook",
     "delivery",
     "OrderError",

@@ -764,6 +764,89 @@ def delete_ios_key(
     return _account_out(db, user, session)
 
 
+# --- сброс пароля -------------------------------------------------------------
+
+
+class ForgotIn(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+
+
+class ResetIn(BaseModel):
+    token: str = Field(min_length=8, max_length=256)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class ResetCheckOut(BaseModel):
+    valid: bool
+    login: str | None = None
+
+
+@router.post("/password/forgot")
+def password_forgot(
+    body: ForgotIn, request: Request, db: OrmSession = Depends(get_db)
+) -> dict[str, object]:
+    """
+    «Забыли пароль» — отправляет ссылку на почту.
+
+    Ответ ВСЕГДА одинаковый, даже когда такой почты у нас нет. Иначе форма
+    превращается в проверялку «зарегистрирован ли человек в этом сервисе», а
+    это чужая приватность: спросить можно про любой чужой адрес.
+
+    Частота ограничена по адресу отправителя: без этого форму используют,
+    чтобы завалить чужой ящик письмами от нашего имени.
+    """
+    ip = client_ip(request)
+    verdict = services.ratelimit.hit(
+        db, f"forgot:{ip}", limit=5, window_minutes=60, lock_minutes=60
+    )
+    if not verdict.allowed:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "слишком много попыток — попробуйте через час",
+            headers={"Retry-After": str(verdict.retry_after or 3600)},
+        )
+
+    address = normalize_email(body.email)
+    try:
+        services.passwords.request(db, address, ip=ip)
+    except Exception:  # pragma: no cover
+        # Молчим наружу и здесь: сорвавшаяся отправка не повод рассказать,
+        # что адрес существует.
+        log.exception("сброс пароля: не удалось подготовить письмо")
+
+    return {"ok": True}
+
+
+@router.get("/password/reset/{token}", response_model=ResetCheckOut)
+def password_reset_check(token: str, db: OrmSession = Depends(get_db)) -> ResetCheckOut:
+    """
+    Годна ли ссылка — чтобы страница сразу сказала «просрочена», а не после
+    того, как человек придумает и введёт новый пароль.
+    """
+    entry = services.passwords.find(db, token)
+    if entry is None:
+        return ResetCheckOut(valid=False)
+    return ResetCheckOut(valid=True, login=entry.user.login)
+
+
+@router.post("/password/reset")
+def password_reset(body: ResetIn, db: OrmSession = Depends(get_db)) -> dict[str, object]:
+    """
+    Смена пароля по ссылке.
+
+    Все живые входы при этом гаснут. Это не побочный эффект: пароль меняют,
+    когда старый мог утечь, и оставить работающими прежние сессии значит не
+    сменить ничего.
+    """
+    try:
+        user = services.passwords.apply(db, body.token, body.password)
+    except services.PanelError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": "reset_failed"}
+        ) from exc
+    return {"ok": True, "login": user.login}
+
+
 class PasswordChangeIn(BaseModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=8, max_length=128)

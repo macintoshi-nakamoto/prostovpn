@@ -250,6 +250,8 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply })
         </div>
       </div>
 
+      <BypassCard file={data.tunnel_file} guideUrl={data.ios?.guide_url} />
+
       <IosCard ios={data.ios} active={data.active} onApply={onApply} onManage={onManage} />
 
       <div className="ac-columns">
@@ -288,6 +290,55 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply })
             {t("account.changePassword")}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Файл обхода российских сервисов.
+ *
+ * Нужен только на iPhone: там подключаются официальным AmneziaVPN, а он про
+ * наш список ничего не знает. В наших приложениях для Windows, Android и
+ * macOS раздельное туннелирование встроено и работает само.
+ *
+ * Кнопка гаснет, когда файла нет, а не исчезает: пропавшая кнопка выглядит
+ * как поломка интерфейса, погашенная — как «сейчас нечего скачивать», что и
+ * происходит на самом деле.
+ */
+function BypassCard({ file, guideUrl }) {
+  const { t, f } = useI18n();
+  const ready = file?.available;
+
+  return (
+    <div className="ac-card ac-bypass">
+      <div className="ac-bypass-body">
+        <h2>{t("account.bypassTitle")}</h2>
+        <p className="ac-empty">{t("account.bypassText")}</p>
+        <span className="ac-key-sub">
+          {ready && file.updated_at
+            ? t("account.bypassUpdated", { date: f.longDate(file.updated_at) }) +
+              (file.size_bytes ? ` · ${f.bytes(file.size_bytes)}` : "")
+            : t("account.bypassEmpty")}
+        </span>
+      </div>
+      <div className="ac-bypass-actions">
+        <a
+          className={`btn btn-primary${ready ? "" : " ac-btn-off"}`}
+          href={ready ? file.url : undefined}
+          download={ready ? file.filename : undefined}
+          aria-disabled={ready ? undefined : "true"}
+          onClick={(e) => {
+            if (!ready) e.preventDefault();
+          }}
+        >
+          {t("account.bypassDownload")}
+        </a>
+        {guideUrl && (
+          <a className="ac-link" href={guideUrl}>
+            {t("account.bypassHow")}
+          </a>
+        )}
       </div>
     </div>
   );

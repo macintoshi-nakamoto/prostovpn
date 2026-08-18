@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useSession } from "./lib/session.jsx";
 import { Landing } from "./pages/Landing.jsx";
 import { Login } from "./pages/Login.jsx";
+import { Reset } from "./pages/Reset.jsx";
 import { Account } from "./pages/Account.jsx";
 import { Guide } from "./pages/Guide.jsx";
 import { Legal } from "./pages/Legal.jsx";
@@ -56,6 +57,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/reset" element={<Reset />} />
         <Route
           path="/account"
           element={

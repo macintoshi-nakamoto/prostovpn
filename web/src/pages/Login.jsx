@@ -226,7 +226,7 @@ export function Login() {
                   {/* Восстановления пароля у нас нет — его возвращает
                       поддержка, поэтому ссылка ведёт к ней, а не в мёртвый
                       якорь. */}
-                  <Link to="/contacts" className="lg-forgot">
+                  <Link to="/reset" className="lg-forgot">
                     {t("login.forgot")}
                   </Link>
                 </div>

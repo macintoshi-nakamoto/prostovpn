@@ -10,6 +10,7 @@ import { ServersPage } from "./features/servers/ServersPage";
 import { KeysPage } from "./features/keys/KeysPage";
 import { PlansPage } from "./features/plans/PlansPage";
 import { ReleasesPage } from "./features/releases/ReleasesPage";
+import { TunnelFilePage } from "./features/tunnel/TunnelFilePage";
 import { OrdersPage } from "./features/orders/OrdersPage";
 import { AuditPage } from "./features/audit/AuditPage";
 
@@ -48,6 +49,7 @@ export function App() {
         <Route path="orders" element={<OrdersPage />} />
         <Route path="plans" element={<PlansPage />} />
         <Route path="releases" element={<ReleasesPage />} />
+        <Route path="tunnel-file" element={<TunnelFilePage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

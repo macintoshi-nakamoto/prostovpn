@@ -215,6 +215,13 @@ def _letter(db: OrmSession, job: DeliveryJob, user: User):
         return letters.email_attached(email=job.target)
     if job.template == "reminder":
         return _reminder_letter(user)
+    if job.template == "password_reset":
+        if not job.payload:
+            raise RuntimeError("ссылка на смену пароля потеряна")
+        site = settings().site_url.rstrip("/")
+        return letters.password_reset(
+            login=user.login, reset_url=f"{site}/reset?token={job.payload}"
+        )
     return None
 
 

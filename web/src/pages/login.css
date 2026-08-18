@@ -726,3 +726,10 @@
     animation: none;
   }
 }
+
+/* Кнопка-ссылка на странице сброса: тот же вид, что у кнопки отправки. */
+.lg-submit-link {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+}

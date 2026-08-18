@@ -173,6 +173,18 @@ export const api = {
       body: { plan_code: planCode || null },
     }),
 
+  // Сброс пароля. Ответ на «забыли пароль» всегда одинаковый — сервер
+  // намеренно не говорит, есть ли такая почта, иначе форма превращается в
+  // проверялку чужой регистрации.
+  forgotPassword: (email) =>
+    request("/api/v1/password/forgot", { method: "POST", body: { email } }),
+
+  checkResetToken: (token) =>
+    request(`/api/v1/password/reset/${encodeURIComponent(token)}`),
+
+  resetPassword: (token, password) =>
+    request("/api/v1/password/reset", { method: "POST", body: { token, password } }),
+
   logout: () => request("/api/v1/logout", { method: "POST", auth: true }).catch(() => {}),
 
   plans: () => request("/api/v1/plans"),

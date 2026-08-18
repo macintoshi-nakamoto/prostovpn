@@ -376,6 +376,38 @@ export const en = {
     },
   },
 
+  reset: {
+    askTitle: "Forgot your password",
+    askText: "We'll send a link to the email linked to your account. The link lasts 30 minutes.",
+    send: "Send the link",
+    sending: "Sending…",
+    sentTitle: "Email sent",
+    sentText:
+      "If we have that address, the link is already on its way. Nothing in a couple of " +
+      "minutes — check spam or write to support.",
+    backToLogin: "Back to sign in",
+    tooMany: "Too many attempts. Try again in an hour or write to support.",
+    failed: "That didn't work. Try again or write to support.",
+
+    checking: "Checking the link…",
+    deadTitle: "This link no longer works",
+    deadText: "It lasts 30 minutes and works once. Request a new one if it expired.",
+    askAgain: "Request a new link",
+
+    setTitle: "New password",
+    setText: "Changing the password for {login}. At least eight characters.",
+    newPassword: "New password",
+    repeatPassword: "Repeat",
+    mismatch: "Passwords don't match",
+    save: "Save the password",
+    saving: "Saving…",
+    doneTitle: "Password changed",
+    doneText:
+      "Sign in with the new password. You'll need to sign in again in the apps on every " +
+      "device too — the old sessions are gone.",
+    goLogin: "Sign in",
+  },
+
   account: {
     tabs: { account: "Account", plan: "Subscription", setup: "Setup guide" },
     heads: {
@@ -419,6 +451,15 @@ export const en = {
     deviceConnected: "online",
     deviceFallback: "Device",
     platformWeb: "Browser",
+
+    bypassTitle: "Russian sites bypass",
+    bypassText:
+      "Needed on iPhone only: banks, government services and other Russian sites work as if the " +
+      "VPN were off. The ProstoVPN app for Windows, Android and macOS already has this built in.",
+    bypassUpdated: "Updated {date}",
+    bypassEmpty: "The file is being prepared — check back later.",
+    bypassDownload: "Download the file",
+    bypassHow: "How to add it",
 
     iosTitle: "iPhone keys",
     iosSub: "Paste a key into AmneziaVPN — one key per device",

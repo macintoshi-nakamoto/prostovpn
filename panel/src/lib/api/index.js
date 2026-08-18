@@ -83,6 +83,17 @@ export const keysApi = {
   syncAll: () => http.post(`${BASE}/keys/sync-traffic`),
 };
 
+export const tunnelApi = {
+  // Файл раздельного туннелирования: список сайтов, идущих мимо VPN.
+  // Содержимое приходит только по запросу одной версии — в списке оно
+  // не нужно и весит сотни строк.
+  list: () => http.get(`${BASE}/tunnel-file`),
+  get: (id) => http.get(`${BASE}/tunnel-file/${id}`),
+  upload: (payload) => http.post(`${BASE}/tunnel-file`, payload),
+  activate: (id) => http.post(`${BASE}/tunnel-file/${id}/activate`),
+  remove: (id) => http.del(`${BASE}/tunnel-file/${id}`),
+};
+
 export const releasesApi = {
   list: () => http.get(`${BASE}/releases`),
   platforms: () => http.get(`${BASE}/releases/platforms`),

@@ -83,7 +83,7 @@ struct L10n {
         chooseServer: "ВЫБЕРИТЕ СЕРВЕР",
         settings: "Настройки",
         split: "Раздельное туннелирование",
-        splitDesc: "Обходит видимость VPN для РФ сервисов",
+        splitDesc: "Российские сервисы идут напрямую, мимо VPN",
         addFile: "Добавить файл",
         kill: "Kill Switch",
         killDesc: "Блокировать интернет при обрыве VPN",

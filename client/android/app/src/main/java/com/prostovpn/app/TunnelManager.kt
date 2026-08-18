@@ -128,6 +128,16 @@ class TunnelManager(context: Context) {
         alternatives = alternativePorts
         _status.value = Status.CONNECTING
         val result = attemptConnect(configText, alternativePorts)
+
+        /*
+        Пока мы поднимались, человек мог передумать. disconnect() ждёт на том
+        же замке, поэтому его снятие произойдёт СРАЗУ после нас — и если не
+        проверить намерение здесь, мы объявим ON поверх уже снятого туннеля и
+        заведём надзор, который поднимет его обратно. Кнопка «отключить»
+        переставала работать, если нажать её во время подключения.
+        */
+        if (wanted == null) return Result.FAILED
+
         if (result == Result.CONNECTED) {
             lastFailure = null
             _status.value = Status.ON
@@ -389,7 +399,9 @@ class TunnelManager(context: Context) {
                     }
                 }
 
-                val alive = aliveNow(lastRx).also { lastRx = receivedBytes() }
+                val rx = receivedBytes()
+                val alive = aliveNow(previousRx = lastRx, rx = rx)
+                lastRx = rx
                 if (alive) {
                     misses = 0
                     backoff = 0
@@ -426,6 +438,9 @@ class TunnelManager(context: Context) {
                 val result = attemptConnect(config, alternatives)
                 if (result == Result.CONNECTED) {
                     backoff = 0
+                    // Счётчики нового интерфейса начинаются с нуля: сравнение
+                    // с прежним значением дало бы «трафик не растёт» и второй
+                    // круг переподключения сразу после удачного.
                     lastRx = -1L
                     _status.value = Status.ON
                 } else {
@@ -447,10 +462,16 @@ class TunnelManager(context: Context) {
         }
     }
 
-    /** Жив ли туннель прямо сейчас: рукопожатие свежее или идёт трафик. */
-    private fun aliveNow(previousRx: Long): Boolean {
+    /**
+     * Жив ли туннель прямо сейчас: рукопожатие свежее или идёт трафик.
+     *
+     * Оба признака нужны вместе. Рукопожатие обновляется реже двух минут, и
+     * по нему одному свежий, но уже мёртвый туннель выглядит живым ещё
+     * долго; трафик может не идти просто потому, что человек ничего не
+     * качает. Живым считаем, если верно хотя бы одно.
+     */
+    private fun aliveNow(previousRx: Long, rx: Long): Boolean {
         if (!isUp) return false
-        val rx = receivedBytes()
         val moving = rx >= 0 && previousRx >= 0 && rx > previousRx
         return isHealthy() || moving
     }

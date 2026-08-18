@@ -1,0 +1,31 @@
+# /etc/systemd/system/prosto-panel.service
+[Unit]
+Description=Prosto VPN — панель
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=prostovpn
+Group=prostovpn
+WorkingDirectory=/opt/prosto-vpn/backend
+EnvironmentFile=/opt/prosto-vpn/backend/.env
+ExecStart=/opt/prosto-vpn/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+# Панель слушает только localhost, наружу её пускает nginx. Всё, что можно
+# закрыть, закрыто: наружу из этой службы ходит только SSH к VPN-серверам.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/prosto-vpn/backend
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

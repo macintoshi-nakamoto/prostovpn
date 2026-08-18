@@ -34,6 +34,7 @@ from .models import (
     IOS_MAX_KEYS,
     AppRelease,
     AuditLog,
+    DeliveryJob,
     Order,
     OrderStatus,
     Plan,
@@ -822,7 +823,26 @@ def set_account_email(
             headers={"X-Error-Code": "email_taken"},
         )
 
+    previous = user.email_plain
     user.set_email(address)
+
+    # Письмо на новый адрес — не вежливость, а проверка.
+    #
+    # Человек мог ошибиться в букве, и тогда чеки и напоминания годами уходят
+    # в никуда, а он считает, что мы их не шлём. Пришедшее письмо доказывает,
+    # что адрес рабочий и принадлежит ему. Ставим в очередь, а не отправляем
+    # тут же: почтовый провайдер может не ответить, и это не повод отказать в
+    # сохранении адреса.
+    if address and address != previous:
+        db.add(
+            DeliveryJob(
+                channel="email",
+                template="email_attached",
+                target=address,
+                user_id=user.id,
+            )
+        )
+
     db.commit()
     return {"ok": True, "email": address}
 

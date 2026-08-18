@@ -394,6 +394,21 @@ def _enqueue_delivery(db: OrmSession, order: Order, user: User, is_renewal: bool
             order_id=order.id,
         )
     )
+    # Чек — отдельным письмом, а не абзацем в письме с доступами.
+    #
+    # Их читают в разное время и по разным поводам: доступы открывают сразу,
+    # чек ищут через месяц, когда сверяют списания. Склеенные в одно письмо,
+    # они мешают и тому и другому — а ещё чек уходит и при продлении, когда
+    # доступы человеку заново не нужны.
+    db.add(
+        DeliveryJob(
+            channel="email",
+            template="receipt",
+            target=order.email,
+            user_id=user.id,
+            order_id=order.id,
+        )
+    )
     if order.telegram_id:
         db.add(
             DeliveryJob(

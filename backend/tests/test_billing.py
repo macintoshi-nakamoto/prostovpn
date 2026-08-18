@@ -200,9 +200,12 @@ def test_twenty_deliveries_give_exactly_one_account(client):
         subs = list(db.scalars(select(Subscription).where(Subscription.user_id == users[0].id)))
         assert len(subs) == 1, f"подписок создано {len(subs)}, ожидалась одна"
 
-        # Письмо тоже одно: двадцать одинаковых писем — это тоже дубль.
+        # Писем ровно по одному на вид: двадцать одинаковых — это тоже дубль.
+        # Видов два и они разные по смыслу — доступы и чек, — поэтому считаем
+        # каждый отдельно, а не общее число.
         jobs = list(db.scalars(select(DeliveryJob).where(DeliveryJob.user_id == users[0].id)))
-        assert len(jobs) == 1
+        templates = sorted(job.template for job in jobs)
+        assert templates == ["credentials", "receipt"], templates
 
         assert db.get(Order, order["id"]).status == OrderStatus.PAID.value
 

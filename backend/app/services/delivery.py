@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session as OrmSession
 from .. import crypto
 from ..config import settings
 from ..models import DeliveryJob, User, utcnow
-from . import mail, telegram
+from . import letters, mail, telegram
 
 log = logging.getLogger("panel.delivery")
 
@@ -114,6 +114,14 @@ def _send(db: OrmSession, job: DeliveryJob) -> None:
     ios = user.ios_access
 
     if job.channel == "email":
+        # Письма по макетам сами знают свою тему: «Чек об оплате — 2 028 ₽»
+        # в списке писем говорит больше, чем одинаковая строка на всё.
+        letter = _letter(db, job, user)
+        if letter is not None:
+            subject, text, html = letter
+            mail.send(job.target, subject, text, html)
+            return
+
         if job.template == "credentials":
             text, html = mail.credentials_body(user.login, _password(user), expires, ios=ios)
         else:
@@ -130,6 +138,152 @@ def _send(db: OrmSession, job: DeliveryJob) -> None:
         return
 
     raise RuntimeError(f"неизвестный канал доставки {job.channel!r}")
+
+
+# За сколько дней до конца подписки предупреждаем.
+#
+# Три — из макета письма, и число разумное: за три дня человек успевает
+# решить, продлевать ли, но ещё не забывает, о чём речь. Раньше — письмо
+# приходит в пустоту, позже — человек узнаёт об отключении по факту.
+REMIND_DAYS_BEFORE = 3
+
+
+def queue_expiry_reminders(db: OrmSession) -> int:
+    """
+    Ставит в очередь по одному напоминанию на подписку, которой скоро конец.
+
+    Одно на подписку и навсегда: пометка `reminder_sent_at` не даёт слать его
+    при каждом обходе, а продление заводит НОВУЮ строку подписки, у которой
+    пометки нет, — поэтому следующий срок снова будет предупреждён.
+
+    Пишем только тем, у кого есть почта. Отсутствие адреса — не ошибка:
+    учётку могли завести из панели или из бота, и напоминать там нечем.
+
+    Возвращает, сколько писем поставлено.
+    """
+    from ..models import Subscription
+
+    now = utcnow()
+    edge = now + dt.timedelta(days=REMIND_DAYS_BEFORE)
+    rows = db.scalars(
+        select(Subscription).where(
+            Subscription.reminder_sent_at.is_(None),
+            Subscription.is_cancelled.is_(False),
+            Subscription.expires_at > now,
+            Subscription.expires_at <= edge,
+        )
+    )
+
+    queued = 0
+    for subscription in rows:
+        user = subscription.user
+        if user is None:
+            continue
+        address = user.email_plain
+        if not address:
+            # Пометку всё равно ставим: иначе эта подписка будет попадать в
+            # выборку каждый обход до самого конца срока.
+            subscription.reminder_sent_at = now
+            continue
+        db.add(
+            DeliveryJob(
+                channel="email",
+                template="reminder",
+                target=address,
+                user_id=user.id,
+            )
+        )
+        subscription.reminder_sent_at = now
+        queued += 1
+
+    if queued or rows:
+        db.commit()
+    return queued
+
+
+def _letter(db: OrmSession, job: DeliveryJob, user: User):
+    """
+    Готовое письмо по макету или None, если для этого вида его нет.
+
+    None означает «дальше по-старому»: доступы и продление уходят прежними
+    текстовыми письмами. Разом переводить на макеты всё нельзя — в них нет
+    ни логина с паролем, ни ссылки на ключ для iPhone.
+    """
+    if job.template == "receipt":
+        return _receipt_letter(db, job, user)
+    if job.template == "email_attached":
+        return letters.email_attached(email=job.target)
+    if job.template == "reminder":
+        return _reminder_letter(user)
+    return None
+
+
+def _receipt_letter(db: OrmSession, job: DeliveryJob, user: User):
+    """
+    Чек по последней оплате заказа.
+
+    Берём именно платёж, а не заказ: в заказе сумма к оплате, а в платеже —
+    та, что действительно списана. Расходятся они редко, но чек обязан
+    показывать второе.
+    """
+    from ..models import Payment
+
+    payment = db.scalar(
+        select(Payment)
+        .where(Payment.order_id == job.order_id)
+        .order_by(Payment.paid_at.desc())
+    ) if job.order_id else None
+    if payment is None:
+        payment = db.scalar(
+            select(Payment).where(Payment.user_id == user.id).order_by(Payment.paid_at.desc())
+        )
+    if payment is None:
+        raise RuntimeError("чек не из чего собрать: оплаты нет")
+
+    subscription = user.active_subscription()
+    expires = subscription.expires_at if subscription else payment.paid_at
+    period_days = subscription.period_days if subscription else 30
+
+    return letters.receipt(
+        login=user.login,
+        amount=payment.amount,
+        currency=payment.currency,
+        period_days=period_days,
+        paid_at=payment.paid_at,
+        expires_at=expires,
+        method=_method_label(payment.method),
+        receipt_no=f"PV-{payment.paid_at:%Y}-{payment.id:06d}",
+    )
+
+
+def _reminder_letter(user: User):
+    subscription = user.active_subscription()
+    if subscription is None:
+        raise RuntimeError("напоминать не о чем: действующей подписки нет")
+    left = max(0, (subscription.expires_at - utcnow()).days)
+    return letters.renewal_reminder(
+        login=user.login,
+        amount=subscription.price,
+        currency=subscription.currency,
+        period_days=subscription.period_days,
+        expires_at=subscription.expires_at,
+        days_left=left,
+    )
+
+
+# Как назвать способ оплаты в чеке. Внутренние коды провайдеров человеку
+# ничего не говорят, а «panel» в чеке выглядит как ошибка.
+METHODS = {
+    "yookassa": "Банковская карта",
+    "cryptocloud": "Криптовалюта",
+    "mock": "Тестовая оплата",
+    "панель": "Вручную",
+    "panel": "Вручную",
+}
+
+
+def _method_label(method: str | None) -> str:
+    return METHODS.get((method or "").lower(), method or "—")
 
 
 def _password(user: User) -> str:

@@ -742,6 +742,12 @@ class Subscription(Base):
     starts_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime, index=True)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Когда отправили напоминание о скором конце подписки.
+    #
+    # Без пометки обход слал бы его при каждом проходе, то есть раз в
+    # несколько минут все три дня подряд. Одно письмо на подписку — и
+    # продление обнуляет пометку само, потому что заводит новую строку.
+    reminder_sent_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     user: Mapped[User] = relationship(back_populates="subscriptions")

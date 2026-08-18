@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<meta name="supported-color-schemes" content="light dark" />
+<title>Чек об оплате — Prosto VPN</title>
+<!--[if mso]>
+<xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+<![endif]-->
+<style>
+  @media only screen and (max-width: 620px) {
+    .px { padding-left: 26px !important; padding-right: 26px !important; }
+    .h1 { font-size: 30px !important; line-height: 36px !important; }
+  }
+</style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #14181D;">
+<span style="display: none !important; visibility: hidden; opacity: 0; height: 0; width: 0; overflow: hidden; mso-hide: all; font-size: 1px; line-height: 1px; color: #14181D;">Оплата прошла: {{ amount }}, подписка на {{ period }} активна до {{ expires }}.</span>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #14181D;">
+  <tr>
+    <td align="center" style="padding: 40px 12px 44px 12px;">
+
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" style="width: 600px; max-width: 600px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden;">
+
+        <!-- Шапка -->
+        <tr>
+          <td bgcolor="#FA4C16" background="{{ img }}/pattern-pixels.png" style="background-color: #FA4C16; background-image: url('{{ img }}/pattern-pixels.png'); background-repeat: repeat; padding: 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
+              <tr>
+                <td class="px" style="padding: 34px 44px 26px 44px;">
+                  <img src="{{ img }}/logo-white.png" width="150" alt="PROSTO VPN" style="display: block; width: 150px; max-width: 150px; height: auto; border: 0;" />
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 0;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
+                    <tr>
+                      <td class="px" valign="middle" style="padding: 0 44px 36px 44px;">
+                        <div class="h1" style="font-family: Arial, Helvetica, sans-serif; font-size: 36px; line-height: 42px; mso-line-height-rule: exactly; font-weight: bold; color: #FFFFFF; padding-bottom: 12px;">Успешная покупка</div>
+                        <div style="font-family: Arial, Helvetica, sans-serif; font-size: 17px; line-height: 25px; mso-line-height-rule: exactly; color: #FFE8DE;">Подписка продлена — доступ работает без перерыва.</div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td height="18" style="height: 18px; font-size: 1px; line-height: 18px;">&nbsp;</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Чек -->
+        <tr>
+          <td class="px" style="padding: 34px 44px 0 44px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; background-color: #F6F7F9; border-radius: 16px;">
+              <tr>
+                <td style="padding: 24px 28px 6px 28px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
+                    <tr>
+                      <td style="font-family: Arial, Helvetica, sans-serif; font-size: 13px; line-height: 16px; letter-spacing: 1px; font-weight: bold; color: #7B828B;">ЧЕК № {{ receipt_no }}</td>
+                      <td align="right" style="font-family: Arial, Helvetica, sans-serif; font-size: 13px; line-height: 16px; color: #7B828B;">{{ paid_at }}</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 10px 28px 0 28px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
+                    <tr>
+                      <td style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; color: #3C4249;">Подписка Prosto VPN, {{ period }}</td>
+                      <td align="right" style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; font-weight: bold; color: #0A0A0A; white-space: nowrap;">{{ amount }}</td>
+                    </tr>
+                    <tr><td colspan="2" style="border-top: 1px solid #E4E7EB; line-height: 1px; font-size: 1px;">&nbsp;</td></tr>
+                    <tr>
+                      <td style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; color: #3C4249;">Логин</td>
+                      <td align="right" style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; font-weight: bold; color: #0A0A0A;">{{ login }}</td>
+                    </tr>
+                    <tr><td colspan="2" style="border-top: 1px solid #E4E7EB; line-height: 1px; font-size: 1px;">&nbsp;</td></tr>
+                    <tr>
+                      <td style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; color: #3C4249;">Способ оплаты</td>
+                      <td align="right" style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; font-weight: bold; color: #0A0A0A;">{{ method }}</td>
+                    </tr>
+                    <tr><td colspan="2" style="border-top: 1px solid #E4E7EB; line-height: 1px; font-size: 1px;">&nbsp;</td></tr>
+                    <tr>
+                      <td style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; color: #3C4249;">Действует до</td>
+                      <td align="right" style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; font-weight: bold; color: #0A0A0A;">{{ expires }}</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 28px 24px 28px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; border-top: 2px solid #0A0A0A;">
+                    <tr>
+                      <td style="padding: 14px 0 0 0; font-family: Arial, Helvetica, sans-serif; font-size: 18px; line-height: 24px; font-weight: bold; color: #0A0A0A;">Итого</td>
+                      <td align="right" style="padding: 14px 0 0 0; font-family: Arial, Helvetica, sans-serif; font-size: 24px; line-height: 28px; font-weight: bold; color: #FA4C16; white-space: nowrap;">{{ amount }}</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Кнопка -->
+        <tr>
+          <td class="px" style="padding: 26px 44px 40px 44px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
+              <tr>
+                <td width="58%" bgcolor="#FA4C16" style="width: 58%; background-color: #FA4C16; border-radius: 12px;">
+                  <a href="{{ account_url }}" style="display: block; text-align: center; padding: 17px 10px; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 20px; font-weight: bold; color: #FFFFFF; text-decoration: none;">Личный кабинет</a>
+                </td>
+                <td width="12" style="width: 12px; font-size: 1px; line-height: 1px;">&nbsp;</td>
+                <td bgcolor="#14181D" style="background-color: #14181D; border-radius: 12px;">
+                  <a href="{{ support_url }}" style="display: block; text-align: center; padding: 17px 10px; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 20px; font-weight: bold; color: #FFFFFF; text-decoration: none;">
+                    <img src="{{ img }}/tg-icon.png" width="20" alt="" style="display: inline-block; width: 20px; height: auto; border: 0; vertical-align: -4px;" />&nbsp;&nbsp;Поддержка
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+      </table>
+
+    </td>
+  </tr>
+</table>
+</body>
+</html>

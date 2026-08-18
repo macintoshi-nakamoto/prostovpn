@@ -14,6 +14,7 @@ from . import (
     devices,
     diagnostics,
     ios,
+    letters,
     orders,
     ratelimit,
     tunnel,
@@ -102,6 +103,7 @@ __all__ = [
     "revoke_key",
     # ключи AmneziaVPN для iPhone и файл раздельного туннелирования
     "ios",
+    "letters",
     "tunnel",
     # устройства
     "devices",

@@ -100,6 +100,7 @@ def list_users(
     q: str | None = Query(default=None, description="Поиск по ID, логину, имени и контакту"),
     status_filter: str | None = Query(default=None, alias="status"),
     plan: str | None = None,
+    ios: bool | None = Query(default=None, description="Только клиенты с ключом для iPhone"),
     db: OrmSession = Depends(get_db),
     _: Admin = Depends(current_admin),
 ) -> list[schemas.UserRow]:
@@ -124,6 +125,8 @@ def list_users(
         rows = [r for r in rows if r.status == status_filter]
     if plan and plan != "all":
         rows = [r for r in rows if r.plan == plan]
+    if ios is not None:
+        rows = [r for r in rows if r.ios_access is ios]
     return rows
 
 
@@ -337,11 +340,99 @@ def extend_subscription(
         if not user.is_blocked and not user.is_active:
             services.set_user_active(db, user, True)
         services.ensure_keys(db, user)
+        # Тариф мог смениться вместе с числом устройств: ключи AmneziaVPN
+        # обязаны повторить это, иначе оплачено одно устройство, а
+        # подключаются по-прежнему три.
+        if user.ios_access:
+            services.ios.sync(db, user)
     except services.PanelError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     audit(db, admin, "user.extend", user.public_id, f"{days} дн., {price or 0}")
     return _detail(db, user_id)
+
+
+# --- ключи AmneziaVPN для iPhone ---------------------------------------------
+#
+# Приложения под iOS нет, поэтому человек подключается официальным
+# AmneziaVPN по ссылке `vpn://`. Управление здесь ровно то же, что и у
+# остальных: включить, выключить, перевыпустить. Трафик и срок подписки
+# отдельных кнопок не требуют — ключи считаются и гаснут вместе со всем
+# остальным доступом учётки.
+
+
+@router.post("/{user_id}/ios/enable", response_model=schemas.UserDetail)
+def enable_ios(
+    user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
+) -> schemas.UserDetail:
+    """Выдаёт ключи AmneziaVPN — по одному на устройство из тарифа."""
+    user = _load(db, user_id)
+    warnings = services.ios.enable(db, user)
+    audit(db, admin, "user.ios_enable", user.public_id, f"устройств {user.device_limit()}")
+    detail = _detail(db, user_id)
+    if warnings:
+        detail.blocked_reason = "Ключи выданы не везде: " + "; ".join(warnings)
+    return detail
+
+
+@router.post("/{user_id}/ios/disable", response_model=schemas.UserDetail)
+def disable_ios(
+    user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
+) -> schemas.UserDetail:
+    """
+    Отключает ключ: пир уходит с узла, ключ остаётся за учёткой.
+
+    Именно снимает пир, а не «перестаёт выдавать»: ссылка уже лежит у
+    человека в Amnezia, и пока пир на узле жив, туннель работает. Включить
+    обратно можно тем же ключом — человеку не придётся ничего переставлять.
+
+    Выдать себе ключ заново кнопкой в кабинете он при этом не сможет: иначе
+    отключение отменялось бы через полминуты после того, как сделано.
+    """
+    user = _load(db, user_id)
+    problems = services.ios.disable(db, user)
+    audit(db, admin, "user.ios_disable", user.public_id)
+    detail = _detail(db, user_id)
+    if problems:
+        detail.blocked_reason = "Доступ остался на узлах: " + "; ".join(problems)
+    return detail
+
+
+@router.delete("/{user_id}/ios", response_model=schemas.UserDetail)
+def remove_ios(
+    user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
+) -> schemas.UserDetail:
+    """
+    Удаляет ключ совсем — вместе с пиром и строкой в базе.
+
+    После этого человек может выдать себе ключ заново в кабинете, и это
+    будет другой ключ: другая пара, другой адрес. Так снимают утёкшую
+    ссылку — она становится мусором навсегда, а не ждёт включения.
+    """
+    user = _load(db, user_id)
+    problems = services.ios.remove(db, user)
+    audit(db, admin, "user.ios_remove", user.public_id)
+    detail = _detail(db, user_id)
+    if problems:
+        detail.blocked_reason = "Пир снят не везде: " + "; ".join(problems)
+    return detail
+
+
+@router.post("/{user_id}/ios/reissue", response_model=schemas.UserDetail)
+def reissue_ios(
+    user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
+) -> schemas.UserDetail:
+    """Меняет ключи на новые — когда ссылку переслали дальше."""
+    user = _load(db, user_id)
+    try:
+        problems = services.ios.reissue(db, user)
+    except services.PanelError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit(db, admin, "user.ios_reissue", user.public_id)
+    detail = _detail(db, user_id)
+    if problems:
+        detail.blocked_reason = "Перевыпуск прошёл не везде: " + "; ".join(problems)
+    return detail
 
 
 @router.post("/{user_id}/password", response_model=schemas.PasswordOut)

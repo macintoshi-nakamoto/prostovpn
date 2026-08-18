@@ -16,6 +16,8 @@ import ipaddress
 import json
 import re
 import socket
+import struct
+import zlib
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
@@ -30,25 +32,150 @@ def generate_keypair() -> tuple[str, str]:
     return base64.b64encode(private_raw).decode(), base64.b64encode(public_raw).decode()
 
 
-def build_vpn_key(host: str, config_ini: str, port: int = 51820) -> str:
-    """
-    Упаковывает wg-quick в ссылку `vpn://` формата Amnezia.
+# Параметры обфускации AmneziaWG. Лежат в [Interface] нашего шаблона, а
+# клиент ждёт их ещё и рядом с конфигом — как в ссылках, которые он выдаёт
+# сам. Совпадать с сервером они обязаны до цифры: разойдись хоть одна —
+# рукопожатие не распознаётся вообще.
+AWG_PARAMS = ("Jc", "Jmin", "Jmax", "S1", "S2", "H1", "H2", "H3", "H4")
 
-    Так ключ принимают и наши приложения, и официальный клиент Amnezia —
-    удобно, когда человека надо быстро проверить чужим клиентом.
+
+def config_sections(config_ini: str) -> tuple[dict[str, str], dict[str, str]]:
+    """Разбирает wg-quick на [Interface] и [Peer]."""
+    interface: dict[str, str] = {}
+    peer: dict[str, str] = {}
+    current = None
+    for line in config_ini.splitlines():
+        stripped = line.split("#", 1)[0].strip()
+        if not stripped:
+            continue
+        if stripped.startswith("["):
+            name = stripped.strip("[]").lower()
+            current = interface if name == "interface" else peer if name == "peer" else None
+            continue
+        if current is None or "=" not in stripped:
+            continue
+        name, _, value = stripped.partition("=")
+        current[name.strip()] = value.strip()
+    return interface, peer
+
+
+def interface_params(config_ini: str) -> dict[str, str]:
+    """Значения из секции [Interface] конфига wg-quick."""
+    return config_sections(config_ini)[0]
+
+
+def public_key_of(private_key: str) -> str:
+    """Публичный ключ клиента из приватного — то же умножение X25519."""
+    raw = base64.b64decode(private_key)
+    return base64.b64encode(
+        X25519PrivateKey.from_private_bytes(raw).public_key().public_bytes_raw()
+    ).decode()
+
+
+def _split_list(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def build_vpn_key(
+    host: str,
+    config_ini: str,
+    port: int = 51820,
+    name: str | None = None,
+    address: str | None = None,
+) -> str:
     """
-    awg = {
-        "last_config": json.dumps({"config": config_ini}, ensure_ascii=False),
-        "port": port,
-        "transport_proto": "udp",
-    }
-    payload = {
+    Собирает ссылку `vpn://` для официального клиента AmneziaVPN.
+
+    Формат неочевидный, и на каждом его пункте ключ ломается молча.
+
+    Первое: клиент строит туннель НЕ из текста `config`, а из отдельных
+    полей `last_config` — приватного и публичного ключей, адреса, списка
+    маршрутов. Ссылка с одним лишь текстом конфига импортируется, профиль
+    поднимается и рвётся за секунду, не отправив ни пакета: на сервере в
+    это время по UDP-порту полная тишина. Именно этим битый конфиг
+    отличается от несовпавшей обфускации, где пакеты идут, а рукопожатия
+    нет.
+
+    Второе: `allowed_ips` — массив, `mtu` и `persistent_keep_alive` —
+    строки, `port` внутри `last_config` — число, а в блоке `awg` — строка.
+    Пустой `psk_key` не кладём вовсе: пустое значение рискует превратиться
+    в `PresharedKey = ` и сломать разбор.
+
+    Третье: канонический вид — сжатый. `vpn://` + base64url без выравнивания
+    от qCompress: четыре байта длины исходных данных плюс обычный поток
+    zlib. Несжатое клиент тоже понимает, но выдаёт он всегда сжатое.
+
+    `name` уходит в `description` — под этим именем сервер виден в списке
+    Amnezia.
+    """
+    interface, peer = config_sections(config_ini)
+
+    private_key = interface.get("PrivateKey", "")
+    client_ip = (address or interface.get("Address", "")).split("/")[0].strip()
+    dns = _split_list(interface.get("DNS", ""))
+    mtu = interface.get("MTU", "1280")
+    junk = {key: interface[key] for key in AWG_PARAMS if key in interface}
+
+    endpoint = peer.get("Endpoint", "")
+    endpoint_port = port
+    if ":" in endpoint:
+        tail = endpoint.rsplit(":", 1)[1]
+        if tail.isdigit():
+            endpoint_port = int(tail)
+
+    last_config = {
+        **junk,
+        "allowed_ips": _split_list(peer.get("AllowedIPs", "0.0.0.0/0, ::/0")),
+        "client_ip": client_ip,
+        "client_priv_key": private_key,
+        "client_pub_key": public_key_of(private_key) if private_key else "",
+        "config": config_ini,
         "hostName": host,
+        "mtu": str(mtu),
+        "persistent_keep_alive": str(peer.get("PersistentKeepalive", "25")),
+        "port": endpoint_port,
+        "server_pub_key": peer.get("PublicKey", ""),
+    }
+
+    awg = {
+        **junk,
+        "mtu": str(mtu),
+        # Строкой: в блоке контейнера клиент читает порт как строку.
+        "port": str(endpoint_port),
+        "transport_proto": "udp",
+        "last_config": json.dumps(last_config, ensure_ascii=False),
+    }
+
+    payload: dict[str, object] = {
         "containers": [{"container": "amnezia-awg", "awg": awg}],
         "defaultContainer": "amnezia-awg",
+        "hostName": host,
     }
-    raw = json.dumps(payload, ensure_ascii=False).encode()
-    return "vpn://" + base64.urlsafe_b64encode(raw).decode().rstrip("=")
+    if name:
+        payload["description"] = name
+    if dns:
+        payload["dns1"] = dns[0]
+        if len(dns) > 1:
+            payload["dns2"] = dns[1]
+
+    raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    packed = struct.pack(">I", len(raw)) + zlib.compress(raw, 8)
+    return "vpn://" + base64.urlsafe_b64encode(packed).decode().rstrip("=")
+
+
+def read_vpn_key(url: str) -> dict:
+    """
+    Разбирает ссылку обратно — ровно так, как это делает клиент при импорте.
+
+    Нужна проверкам: собранный ключ должен читаться, а не «выглядеть
+    правильно». Понимает оба вида, сжатый и голый.
+    """
+    body = url[len("vpn://") :] if url.startswith("vpn://") else url
+    blob = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
+    try:
+        return json.loads(zlib.decompress(blob[4:]))
+    except zlib.error:
+        return json.loads(blob)
 
 
 def endpoint_of(config_ini: str) -> str | None:

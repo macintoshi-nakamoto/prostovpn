@@ -80,6 +80,28 @@ def site_plans(db: OrmSession) -> list[Plan]:
     )
 
 
+def platform_from_user_agent(user_agent: str | None) -> str | None:
+    """
+    С какого устройства оформляют заказ — по строке браузера.
+
+    Нужен ровно один ответ: iPhone это или нет. Своего приложения под iOS
+    нет, и такому покупателю после оплаты идти некуда — ему панель готовит
+    ключ `vpn://` для AmneziaVPN. Остальным платформам решение не меняет
+    ничего, поэтому и различать их незачем.
+
+    iPad сюда не попадает намеренно: Safari на нём представляется
+    настольным Macintosh, и угадывать по косвенным признакам значит выдать
+    ключ тому, кому он не нужен. Такой человек включит ключ сам — кнопкой
+    в кабинете.
+    """
+    agent = (user_agent or "").lower()
+    if any(mark in agent for mark in ("iphone", "ipod")):
+        return "ios"
+    if "ipad" in agent:
+        return "ios"
+    return None
+
+
 def create_order(
     db: OrmSession,
     plan_code: str,
@@ -87,6 +109,7 @@ def create_order(
     telegram_id: int | None = None,
     ip: str | None = None,
     provider_name: str | None = None,
+    platform: str | None = None,
 ) -> Order:
     """
     Заводит заказ и регистрирует платёж у провайдера.
@@ -116,6 +139,7 @@ def create_order(
         status=OrderStatus.PENDING.value,
         provider=name,
         ip=ip,
+        platform=(platform or "").strip().lower() or None,
         # Продление или первая покупка — видно уже сейчас, по почте. Значение
         # ещё раз уточняется при выдаче: за сутки, пока висит неоплаченный
         # заказ, человек мог купить по той же почте с другого устройства.
@@ -251,6 +275,16 @@ def fulfil(db: OrmSession, order: Order, manual_by: int | None = None) -> Fulfil
     if order.telegram_id and not user.telegram_id:
         user.telegram_id = order.telegram_id
 
+    # Купили с iPhone — приложения там нет, и человеку нужен ключ для
+    # AmneziaVPN. Ставим пометку до выдачи ключей: слоты `ios-N` попадут в
+    # ту же раздачу, что и обычные пиры, и ключ будет готов к моменту,
+    # когда человек откроет кабинет.
+    #
+    # Пометку только ставим, но не снимаем: покупка с ноутбука не означает,
+    # что iPhone у человека пропал.
+    if order.platform == "ios":
+        user.ios_access = True
+
     subscription = grant_subscription(
         db,
         user,
@@ -380,10 +414,15 @@ def _ensure_keys_safely(db: OrmSession, user: User) -> None:
     ответ провайдеру, ни тем более откатывать оплаченную подписку.
     Приложение всё равно досоздаёт недостающее при первом входе.
     """
+    from . import ios
     from .keys import ensure_keys
 
     try:
         warnings = ensure_keys(db, user)
+        # Тариф после продления мог смениться, а с ним и число устройств:
+        # лишние ключи для AmneziaVPN обязаны уйти, недостающие — появиться.
+        if user.ios_access:
+            warnings += ios.sync(db, user)
     except Exception:  # pragma: no cover - зависит от доступности узлов
         log.exception("не удалось выдать ключи пользователю %s", user.public_id)
         return

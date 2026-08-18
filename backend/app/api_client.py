@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session as OrmSession
 from . import geo, services
 from .config import settings
 from .db import get_db
-from .models import Provisioning, Session, User
+from .models import Provisioning, Session, User, is_ios_slot
 from .provisioning import config_for
 from .security import client_ip
 
@@ -305,6 +305,11 @@ def _servers_out(
     shared: dict[int, object] = {}
     for key in user.keys:
         if key.revoked_at is None:
+            # Слоты `ios-N` — ключи для AmneziaVPN на iPhone, у них своя
+            # раздача через кабинет. Приложению они не принадлежат: отдать
+            # ему чужой пир значит поделить один адрес в подсети на двоих.
+            if is_ios_slot(key.device_id):
+                continue
             if (key.device_id or "") == device_id:
                 by_server[key.server_id] = key
             elif not key.device_id:

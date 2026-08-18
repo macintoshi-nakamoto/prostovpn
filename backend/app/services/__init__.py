@@ -7,7 +7,17 @@
 
 from __future__ import annotations
 
-from . import billing_webhook, credentials, delivery, devices, diagnostics, orders, ratelimit
+from . import (
+    billing_webhook,
+    credentials,
+    delivery,
+    devices,
+    diagnostics,
+    ios,
+    orders,
+    ratelimit,
+    tunnel,
+)
 from .diagnostics import can_serve, check as check_server
 from .auth import (
     LoginThrottled,
@@ -90,6 +100,9 @@ __all__ = [
     "issue_key",
     "known_devices",
     "revoke_key",
+    # ключи AmneziaVPN для iPhone и файл раздельного туннелирования
+    "ios",
+    "tunnel",
     # устройства
     "devices",
     "disconnect_device",

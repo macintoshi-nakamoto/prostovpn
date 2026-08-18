@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session as OrmSession
 
+from ..services import ios
 from ..models import (
     HANDSHAKE_WINDOW,
     AuditLog,
@@ -19,8 +20,10 @@ from ..models import (
     Order,
     Server,
     Session,
+    TunnelFile,
     User,
     UserKey,
+    is_ios_slot,
     utcnow,
 )
 from . import schemas
@@ -127,6 +130,11 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         devices_used=len(user.device_sessions(moment)),
         device_limit=user.device_limit(moment),
         servers_count=sum(1 for k in user.keys if k.revoked_at is None),
+        ios_access=user.ios_access,
+        ios_blocked=user.ios_blocked,
+        ios_keys_count=sum(
+            1 for k in user.keys if k.revoked_at is None and is_ios_slot(k.device_id)
+        ),
         created_at=user.created_at,
     )
 
@@ -261,6 +269,40 @@ def user_detail(
             for s in sorted(user.subscriptions, key=lambda s: s.expires_at, reverse=True)
         ],
         keys=[key_out(k) for k in sorted(user.keys, key=lambda k: k.server_id)],
+        ios_keys=[ios_key_out(k) for k in ios.keys(user)],
+    )
+
+
+def ios_key_out(key: "ios.IosKey") -> schemas.IosKeyOut:
+    return schemas.IosKeyOut(
+        id=key.id,
+        slot=key.slot,
+        name=key.name,
+        server_id=key.server_id,
+        server_name=key.server_name,
+        country=key.country,
+        country_code=key.country_code,
+        city=key.city,
+        address=key.address,
+        vpn_url=key.vpn_url,
+        traffic_bytes=key.traffic_bytes,
+        last_handshake_at=key.last_handshake_at,
+        created_at=key.created_at,
+        is_active=key.is_active,
+    )
+
+
+def tunnel_file_out(entry: TunnelFile, with_content: bool = False) -> schemas.TunnelFileOut:
+    return schemas.TunnelFileOut(
+        id=entry.id,
+        filename=entry.filename,
+        version=entry.version,
+        size_bytes=entry.size_bytes,
+        sha256=entry.sha256,
+        note=entry.note,
+        is_active=entry.is_active,
+        updated_at=entry.updated_at,
+        content=entry.content if with_content else None,
     )
 
 

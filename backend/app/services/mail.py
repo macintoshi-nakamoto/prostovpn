@@ -15,6 +15,11 @@ DKIM и DMARC, попадает в спам почти гарантирован�
 
 Чего в письме нет и не будет: ключей, конфигов, вложений, `vpn://`. Человек
 за весь жизненный цикл видит ровно две строки.
+
+Покупка с iPhone этого не меняет. Приложения под iOS нет, и подключаются
+там ключом `vpn://` — но сам ключ живёт в личном кабинете, а письмо только
+показывает дорогу к нему. Ключ — это рабочий доступ к VPN без пароля:
+попав в чужие руки вместе с письмом, он не требует уже ничего.
 """
 
 from __future__ import annotations
@@ -50,6 +55,32 @@ def _links() -> str:
     return "\n".join(f"  {title}: {base}{path}" for title, path in _DOWNLOADS)
 
 
+def _ios_text(base: str) -> str:
+    """
+    Абзац для тех, кто купил с iPhone.
+
+    Ключ сюда не кладём — только дорогу к нему: ссылка `vpn://` работает
+    без пароля, и письмо с ней стало бы доступом к VPN для всякого, кто это
+    письмо однажды прочитает.
+    """
+    return f"""
+На iPhone приложения нет — подключение идёт через AmneziaVPN из App Store.
+Ваш ключ уже готов и ждёт в личном кабинете: {base}/account
+Инструкция по установке: {settings().guide_link}
+"""
+
+
+def _ios_html(base: str) -> str:
+    return (
+        '<p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">'
+        "На iPhone приложения нет — подключение идёт через AmneziaVPN из App Store. "
+        f'Ваш ключ уже готов в <a href="{base}/account" style="color:#ff6a1f;text-decoration:none">'
+        "личном кабинете</a>, там же лежит "
+        f'<a href="{settings().guide_link}" style="color:#ff6a1f;text-decoration:none">инструкция</a>.'
+        "</p>"
+    )
+
+
 def _support_line() -> str:
     """Куда писать, если не получилось. Пусто — почты поддержки нет."""
     address = settings().support_email.strip()
@@ -66,7 +97,7 @@ def _support_html() -> str:
     )
 
 
-def credentials_body(login: str, password: str, expires_at: str) -> tuple[str, str]:
+def credentials_body(login: str, password: str, expires_at: str, ios: bool = False) -> tuple[str, str]:
     """Первое письмо: логин и пароль. Возвращает (текст, html)."""
     base = settings().site_url.rstrip("/")
     text = f"""Здравствуйте!
@@ -82,7 +113,7 @@ def credentials_body(login: str, password: str, expires_at: str) -> tuple[str, s
 не нужно.
 
 {_links()}
-
+{_ios_text(base) if ios else ""}
 Пароль можно сменить в личном кабинете: {base}/account.html
 
 {_support_line()}
@@ -102,22 +133,29 @@ def credentials_body(login: str, password: str, expires_at: str) -> tuple[str, s
   <p style="font-size:14px;line-height:2;margin:0 0 24px">
     {"<br>".join(f'<a href="{base}{path}" style="color:#ff6a1f;text-decoration:none">{title}</a>' for title, path in _DOWNLOADS)}
   </p>
+  {_ios_html(base) if ios else ""}
   <p style="font-size:13px;color:#8b8b93;margin:0">Пароль можно сменить в <a href="{base}/account.html" style="color:#8b8b93">личном кабинете</a>.</p>
   {_support_html()}
 </div></body></html>"""
     return text, html
 
 
-def renewed_body(login: str, expires_at: str) -> tuple[str, str]:
+def renewed_body(login: str, expires_at: str, ios: bool = False) -> tuple[str, str]:
     """Продление: пароль не меняется, и повторять его в письме незачем."""
     base = settings().site_url.rstrip("/")
+    ios_line = (
+        "\nКлюч для AmneziaVPN на iPhone остался прежним — заново вставлять\n"
+        "его не нужно.\n"
+        if ios
+        else ""
+    )
     text = f"""Здравствуйте!
 
 Подписка продлена до {expires_at}.
 
 Логин прежний: {login}. Пароль тоже прежний — менять ничего не нужно,
 приложение продолжит работать само.
-
+{ios_line}
 Личный кабинет: {base}/account.html
 
 {_support_line()}"""
@@ -125,7 +163,7 @@ def renewed_body(login: str, expires_at: str) -> tuple[str, str]:
 <html lang="ru"><body style="margin:0;padding:32px 16px;background:#0b0b0c;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ea">
 <div style="max-width:520px;margin:0 auto">
   <p style="font-size:15px;line-height:1.6;margin:0 0 20px">Подписка продлена до <b style="color:#ff6a1f">{expires_at}</b>.</p>
-  <p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">Логин прежний: <span style="font-family:ui-monospace,monospace">{login}</span>. Пароль тоже прежний — менять ничего не нужно, приложение продолжит работать само.</p>
+  <p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">Логин прежний: <span style="font-family:ui-monospace,monospace">{login}</span>. Пароль тоже прежний — менять ничего не нужно, приложение продолжит работать само.{" Ключ для AmneziaVPN на iPhone тоже прежний." if ios else ""}</p>
   <p style="font-size:13px;color:#8b8b93;margin:0"><a href="{base}/account.html" style="color:#8b8b93">Личный кабинет</a></p>
   {_support_html()}
 </div></body></html>"""

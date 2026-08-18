@@ -92,6 +92,38 @@ HANDSHAKE_WINDOW = dt.timedelta(minutes=3)
 # приложение на телефоне просит войти заново.
 WEB_PLATFORMS = frozenset({"web", "site", "browser"})
 
+# Приставка идентификатора «устройства», за которым стоит не приложение, а
+# ключ AmneziaVPN для iPhone.
+#
+# Своего приложения под iOS нет, и человек вставляет в AmneziaVPN готовую
+# ссылку `vpn://`. Ссылка — это отдельный пир, а пир заводится на
+# устройство, поэтому место под iPhone занимает такая же строка в
+# `user_keys`, как телефон с приложением: слот `ios-1`. Всё, что уже умеет
+# система — учёт трафика, снятие пира по концу подписки, отзыв из панели, —
+# работает с ним само, без второй ветки правил.
+IOS_SLOT_PREFIX = "ios-"
+
+
+def is_ios_slot(device_id: str | None) -> bool:
+    return (device_id or "").startswith(IOS_SLOT_PREFIX)
+
+
+def sanitize_device_id(device_id: str | None) -> str | None:
+    """
+    Идентификатор установки, пришедший от клиента.
+
+    Приставку `ios-` вырезаем: её выдаёт панель, и приложение, назвавшееся
+    `ios-1`, заняло бы чужой по смыслу слот — тот, куда панель кладёт ключ
+    для AmneziaVPN. Ничего страшнее путаницы в списках это не даёт (слот
+    всё равно свой собственный), но путаница здесь дороже одной проверки.
+    """
+    value = (device_id or "").strip()
+    if not value:
+        return device_id
+    while is_ios_slot(value):
+        value = value[len(IOS_SLOT_PREFIX) :]
+    return value or None
+
 
 def is_device_platform(platform: str | None) -> bool:
     """
@@ -329,6 +361,26 @@ class User(Base):
     traffic_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     traffic_reset_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
+    # Человек пользуется сервисом с iPhone, где своего приложения нет:
+    # панель держит для него готовые ссылки `vpn://` под AmneziaVPN.
+    #
+    # Отдельный флаг, а не догадка по платформе входа. Ключ выдаётся до
+    # первого входа — сразу после оплаты, — и вход с iPhone в браузере не
+    # то же самое, что «этому человеку нужен ключ»: в кабинет заходят и с
+    # чужого телефона. Ставится автоматически при покупке с iOS и руками
+    # из панели, снимается только руками.
+    ios_access: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
+    # Ключ отключён администратором.
+    #
+    # Отдельно от `ios_access`, и это не дублирование. Снять пометку — значит
+    # разрешить человеку выдать ключ заново кнопкой в кабинете, то есть
+    # отменить решение администратора через полминуты после того, как оно
+    # принято. Отключённый ключ остаётся отключённым, пока его не включат
+    # обратно: пир снят, кнопка выдачи не работает, в кабинете написано,
+    # куда идти.
+    ios_blocked: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+
     # Защита от перебора пароля. Счётчик и замок живут на пользователе, а не
     # только в памяти процесса: перезапуск панели не должен обнулять защиту,
     # а за одним доменом может стоять несколько воркеров.
@@ -374,6 +426,27 @@ class User(Base):
         """Сколько устройств разрешено. Без действующего тарифа — один."""
         plan = self.current_plan(now)
         return plan.device_limit if plan is not None else 1
+
+    def ios_slots(self, now: dt.datetime | None = None) -> list[str]:
+        """
+        Слоты ключей AmneziaVPN. Сейчас он ровно один на учётку.
+
+        Ключ `vpn://` — это один пир WireGuard, и поделить его между
+        телефонами нельзя: сервер помнит у пира один адрес подключения, и
+        второе устройство молча отбирает соединение у первого. Раньше на
+        каждое устройство тарифа заводился свой ключ, и человек получал
+        список из четырёх ссылок, в котором путался.
+
+        Теперь ключ один, а если он не работает или нужен второй — это
+        разговор с поддержкой, а не кнопка: так видно, кому и зачем ключи
+        расходятся, и не появляется тихой раздачи доступа по учётке.
+
+        Список, а не строка, потому что вокруг всё считает слоты набором:
+        `ensure_keys`, `sync` и сверка пиров одинаково работают и с одним.
+        """
+        if not self.ios_access:
+            return []
+        return [f"{IOS_SLOT_PREFIX}1"]
 
     def server_limit(self, now: dt.datetime | None = None) -> int | None:
         plan = self.current_plan(now)
@@ -753,6 +826,13 @@ class Order(Base):
     email: Mapped[str] = mapped_column(String(255), index=True)
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, default=None)
 
+    # С какого устройства оформляли заказ. Нужно ровно для одного: покупку с
+    # iPhone надо закрыть ключом AmneziaVPN, потому что приложения под iOS
+    # нет и человеку после оплаты идти некуда. Определяется по браузеру в
+    # момент создания заказа и запоминается — к приходу вебхука заголовков
+    # уже нет, а решать надо тогда.
+    platform: Mapped[str | None] = mapped_column(String(16), default=None)
+
     # Сумма фиксируется в момент создания заказа и потом не пересчитывается:
     # человек согласился на конкретную цену, а тариф в панели могут поменять
     # между открытием формы и приходом вебхука.
@@ -852,6 +932,38 @@ class DeliveryJob(Base):
 
     user: Mapped["User | None"] = relationship()
     order: Mapped[Order | None] = relationship()
+
+
+class TunnelFile(Base):
+    """
+    Файл раздельного туннелирования для AmneziaVPN — список сайтов, которые
+    ходят мимо VPN.
+
+    Содержимое лежит в базе, а не на диске. Файл маленький (список доменов),
+    зато меняется часто: банки и госуслуги то перестают пускать зарубежные
+    адреса, то начинают. В базе он переживает переустановку панели, ходит
+    вместе с резервной копией и обновляется одной кнопкой — без выкладки
+    файла на сервер и правки nginx.
+
+    Строк в таблице может быть несколько: прошлые версии остаются историей,
+    отдаётся всегда самая свежая включённая. Откатиться после неудачного
+    списка — значит включить предыдущую строку, а не искать файл заново.
+    """
+
+    __tablename__ = "tunnel_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # Как назвать файл при скачивании: человек кладёт его в AmneziaVPN.
+    filename: Mapped[str] = mapped_column(String(128), default="prostovpn-ru-sites.json")
+    # Метка версии для интерфейса: «от 17.08.2026» или своя строка.
+    version: Mapped[str | None] = mapped_column(String(64), default=None)
+    content: Mapped[str] = mapped_column(Text)
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    sha256: Mapped[str | None] = mapped_column(String(64), default=None)
+    note: Mapped[str | None] = mapped_column(Text, default=None)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    updated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class RateLimit(Base):

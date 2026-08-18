@@ -117,6 +117,14 @@ class UserRow(Schema):
     devices_used: int = 0
     device_limit: int = 1
     servers_count: int
+    # Человек сидит на iPhone и ходит по ключу AmneziaVPN, а не через наше
+    # приложение. В списке это отдельная пометка: у таких клиентов другой
+    # разговор в поддержке — им нечего переустанавливать и негде «войти».
+    ios_access: bool = False
+    # Ключ отключён администратором: пир снят, но ключ за учёткой остался и
+    # включается обратно тем же — человеку ничего переставлять не придётся.
+    ios_blocked: bool = False
+    ios_keys_count: int = 0
     created_at: dt.datetime
 
 
@@ -179,6 +187,25 @@ class UserKeyOut(Schema):
     revoked_at: dt.datetime | None
 
 
+class IosKeyOut(Schema):
+    """Готовая ссылка `vpn://` для одного устройства на одном сервере."""
+
+    id: int
+    slot: int
+    name: str
+    server_id: int
+    server_name: str
+    country: str | None = None
+    country_code: str | None = None
+    city: str | None = None
+    address: str | None = None
+    vpn_url: str
+    traffic_bytes: int = 0
+    last_handshake_at: dt.datetime | None = None
+    created_at: dt.datetime
+    is_active: bool = True
+
+
 class OrderRow(Schema):
     """Строка раздела «Заказы» и истории покупок в карточке."""
 
@@ -216,6 +243,7 @@ class UserDetail(UserRow):
     subscriptions: list[SubscriptionOut]
     keys: list[UserKeyOut]
     orders: list[OrderRow] = []
+    ios_keys: list[IosKeyOut] = []
 
 
 class UserCreate(Schema):
@@ -583,6 +611,33 @@ class RevealOut(Schema):
 
 class OrderActionIn(Schema):
     reason: str | None = None
+
+
+# --- файл раздельного туннелирования -----------------------------------------
+
+
+class TunnelFileOut(Schema):
+    id: int
+    filename: str
+    version: str | None = None
+    size_bytes: int = 0
+    sha256: str | None = None
+    note: str | None = None
+    is_active: bool = True
+    updated_at: dt.datetime
+    # Содержимое отдаём только по отдельному запросу: список доменов бывает
+    # на сотни строк, и таскать его в каждой строке истории незачем.
+    content: str | None = None
+
+
+class TunnelFileIn(Schema):
+    # Текстом, а не файлом: панель читает выбранный файл у себя и присылает
+    # содержимое. Так же работает и правка списка прямо в панели, без
+    # выгрузки-загрузки ради одной строки.
+    content: str = Field(min_length=1)
+    filename: str | None = Field(default=None, max_length=128)
+    version: str | None = Field(default=None, max_length=64)
+    note: str | None = None
 
 
 # --- версии приложения -------------------------------------------------------

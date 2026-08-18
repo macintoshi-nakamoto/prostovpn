@@ -80,6 +80,13 @@ class Settings(BaseSettings):
     # стоит за nginx отдельно).
     site_dir: str = "../site"
 
+    # Страница инструкции по установке. Пусто — берётся `site_url` + /guide.
+    # Отдельной настройкой, потому что ссылку показывают в трёх местах —
+    # кабинет, бот, письмо с доступом, — и переезд страницы не должен
+    # означать правку в трёх проектах.
+    guide_path: str = "/guide"
+    guide_url: str = ""
+
     # Сайт — одностраничное приложение (React). Тогда на клиентские маршруты
     # (/login, /account, /faq) отдаётся index.html, а не 404: маршрутизация у
     # SPA своя, и по прямой ссылке сервер обязан вернуть тот же index.
@@ -178,6 +185,13 @@ class Settings(BaseSettings):
     login_lock_minutes: int = 15
 
     order_max_per_hour: int = 10
+
+    @property
+    def guide_link(self) -> str:
+        """Полный адрес инструкции по установке."""
+        if self.guide_url.strip():
+            return self.guide_url.strip()
+        return f"{self.site_url.rstrip('/')}/{self.guide_path.strip('/')}"
 
     @property
     def cors_origin_list(self) -> list[str]:

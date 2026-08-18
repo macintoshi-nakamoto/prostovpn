@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from ..config import settings
-from ..models import Admin, AdminSession, Session, User, utcnow
+from ..models import Admin, AdminSession, Session, User, sanitize_device_id, utcnow
 from ..security import hash_password, needs_rehash, new_token, token_hash, verify_password
 from . import ratelimit
 from .errors import PanelError
@@ -186,7 +186,10 @@ def authenticate(
         platform=platform,
         app_version=app_version,
         ip=ip,
-        device_id=device_id,
+        # Идентификатор приходит от клиента, а `ios-N` — служебные слоты
+        # ключей AmneziaVPN, которые заводит панель. Приложение с таким
+        # идентификатором путалось бы с ними в списках ключей.
+        device_id=sanitize_device_id(device_id),
         device_name=device_name,
         expires_at=utcnow() + dt.timedelta(days=config.client_token_days),
     )

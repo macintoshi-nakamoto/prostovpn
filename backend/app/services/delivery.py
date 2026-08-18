@@ -109,20 +109,23 @@ def _send(db: OrmSession, job: DeliveryJob) -> None:
 
     expires = _expires_label(user)
     site = settings().site_url.rstrip("/")
+    # Человеку с iPhone к логину и паролю нужна дорога до ключа AmneziaVPN:
+    # приложения там нет, и без этой строки письмо ведёт в пустоту.
+    ios = user.ios_access
 
     if job.channel == "email":
         if job.template == "credentials":
-            text, html = mail.credentials_body(user.login, _password(user), expires)
+            text, html = mail.credentials_body(user.login, _password(user), expires, ios=ios)
         else:
-            text, html = mail.renewed_body(user.login, expires)
+            text, html = mail.renewed_body(user.login, expires, ios=ios)
         mail.send(job.target, settings().mail_subject, text, html)
         return
 
     if job.channel == "telegram":
         if job.template == "credentials":
-            body = telegram.credentials_text(user.login, _password(user), expires, site)
+            body = telegram.credentials_text(user.login, _password(user), expires, site, ios=ios)
         else:
-            body = telegram.renewed_text(user.login, expires, site)
+            body = telegram.renewed_text(user.login, expires, site, ios=ios)
         telegram.send(job.target, body)
         return
 

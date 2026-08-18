@@ -6,9 +6,14 @@ API публичного сайта: тарифы, заказы, вебхуки 
 тот же `/api/v1/login`, что и в приложении: заводить второй способ входа
 значит завести второе место, где ошибаются с проверкой пароля.
 
-Ключей, конфигов и `vpn://` ни в одном ответе этого модуля нет и быть не
-может. Личный кабинет показывает срок подписки, устройства и кнопку
-продления — всё, что человеку положено видеть.
+Ключей и конфигов для приложений здесь нет: их выдаёт `/api/v1/servers` по
+токену приложения, и в кабинете им делать нечего.
+
+Единственное исключение — ключи `vpn://` для iPhone. Приложения под iOS
+нет, человек подключается официальным AmneziaVPN, и получить ключ ему
+физически неоткуда, кроме кабинета. Правило при этом остаётся прежним:
+ключ отдаётся только по токену входа, только своему владельцу и только
+тому, у кого этот доступ включён. См. services/ios.py.
 """
 
 from __future__ import annotations
@@ -113,6 +118,10 @@ class OrderIn(BaseModel):
     plan_code: str = Field(min_length=1, max_length=32)
     email: str = Field(min_length=5, max_length=255, pattern=EMAIL_PATTERN)
     telegram_id: int | None = None
+    # С какого устройства покупают. Сайт может сказать прямо; если молчит,
+    # платформу определяет сервер по строке браузера. Значение решает ровно
+    # один вопрос — готовить ли ключ для AmneziaVPN, см. fulfil.
+    platform: str | None = Field(default=None, max_length=16)
 
 
 class OrderOut(BaseModel):
@@ -175,6 +184,11 @@ def create_order(
             email=str(body.email),
             telegram_id=body.telegram_id,
             ip=ip,
+            # Что сказал сайт, а иначе — что видно по браузеру. Определять
+            # платформу надо сейчас: к приходу вебхука заголовков уже нет,
+            # а решение «нужен ли ключ для AmneziaVPN» принимается там.
+            platform=body.platform
+            or services.orders.platform_from_user_agent(request.headers.get("user-agent")),
         )
     except services.OrderError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -393,6 +407,63 @@ class PaymentOut(BaseModel):
     paid_at: dt.datetime
 
 
+class IosKeyOut(BaseModel):
+    """
+    Ключ AmneziaVPN для одного устройства.
+
+    Ключей столько, сколько устройств в тарифе, и это не прихоть формата:
+    один пир нельзя честно поделить между телефонами — сервер помнит у
+    пира один адрес подключения, и второе устройство отбирает соединение у
+    первого. Поэтому «три устройства» — это три разные ссылки.
+    """
+
+    slot: int
+    name: str
+    server_id: int
+    server: str
+    country: str | None = None
+    country_code: str | None = None
+    city: str | None = None
+    vpn_url: str
+    traffic_bytes: int = 0
+    last_handshake_at: dt.datetime | None = None
+    # Когда ключ выдан. Нужно человеку: после перевыпуска в кабинете лежит
+    # другая ссылка, и по дате видно, что это уже не та, что вставлена в
+    # Amnezia, — иначе перемена молчаливая.
+    created_at: dt.datetime | None = None
+    is_connected: bool = False
+
+
+class IosOut(BaseModel):
+    available: bool = False
+    # Отключён администратором: ключа нет и выдать себе новый нельзя.
+    blocked: bool = False
+    keys: list[IosKeyOut] = []
+    guide_url: str | None = None
+    # Почему ключей нет, хотя доступ включён: узлы ещё готовят пиры или
+    # подписка кончилась. Пустой список без объяснения — тупик.
+    notice: str | None = None
+
+
+class TunnelFileOut(BaseModel):
+    """
+    Что показать о файле обхода до скачивания.
+
+    Едет и отдельным запросом (его делает бот), и внутри ответа кабинета.
+    Второе важнее: кабинет и так спрашивает `/account`, а лишний запрос —
+    это лишний повод чему-то не доехать и убрать кнопку с глаз.
+    """
+
+    available: bool = False
+    filename: str | None = None
+    version: str | None = None
+    size_bytes: int | None = None
+    sha256: str | None = None
+    note: str | None = None
+    updated_at: dt.datetime | None = None
+    url: str = "/api/v1/tunnel-file/download"
+
+
 class AccountOut(BaseModel):
     login: str
     email: str | None = None
@@ -409,6 +480,8 @@ class AccountOut(BaseModel):
     traffic_used_bytes: int = 0
     traffic_limit_bytes: int | None = None
     payments: list[PaymentOut] = []
+    ios: IosOut = IosOut()
+    tunnel_file: TunnelFileOut = TunnelFileOut()
 
 
 def _device_connected(user: User, device_id: str, now: dt.datetime) -> bool:
@@ -424,6 +497,73 @@ def _device_connected(user: User, device_id: str, now: dt.datetime) -> bool:
         if key.last_handshake_at is not None and key.last_handshake_at > now - HANDSHAKE_WINDOW:
             return True
     return False
+
+
+def _ios_out(user: User, now: dt.datetime) -> IosOut:
+    """
+    Ключи для AmneziaVPN — только тем, кому этот доступ включён.
+
+    Пометка на учётке ставится покупкой с iPhone или кнопкой в кабинете, и
+    без неё блока в ответе нет вовсе: остальным людям он не нужен и только
+    сбивал бы с толку.
+    """
+    if not user.ios_access:
+        return IosOut(available=False, guide_url=settings().guide_link)
+
+    if user.ios_blocked:
+        # Отключён администратором. Кнопки выдачи нет: иначе решение
+        # отменялось бы нажатием через полминуты после того, как принято.
+        return IosOut(
+            available=True,
+            blocked=True,
+            guide_url=settings().guide_link,
+            notice="Ключ отключён. Напишите в поддержку — разберёмся, в чём дело.",
+        )
+
+    keys = [
+        IosKeyOut(
+            slot=key.slot,
+            name=key.name,
+            server_id=key.server_id,
+            server=key.country or key.server_name,
+            country=key.country,
+            country_code=key.country_code,
+            city=key.city,
+            vpn_url=key.vpn_url,
+            traffic_bytes=key.traffic_bytes,
+            last_handshake_at=key.last_handshake_at,
+            created_at=key.created_at,
+            is_connected=(
+                key.last_handshake_at is not None
+                and key.last_handshake_at > now - HANDSHAKE_WINDOW
+            ),
+        )
+        for key in services.ios.keys(user)
+    ]
+
+    notice = None
+    if not keys:
+        if not user.has_access(now):
+            notice = "Ключи отключены: подписка кончилась или закрыт доступ."
+        else:
+            notice = "Готовим ключи, это займёт около минуты — обновите страницу."
+
+    return IosOut(available=True, keys=keys, guide_url=settings().guide_link, notice=notice)
+
+
+def _tunnel_out(db: OrmSession) -> TunnelFileOut:
+    entry = services.tunnel.current(db)
+    if entry is None:
+        return TunnelFileOut(available=False)
+    return TunnelFileOut(
+        available=True,
+        filename=entry.filename,
+        version=entry.version,
+        size_bytes=entry.size_bytes,
+        sha256=entry.sha256,
+        note=entry.note,
+        updated_at=entry.updated_at,
+    )
 
 
 def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
@@ -474,14 +614,69 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
             )
             for payment in sorted(user.payments, key=lambda p: p.paid_at, reverse=True)
         ],
+        ios=_ios_out(user, now),
+        tunnel_file=_tunnel_out(db),
     )
 
 
 @router.get("/account", response_model=AccountOut)
 def account(
-    who: tuple[User, Session] = Depends(current_user), db: OrmSession = Depends(get_db)
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
 ) -> AccountOut:
     user, session = who
+    # В ответе могут быть ссылки `vpn://` — это рабочий доступ к VPN, и
+    # оседать в кэше браузера или прокси ему нечего.
+    response.headers["Cache-Control"] = "no-store"
+    return _account_out(db, user, session)
+
+
+@router.post("/account/ios", response_model=AccountOut)
+def enable_ios(
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    """
+    «У меня iPhone» — выдать ключи для AmneziaVPN.
+
+    Покупка с iPhone включает это сама, но случаев мимо неё хватает:
+    оплатили с ноутбука, подарили доступ, купили до появления ключей.
+    Просить за этим поддержку незачем — ничего нового человек так не
+    получает: ключи считают тот же трафик и гаснут по тому же концу
+    подписки, что и приложение.
+    """
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+
+    if user.ios_blocked:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "ключ отключён — напишите в поддержку",
+            headers={"X-Error-Code": "ios_blocked"},
+        )
+
+    if not user.has_access():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "ключ выдаётся по действующей подписке — оплатите тариф",
+            headers={"X-Error-Code": "no_subscription"},
+        )
+
+    # Повторное нажатие ничего не удваивает: ключ на учётку один, и если он
+    # уже есть — просто отдаём кабинет с ним. А вот когда пометка стоит, а
+    # живого ключа нет (узел не ответил в прошлый раз), выдачу повторяем:
+    # иначе человек остаётся с кнопкой, которая «уже нажата», и без ключа.
+    if not user.ios_access:
+        warnings = services.ios.enable(db, user)
+    elif not services.ios.keys(user):
+        warnings = services.ios.sync(db, user)
+    else:
+        warnings = []
+
+    for warning in warnings:
+        log.warning("ключ AmneziaVPN для %s: %s", user.public_id, warning)
     return _account_out(db, user, session)
 
 
@@ -613,6 +808,13 @@ def renew(
             email=email,
             telegram_id=user.telegram_id,
             ip=client_ip(request),
+            # Продление с iPhone — тот же повод выдать ключ AmneziaVPN, что
+            # и первая покупка: приложения там по-прежнему нет.
+            platform=(
+                "ios"
+                if user.ios_access
+                else services.orders.platform_from_user_agent(request.headers.get("user-agent"))
+            ),
         )
     except services.OrderError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -625,6 +827,40 @@ def renew(
         currency=order.currency,
         redirect_url=order.redirect_url,
         created_at=order.created_at,
+    )
+
+
+# --- файл раздельного туннелирования -----------------------------------------
+
+
+@router.get("/tunnel-file", response_model=TunnelFileOut)
+def tunnel_file(db: OrmSession = Depends(get_db)) -> TunnelFileOut:
+    """
+    Сведения о файле обхода: есть ли он, когда обновлялся, сколько весит.
+
+    Без токена: это список сайтов, а не доступ. Его спрашивает бот; кабинету
+    отдельный запрос не нужен — те же поля лежат в ответе `/account`.
+    """
+    return _tunnel_out(db)
+
+
+@router.get("/tunnel-file/download", include_in_schema=False)
+def tunnel_file_download(db: OrmSession = Depends(get_db)) -> Response:
+    entry = services.tunnel.current(db)
+    if entry is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "файл ещё не загружен")
+
+    media = "application/json" if entry.filename.lower().endswith(".json") else "text/plain"
+    return Response(
+        content=entry.content,
+        media_type=f"{media}; charset=utf-8",
+        headers={
+            # filename* по RFC 5987 — имя может быть и кириллическим.
+            "Content-Disposition": f'attachment; filename="{entry.filename}"',
+            # Файл меняется часто, и отдать вчерашний список хуже, чем
+            # сходить за ним ещё раз: сайты из него человек не увидит.
+            "Cache-Control": "no-cache",
+        },
     )
 
 

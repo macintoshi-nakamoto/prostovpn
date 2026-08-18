@@ -183,6 +183,12 @@ class UserKeyOut(Schema):
     rx_bytes: int
     tx_bytes: int
     last_handshake_at: dt.datetime | None
+    # На каком порту это устройство пробует подключаться.
+    #
+    # Видно в поддержке: у кого рукопожатия нет ни разу, панель по кругу
+    # предлагает запасные порты, и по этому полю сразу понятно, какой из
+    # них сейчас в деле и добрался ли человек до рабочего.
+    endpoint_port: int | None = None
     created_at: dt.datetime
     revoked_at: dt.datetime | None
 
@@ -466,6 +472,12 @@ class KeyRow(Schema):
     rx_bytes: int
     tx_bytes: int
     last_handshake_at: dt.datetime | None
+    # На каком порту это устройство пробует подключаться.
+    #
+    # Видно в поддержке: у кого рукопожатия нет ни разу, панель по кругу
+    # предлагает запасные порты, и по этому полю сразу понятно, какой из
+    # них сейчас в деле и добрался ли человек до рабочего.
+    endpoint_port: int | None = None
     created_at: dt.datetime
     revoked_at: dt.datetime | None
     is_active: bool

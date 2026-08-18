@@ -65,6 +65,7 @@ def list_keys(
                 rx_bytes=key.rx_bytes,
                 tx_bytes=key.tx_bytes,
                 last_handshake_at=key.last_handshake_at,
+                endpoint_port=key.endpoint_port,
                 created_at=key.created_at,
                 revoked_at=key.revoked_at,
                 is_active=key.revoked_at is None,

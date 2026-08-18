@@ -681,12 +681,22 @@ function Servers({ user }) {
                 <div className="gd-cellsub gd-mono">
                   {key.address || "общий ключ"} · {key.serverName} ·{" "}
                   {deviceLabel(user, key.deviceId)}
+                  {key.endpointPort ? ` · порт ${key.endpointPort}` : ""}
                 </div>
               </div>
               <div className="r">
                 {bytes(key.rxBytes + key.txBytes)}
-                <div className="gd-cellsub">
-                  {key.lastHandshakeAt ? ago(key.lastHandshakeAt) : "не подключался"}
+                {/*
+                «Не подключался ни разу» — это не то же самое, что «давно не
+                заходил», и в поддержке разница решающая. Первое означает, что
+                до узла не дошло ни одного пакета: перебирается порт, и надо
+                смотреть на сеть человека. Второе — просто человек не включал.
+                */}
+                <div
+                  className="gd-cellsub"
+                  style={key.lastHandshakeAt ? undefined : { color: "var(--gd-neg)" }}
+                >
+                  {key.lastHandshakeAt ? ago(key.lastHandshakeAt) : "ни одного рукопожатия"}
                 </div>
               </div>
             </div>

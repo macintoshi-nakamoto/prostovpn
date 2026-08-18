@@ -94,11 +94,23 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     init {
         migrateToFullTunnel()
-        observeTunnel()
     }
 
     /**
      * Экран следует за туннелем, а не наоборот.
+     *
+     * Вызывается ТОЛЬКО из [restoreRunningTunnel], и оба ограничения важны.
+     *
+     * Не из блока `init` в начале класса: `viewModelScope` работает на
+     * `Main.immediate`, поэтому корутина стартует не «потом», а тут же,
+     * синхронно. `StateFlow` отдаёт новому подписчику текущее значение
+     * немедленно — то есть тело сборщика выполнялось бы посреди конструктора,
+     * когда `phase`, `server` и `tunnel` объявлены ниже и ещё не созданы.
+     * Приложение падало при запуске ровно на этом.
+     *
+     * И только после подхвата живого туннеля: иначе сборщик получил бы
+     * стартовое OFF от менеджера, который ещё не знает о работающем VPN, и
+     * погасил бы экран с ошибкой поверх исправного подключения.
      *
      * Туннель переживает Activity: человек сворачивает приложение, система
      * уничтожает ViewModel, а VPN продолжает работать — и сам поднимается
@@ -597,12 +609,22 @@ class AppState(application: Application) : AndroidViewModel(application) {
      */
     private fun restoreRunningTunnel() {
         viewModelScope.launch {
-            val up = withContext(tunnelDispatcher) { tunnel.isUp }
+            val config = server?.config
+            // Подхватываем не только интерфейс, но и надзор за ним: иначе
+            // переживший смерть процесса туннель остаётся без хозяина и
+            // после первого же обрыва не поднимется сам.
+            val up = withContext(tunnelDispatcher) {
+                if (config.isNullOrBlank()) tunnel.isUp
+                else tunnel.adopt(config, server?.altPorts ?: emptyList())
+            }
             if (up && phase == Phase.OFF) {
                 phase = Phase.ON
                 startForegroundNotice()
                 startTimer()
             }
+            // Подписываемся последними — когда состояние менеджера уже
+            // соответствует действительности.
+            observeTunnel()
         }
     }
 

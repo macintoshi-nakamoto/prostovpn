@@ -412,6 +412,25 @@ class TunnelManager(context: Context) {
     }
 
     /**
+     * Подхватывает туннель, переживший смерть процесса.
+     *
+     * VPN живёт в системе дольше приложения: процесс убивают оболочки, его
+     * выгружает система, а интерфейс остаётся поднятым. В новом процессе
+     * менеджер об этом не знает — состояние у него OFF, надзора нет, и
+     * туннель работает бесхозным: упадёт — никто не поднимет.
+     *
+     * Возвращает true, если было что подхватывать.
+     */
+    fun adopt(configText: String, alternativePorts: List<Int> = emptyList()): Boolean {
+        if (!isUp) return false
+        wanted = configText
+        alternatives = alternativePorts
+        _status.value = Status.ON
+        startSupervision()
+        return true
+    }
+
+    /**
      * Снятие для тех, кому нельзя ждать: уведомление в шторке.
      *
      * Сервис живёт на главном потоке, и `runBlocking { disconnect() }` там

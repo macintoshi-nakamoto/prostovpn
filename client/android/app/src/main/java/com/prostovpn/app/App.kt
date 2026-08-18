@@ -25,7 +25,10 @@ class App : Application() {
             thread(name = "always-on-vpn") {
                 val base = ConnectConfig.storedConfig(this) ?: return@thread
                 val prepared = runCatching { ConnectConfig.build(this, base) }.getOrDefault(base)
-                val result = runBlocking { TunnelManager.getInstance(this@App).connect(prepared) }
+                val ports = ConnectConfig.storedAltPorts(this)
+                val result = runBlocking {
+                    TunnelManager.getInstance(this@App).connect(prepared, ports)
+                }
                 Log.i(TAG, "always-on поднял туннель: $result")
                 if (result == TunnelManager.Result.CONNECTED) {
                     val lang = getSharedPreferences("prosto", 0).getString("lang", null)

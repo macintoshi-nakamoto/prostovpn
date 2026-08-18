@@ -278,6 +278,15 @@ class Server(Base):
 
     host: Mapped[str] = mapped_column(String(255))
     port: Mapped[int] = mapped_column(Integer, default=51820)
+    # Запасные порты того же узла, через запятую.
+    #
+    # Один порт — это одна точка отказа, и отказывает она не у нас, а у
+    # оператора: 51820 known-порт WireGuard, и часть сетей его просто не
+    # пропускает. Человек при этом видит исправное приложение, исправный
+    # сервер и вечное «подключение». Узел слушает один порт, остальные
+    # заворачиваются на него правилом DNAT (см. deploy/extra-ports.sh) —
+    # здесь только список того, что реально доступно снаружи.
+    alt_ports: Mapped[str] = mapped_column(String(120), default="", server_default="")
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
@@ -295,6 +304,18 @@ class Server(Base):
     ssh_password: Mapped[str | None] = mapped_column(Text, default=None)
     ssh_key: Mapped[str | None] = mapped_column(Text, default=None)
     awg_template: Mapped[str | None] = mapped_column(Text, default=None)
+
+    def alt_port_list(self) -> list[int]:
+        """Запасные порты числами, без основного и без мусора."""
+        out: list[int] = []
+        for chunk in (self.alt_ports or "").replace(";", ",").split(","):
+            chunk = chunk.strip()
+            if not chunk.isdigit():
+                continue
+            value = int(chunk)
+            if 0 < value < 65536 and value != self.port and value not in out:
+                out.append(value)
+        return out
 
     # Когда с сервера последний раз снимали счётчики трафика.
     traffic_synced_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
@@ -663,6 +684,12 @@ class UserKey(Base):
 
     # Счётчики пира с сервера. Абсолютные значения с момента поднятия
     # интерфейса: разницу между замерами копим в traffic_used_bytes.
+    # Порт эндпоинта, отданный этому устройству в прошлый раз.
+    #
+    # Нужен, чтобы подбор порта не сбрасывался на каждом опросе и чтобы
+    # сработавший порт закрепился за ключом: сменить его у человека, у
+    # которого всё работает, — значит сломать работающее.
+    endpoint_port: Mapped[int | None] = mapped_column(Integer, default=None)
     rx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     tx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     last_handshake_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)

@@ -22,6 +22,19 @@ object ConnectConfig {
     fun storedConfig(context: Context): String? =
         prefs(context).getString("server.config", null)?.takeIf { it.isNotBlank() }
 
+    /**
+     * Запасные порты узла, сохранённые с последнего опроса панели.
+     *
+     * Always-on поднимает туннель на загрузке телефона, когда панель ещё
+     * недоступна, а сеть уже может резать основной порт. Без сохранённого
+     * списка перебирать в этот момент нечего — а это ровно тот случай,
+     * когда человек ничего сделать не может: приложение он не открывал.
+     */
+    fun storedAltPorts(context: Context): List<Int> =
+        (prefs(context).getString("server.altPorts", "") ?: "")
+            .split(',')
+            .mapNotNull { it.trim().toIntOrNull() }
+
     fun defaultListJson(context: Context): String? = runCatching {
         context.assets.open(AppState.DEFAULT_FILE_NAME).bufferedReader().use { it.readText() }
     }.getOrNull()

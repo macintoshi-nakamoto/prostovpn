@@ -54,6 +54,14 @@ def _apply(server: Server, body: schemas.ServerIn) -> None:
     server.country_code = (body.country_code or "").upper() or None
     server.host = body.host
     server.port = body.port
+    # Нормализуем на входе: в поле панели человек напишет и «443, 2408», и
+    # «443;2408», и лишний пробел. Хранить это как набрано — значит однажды
+    # молча потерять порт из-за пробела.
+    server.alt_ports = ",".join(
+        str(int(chunk))
+        for chunk in (body.alt_ports or "").replace(";", ",").split(",")
+        if chunk.strip().isdigit() and 0 < int(chunk) < 65536
+    )
     server.provisioning = (
         Provisioning.SSH if body.provisioning == "ssh" else Provisioning.SHARED
     )

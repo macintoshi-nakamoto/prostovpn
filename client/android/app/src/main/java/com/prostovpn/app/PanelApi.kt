@@ -84,6 +84,8 @@ object PanelApi {
         val city: String?,
         val countryCode: String?,
         val config: String,
+        /** Запасные порты того же узла; пусто — перебирать нечего. */
+        val altPorts: List<Int> = emptyList(),
     )
 
     data class UpdateInfo(
@@ -215,6 +217,9 @@ object PanelApi {
                 city = item.optStringOrNull("city"),
                 countryCode = item.optStringOrNull("country_code"),
                 config = config,
+                altPorts = item.optJSONArray("alt_ports")?.let { ports ->
+                    (0 until ports.length()).mapNotNull { n -> ports.optInt(n).takeIf { it > 0 } }
+                } ?: emptyList(),
             )
         }
     }
@@ -283,4 +288,5 @@ fun PanelApi.PanelServer.toServerInfo(): ServerInfo = ServerInfo(
     countryEn = countryEn,
     countryCode = countryCode,
     config = config,
+    altPorts = altPorts,
 )

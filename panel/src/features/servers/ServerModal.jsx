@@ -23,6 +23,7 @@ const EMPTY = {
   countryCode: "",
   host: "",
   port: 51820,
+  altPorts: "",
   provisioning: "ssh",
   sharedConfig: "",
   sshHost: "",
@@ -115,6 +116,27 @@ export function ServerModal({ server, onClose, onSaved }) {
             <input className="gd-input" value={form.host} onChange={set("host")} placeholder="185.10.20.30" />
           </Field>
         </div>
+
+        {/*
+        Запасные порты — против операторов, режущих канонический 51820.
+
+        Узел слушает один порт, остальные заворачиваются на него правилом
+        DNAT (deploy/extra-ports.sh). Здесь перечисляем только то, что реально
+        доступно снаружи: список уезжает в приложение, и клиент будет честно
+        перебирать каждый порт по полминуты. Лишний порт в списке — это
+        потерянные полминуты у каждого, кому не повезло.
+        */}
+        <Field
+          label="Запасные порты"
+          hint="Через запятую. Сначала настройте их на узле: deploy/extra-ports.sh"
+        >
+          <input
+            className="gd-input"
+            value={form.altPorts || ""}
+            onChange={set("altPorts")}
+            placeholder="443, 2408, 8443"
+          />
+        </Field>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 90px", gap: 12 }}>
           <Field label="Страна" hint="Это видит клиент">

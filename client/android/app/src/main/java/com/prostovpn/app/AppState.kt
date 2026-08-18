@@ -32,6 +32,16 @@ data class ServerInfo(
     val cityEn: String? = null,
     val countryCode: String? = null,
     val config: String? = null,
+    /**
+     * Запасные порты того же узла.
+     *
+     * Приходят от панели. Канонический порт WireGuard у части операторов не
+     * проходит вовсе, и перебор — единственное, чем клиент может себе помочь.
+     * Пустой список (панель их не прислала) означает прежнее поведение: один
+     * эндпоинт. Гадать о портах самим нельзя — будем упорно стучаться туда,
+     * где никто не слушает.
+     */
+    val altPorts: List<Int> = emptyList(),
 ) {
     fun countryFor(lang: String): String? =
         if (lang == "en") countryEn ?: country else country ?: countryEn
@@ -84,6 +94,61 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     init {
         migrateToFullTunnel()
+        observeTunnel()
+    }
+
+    /**
+     * Экран следует за туннелем, а не наоборот.
+     *
+     * Туннель переживает Activity: человек сворачивает приложение, система
+     * уничтожает ViewModel, а VPN продолжает работать — и сам поднимается
+     * обратно после разрыва (см. надзор в [TunnelManager]). Пока экран держал
+     * состояние у себя, вернувшийся человек видел то, что было в момент
+     * закрытия окна: «отключено» поверх работающего туннеля или бодрый
+     * счётчик поверх мёртвого.
+     *
+     * Гостевой режим сюда не попадает: там туннеля нет вовсе, а
+     * имитированное подключение живёт своей жизнью в [startSimulated].
+     */
+    private fun observeTunnel() {
+        viewModelScope.launch {
+            tunnel.status.collect { status ->
+                if (server?.config.isNullOrBlank()) return@collect
+                when (status) {
+                    TunnelManager.Status.ON -> if (phase != Phase.ON) {
+                        phase = Phase.ON
+                        connectionError = null
+                        startForegroundNotice()
+                        if (timerJob == null) startTimer()
+                    }
+                    /*
+                    Переподключение показываем как подключение, а не как ошибку:
+                    для человека это одно и то же состояние — «сейчас связи нет,
+                    приложение занято». Отдельная надпись понадобилась бы, только
+                    если бы от него что-то требовалось, а не требуется ничего.
+                    */
+                    TunnelManager.Status.RECONNECTING -> if (phase == Phase.ON) {
+                        phase = Phase.CONNECTING
+                        startConnectingNotice()
+                    }
+                    TunnelManager.Status.OFF ->
+                        if (phase == Phase.ON || phase == Phase.CONNECTING) {
+                            phase = Phase.OFF
+                            timerJob?.cancel()
+                            timerJob = null
+                            stopForegroundNotice()
+                            if (connectionError == null) {
+                                connectionError = when (tunnel.lastFailure) {
+                                    TunnelManager.Result.NO_HANDSHAKE -> s.errNoHandshake
+                                    TunnelManager.Result.FAILED -> s.errTunnelFailed
+                                    else -> s.errTunnelDropped
+                                }
+                            }
+                        }
+                    TunnelManager.Status.CONNECTING -> Unit
+                }
+            }
+        }
     }
 
     /**
@@ -501,6 +566,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 cityEn = prefs.getString("server.cityEn", null),
                 countryCode = prefs.getString("server.countryCode", null),
                 config = prefs.getString("server.config", null),
+                altPorts = (prefs.getString("server.altPorts", "") ?: "")
+                    .split(',').mapNotNull { it.trim().toIntOrNull() },
             )
             refreshGeo()
         }
@@ -760,6 +827,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
             .putString("server.cityEn", current.cityEn)
             .putString("server.countryCode", current.countryCode)
             .putString("server.config", current.config)
+            .putString("server.altPorts", current.altPorts.joinToString(","))
             .apply()
     }
 
@@ -807,7 +875,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
             val prepared = buildConfigForConnect(config)
             // Без withContext: connect сам сериализуется и сам уходит на IO,
             // а ожидание рукопожатия обязано оставаться отменяемым
-            val result = tunnel.connect(prepared)
+            val result = tunnel.connect(prepared, server?.altPorts ?: emptyList())
             when (result) {
                 TunnelManager.Result.CONNECTED -> {
                     phase = Phase.ON
@@ -839,54 +907,25 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Счётчик времени на экране — и только он.
+     *
+     * За живостью туннеля следит надзор в [TunnelManager]: он переживает
+     * закрытие окна и сам поднимает упавший туннель. Раньше проверка жила
+     * здесь, и это было двойной ошибкой. Во-первых, она умирала вместе с
+     * Activity — то есть не работала как раз тогда, когда VPN и нужен, при
+     * закрытом приложении. Во-вторых, обнаружив смерть туннеля, она просто
+     * показывала ошибку и оставляла человека отключённым до следующего
+     * РУЧНОГО нажатия кнопки: любая заминка в сети обрывала VPN насовсем.
+     */
     private fun startTimer() {
         seconds = 0
         val startedAt = System.currentTimeMillis()
-        // Гостевой режим: туннеля нет, соединение имитированное. Проверять
-        // живость нечего — иначе через два промаха таймер «обрывал» связь,
-        // которой не было.
-        val real = server?.config?.isNotBlank() == true
         timerJob = viewModelScope.launch {
-            var misses = 0
-            var nextCheck = 5
-            var lastRx = -1L
             while (true) {
                 delay(500)
                 val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
                 if (elapsed != seconds) seconds = elapsed
-                if (!real) continue
-
-                /*
-                Туннель может умереть сам: сервер пропал, сеть сменилась,
-                система прибила процесс. Без этой проверки экран показывал
-                «подключено» и бодро считал секунды, пока наружу не уходило
-                ничего. Проверяем раз в пять секунд, а не каждые полсекунды:
-                опрос движка не бесплатный.
-                */
-                if (elapsed < nextCheck) continue
-                nextCheck = elapsed + 5
-
-                val alive = withContext(tunnelDispatcher) {
-                    if (!tunnel.isUp) return@withContext false
-                    // Идущий трафик — доказательство жизни даже до того, как
-                    // подойдёт срок следующего рукопожатия
-                    val rx = tunnel.receivedBytes()
-                    val moving = rx >= 0 && lastRx >= 0 && rx > lastRx
-                    lastRx = rx
-                    tunnel.isHealthy() || moving
-                }
-
-                // Одиночный промах не считаем: опрос изредка не проходит,
-                // а ложное отключение хуже пяти секунд задержки
-                misses = if (alive) 0 else misses + 1
-                if (misses >= 2) {
-                    timerJob = null
-                    phase = Phase.OFF
-                    connectionError = s.errTunnelDropped
-                    stopForegroundNotice()
-                    viewModelScope.launch { runCatching { tunnel.disconnect() } }
-                    return@launch
-                }
             }
         }
     }

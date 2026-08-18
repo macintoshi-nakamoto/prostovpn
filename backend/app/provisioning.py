@@ -232,6 +232,32 @@ def render_from_template(template: str, private_key: str, address: str) -> str:
     return template.replace("{private_key}", private_key).replace("{address}", address)
 
 
+ENDPOINT_LINE = re.compile(r"(?im)^([ \t]*Endpoint[ \t]*=[ \t]*)(\S+?)(?::(\d+))?[ \t]*$")
+
+
+def endpoint_port(config: str) -> int | None:
+    """Порт из строки Endpoint; None — строки нет или порт не указан."""
+    match = ENDPOINT_LINE.search(config or "")
+    if match is None or not match.group(3):
+        return None
+    return int(match.group(3))
+
+
+def with_endpoint_port(config: str, port: int) -> str:
+    """
+    Тот же конфиг, но эндпоинт смотрит в другой порт.
+
+    Меняем ровно одну строку и ровно её хвост: в конфиге хватает других
+    чисел после «=» и «:» — MTU, junk-параметры, адреса, — и любая менее
+    строгая замена однажды испортит ключ вместо порта. Такая порча не
+    видна глазом: конфиг остаётся синтаксически верным, а туннель просто
+    перестаёт подниматься.
+    """
+    if not config:
+        return config
+    return ENDPOINT_LINE.sub(lambda m: f"{m.group(1)}{m.group(2)}:{port}", config, count=1)
+
+
 def config_for(server: Server, key: UserKey | None) -> str | None:
     """Что отдать приложению для этого сервера."""
     if server.provisioning == Provisioning.SHARED:

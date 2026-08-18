@@ -21,10 +21,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, 
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as OrmSession
 
-from . import geo, services
+from . import geo, provisioning, services
 from .config import settings
 from .db import get_db
-from .models import Provisioning, Session, User, is_ios_slot
+from .models import Provisioning, Server, Session, User, UserKey, is_ios_slot, utcnow
 from .provisioning import config_for
 from .security import client_ip
 
@@ -73,6 +73,10 @@ class ServerOut(BaseModel):
     city_en: str | None = None
     country_code: str | None = None
     config: str
+    # Запасные порты того же узла. Приложение перебирает их, когда основной
+    # не отвечает: у части операторов 51820 не проходит вовсе. Старые версии
+    # поле игнорируют, поэтому добавлять его безопасно.
+    alt_ports: list[int] = []
 
 
 class SubscriptionOut(BaseModel):
@@ -352,11 +356,13 @@ def _servers_out(
             )
             continue
 
-        config = config_for(server, by_server.get(server.id))
+        key = by_server.get(server.id)
+        config = config_for(server, key)
         if not config:
             # Сервер есть, но конфига для этого человека пока нет —
             # показывать его в приложении нельзя: подключение упадёт.
             continue
+        config = _with_chosen_port(db, server, key, config)
         out.append(
             ServerOut(
                 id=server.id,
@@ -379,9 +385,61 @@ def _servers_out(
                 city_en=server.city_en or server.city,
                 country_code=server.country_code,
                 config=config,
+                alt_ports=server.alt_port_list(),
             )
         )
     return out
+
+
+# Как часто меняем пробуемый порт тому, у кого ничего не получается.
+#
+# Три минуты — компромисс. Приложение опрашивает панель раз в минуту, но
+# конфиг оно берёт в момент нажатия «подключиться»; человек, у которого не
+# выходит, жмёт кнопку несколько раз подряд. За три минуты он успевает
+# честно попробовать один порт (полный заход клиента — около минуты) и
+# перейти к следующему, а не скакать между портами внутри одной попытки.
+PORT_PROBE_SECONDS = 180
+
+
+def _with_chosen_port(
+    db: OrmSession, server: Server, key: UserKey | None, config: str
+) -> str:
+    """
+    Подставляет в конфиг тот порт, который для этого устройства имеет смысл.
+
+    Зачем это на сервере, если перебор портов есть и в приложении: приложения
+    у людей УЖЕ установлены, и обновятся они не сегодня. Единственный способ
+    дотянуться до человека, у которого туннель не встаёт, — отдать ему другой
+    порт в конфиге: приложение перечитывает список серверов при каждом входе
+    и раз в минуту на экране.
+
+    Правило простое и осторожное:
+
+    * у кого рукопожатие хоть раз было — не трогаем вовсе. Работающее не
+      чинят: сменить порт такому человеку значит сломать то, что работает;
+    * у кого не было ни разу — раз в несколько минут предлагаем следующий
+      порт из списка. Рано или поздно попадётся тот, что проходит через его
+      сеть, и он закрепится за ключом сам.
+    """
+    ports = server.alt_port_list()
+    if key is None or not ports:
+        return config
+
+    if key.last_handshake_at is not None:
+        # Порт, на котором в прошлый раз получилось. Пока получается —
+        # ничего не меняем.
+        chosen = key.endpoint_port or provisioning.endpoint_port(config) or server.port
+        return provisioning.with_endpoint_port(config, chosen)
+
+    wheel = [server.port] + ports
+    index = int(utcnow().timestamp() // PORT_PROBE_SECONDS) % len(wheel)
+    chosen = wheel[index]
+    if key.endpoint_port != chosen:
+        # Запоминаем, что именно отдали: когда рукопожатие наконец случится,
+        # закрепится ровно этот порт.
+        key.endpoint_port = chosen
+        db.commit()
+    return provisioning.with_endpoint_port(config, chosen)
 
 
 @router.post("/login", response_model=LoginResponse)

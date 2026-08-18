@@ -357,6 +357,9 @@ class ServerOut(Schema):
     country_code: str | None
     host: str
     port: int
+    # Запасные порты через запятую: узел слушает один, остальные заворачивает
+    # на него правилом DNAT. Нужны там, где оператор режет основной порт.
+    alt_ports: str = ""
     is_active: bool
     provisioning: str
     sort_order: int
@@ -396,6 +399,7 @@ class ServerIn(Schema):
     country_code: str | None = None
     host: str = Field(min_length=1, max_length=255)
     port: int = 51820
+    alt_ports: str = ""
     provisioning: str = "ssh"
     shared_config: str | None = None
     ssh_host: str | None = None

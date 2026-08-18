@@ -335,6 +335,7 @@ def server_out(db: OrmSession, server: Server) -> schemas.ServerOut:
         country_code=server.country_code,
         host=server.host,
         port=server.port,
+        alt_ports=server.alt_ports or "",
         is_active=server.is_active,
         provisioning=server.provisioning.value,
         sort_order=server.sort_order,

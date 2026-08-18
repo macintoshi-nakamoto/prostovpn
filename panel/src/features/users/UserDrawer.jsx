@@ -37,6 +37,7 @@ const TABS = [
   { id: "payments", label: "Оплаты" },
   { id: "orders", label: "Заказы" },
   { id: "sessions", label: "Устройства" },
+  { id: "ios", label: "iPhone" },
   { id: "servers", label: "Серверы" },
 ];
 
@@ -209,6 +210,7 @@ export function UserDrawer({ userId, plans, onClose, onChanged }) {
             {tab === "payments" && <Payments user={user} />}
             {tab === "orders" && <Orders user={user} />}
             {tab === "sessions" && <Sessions user={user} onChanged={applyResult} />}
+            {tab === "ios" && <IosKeys user={user} onChanged={applyResult} />}
             {tab === "servers" && <Servers user={user} />}
           </div>
 
@@ -260,6 +262,211 @@ function Overview({ user }) {
         </KV>
       )}
       {user.note && <KV k="Заметка">{user.note}</KV>}
+    </Card>
+  );
+}
+
+/**
+ * Ключи AmneziaVPN для iPhone.
+ *
+ * Приложения под iOS нет: человек ставит официальный AmneziaVPN и вставляет
+ * туда ссылку `vpn://`. Значит, всё, что на других платформах делает
+ * приложение — выдать доступ, отобрать, поменять, — здесь делает поддержка
+ * из этой вкладки, и она же видит то же самое, что человек видит в кабинете.
+ *
+ * Ключей до пяти, по одному на устройство: один пир нельзя честно поделить
+ * между телефонами — сервер помнит у пира один адрес подключения, и второй
+ * телефон молча отбирает туннель у первого. Поэтому «нужен ещё телефон» —
+ * это «Добавить ключ», а не пересылка той же ссылки.
+ */
+function IosKeys({ user, onChanged }) {
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState(null);
+  const keys = user.iosKeys || [];
+  const max = user.iosMaxKeys || 0;
+  // Ключей столько, сколько номеров: на каждый номер приходится по ссылке на
+  // каждую страну, и считать строки значило бы обещать лишние ключи.
+  const used = new Set(keys.map((k) => k.slot)).size;
+
+  const run = async (action, fn) => {
+    setBusy(action);
+    setError(null);
+    try {
+      const result = await fn();
+      if (result) onChanged(result);
+    } catch (err) {
+      setError(err.message || "Не удалось выполнить");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const addKey = () => run("add", () => usersApi.iosAddKey(user.id));
+
+  const removeKey = async (slot) => {
+    const ok = await confirmDialog({
+      title: `Удалить ключ ${slot}?`,
+      message:
+        "Пир уйдёт с узлов, ссылка перестанет работать сразу и не восстановится: " +
+        "у ключа нет пароля, и вернуть можно только новый.",
+      confirmText: "Удалить",
+      danger: true,
+    });
+    if (!ok) return;
+    return run(`del-${slot}`, () => usersApi.iosRemoveKey(user.id, slot));
+  };
+
+  const reissue = async () => {
+    const ok = await confirmDialog({
+      title: "Перевыпустить ключи?",
+      message:
+        "Все ссылки этой учётки сменятся разом — те, что уже вставлены в Amnezia, перестанут " +
+        "работать. Так снимают утёкший ключ.",
+      confirmText: "Перевыпустить",
+      danger: true,
+    });
+    if (!ok) return;
+    return run("reissue", () => usersApi.iosReissue(user.id));
+  };
+
+  if (!user.iosAccess) {
+    return (
+      <Card pad>
+        <Section
+          title="Ключей для iPhone нет"
+          sub="Выдаётся первый ключ, остальные — кнопкой «Добавить ключ»"
+        >
+          {error && <div className="gd-error" style={{ marginBottom: 10 }}>{error}</div>}
+          <Button
+            variant="primary"
+            disabled={busy === "enable"}
+            onClick={() => run("enable", () => usersApi.iosEnable(user.id))}
+          >
+            {busy === "enable" ? "Выдаём…" : "Выдать ключ"}
+          </Button>
+        </Section>
+      </Card>
+    );
+  }
+
+  return (
+    <Card pad>
+      {error && <div className="gd-error" style={{ marginBottom: 10 }}>{error}</div>}
+
+      {user.iosBlocked && (
+        <div className="gd-cellsub" style={{ color: "var(--gd-neg)", marginBottom: 12 }}>
+          Ключи отключены: пиры сняты с узлов, выдать себе новый в кабинете человек не может.
+        </div>
+      )}
+
+      <Section
+        title={`Ключи AmneziaVPN · ${used} из ${max}`}
+        sub="По ключу на устройство — поделить один пир между телефонами нельзя"
+        actions={
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={busy === "add" || !user.iosCanAdd}
+            onClick={addKey}
+          >
+            {busy === "add" ? "Создаём…" : "Добавить ключ"}
+          </Button>
+        }
+      >
+        {keys.length === 0 ? (
+          <Empty>
+            {user.iosBlocked
+              ? "Ключи сняты — включите доступ, и они вернутся теми же"
+              : "Ключей на узлах нет: подписка кончилась или узел не ответил"}
+          </Empty>
+        ) : (
+          <div className="gd-rows">
+            {keys.map((key) => (
+              <div key={`${key.slot}-${key.serverId}`} className="gd-r">
+                <span style={{ fontSize: 18 }}>{flag(key.countryCode)}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600 }}>
+                    Ключ {key.slot} · {key.country || key.serverName}
+                  </div>
+                  <div className="gd-cellsub" style={{ maxWidth: 320 }}>
+                    <Copyable text={key.vpnUrl}>ссылка vpn:// · скопировать</Copyable>
+                  </div>
+                  <div className="gd-cellsub gd-mono">
+                    {key.address || "без адреса"} · выдан {date(key.createdAt)}
+                  </div>
+                </div>
+                <div className="r" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div>
+                    {bytes(key.trafficBytes)}
+                    <div className="gd-cellsub">
+                      {key.lastHandshakeAt ? ago(key.lastHandshakeAt) : "не подключался"}
+                    </div>
+                  </div>
+                  {used > 1 && (
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      disabled={busy === `del-${key.slot}`}
+                      onClick={() => removeKey(key.slot)}
+                    >
+                      Удалить
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Section>
+
+      <div style={{ marginTop: 18 }}>
+        <Section title="Ключи целиком" sub="Действия на всю учётку, а не на один ключ">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            {user.iosBlocked ? (
+              <Button
+                variant="on"
+                disabled={busy === "enable"}
+                onClick={() => run("enable", () => usersApi.iosEnable(user.id))}
+              >
+                Включить обратно
+              </Button>
+            ) : (
+              <Button
+                variant="danger"
+                disabled={busy === "disable"}
+                onClick={() => run("disable", () => usersApi.iosDisable(user.id))}
+              >
+                Отключить
+              </Button>
+            )}
+            <Button disabled={busy === "reissue"} onClick={reissue}>
+              Перевыпустить все
+            </Button>
+            <Button
+              variant="danger"
+              disabled={busy === "remove"}
+              onClick={async () => {
+                const ok = await confirmDialog({
+                  title: "Убрать ключи совсем?",
+                  message:
+                    "Пиры уйдут с узлов, строки — из базы. После этого человек сможет выдать " +
+                    "себе ключ заново в кабинете, и это будет уже другой ключ.",
+                  confirmText: "Убрать",
+                  danger: true,
+                });
+                if (ok) run("remove", () => usersApi.iosRemove(user.id));
+              }}
+            >
+              Убрать доступ
+            </Button>
+          </div>
+          <div className="gd-cellsub" style={{ marginTop: 10, whiteSpace: "normal" }}>
+            «Отключить» снимает пиры, но оставляет ключи за учёткой: включение вернёт те же
+            ссылки, и человеку не придётся ничего переставлять. «Перевыпустить» меняет ссылки —
+            для утёкшего ключа. «Убрать доступ» удаляет всё вместе со строками.
+          </div>
+        </Section>
+      </div>
     </Card>
   );
 }

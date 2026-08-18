@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session as OrmSession
 from ..services import ios
 from ..models import (
     HANDSHAKE_WINDOW,
+    IOS_MAX_KEYS,
     AuditLog,
     DeliveryJob,
     Order,
@@ -132,8 +133,11 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         servers_count=sum(1 for k in user.keys if k.revoked_at is None),
         ios_access=user.ios_access,
         ios_blocked=user.ios_blocked,
-        ios_keys_count=sum(
-            1 for k in user.keys if k.revoked_at is None and is_ios_slot(k.device_id)
+        # Ключей столько, сколько номеров, а не строк: на каждый номер
+        # приходится по пиру на каждой стране, и «ключей 3» у человека с
+        # одним ключом и тремя странами — неправда.
+        ios_keys_count=len(
+            {k.device_id for k in user.keys if k.revoked_at is None and is_ios_slot(k.device_id)}
         ),
         created_at=user.created_at,
     )
@@ -270,6 +274,8 @@ def user_detail(
         ],
         keys=[key_out(k) for k in sorted(user.keys, key=lambda k: k.server_id)],
         ios_keys=[ios_key_out(k) for k in ios.keys(user)],
+        ios_max_keys=IOS_MAX_KEYS,
+        ios_can_add=user.has_access(moment) and ios.free_slot(user) is not None,
     )
 
 

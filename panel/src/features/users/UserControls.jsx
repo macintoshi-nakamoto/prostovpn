@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ban, Gauge, KeyRound, Power, Trash2, Wallet } from "lucide-react";
+import { Ban, Gauge, KeyRound, Power, Smartphone, Trash2, Wallet } from "lucide-react";
 import { usersApi } from "../../lib/api";
 import { money, trafficLimit } from "../../lib/format";
 import { Button, Section, Toggle, confirmDialog } from "../../ui";
@@ -162,6 +162,39 @@ export function UserControls({ user, plans, onResult, onDeleted }) {
           >
             <Button size="sm" variant="primary" onClick={() => setModal("extend")}>
               Продлить
+            </Button>
+          </ControlRow>
+
+          {/*
+            Ключ для iPhone выдаётся отсюда же, а не только со вкладки.
+
+            Просьба «дайте ключ на второй телефон» приходит в поддержку чаще
+            всего остального в этом списке, и прятать её на вкладку значит
+            заставлять искать. Разбор ключей по одному — там, здесь только
+            выдать ещё один.
+          */}
+          <ControlRow
+            icon={<Smartphone size={16} />}
+            title="Ключи для iPhone"
+            sub={
+              !user.iosAccess
+                ? "Не выдавались — на iPhone подключаются ссылкой vpn://"
+                : user.iosBlocked
+                  ? "Отключены: пиры сняты, кнопка в кабинете не работает"
+                  : `Выдано ${user.iosKeysCount} из ${user.iosMaxKeys} · подробнее на вкладке «iPhone»`
+            }
+          >
+            <Button
+              size="sm"
+              variant={user.iosAccess ? "" : "primary"}
+              disabled={busy === "ios" || (user.iosAccess && !user.iosCanAdd)}
+              onClick={() =>
+                run("ios", () =>
+                  user.iosAccess ? usersApi.iosAddKey(user.id) : usersApi.iosEnable(user.id),
+                )
+              }
+            >
+              {busy === "ios" ? "…" : user.iosAccess ? "Добавить ключ" : "Выдать ключ"}
             </Button>
           </ControlRow>
 

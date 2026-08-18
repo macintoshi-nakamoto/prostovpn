@@ -365,10 +365,16 @@ def extend_subscription(
 def enable_ios(
     user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
 ) -> schemas.UserDetail:
-    """Выдаёт ключи AmneziaVPN — по одному на устройство из тарифа."""
+    """
+    Включает ключи AmneziaVPN и выдаёт первый.
+
+    Именно первый: остальные заводятся кнопкой «Добавить ключ» — здесь и в
+    кабинете. Выдавать сразу пять значит расставить по узлам четыре пира,
+    за которыми никто не придёт, и посчитать их в лимитах как настоящие.
+    """
     user = _load(db, user_id)
     warnings = services.ios.enable(db, user)
-    audit(db, admin, "user.ios_enable", user.public_id, f"устройств {user.device_limit()}")
+    audit(db, admin, "user.ios_enable", user.public_id, f"ключей {len(user.ios_slots())}")
     detail = _detail(db, user_id)
     if warnings:
         detail.blocked_reason = "Ключи выданы не везде: " + "; ".join(warnings)
@@ -412,6 +418,49 @@ def remove_ios(
     user = _load(db, user_id)
     problems = services.ios.remove(db, user)
     audit(db, admin, "user.ios_remove", user.public_id)
+    detail = _detail(db, user_id)
+    if problems:
+        detail.blocked_reason = "Пир снят не везде: " + "; ".join(problems)
+    return detail
+
+
+@router.post("/{user_id}/ios/keys", response_model=schemas.UserDetail)
+def add_ios_key(
+    user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
+) -> schemas.UserDetail:
+    """
+    Заводит человеку ещё один ключ AmneziaVPN — до потолка на учётку.
+
+    То же действие, что и кнопка в кабинете, и намеренно то же самое: у
+    поддержки нет причин выдавать ключ иначе, чем это сделает сам человек,
+    а вторая ветка правил здесь означала бы вторую же ветку ошибок.
+    """
+    user = _load(db, user_id)
+    try:
+        number, warnings = services.ios.add_key(db, user)
+    except services.PanelError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit(db, admin, "user.ios_key_add", user.public_id, f"ключ {number}")
+    detail = _detail(db, user_id)
+    if warnings:
+        detail.blocked_reason = "Ключ выдан не везде: " + "; ".join(warnings)
+    return detail
+
+
+@router.delete("/{user_id}/ios/keys/{slot}", response_model=schemas.UserDetail)
+def remove_ios_key(
+    user_id: int,
+    slot: int,
+    db: OrmSession = Depends(get_db),
+    admin: Admin = Depends(current_admin),
+) -> schemas.UserDetail:
+    """Удаляет один ключ насовсем: пир с узлов, строку из базы."""
+    user = _load(db, user_id)
+    try:
+        problems = services.ios.remove_key(db, user, slot)
+    except services.PanelError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit(db, admin, "user.ios_key_remove", user.public_id, f"ключ {slot}")
     detail = _detail(db, user_id)
     if problems:
         detail.blocked_reason = "Пир снят не везде: " + "; ".join(problems)

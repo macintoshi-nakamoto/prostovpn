@@ -678,3 +678,135 @@
     font-size: 26px;
   }
 }
+
+/*
+ * Ключи AmneziaVPN для iPhone.
+ *
+ * Карточка во всю ширину, а не колонка рядом с устройствами: ссылка `vpn://`
+ * длинная, и в половине ширины от неё видно два десятка символов — по ним не
+ * отличить один ключ от другого.
+ */
+.ac-ios {
+  gap: 16px;
+}
+.ac-ios-count {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.ac-ios-sub {
+  margin-top: -8px;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+.ac-ios-notice,
+.ac-ios-warn {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.ac-ios-error {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--danger);
+}
+.ac-ios-hint {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+.ac-ios-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ac-ios-key {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--bg-field);
+  border-radius: 16px;
+  padding: 16px 18px;
+}
+.ac-ios-key-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.ac-ios-key-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.ac-ios-key-server {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-dim);
+}
+.ac-ios-copy {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-deep);
+  padding: 9px 14px;
+  white-space: nowrap;
+  transition: border-color 0.15s ease;
+}
+.ac-ios-copy:hover,
+.ac-ios-copy:focus-visible {
+  border-color: var(--accent);
+}
+/*
+ * Ключ показан одной строкой с обрезкой, а не переносом.
+ *
+ * Перенос растянул бы карточку на десяток строк нечитаемого base64 — и это
+ * на каждый из пяти ключей. Выделить строку целиком мышью всё равно нельзя,
+ * поэтому рядом стоит кнопка копирования, а сама строка нужна только чтобы
+ * убедиться: это ключ, и он не тот же, что соседний.
+ */
+.ac-ios-url {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-dim);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.ac-ios-key-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.ac-ios-key-meta {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+.ac-ios-foot {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 560px) {
+  .ac-ios-key-head,
+  .ac-ios-key-foot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}

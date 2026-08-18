@@ -156,6 +156,16 @@ export const api = {
   setEmail: (email) =>
     request("/api/v1/account/email", { method: "POST", auth: true, body: { email } }),
 
+  // Ключи AmneziaVPN для iPhone. Все три запроса возвращают кабинет целиком,
+  // поэтому страница обновляется ответом, а не вторым запросом следом: между
+  // ними человек успевал увидеть список без только что добавленного ключа.
+  enableIos: () => request("/api/v1/account/ios", { method: "POST", auth: true }),
+
+  addIosKey: () => request("/api/v1/account/ios/keys", { method: "POST", auth: true }),
+
+  deleteIosKey: (slot) =>
+    request(`/api/v1/account/ios/keys/${slot}`, { method: "DELETE", auth: true }),
+
   renew: (planCode) =>
     request("/api/v1/account/renew", {
       method: "POST",

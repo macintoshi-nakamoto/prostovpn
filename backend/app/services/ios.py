@@ -7,9 +7,11 @@
 подпиской, отваливается по концу срока), должна сделать панель.
 
 Ключ здесь не отдельная сущность. Это обычный пир на сервере, заведённый на
-«устройство» со слотом `ios-1` (см. `User.ios_slots`). Ключ на учётку один:
-поделить пир между телефонами нельзя, а второй ключ — это разговор с
-поддержкой, а не кнопка. Из этого само собой следует всё нужное:
+«устройство» со слотом `ios-N` (см. `User.ios_slots`). Ключей на учётку до
+`IOS_MAX_KEYS`, и заводятся они по одному: поделить пир между телефонами
+нельзя — сервер помнит у пира один адрес подключения, и второй телефон
+молча отбирает соединение у первого, — поэтому второй телефон это второй
+ключ. Из этого само собой следует всё нужное:
 
 * трафик считается тем же обходом `awg show dump`, что и у приложений;
 * конец подписки, исчерпанный трафик, пауза и бан снимают пир с узла тем же
@@ -35,30 +37,41 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session as OrmSession
 
 from .. import provisioning
-from ..models import IOS_SLOT_PREFIX, Provisioning, Server, User, UserKey, is_ios_slot
+from ..models import (
+    IOS_MAX_KEYS,
+    Provisioning,
+    Server,
+    User,
+    UserKey,
+    ios_slot,
+    ios_slot_number,
+    is_ios_slot,
+)
 from .errors import PanelError
 from .keys import active_servers, ensure_keys, issue_key, revoke_key
 
 log = logging.getLogger("panel.ios")
 
 
-def key_name(user: User) -> str:
+def key_name(user: User, slot: int = 1) -> str:
     """
     Как ключ подписан в списке серверов AmneziaVPN.
 
     С логином в скобках намеренно: человек присылает в поддержку скриншот
     экрана Amnezia, и по нему сразу видно, чья это учётка. Без логина там
     стояло бы одинаковое «ProstoVPN» у всех.
+
+    Номер добавляется со второго ключа. У первого его нет не из экономии, а
+    чтобы у людей с одним ключом — а таких большинство — подпись осталась
+    ровно той, что уже лежит у них в Amnezia: ссылка собирается на лету, и
+    новое имя означало бы «переимпортируйте ключ» на ровном месте.
     """
-    return f"ProstoVPN ({user.login})"
+    tail = "" if slot <= 1 else f" · {slot}"
+    return f"ProstoVPN ({user.login}){tail}"
 
 
-def slot_number(device_id: str | None) -> int:
-    """Номер устройства из идентификатора слота. Не слот — ноль."""
-    if not is_ios_slot(device_id):
-        return 0
-    tail = (device_id or "")[len(IOS_SLOT_PREFIX) :]
-    return int(tail) if tail.isdigit() else 0
+# Разбор номера слота живёт в моделях: его знают и `User.ios_slots`, и здесь.
+slot_number = ios_slot_number
 
 
 @dataclass(frozen=True)
@@ -91,12 +104,15 @@ def _live_slot_keys(user: User) -> list[UserKey]:
 
 def sync(db: OrmSession, user: User) -> list[str]:
     """
-    Приводит набор ключей к тарифу: лишние снимает, недостающие заводит.
+    Доводит набор ключей до того, что человеку положено: недостающие пиры
+    заводит, лишние снимает.
 
     Зовётся после всего, что меняет доступ, — покупки, продления, включения
-    руками. Заодно подчищает наследство: пока ключей заводилось по одному на
-    устройство тарифа, у людей осталось по два-четыре слота, и лишние тут
-    снимаются с узлов — иначе оплачен один ключ, а работают четыре.
+    руками. Ключи при этом не «пересоздаются»: `ensure_keys` трогает только
+    те слоты, пира которых на узле нет, а `issue_key` возвращает прежнюю
+    пару. Лишними считаются слоты сверх `IOS_MAX_KEYS` — за потолок учётка
+    уехать может только из истории или из ручной правки базы, но пир за
+    таким слотом работает как настоящий, и снять его должно что-то одно.
 
     Возвращает предупреждения по недоступным узлам: один молчащий сервер не
     повод не выдать остальные.
@@ -164,6 +180,88 @@ def disable(db: OrmSession, user: User) -> list[str]:
             problems.append(f"{key.server.name}: {exc}")
 
     user.ios_blocked = True
+    db.commit()
+    db.refresh(user)
+    return problems
+
+
+def free_slot(user: User) -> int | None:
+    """
+    Наименьший свободный номер ключа. None — потолок выбран.
+
+    Наименьший, а не следующий по счёту: после удаления второго ключа из
+    трёх дырка должна закрыться, иначе номера уходят вверх, и человек с
+    двумя ключами видит «Ключ 1» и «Ключ 4».
+    """
+    taken = set(user.ios_slot_numbers())
+    for number in range(1, IOS_MAX_KEYS + 1):
+        if number not in taken:
+            return number
+    return None
+
+
+def add_key(db: OrmSession, user: User) -> tuple[int, list[str]]:
+    """
+    Заводит ещё один ключ и возвращает его номер и предупреждения.
+
+    Пир создаётся здесь же, а не «когда-нибудь потом»: человек нажал кнопку
+    и ждёт ссылку на экране. Недоступный узел ссылку не отменяет — он
+    попадает в предупреждения, а слот досоздастся при следующем обращении.
+    """
+    if user.ios_blocked:
+        raise PanelError("ключи отключены администратором")
+    if not user.has_access():
+        raise PanelError("ключ выдаётся по действующей подписке")
+
+    number = free_slot(user)
+    if number is None:
+        raise PanelError(f"на учётку выдаём не больше {IOS_MAX_KEYS} ключей")
+
+    # Первый ключ заодно включает доступ: разделять «разрешить» и «выдать»
+    # незачем — за кнопкой стоит одно намерение.
+    user.ios_access = True
+    db.commit()
+
+    warnings = ensure_keys(db, user, devices={ios_slot(number)})
+    db.refresh(user)
+    return number, warnings
+
+
+def remove_key(db: OrmSession, user: User, number: int) -> list[str]:
+    """
+    Убирает один ключ: пир с узлов, строки из базы.
+
+    Строки удаляются целиком, а не отзываются, и это разница между «ключ
+    удалён» и «ключ выключен». Отозванная строка держит за собой пару
+    ключей и номер: следующая выдача переиспользовала бы их и вернула ту же
+    ссылку — то есть удаление утёкшего ключа не удаляло бы ничего.
+
+    Последний ключ так не снимают. Учётка с пометкой `ios_access` и без
+    единого ключа — это состояние «ключ положен, но не заведён», из
+    которого ближайший `sync` заведёт ключ обратно; чтобы забрать доступ
+    насовсем, есть `remove`, а чтобы сменить единственную ссылку —
+    `reissue`.
+    """
+    slot = ios_slot(number)
+    rows = [key for key in user.keys if (key.device_id or "") == slot]
+    if not rows:
+        raise PanelError(f"ключа {number} у этой учётки нет")
+    if len(user.ios_slot_numbers()) <= 1:
+        raise PanelError("это единственный ключ — перевыпустите его или уберите доступ целиком")
+
+    problems: list[str] = []
+    for key in rows:
+        if key.revoked_at is None:
+            try:
+                revoke_key(db, key)
+            except Exception as exc:
+                # Пир мог остаться на узле. Строку всё равно сносим: сверка
+                # reconcile_peers снимет пира, которому нечего предъявить в
+                # базе, а живая строка вернула бы человеку ту же ссылку.
+                problems.append(f"{key.server.name}: {exc}")
+
+    for key in rows:
+        db.delete(key)
     db.commit()
     db.refresh(user)
     return problems
@@ -244,7 +342,6 @@ def keys(user: User, include_revoked: bool = False) -> list[IosKey]:
     `vpn://` — всего лишь его упаковка. Хранить обе формы значит однажды
     показать человеку ссылку от пира, которого на узле уже нет.
     """
-    name = key_name(user)
     out: list[IosKey] = []
     for key in sorted(user.keys, key=lambda k: (slot_number(k.device_id), k.server_id)):
         if not is_ios_slot(key.device_id):
@@ -254,10 +351,12 @@ def keys(user: User, include_revoked: bool = False) -> list[IosKey]:
         server = key.server
         if server.provisioning != Provisioning.SSH or not key.config:
             continue
+        slot = slot_number(key.device_id)
+        name = key_name(user, slot)
         out.append(
             IosKey(
                 id=key.id,
-                slot=slot_number(key.device_id),
+                slot=slot,
                 name=name,
                 server_id=server.id,
                 server_name=server.name,

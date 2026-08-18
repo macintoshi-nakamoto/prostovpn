@@ -31,6 +31,7 @@ from .config import settings
 from .db import get_db
 from .models import (
     HANDSHAKE_WINDOW,
+    IOS_MAX_KEYS,
     AppRelease,
     AuditLog,
     Order,
@@ -411,10 +412,10 @@ class IosKeyOut(BaseModel):
     """
     Ключ AmneziaVPN для одного устройства.
 
-    Ключей столько, сколько устройств в тарифе, и это не прихоть формата:
-    один пир нельзя честно поделить между телефонами — сервер помнит у
-    пира один адрес подключения, и второе устройство отбирает соединение у
-    первого. Поэтому «три устройства» — это три разные ссылки.
+    Ключ на устройство, а не на учётку, и это не прихоть формата: один пир
+    нельзя честно поделить между телефонами — сервер помнит у пира один
+    адрес подключения, и второе устройство отбирает соединение у первого.
+    Поэтому «три телефона» — это три разные ссылки.
     """
 
     slot: int
@@ -439,6 +440,15 @@ class IosOut(BaseModel):
     # Отключён администратором: ключа нет и выдать себе новый нельзя.
     blocked: bool = False
     keys: list[IosKeyOut] = []
+    # Сколько ключей человек может завести всего и сколько уже завёл.
+    # Кабинету нужны оба числа: он пишет «2 из 5» и гасит кнопку на потолке,
+    # а считать ключи по списку он не может — там строка на каждую страну.
+    max_keys: int = IOS_MAX_KEYS
+    keys_count: int = 0
+    # Можно ли завести ещё один прямо сейчас. Ответ считает сервер: кроме
+    # потолка сюда входят подписка и отключение администратором, и
+    # повторять эти правила в кабинете значит однажды разойтись с ними.
+    can_add: bool = False
     guide_url: str | None = None
     # Почему ключей нет, хотя доступ включён: узлы ещё готовят пиры или
     # подписка кончилась. Пустой список без объяснения — тупик.
@@ -517,7 +527,7 @@ def _ios_out(user: User, now: dt.datetime) -> IosOut:
             available=True,
             blocked=True,
             guide_url=settings().guide_link,
-            notice="Ключ отключён. Напишите в поддержку — разберёмся, в чём дело.",
+            notice="Ключи отключены. Напишите в поддержку — разберёмся, в чём дело.",
         )
 
     keys = [
@@ -548,7 +558,18 @@ def _ios_out(user: User, now: dt.datetime) -> IosOut:
         else:
             notice = "Готовим ключи, это займёт около минуты — обновите страницу."
 
-    return IosOut(available=True, keys=keys, guide_url=settings().guide_link, notice=notice)
+    # Ключей у человека столько, сколько номеров, а не строк: на каждый
+    # номер приходится по ссылке на каждую страну.
+    used = len({key.slot for key in keys})
+    return IosOut(
+        available=True,
+        keys=keys,
+        max_keys=IOS_MAX_KEYS,
+        keys_count=used,
+        can_add=user.has_access(now) and services.ios.free_slot(user) is not None,
+        guide_url=settings().guide_link,
+        notice=notice,
+    )
 
 
 def _tunnel_out(db: OrmSession) -> TunnelFileOut:
@@ -677,6 +698,68 @@ def enable_ios(
 
     for warning in warnings:
         log.warning("ключ AmneziaVPN для %s: %s", user.public_id, warning)
+    return _account_out(db, user, session)
+
+
+@router.post("/account/ios/keys", response_model=AccountOut)
+def add_ios_key(
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    """
+    «Добавить ключ» — ещё один `vpn://` на то же имя, до `IOS_MAX_KEYS`.
+
+    Второй телефон это второй ключ, а не тот же самый: пир помнит один
+    адрес подключения, и два устройства на одной ссылке отбирают туннель
+    друг у друга — по очереди, молча и без единой ошибки на экране.
+
+    Пир заводится внутри запроса, а не фоном. Человек нажал кнопку и ждёт
+    ссылку: ответ с пустым списком и обещанием «скоро появится» здесь
+    ничем не лучше ошибки.
+    """
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+
+    try:
+        number, warnings = services.ios.add_key(db, user)
+    except services.PanelError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": "ios_add_failed"}
+        ) from exc
+
+    for warning in warnings:
+        log.warning("ключ %s AmneziaVPN для %s: %s", number, user.public_id, warning)
+    return _account_out(db, user, session)
+
+
+@router.delete("/account/ios/keys/{slot}", response_model=AccountOut)
+def delete_ios_key(
+    slot: int,
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    """
+    Удаляет один ключ — тот, что перестал быть нужен или куда-то уехал.
+
+    Удаляет насовсем: пир снимается с узлов, строка сносится, и та же
+    ссылка больше не вернётся. Иначе кнопка не решала бы задачу, ради
+    которой она есть, — ссылку у ключа не сменить паролем, и утёкшая
+    ссылка это и есть утёкший доступ.
+    """
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+
+    try:
+        problems = services.ios.remove_key(db, user, slot)
+    except services.PanelError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": "ios_remove_failed"}
+        ) from exc
+
+    for problem in problems:
+        log.warning("ключ %s AmneziaVPN для %s: %s", slot, user.public_id, problem)
     return _account_out(db, user, session)
 
 

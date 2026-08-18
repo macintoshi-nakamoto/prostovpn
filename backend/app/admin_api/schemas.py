@@ -244,6 +244,11 @@ class UserDetail(UserRow):
     keys: list[UserKeyOut]
     orders: list[OrderRow] = []
     ios_keys: list[IosKeyOut] = []
+    # Потолок ключей на учётку и можно ли завести ещё один прямо сейчас.
+    # Считает сервер: кроме потолка сюда входят подписка и отключение, и
+    # повторять эти правила в панели значит однажды разойтись с ними.
+    ios_max_keys: int = 0
+    ios_can_add: bool = False
 
 
 class UserCreate(Schema):

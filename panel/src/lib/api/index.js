@@ -34,6 +34,17 @@ export const usersApi = {
   // прокси, а каждый такой запрос пишется в журнал поимённо.
   revealPassword: (id) => http.post(`${BASE}/users/${id}/reveal`),
   killSession: (userId, sessionId) => http.del(`${BASE}/users/${userId}/sessions/${sessionId}`),
+
+  // Ключи AmneziaVPN для iPhone. Приложения под iOS нет, человек подключается
+  // ссылкой `vpn://`, и всё управление этой ссылкой — здесь. Каждый вызов
+  // возвращает карточку клиента целиком, поэтому список ключей в панели
+  // перерисовывается ответом, а не вторым запросом следом.
+  iosEnable: (id) => http.post(`${BASE}/users/${id}/ios/enable`),
+  iosDisable: (id) => http.post(`${BASE}/users/${id}/ios/disable`),
+  iosRemove: (id) => http.del(`${BASE}/users/${id}/ios`),
+  iosReissue: (id) => http.post(`${BASE}/users/${id}/ios/reissue`),
+  iosAddKey: (id) => http.post(`${BASE}/users/${id}/ios/keys`),
+  iosRemoveKey: (id, slot) => http.del(`${BASE}/users/${id}/ios/keys/${slot}`),
 };
 
 export const ordersApi = {

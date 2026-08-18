@@ -48,8 +48,48 @@ export function Account() {
     }
   }, [navigate, t]);
 
+  /*
+  Ответ действия — это и есть свежий кабинет.
+
+  Выдача ключа, удаление, отвязка устройства возвращают тот же объект, что и
+  `/account`, поэтому подставляем его сразу. Второй запрос следом стоил бы
+  сотни миллисекунд, в которые человек видит список без ключа, который он
+  только что создал, — и жмёт кнопку второй раз.
+  */
+  const apply = useCallback((fresh) => {
+    if (fresh) setData(fresh);
+  }, []);
+
   useEffect(() => {
     load();
+  }, [load]);
+
+  /*
+  Освежаем кабинет сами, пока страница открыта.
+
+  Ключи выдаёт не только сам человек: их заводит поддержка из панели, туда
+  же приходит продление, и подписка может закончиться прямо во время того,
+  как страница открыта. Просить за этим F5 значит показывать вчерашнее
+  состояние тому, кто сидит и смотрит.
+
+  Свой запрос раз в пятнадцать секунд плюс один в момент возвращения к
+  вкладке. Проверку `visibilityState` здесь не ставим намеренно: в скрытой
+  вкладке браузер сам разжимает таймеры до раза в минуту, а вот
+  «постоянно скрытых» контекстов — встроенных вебвью, окон без фокуса —
+  хватает, и в них проверка выключала бы обновление насовсем.
+  */
+  useEffect(() => {
+    const timer = setInterval(load, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, [load]);
 
   const logout = async () => {
@@ -129,6 +169,7 @@ export function Account() {
             onSetup={() => setTab("setup")}
             onPassword={() => setPwOpen(true)}
             onChanged={load}
+            onApply={apply}
           />
         )}
         {data && tab === "plan" && (
@@ -151,7 +192,7 @@ export function Account() {
   );
 }
 
-function AccountTab({ data, onManage, onSetup, onPassword, onChanged }) {
+function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply }) {
   const { t, f } = useI18n();
   const used = data.devices.length;
   const free = Math.max(0, data.device_limit - used);
@@ -209,6 +250,8 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged }) {
         </div>
       </div>
 
+      <IosCard ios={data.ios} active={data.active} onApply={onApply} onManage={onManage} />
+
       <div className="ac-columns">
         <div className="ac-card">
           <div className="ac-card-head">
@@ -246,6 +289,231 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Ключи AmneziaVPN для iPhone.
+ *
+ * На iPhone нашего приложения нет, и ключ `vpn://` — единственный способ
+ * подключиться. Поэтому карточка живёт в кабинете рядом с устройствами, а
+ * не прячется в инструкции: то, чем человек пользуется каждый день, должно
+ * лежать там, куда он заходит.
+ *
+ * Ключей до пяти, по одному на устройство. Один пир нельзя честно поделить
+ * между телефонами — сервер помнит у пира один адрес подключения, и второй
+ * телефон молча отбирает туннель у первого, — поэтому «ещё один телефон»
+ * это кнопка «Добавить ключ», а не тот же ключ, вставленный дважды.
+ *
+ * Каждое действие возвращает кабинет целиком, и список перерисовывается
+ * ответом сервера. Своего состояния у карточки нет вовсе: ключ появляется
+ * ровно тогда, когда пир заведён на узле, а не когда нажата кнопка.
+ */
+function IosCard({ ios, active, onApply, onManage }) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const keys = ios?.keys || [];
+  const total = ios?.max_keys || 5;
+  const used = ios?.keys_count || 0;
+
+  const run = async (call, fallback) => {
+    setBusy(true);
+    setError("");
+    try {
+      onApply(await call());
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : "";
+      setError(
+        code === "no_subscription"
+          ? t("account.iosNoSubscription")
+          : err instanceof ApiError
+            ? err.message
+            : fallback,
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Ключа ещё нет: показываем предложение, а не пустую карточку. Кнопка
+  // ведёт к подписке, если платить ещё нечем: отказ «нет подписки» после
+  // нажатия говорит то же самое, но на шаг позже.
+  if (!ios?.available) {
+    return (
+      <div className="ac-card ac-ios">
+        <div className="ac-card-head">
+          <h2>{t("account.iosTitle")}</h2>
+        </div>
+        <p className="ac-empty">{t("account.iosOffer")}</p>
+        {error && <p className="ac-ios-error">{error}</p>}
+        <div className="ac-ios-foot">
+          {active ? (
+            <button
+              className="btn btn-primary"
+              disabled={busy}
+              onClick={() => run(api.enableIos, t("account.iosFailed"))}
+            >
+              {busy ? t("account.iosGetBusy") : t("account.iosGet")}
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={onManage}>
+              {t("account.manage")}
+            </button>
+          )}
+          <Link className="ac-link" to="/guide">
+            {t("account.iosGuide")}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ac-card ac-ios">
+      <div className="ac-card-head">
+        <h2>{t("account.iosTitle")}</h2>
+        <span className="ac-ios-count">{t("account.iosCount", { used, total })}</span>
+      </div>
+      <p className="ac-ios-sub">{t("account.iosSub")}</p>
+
+      {ios.notice && <p className="ac-ios-notice">{ios.notice}</p>}
+      {error && <p className="ac-ios-error">{error}</p>}
+
+      {keys.length > 0 && (
+        <div className="ac-ios-keys">
+          {keys.map((key) => (
+            <IosKeyRow
+              key={String(key.slot) + "-" + String(key.server_id)}
+              item={key}
+              deletable={used > 1}
+              onApply={onApply}
+            />
+          ))}
+        </div>
+      )}
+
+      <div className="ac-ios-foot">
+        {!ios.blocked && (
+          <button
+            className="btn btn-outline"
+            disabled={busy || !ios.can_add}
+            onClick={() => run(api.addIosKey, t("account.iosFailed"))}
+          >
+            {busy ? t("account.iosAddBusy") : t("account.iosAdd")}
+          </button>
+        )}
+        <Link className="ac-link" to="/guide">
+          {t("account.iosGuide")}
+        </Link>
+      </div>
+      {!ios.blocked && (
+        <p className="ac-ios-hint">
+          {ios.can_add ? t("account.iosAddHint") : t("account.iosLimit", { total })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Один ключ: ссылка, кнопка копирования и удаление.
+ *
+ * Сама ссылка показана моноширинной строкой в одну линию. Целиком она
+ * длиной в несколько экранов, и читать её незачем — её копируют. Но и
+ * прятать совсем нельзя: человек должен видеть, что копирует именно ключ,
+ * и отличать один от другого.
+ *
+ * Удаление спрашивает подтверждение и удаляет насовсем: пароля у ключа нет,
+ * и «удалить» здесь ровно для того случая, когда ссылка куда-то уехала.
+ * Последний ключ так не снимается — кнопки у него нет, иначе человек одним
+ * нажатием остался бы без единого доступа.
+ */
+function IosKeyRow({ item, deletable, onApply }) {
+  const { t, f } = useI18n();
+  const [copied, setCopied] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(item.vpn_url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Буфера может не быть вовсе (http-контекст, старый вебвью) — тогда
+      // ссылку выделяют руками, и сказать об этом честнее, чем соврать
+      // галочкой «Скопировано».
+      setError(t("account.iosCopyFailed"));
+    }
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      onApply(await api.deleteIosKey(item.slot));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("account.iosDeleteFailed"));
+      setBusy(false);
+      setAsking(false);
+    }
+  };
+
+  const meta = item.traffic_bytes
+    ? t("account.iosTrafficUsed", { value: f.bytes(item.traffic_bytes) })
+    : t("account.iosNeverUsed");
+
+  return (
+    <div className="ac-ios-key">
+      <div className="ac-ios-key-head">
+        <span className="ac-ios-key-name">
+          {t("account.iosKeyTitle", { n: item.slot })}
+          <span className="ac-ios-key-server">
+            {item.country || item.server}
+            {item.city ? ", " + item.city : ""}
+          </span>
+          {item.is_connected && (
+            <span className="ac-device-live">
+              <span className="ac-device-live-dot" />
+              {t("account.iosConnected")}
+            </span>
+          )}
+        </span>
+        <button className="ac-ios-copy" onClick={copy}>
+          {copied ? t("account.iosCopied") : t("account.iosCopy")}
+        </button>
+      </div>
+
+      <code className="ac-ios-url">{item.vpn_url}</code>
+
+      <div className="ac-ios-key-foot">
+        <span className="ac-ios-key-meta">
+          {item.created_at
+            ? meta + " · " + t("account.iosCreated", { date: f.shortDate(item.created_at) })
+            : meta}
+        </span>
+        {deletable &&
+          (asking ? (
+            <span className="ac-device-confirm">
+              <button className="ac-device-off" disabled={busy} onClick={remove}>
+                {busy ? "…" : t("account.iosDeleteConfirm")}
+              </button>
+              <button className="ac-link" disabled={busy} onClick={() => setAsking(false)}>
+                {t("account.cancel")}
+              </button>
+            </span>
+          ) : (
+            <button className="ac-device-off" onClick={() => setAsking(true)}>
+              {t("account.iosDelete")}
+            </button>
+          ))}
+      </div>
+      {asking && !busy && <p className="ac-ios-warn">{t("account.iosDeleteHint")}</p>}
+      {error && <p className="ac-ios-error">{error}</p>}
     </div>
   );
 }

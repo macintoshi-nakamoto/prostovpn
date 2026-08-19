@@ -35,15 +35,25 @@ def grant_subscription(
     commit: bool = True,
 ) -> Subscription:
     """
-    Продлевает доступ. Оплаченные дни не съедаются: новый период встаёт в
-    очередь за последним оплаченным — хоть тот же тариф, хоть другой. Пока
-    очередь не дошла, действует прежний тариф; смена вступает в полную силу,
-    когда старые дни дожиты (см. User.active_subscription).
+    Продлевает доступ. Оплаченные дни не съедаются никогда, а форма зависит от
+    того, тот же это тариф или другой:
 
-    Бесплатные периоды очередь не двигают: купленный во время пробного
-    тариф начинается сразу, а не «после пробного» — терять там нечего, эти
-    дни ничего не стоили, и заставлять человека досиживать пробные лимиты
-    после оплаты нельзя.
+    * ТОТ ЖЕ тариф (обычное продление, самый частый случай) — продлеваем
+      существующий период, а не заводим второй. Иначе «продлить» плодит
+      строки, а `active_subscription` показывает всё ту же истекающую первую,
+      и администратор жмёт кнопку без видимого эффекта — ровно этот баг и
+      случился, когда каждое продление вставало в очередь.
+    * ДРУГОЙ тариф (смена/апгрейд) — новый период встаёт в очередь за идущим:
+      пока не дожиты дни старого тарифа, действует он, потом в полную силу
+      вступает новый. Очередь держим строго в один период: прежний
+      запланированный апгрейд заменяется новым, а не копится каскадом.
+
+    Бесплатный период (пробный) к живому доступу не пристраиваем вовсе: так он
+    уезжал в будущее и копил дни, которых никто не покупал.
+
+    Инвариант на выходе — не больше одного идущего периода плюс не больше
+    одного будущего. Его же чинит миграция для учёток, испорченных прежним
+    каскадом (см. migrations._collapse_subscription_queue).
 
     `commit=False` оставляет запись в незавершённой транзакции: выдача по
     оплаченному заказу пишет пользователя, подписку, платёж и заказ одним
@@ -59,27 +69,68 @@ def grant_subscription(
     elif isinstance(plan, str):
         plan_ref = db.scalar(select(Plan).where(Plan.code == plan))
 
+    code = plan_ref.code if plan_ref else (plan if isinstance(plan, str) else "basic")
+    price_dec = (
+        Decimal(str(price)) if price is not None else (plan_ref.price if plan_ref else Decimal(0))
+    )
+
     now = utcnow()
-    # Конец последнего оплаченного периода, включая ещё не начавшиеся: две
-    # покупки подряд обязаны встать друг за другом, а не внахлёст. Отсчёт от
-    # active_subscription здесь не годится дважды: она нарочно отдаёт идущий
-    # период, а не хвост очереди, и читает коллекцию на объекте, которая при
-    # expire_on_commit=False молча отстаёт от базы в длинных сессиях.
-    paid_tail = db.scalar(
-        select(func.max(Subscription.expires_at)).where(
-            Subscription.user_id == user.id,
-            Subscription.is_cancelled.is_(False),
-            Subscription.expires_at > now,
-            Subscription.price > 0,
+    # Читаем из базы, а не из user.subscriptions: при expire_on_commit=False
+    # коллекция на объекте в длинной сессии молча отстаёт от базы.
+    live = list(
+        db.scalars(
+            select(Subscription)
+            .where(
+                Subscription.user_id == user.id,
+                Subscription.is_cancelled.is_(False),
+                Subscription.expires_at > now,
+            )
+            .order_by(Subscription.expires_at)
         )
     )
-    starts = paid_tail if paid_tail is not None else now
+    running = max(
+        (s for s in live if s.starts_at <= now), key=lambda s: s.expires_at, default=None
+    )
+    upcoming = sorted((s for s in live if s.starts_at > now), key=lambda s: s.starts_at)
 
+    # Бесплатный период дарить поверх живого доступа нечего.
+    if price_dec <= 0 and running is not None:
+        return running
+
+    def _finish(sub: Subscription) -> Subscription:
+        if commit:
+            db.commit()
+            db.refresh(sub)
+        else:
+            # id подписки нужен вызывающему до коммита — заказ ссылается на неё.
+            db.flush()
+        return sub
+
+    # Платный период во время пробного вступает СРАЗУ, а не после него: остаток
+    # бесплатных дней ничего не стоит, и досиживать пробные лимиты после оплаты
+    # человек не должен. Идущий пробный уступает — снимаем его.
+    if price_dec > 0 and running is not None and (running.price or 0) <= 0:
+        running.is_cancelled = True
+        running = None
+
+    # Тариф, на котором человек окажется в конце: хвост очереди, иначе идущий.
+    tail = upcoming[-1] if upcoming else running
+    if tail is not None and tail.plan == code:
+        tail.expires_at = tail.expires_at + dt.timedelta(days=days)
+        # Продление своей ценой и не двигает `price`: он остаётся ценой периода.
+        return _finish(tail)
+
+    # Другой тариф — очередь ровно в один период: прежний запланированный
+    # апгрейд заменяется, чтобы не копился каскад из наложенных строк.
+    for stale in upcoming:
+        stale.is_cancelled = True
+
+    starts = running.expires_at if running is not None else now
     sub = Subscription(
         user_id=user.id,
-        plan=plan_ref.code if plan_ref else (plan if isinstance(plan, str) else "basic"),
+        plan=code,
         plan_id=plan_ref.id if plan_ref else None,
-        price=Decimal(str(price)) if price is not None else (plan_ref.price if plan_ref else Decimal(0)),
+        price=price_dec,
         currency=plan_ref.currency if plan_ref else settings().currency,
         period_days=days,
         auto_renew=auto_renew,
@@ -87,13 +138,54 @@ def grant_subscription(
         expires_at=starts + dt.timedelta(days=days),
     )
     db.add(sub)
-    if commit:
+    return _finish(sub)
+
+
+def collapse_corrupted_queues(db: OrmSession) -> list[dict[str, object]]:
+    """
+    Одноразовая чистка учёток, испорченных прежним каскадом очередей.
+
+    Прежняя выдача пристраивала в очередь всё подряд — включая платёж, сделанный
+    во время пробного, и повторное продление того же тарифа. У людей накопились
+    наложенные периоды, а `active_subscription` показывала истекающий пробный
+    вместо оплаченного тарифа.
+
+    Чиним по одному правилу: оставляем период с самым дальним концом (то, за что
+    человек реально заплатил дольше всего), делаем его идущим с этого момента и
+    снимаем остальные живые. Дни доступа при этом не теряются — конец тот же, —
+    а каскад исчезает.
+
+    Не для старта панели: обычную очередь из смены тарифа (идущий + один
+    будущий) чинить не надо, поэтому зовётся руками из скрипта выкладки, а не из
+    миграций. Идемпотентно: после чистки живой период один, повтор — ничего.
+    """
+    now = utcnow()
+    fixed: list[dict[str, object]] = []
+    for user in db.scalars(select(User)):
+        live = [s for s in user.subscriptions if not s.is_cancelled and s.expires_at > now]
+        if len(live) <= 1:
+            continue
+        keep = max(live, key=lambda s: s.expires_at)
+        before_plan = user.active_subscription(now)
+        if keep.starts_at > now:
+            # Оплаченный период стоял в будущем за пробным — активируем сейчас.
+            keep.starts_at = now
+        for s in live:
+            if s.id != keep.id:
+                s.is_cancelled = True
+        fixed.append(
+            {
+                "login": user.login,
+                "public_id": user.public_id,
+                "live_before": len(live),
+                "was_plan": before_plan.plan if before_plan else None,
+                "now_plan": keep.plan,
+                "access_until": keep.expires_at.isoformat(),
+            }
+        )
+    if fixed:
         db.commit()
-        db.refresh(sub)
-    else:
-        # id подписки нужен вызывающему до коммита — заказ ссылается на неё.
-        db.flush()
-    return sub
+    return fixed
 
 
 # --- платежи -----------------------------------------------------------------

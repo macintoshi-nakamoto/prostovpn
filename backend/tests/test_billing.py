@@ -33,6 +33,7 @@ from app.models import (
     Subscription,
     User,
     UserKey,
+    utcnow,
 )
 from app.payments import mock as mock_provider
 from app.services import billing_webhook
@@ -255,13 +256,13 @@ def test_second_purchase_extends_instead_of_creating_second_user(client):
         # приложения ровно в тот момент, когда он заплатил.
         assert user.password_hash == password_hash
 
-        # Продление встаёт в очередь за идущим периодом: active_subscription
-        # продолжает показывать текущий, а общий конец доступа сдвигается.
-        assert user.active_subscription().expires_at == expires_first
-        added = (user.access_expires_at() - expires_first).days
+        # Тот же тариф продлевает существующий период, а не плодит очередь:
+        # срок вырос на 30 дней, лишних подписок нет.
+        added = (user.active_subscription().expires_at - expires_first).days
         assert added == 30, f"продлили на {added} дней вместо 30"
-        queued = user.upcoming_subscriptions()
-        assert len(queued) == 1 and queued[0].starts_at == expires_first
+        assert user.upcoming_subscriptions() == []
+        live = [s for s in user.subscriptions if not s.is_cancelled and s.expires_at > utcnow()]
+        assert len(live) == 1, "продление того же тарифа не должно заводить второй период"
 
     # Второе письмо — про продление, без пароля.
     status = client.get(f"/api/v1/orders/{second['id']}/status").json()

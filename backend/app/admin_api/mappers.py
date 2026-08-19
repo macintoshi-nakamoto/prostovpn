@@ -130,8 +130,11 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         currency=sub.currency if sub else "RUB",
         period_days=sub.period_days if sub else None,
         subscription_started_at=sub.starts_at if sub else None,
-        expires_at=sub.expires_at if sub else None,
-        days_left=max(0, (sub.expires_at - moment).days) if sub else None,
+        # «Оплачено до» и «осталось» — по общему концу доступа: продление,
+        # встающее в очередь за текущим тарифом, обязано быть видно сразу,
+        # иначе администратор жмёт «продлить» и цифра не меняется.
+        expires_at=user.access_expires_at(moment),
+        days_left=user.access_days_left(moment),
         traffic_used_bytes=used,
         traffic_limit_bytes=limit,
         traffic_pct=(round(used / limit * 100, 1) if limit else None),

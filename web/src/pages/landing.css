@@ -360,21 +360,28 @@
 }
 .ld-split-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 60px;
-  align-items: end;
+  /* Заголовок шире абзаца: крупная строка занимает левую часть уверенно, а
+     пояснение не растягивается на всю ширину и не рвётся на много строк. */
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 24px 64px;
+  /* Абзац по центру высоты заголовка: прижатый к низу оставлял большую пустоту
+     сверху и выглядел случайным. По центру — как подпись к крупной строке. */
+  align-items: center;
 }
 .ld-split-head h2 {
-  font-size: 60px;
-  line-height: 1.03;
+  font-size: 58px;
+  line-height: 1.05;
   font-weight: 700;
   letter-spacing: -0.03em;
 }
 .ld-split-head p {
-  max-width: 520px;
   font-size: 19px;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text-muted);
+  /* Тонкая линия слева привязывает пояснение к заголовку — пара, а не два
+     разрозненных блока. */
+  padding-left: 22px;
+  border-left: 2px solid var(--accent);
 }
 .ld-split-cards {
   display: grid;
@@ -885,6 +892,12 @@
   .ld-split-head {
     grid-template-columns: 1fr;
     gap: 40px;
+  }
+  /* В одну колонку пояснение встаёт под заголовком — линия-привязка сбоку
+     тогда лишняя, абзац занимает всю ширину. */
+  .ld-split-head p {
+    border-left: none;
+    padding-left: 0;
   }
   .ld-app-body {
     padding-bottom: 0;

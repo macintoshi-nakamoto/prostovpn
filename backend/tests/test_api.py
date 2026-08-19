@@ -378,8 +378,9 @@ def test_renewed_past_period_is_not_expected_again(client, auth):
     created = client.post(
         "/api/admin/users", json={"name": "Продлённый", "planCode": "basic"}, headers=auth
     ).json()["user"]
-    # Продлеваем: первый период закрывается, начинается второй.
-    client.post(f"/api/admin/users/{created['id']}/extend", json={"planCode": "basic"}, headers=auth)
+    # Меняем тариф: старый период доживает, новый встаёт в очередь встык —
+    # именно этот встык раньше и задваивал день в календаре.
+    client.post(f"/api/admin/users/{created['id']}/extend", json={"planCode": "3months"}, headers=auth)
 
     detail = client.get(f"/api/admin/users/{created['id']}", headers=auth).json()
     assert len(detail["subscriptions"]) == 2

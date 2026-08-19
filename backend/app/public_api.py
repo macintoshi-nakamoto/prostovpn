@@ -270,9 +270,9 @@ def order_status(
     if user is None:
         return out
 
-    subscription = user.active_subscription()
     out.login = user.login
-    out.expires_at = subscription.expires_at if subscription else None
+    # Общий конец доступа: при продлении важен он, а не срок текущего периода.
+    out.expires_at = user.access_expires_at()
 
     if not order.is_renewal and _password_window_open(order):
         # Пароль показываем только для новой учётки и только внутри окна
@@ -704,8 +704,11 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         period_days=plan.period_days if plan else None,
         price=float(subscription.price) if subscription and subscription.price else None,
         active=user.has_access(now),
-        expires_at=subscription.expires_at if subscription else None,
-        days_left=max(0, (subscription.expires_at - now).days) if subscription else None,
+        # «Действует до» и «осталось» — по общему концу доступа, а не по
+        # текущему периоду: продление, встающее в очередь, обязано увеличивать
+        # эти числа сразу, иначе кабинет и панель показывают старый срок.
+        expires_at=user.access_expires_at(now),
+        days_left=user.access_days_left(now),
         expires_total_at=user.access_expires_at(now),
         upcoming=[
             UpcomingOut(

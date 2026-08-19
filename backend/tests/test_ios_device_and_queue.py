@@ -229,6 +229,29 @@ def _plan(db, code: str, name: str, kopecks: int, days: int) -> Plan:
     return plan
 
 
+def test_same_plan_extend_prolongs_visibly(server_id):
+    """Продление того же тарифа продлевает период, а не плодит очередь."""
+    with SessionLocal() as db:
+        basic = _plan(db, "q-basic", "Базовый", 19_900, 30)
+
+        user = User(login="extend-1", password_hash=hash_password("x"))
+        db.add(user)
+        db.flush()
+        first = billing.grant_subscription(db, user, days=30, plan=basic, price=199)
+        first_id, first_end = first.id, first.expires_at
+
+        # Ещё раз тот же тариф — тот же период, срок сдвинулся на 30 дней.
+        again = billing.grant_subscription(db, user, days=30, plan=basic, price=199)
+        db.refresh(user)
+        assert again.id == first_id
+        assert again.expires_at == first_end + dt.timedelta(days=30)
+
+        # Очереди нет, общий конец сразу вырос — это и есть «продление видно».
+        assert user.upcoming_subscriptions() == []
+        assert user.access_days_left() >= 59
+        assert user.active_subscription().id == first_id
+
+
 def test_plan_change_queues_after_paid_days(server_id):
     with SessionLocal() as db:
         basic = _plan(db, "q-basic", "Базовый", 19_900, 30)
@@ -251,19 +274,144 @@ def test_plan_change_queues_after_paid_days(server_id):
         assert current.id == first.id and current.plan == "q-basic"
         assert user.current_plan().code == "q-basic"
 
-        # Очередь и общий конец доступа видны.
+        # Очередь и общий конец доступа видны; «осталось» считает весь доступ.
         queued = user.upcoming_subscriptions()
         assert [s.id for s in queued] == [second.id]
         assert user.access_expires_at() == second.expires_at
+        assert user.access_days_left() >= 30 + 365 - 1
 
         # Когда старый срок кончится, в полную силу вступает новый.
         later = first_end + dt.timedelta(hours=1)
         assert user.active_subscription(later).id == second.id
         assert user.current_plan(later).code == "q-pro"
 
-        # Третья покупка встаёт за хвостом очереди, а не за идущим периодом.
-        third = billing.grant_subscription(db, user, days=30, plan=basic, price=199)
-        assert third.starts_at == second.expires_at
+
+def test_queue_stays_one_period_on_repeated_change(server_id):
+    """Повторная смена тарифа не копит каскад — очередь ровно одна."""
+    with SessionLocal() as db:
+        basic = _plan(db, "q-basic", "Базовый", 19_900, 30)
+        pro = _plan(db, "q-pro", "Годовая", 149_900, 365)
+        half = _plan(db, "q-half", "Полугодовая", 89_900, 180)
+
+        user = User(login="queue-2", password_hash=hash_password("x"))
+        db.add(user)
+        db.flush()
+        billing.grant_subscription(db, user, days=30, plan=basic, price=199)
+        billing.grant_subscription(db, user, days=365, plan=pro, price=1499)
+        # Передумали: другой апгрейд заменяет прежний запланированный, а не
+        # встаёт третьим слоем.
+        billing.grant_subscription(db, user, days=180, plan=half, price=899)
+        db.refresh(user)
+
+        upcoming = user.upcoming_subscriptions()
+        assert len(upcoming) == 1
+        assert upcoming[0].plan == "q-half"
+        # Старый тариф по-прежнему идёт, а не потерян.
+        assert user.active_subscription().plan == "q-basic"
+
+
+def test_free_trial_does_not_queue_behind_paid(server_id):
+    """Пробный не пристраивается к живому платному доступу."""
+    with SessionLocal() as db:
+        basic = _plan(db, "q-basic", "Базовый", 19_900, 30)
+        trial = _plan(db, "q-trial", "Пробный", 0, 2)
+
+        user = User(login="trial-1", password_hash=hash_password("x"))
+        db.add(user)
+        db.flush()
+        paid = billing.grant_subscription(db, user, days=30, plan=basic, price=199)
+        # Пробный при живой подписке — ничего не заводит и очередь не двигает.
+        got = billing.grant_subscription(db, user, days=2, plan=trial, price=0)
+        db.refresh(user)
+        assert got.id == paid.id
+        assert user.upcoming_subscriptions() == []
+        assert [s for s in user.subscriptions if not s.is_cancelled] == [paid]
+
+
+def test_paid_purchase_during_trial_starts_now(server_id):
+    """Оплата во время пробного вступает сразу, а не встаёт за пробным."""
+    with SessionLocal() as db:
+        trial = _plan(db, "q-trial", "Пробный", 0, 2)
+        year = _plan(db, "q-year", "Годовая", 149_900, 365)
+
+        user = User(login="trial-2", password_hash=hash_password("x"))
+        db.add(user)
+        db.flush()
+        # Человек на пробном.
+        billing.grant_subscription(db, user, days=2, plan=trial, price=0)
+        # Покупает годовой — он должен работать НЕМЕДЛЕННО, на полных лимитах.
+        billing.grant_subscription(db, user, days=365, plan=year, price=1499)
+        db.refresh(user)
+
+        act = user.active_subscription()
+        assert act is not None and act.plan == "q-year"
+        assert user.current_plan().code == "q-year"
+        assert user.upcoming_subscriptions() == []
+
+
+def test_admin_extend_visibly_adds_days_near_expiry(server_id):
+    """
+    Симптом из отчёта: подписка на исходе показывает 0 дней, «продлить» её
+    не меняет. С продлением того же тарифа дни обязаны вырасти сразу.
+    """
+    with SessionLocal() as db:
+        basic = _plan(db, "q-basic", "Базовый", 19_900, 30)
+        user = User(login="near-expiry", password_hash=hash_password("x"))
+        db.add(user)
+        db.flush()
+        # Период кончается через 3 часа — «осталось 0 дней».
+        sub = billing.grant_subscription(db, user, days=30, plan=basic, price=199)
+        sub.starts_at = utcnow() - dt.timedelta(days=30)
+        sub.expires_at = utcnow() + dt.timedelta(hours=3)
+        db.commit()
+        db.refresh(user)
+        assert user.access_days_left() == 0
+
+        # Администратор продлевает тем же тарифом на 30 дней.
+        billing.grant_subscription(db, user, days=30, plan=basic, price=199)
+        db.refresh(user)
+        assert user.access_days_left() >= 30
+        assert user.has_access() is True
+
+
+def test_collapse_repairs_paid_stuck_behind_trial(server_id):
+    """Чистка активирует оплаченный тариф, застрявший за пробным."""
+    with SessionLocal() as db:
+        trial = _plan(db, "q-trial", "Пробный", 0, 2)
+        year = _plan(db, "q-year", "Годовая", 149_900, 365)
+
+        user = User(login="stuck-1", password_hash=hash_password("x"))
+        db.add(user)
+        db.flush()
+        now = utcnow()
+        # Воспроизводим порчу: пробный идёт, годовой заперт в будущем за ним.
+        db.add(
+            Subscription(
+                user_id=user.id, plan="q-trial", price=0, period_days=2,
+                starts_at=now - dt.timedelta(days=1), expires_at=now + dt.timedelta(days=1),
+            )
+        )
+        db.add(
+            Subscription(
+                user_id=user.id, plan="q-year", plan_id=year.id, price=1499, period_days=365,
+                starts_at=now + dt.timedelta(days=1), expires_at=now + dt.timedelta(days=366),
+            )
+        )
+        db.commit()
+        db.refresh(user)
+        # До чистки человек на пробном, хотя оплатил годовой.
+        assert user.active_subscription().plan == "q-trial"
+
+        fixed = billing.collapse_corrupted_queues(db)
+        db.refresh(user)
+        logins = [f["login"] for f in fixed]
+        assert "stuck-1" in logins
+        # Теперь идёт оплаченный годовой, очереди нет, доступ есть.
+        assert user.active_subscription().plan == "q-year"
+        assert user.upcoming_subscriptions() == []
+        assert user.has_access() is True
+        # Повтор ничего не трогает — идемпотентно.
+        assert all(f["login"] != "stuck-1" for f in billing.collapse_corrupted_queues(db))
 
 
 def test_account_api_shows_ios_device_and_disconnect_cycle(server_id, node):

@@ -78,7 +78,7 @@ export const en = {
     },
 
     split: {
-      line1: "Russian services",
+      line1: "Familiar services",
       line2: "keep working as usual",
       text:
         "Built-in split tunnelling keeps banks, marketplaces and government services on a " +
@@ -298,7 +298,7 @@ export const en = {
 
     split: {
       eyebrow: "SPLIT TUNNELING",
-      title: "Russian services keep working",
+      title: "Familiar services keep working",
       lead1: "Split tunneling sends through the VPN only the addresses that need it. The rest goes direct, so banks, state portals, marketplaces and delivery keep working: they see a normal local address and keep working as usual.",
       lead2: "In our apps the list is already inside and on by default — nothing to set up. The steps below are for AmneziaVPN on iPhone, where the list is imported by hand.",
       fileButton: "Get the list in your account",
@@ -452,7 +452,7 @@ export const en = {
     deviceFallback: "Device",
     platformWeb: "Browser",
 
-    bypassTitle: "Russian sites go direct",
+    bypassTitle: "Familiar services go direct",
     bypassText:
       "Needed on iPhone only: banks, government services and other Russian sites work as if the " +
       "VPN were off. The ProstoVPN app for Windows, Android and macOS already has this built in.",

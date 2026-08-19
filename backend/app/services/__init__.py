@@ -34,6 +34,7 @@ from .auth import (
 from .billing import (
     add_payment,
     calendar_month,
+    collapse_corrupted_queues,
     dashboard_totals,
     grant_subscription,
     revenue_by_month,
@@ -117,6 +118,7 @@ __all__ = [
     # billing
     "add_payment",
     "grant_subscription",
+    "collapse_corrupted_queues",
     "revenue_series",
     "revenue_by_month",
     "revenue_by_year",

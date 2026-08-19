@@ -439,24 +439,25 @@ class User(Base):
 
     def active_subscription(self, now: dt.datetime | None = None) -> "Subscription | None":
         """
-        Подписка, по которой человек живёт прямо сейчас.
+        Подписка, по которой человек живёт ПРЯМО СЕЙЧАС: срок начался и ещё не
+        кончился. По ней считаются тариф, лимиты и «есть ли доступ».
 
-        Сначала идущие — те, чей срок уже начался. Смена тарифа не съедает
-        оставшиеся дни: новый оплаченный период встаёт в очередь за текущим,
-        и до его начала действуют лимиты того тарифа, который человек
-        доживает. Пока очередь бралась просто по самому позднему концу,
-        купленный «на потом» тариф вступал в силу немедленно — и человек
-        получал лимиты нового тарифа, не дожив старые дни.
+        Строго идущий период, а не «самый поздний из живых». Разница важна при
+        смене тарифа: пока не дожиты дни старого тарифа, действует он, а не
+        купленный «на потом». И наоборот — период, который начнётся завтра,
+        доступа сегодня не даёт: has_access должен это видеть, иначе оплаченный
+        будущий период открывал бы VPN до своего начала.
 
-        Будущая очередь берётся, только когда идущих нет совсем: оплаченный
-        доступ у человека есть, и отвечать «подписки нет» из-за того, что
-        период начнётся завтра, нельзя — на этом держится и has_access, и
-        решение «банить ли учётку» при возврате денег.
+        Общий конец доступа (вместе с очередью) — в access_expires_at; сколько
+        всего дней осталось — по нему, чтобы продление было видно сразу.
         """
         moment = now or utcnow()
-        live = [s for s in self.subscriptions if s.expires_at > moment and not s.is_cancelled]
-        running = [s for s in live if s.starts_at <= moment]
-        return max(running or live, key=lambda s: s.expires_at, default=None)
+        running = [
+            s
+            for s in self.subscriptions
+            if not s.is_cancelled and s.starts_at <= moment < s.expires_at
+        ]
+        return max(running, key=lambda s: s.expires_at, default=None)
 
     def upcoming_subscriptions(self, now: dt.datetime | None = None) -> list["Subscription"]:
         """Оплаченная очередь: периоды, которые ещё не начались."""
@@ -471,7 +472,13 @@ class User(Base):
         )
 
     def access_expires_at(self, now: dt.datetime | None = None) -> dt.datetime | None:
-        """Когда кончается весь оплаченный доступ — вместе с очередью."""
+        """
+        Когда кончается весь оплаченный доступ — вместе с очередью.
+
+        По нему кабинет и панель считают «осталось дней»: продление, встающее в
+        очередь, обязано увеличивать это число сразу, иначе администратор жмёт
+        «продлить» и не видит эффекта.
+        """
         moment = now or utcnow()
         ends = [
             s.expires_at
@@ -479,6 +486,12 @@ class User(Base):
             if not s.is_cancelled and s.expires_at > moment
         ]
         return max(ends, default=None)
+
+    def access_days_left(self, now: dt.datetime | None = None) -> int | None:
+        """Сколько всего дней доступа осталось; None — доступа нет."""
+        moment = now or utcnow()
+        end = self.access_expires_at(moment)
+        return max(0, (end - moment).days) if end is not None else None
 
     def effective_traffic_limit(self, now: dt.datetime | None = None) -> int | None:
         """

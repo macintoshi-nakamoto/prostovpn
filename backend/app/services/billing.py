@@ -35,8 +35,15 @@ def grant_subscription(
     commit: bool = True,
 ) -> Subscription:
     """
-    Продлевает доступ. Если подписка ещё жива — продлеваем от её конца, а не
-    от сегодняшнего дня: оплата не должна съедать оставшиеся дни.
+    Продлевает доступ. Оплаченные дни не съедаются: новый период встаёт в
+    очередь за последним оплаченным — хоть тот же тариф, хоть другой. Пока
+    очередь не дошла, действует прежний тариф; смена вступает в полную силу,
+    когда старые дни дожиты (см. User.active_subscription).
+
+    Бесплатные периоды очередь не двигают: купленный во время пробного
+    тариф начинается сразу, а не «после пробного» — терять там нечего, эти
+    дни ничего не стоили, и заставлять человека досиживать пробные лимиты
+    после оплаты нельзя.
 
     `commit=False` оставляет запись в незавершённой транзакции: выдача по
     оплаченному заказу пишет пользователя, подписку, платёж и заказ одним
@@ -53,8 +60,20 @@ def grant_subscription(
         plan_ref = db.scalar(select(Plan).where(Plan.code == plan))
 
     now = utcnow()
-    current = user.active_subscription(now)
-    starts = current.expires_at if current else now
+    # Конец последнего оплаченного периода, включая ещё не начавшиеся: две
+    # покупки подряд обязаны встать друг за другом, а не внахлёст. Отсчёт от
+    # active_subscription здесь не годится дважды: она нарочно отдаёт идущий
+    # период, а не хвост очереди, и читает коллекцию на объекте, которая при
+    # expire_on_commit=False молча отстаёт от базы в длинных сессиях.
+    paid_tail = db.scalar(
+        select(func.max(Subscription.expires_at)).where(
+            Subscription.user_id == user.id,
+            Subscription.is_cancelled.is_(False),
+            Subscription.expires_at > now,
+            Subscription.price > 0,
+        )
+    )
+    starts = paid_tail if paid_tail is not None else now
 
     sub = Subscription(
         user_id=user.id,

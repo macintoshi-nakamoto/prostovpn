@@ -210,6 +210,12 @@ class IosKeyOut(Schema):
     last_handshake_at: dt.datetime | None = None
     created_at: dt.datetime
     is_active: bool = True
+    # Идёт ли через ключ трафик прямо сейчас — по свежести рукопожатия.
+    # Считает сервер: у него и окно, и часы, а панели дата в чужом поясе.
+    is_connected: bool = False
+    # Отключён самим человеком из списка устройств в кабинете: пир снят,
+    # но пара и адрес за слотом остались — «включить» вернёт ту же ссылку.
+    disconnected: bool = False
 
 
 class OrderRow(Schema):

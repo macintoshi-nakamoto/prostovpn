@@ -166,6 +166,14 @@ export const api = {
   deleteIosKey: (slot) =>
     request(`/api/v1/account/ios/keys/${slot}`, { method: "DELETE", auth: true }),
 
+  // «Отключить» на строке ключа в устройствах: пир снимается с узла, но
+  // ссылка остаётся за слотом — «включить» вернёт ту же самую.
+  disconnectIosKey: (slot) =>
+    request(`/api/v1/account/ios/keys/${slot}/disconnect`, { method: "POST", auth: true }),
+
+  enableIosKey: (slot) =>
+    request(`/api/v1/account/ios/keys/${slot}/enable`, { method: "POST", auth: true }),
+
   renew: (planCode) =>
     request("/api/v1/account/renew", {
       method: "POST",

@@ -45,6 +45,10 @@ export const usersApi = {
   iosReissue: (id) => http.post(`${BASE}/users/${id}/ios/reissue`),
   iosAddKey: (id) => http.post(`${BASE}/users/${id}/ios/keys`),
   iosRemoveKey: (id, slot) => http.del(`${BASE}/users/${id}/ios/keys/${slot}`),
+  // Мягкое отключение одного ключа — то же, что делает сам человек в
+  // кабинете: пир снят, ссылка осталась, включить может и он сам.
+  iosDisconnectKey: (id, slot) => http.post(`${BASE}/users/${id}/ios/keys/${slot}/disconnect`),
+  iosEnableKey: (id, slot) => http.post(`${BASE}/users/${id}/ios/keys/${slot}/enable`),
 };
 
 export const ordersApi = {

@@ -383,13 +383,23 @@ function IosKeys({ user, onChanged }) {
           <div className="gd-rows">
             {keys.map((key) => (
               <div key={`${key.slot}-${key.serverId}`} className="gd-r">
-                <span style={{ fontSize: 18 }}>{flag(key.countryCode)}</span>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 600 }}>
+                <span style={{ fontSize: 18, opacity: key.disconnected ? 0.5 : 1 }}>
+                  {flag(key.countryCode)}
+                </span>
+                <div style={{ minWidth: 0, opacity: key.disconnected ? 0.7 : 1 }}>
+                  <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
                     Ключ {key.slot} · {key.country || key.serverName}
+                    {key.isConnected && <Chip color="var(--gd-pos)">в VPN</Chip>}
+                    {key.disconnected && <Chip color="var(--gd-faint)">отключён</Chip>}
                   </div>
+                  {/* У отключённого ссылку не копируем: она сейчас мёртвая,
+                      а «включить» вернёт ту же самую — копия не нужна. */}
                   <div className="gd-cellsub" style={{ maxWidth: 320 }}>
-                    <Copyable text={key.vpnUrl}>ссылка vpn:// · скопировать</Copyable>
+                    {key.disconnected ? (
+                      "отключён из кабинета · включается той же ссылкой"
+                    ) : (
+                      <Copyable text={key.vpnUrl}>ссылка vpn:// · скопировать</Copyable>
+                    )}
                   </div>
                   <div className="gd-cellsub gd-mono">
                     {key.address || "без адреса"} · выдан {date(key.createdAt)}
@@ -402,6 +412,28 @@ function IosKeys({ user, onChanged }) {
                       {key.lastHandshakeAt ? ago(key.lastHandshakeAt) : "не подключался"}
                     </div>
                   </div>
+                  {key.disconnected ? (
+                    <Button
+                      size="sm"
+                      variant="on"
+                      disabled={busy === `on-${key.slot}`}
+                      onClick={() =>
+                        run(`on-${key.slot}`, () => usersApi.iosEnableKey(user.id, key.slot))
+                      }
+                    >
+                      Включить
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      disabled={busy === `off-${key.slot}`}
+                      onClick={() =>
+                        run(`off-${key.slot}`, () => usersApi.iosDisconnectKey(user.id, key.slot))
+                      }
+                    >
+                      Отключить
+                    </Button>
+                  )}
                   {used > 1 && (
                     <Button
                       size="sm"
@@ -570,7 +602,8 @@ function Payments({ user }) {
 function Sessions({ user, onChanged }) {
   const [busy, setBusy] = useState(null);
   const [warning, setWarning] = useState("");
-  if (!user.sessions.length) return <Empty>Входов пока не было</Empty>;
+  const iosDevices = iosDeviceRows(user);
+  if (!user.sessions.length && !iosDevices.length) return <Empty>Входов пока не было</Empty>;
 
   /*
   Отключение снимает пира этого устройства с узлов, а не только гасит токен,
@@ -600,6 +633,32 @@ function Sessions({ user, onChanged }) {
       }
       const fresh = await usersApi.get(user.id);
       onChanged(fresh);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /*
+  Отключение ключа AmneziaVPN — мягкое, как из кабинета: пир снят, ссылка
+  осталась за учёткой, и включить её может сам человек. Забрать ключ так,
+  чтобы человек не вернул, — это «Отключить» на вкладке iPhone.
+  */
+  const dropKey = async (row) => {
+    const ok = await confirmDialog({
+      title: `Отключить ключ ${row.slot}?`,
+      message:
+        "Туннель на этом iPhone упадёт сразу. Ссылка останется за учёткой: человек сможет " +
+        "включить её сам в кабинете, и после подключения ключ снова появится в устройствах.",
+      confirmText: "Отключить",
+      danger: true,
+    });
+    if (!ok) return;
+    setBusy(`ios-${row.slot}`);
+    setWarning("");
+    try {
+      onChanged(await usersApi.iosDisconnectKey(user.id, row.slot));
+    } catch (err) {
+      setWarning(err.message || "Не удалось отключить ключ");
     } finally {
       setBusy(null);
     }
@@ -640,9 +699,67 @@ function Sessions({ user, onChanged }) {
             </div>
           </div>
         ))}
+
+        {/* iPhone с вставленным ключом AmneziaVPN — тоже устройство: за ним
+            нет входа, но есть пир и трафик, и место в лимите он занимает
+            наравне с приложением. Появляется по первому рукопожатию. */}
+        {iosDevices.map((row) => (
+          <div key={`ios-${row.slot}`} className="gd-r">
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+                iPhone · ключ {row.slot}
+                <span className="gd-chip">AmneziaVPN</span>
+                {row.connected && <Chip color="var(--gd-pos)">в VPN</Chip>}
+              </div>
+              <div className="gd-cellsub">
+                ключ vpn:// вставлен в AmneziaVPN · выдан {date(row.createdAt)}
+              </div>
+            </div>
+            <div className="r" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {ago(row.lastHandshakeAt)}
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={busy === `ios-${row.slot}`}
+                onClick={() => dropKey(row)}
+              >
+                Отключить
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
     </Card>
   );
+}
+
+/**
+ * Ключи AmneziaVPN как строки устройств.
+ *
+ * Тот же признак, что в кабинете: живой пир, через который хоть раз шёл
+ * трафик. Строка одна на номер ключа, даже когда стран несколько, — это
+ * один iPhone, и рукопожатие берётся самое свежее.
+ */
+function iosDeviceRows(user) {
+  const bySlot = new Map();
+  for (const key of user.iosKeys || []) {
+    if (!key.isActive || !key.lastHandshakeAt) continue;
+    const row = bySlot.get(key.slot) || {
+      slot: key.slot,
+      connected: false,
+      lastHandshakeAt: key.lastHandshakeAt,
+      createdAt: key.createdAt,
+    };
+    row.connected = row.connected || Boolean(key.isConnected);
+    if (Date.parse(key.lastHandshakeAt) > Date.parse(row.lastHandshakeAt)) {
+      row.lastHandshakeAt = key.lastHandshakeAt;
+    }
+    if (Date.parse(key.createdAt) < Date.parse(row.createdAt)) {
+      row.createdAt = key.createdAt;
+    }
+    bySlot.set(key.slot, row);
+  }
+  return [...bySlot.values()].sort((a, b) => a.slot - b.slot);
 }
 
 /**

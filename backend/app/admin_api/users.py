@@ -467,6 +467,52 @@ def remove_ios_key(
     return detail
 
 
+@router.post("/{user_id}/ios/keys/{slot}/disconnect", response_model=schemas.UserDetail)
+def disconnect_ios_key(
+    user_id: int,
+    slot: int,
+    db: OrmSession = Depends(get_db),
+    admin: Admin = Depends(current_admin),
+) -> schemas.UserDetail:
+    """
+    Отключает один ключ — так же, как это делает сам человек в кабинете.
+
+    Пир уходит с узла, ссылка остаётся за слотом, включить может и человек
+    сам. Для отключения, которое человеку не снять, есть общий «Отключить»
+    (ios_blocked) — это разные решения.
+    """
+    user = _load(db, user_id)
+    try:
+        problems = services.ios.disconnect_key(db, user, slot)
+    except services.PanelError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit(db, admin, "user.ios_key_disconnect", user.public_id, f"ключ {slot}")
+    detail = _detail(db, user_id)
+    if problems:
+        detail.blocked_reason = "Пир снят не везде: " + "; ".join(problems)
+    return detail
+
+
+@router.post("/{user_id}/ios/keys/{slot}/enable", response_model=schemas.UserDetail)
+def enable_ios_key(
+    user_id: int,
+    slot: int,
+    db: OrmSession = Depends(get_db),
+    admin: Admin = Depends(current_admin),
+) -> schemas.UserDetail:
+    """Включает отключённый ключ: тот же пир, та же ссылка."""
+    user = _load(db, user_id)
+    try:
+        warnings = services.ios.reconnect_key(db, user, slot)
+    except services.PanelError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    audit(db, admin, "user.ios_key_enable", user.public_id, f"ключ {slot}")
+    detail = _detail(db, user_id)
+    if warnings:
+        detail.blocked_reason = "Ключ вернулся не везде: " + "; ".join(warnings)
+    return detail
+
+
 @router.post("/{user_id}/ios/reissue", response_model=schemas.UserDetail)
 def reissue_ios(
     user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)

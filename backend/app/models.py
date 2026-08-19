@@ -438,9 +438,47 @@ class User(Base):
     sessions: Mapped[list["Session"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
     def active_subscription(self, now: dt.datetime | None = None) -> "Subscription | None":
+        """
+        Подписка, по которой человек живёт прямо сейчас.
+
+        Сначала идущие — те, чей срок уже начался. Смена тарифа не съедает
+        оставшиеся дни: новый оплаченный период встаёт в очередь за текущим,
+        и до его начала действуют лимиты того тарифа, который человек
+        доживает. Пока очередь бралась просто по самому позднему концу,
+        купленный «на потом» тариф вступал в силу немедленно — и человек
+        получал лимиты нового тарифа, не дожив старые дни.
+
+        Будущая очередь берётся, только когда идущих нет совсем: оплаченный
+        доступ у человека есть, и отвечать «подписки нет» из-за того, что
+        период начнётся завтра, нельзя — на этом держится и has_access, и
+        решение «банить ли учётку» при возврате денег.
+        """
         moment = now or utcnow()
         live = [s for s in self.subscriptions if s.expires_at > moment and not s.is_cancelled]
-        return max(live, key=lambda s: s.expires_at, default=None)
+        running = [s for s in live if s.starts_at <= moment]
+        return max(running or live, key=lambda s: s.expires_at, default=None)
+
+    def upcoming_subscriptions(self, now: dt.datetime | None = None) -> list["Subscription"]:
+        """Оплаченная очередь: периоды, которые ещё не начались."""
+        moment = now or utcnow()
+        return sorted(
+            (
+                s
+                for s in self.subscriptions
+                if not s.is_cancelled and s.starts_at > moment and s.expires_at > moment
+            ),
+            key=lambda s: s.starts_at,
+        )
+
+    def access_expires_at(self, now: dt.datetime | None = None) -> dt.datetime | None:
+        """Когда кончается весь оплаченный доступ — вместе с очередью."""
+        moment = now or utcnow()
+        ends = [
+            s.expires_at
+            for s in self.subscriptions
+            if not s.is_cancelled and s.expires_at > moment
+        ]
+        return max(ends, default=None)
 
     def effective_traffic_limit(self, now: dt.datetime | None = None) -> int | None:
         """
@@ -503,11 +541,29 @@ class User(Base):
         лишние снимет `services.ios.sync`. Меньше одного — тоже: пометка
         `ios_access` без единого ключа означает «ключ положен, но ещё не
         заведён», и первый слот здесь как раз и появляется.
+
+        Отключённые не в счёт — ни администратором (`ios_blocked`), ни самим
+        человеком из списка устройств (`disconnected_at` на строках слота).
+        Этот список читает раздача пиров (`ensure_keys` через
+        `known_devices`), и пока отключённые слоты сюда попадали, продление
+        подписки молча возвращало на узел пира, которого только что сняли.
         """
-        if not self.ios_access:
+        if not self.ios_access or self.ios_blocked:
             return []
-        numbers = self.ios_slot_numbers()[:IOS_MAX_KEYS]
-        return [ios_slot(n) for n in (numbers or [1])]
+        rows: dict[int, list["UserKey"]] = {}
+        for key in self.keys:
+            number = ios_slot_number(key.device_id)
+            if number > 0:
+                rows.setdefault(number, []).append(key)
+        if not rows:
+            # Ключ положен, но ещё не заведён — первый слот появляется здесь.
+            return [ios_slot(1)]
+        numbers = sorted(
+            number
+            for number, keys in rows.items()
+            if not all(key.disconnected_at is not None for key in keys)
+        )[:IOS_MAX_KEYS]
+        return [ios_slot(n) for n in numbers]
 
     def server_limit(self, now: dt.datetime | None = None) -> int | None:
         plan = self.current_plan(now)
@@ -697,6 +753,16 @@ class UserKey(Base):
 
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    # Ключ AmneziaVPN отключён самим человеком из списка устройств.
+    #
+    # Отдельно от revoked_at, потому что это разные вопросы: «пир снят с
+    # узла» и «человек сам выключил этот ключ». Отзыв без пометки — дело
+    # системы: кончилась подписка, выбран лимит — и выдача возвращает пира
+    # при первом же поводе. С пометкой пир не возвращается ни продлением,
+    # ни входом — только явным «включить», и тогда та же ссылка, что лежит
+    # у человека в Amnezia, оживает как была.
+    disconnected_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     user: Mapped[User] = relationship(back_populates="keys")
     server: Mapped[Server] = relationship(back_populates="keys")

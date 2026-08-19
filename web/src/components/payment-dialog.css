@@ -1,0 +1,219 @@
+/* ── Окно выбора оплаты ──────────────────────────────────────────────────────
+ *
+ * Анимация только на `opacity` и `transform`: браузер считает их на
+ * видеокарте, не перебирая раскладку страницы, — поэтому окно открывается
+ * ровно и на слабом телефоне. Ни теней, ни размеров, ни высот в кадрах нет
+ * намеренно: каждое такое свойство заставляет пересчитывать вёрстку и даёт
+ * рывки, ради которых анимацию потом отключают совсем.
+ */
+.pay-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 12, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 90;
+  animation: pay-fade 0.16s ease-out;
+}
+@keyframes pay-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.pay {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface-2);
+  border-radius: 26px;
+  padding: 28px 26px 22px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: pay-rise 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+@keyframes pay-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.97);
+  }
+}
+
+.pay-close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-dim);
+  padding: 6px;
+  border-radius: 10px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.pay-close:hover {
+  color: var(--ink);
+  background: var(--bg-field);
+}
+
+.pay-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pay-plan {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.pay-sum {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.pay-term {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.pay-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Строка способа — одинаковая для ссылки и для кнопки: разница между
+   «работает» и «скоро» должна быть в словах, а не в размере строки. */
+.pay-method {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  border: 1.5px solid var(--border);
+  background: var(--bg-field);
+  border-radius: 16px;
+  padding: 14px 16px;
+  /* Одинаковая высота у всех трёх: строка «скоро» и стрелка не должны
+     делать соседние способы разного роста — ряд читается как небрежный. */
+  min-height: 72px;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+}
+.pay-method:hover:not(:disabled) {
+  transform: translate3d(0, -1px, 0);
+}
+.pay-method:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+/* Значки в одинаковой коробке: разнокалиберные логотипы в ряду читаются
+   как небрежность, даже когда каждый сам по себе аккуратен. */
+.pay-icon {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Знак любого файла встаёт в одну коробку: `contain` не даёт квадратной
+   картинке растянуть соседей, а размер задан жёстко — знаки из разных
+   источников иначе выходят разного роста. */
+.pay-icon svg,
+.pay-icon img {
+  width: 24px;
+  height: 24px;
+  display: block;
+  object-fit: contain;
+}
+
+.pay-method-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.pay-method-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+.pay-method-sub {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.pay-method-soon {
+  flex: none;
+  line-height: 1.2;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 5px 10px;
+}
+.pay-method-go {
+  flex: none;
+  font-size: 18px;
+  opacity: 0.9;
+}
+
+/* Telegram — фирменной синевой: способ, который работает прямо сейчас,
+   должен быть виден сразу, а не читаться наравне с «скоро». */
+.pay-tg {
+  background: #229ed9;
+  border-color: #229ed9;
+  color: #fff;
+  text-decoration: none;
+}
+.pay-tg:hover {
+  background: #1d92c9;
+  border-color: #1d92c9;
+}
+.pay-tg .pay-method-sub {
+  color: rgba(255, 255, 255, 0.85);
+}
+.pay-tg .pay-icon-tg {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
+.pay-note {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+  .pay {
+    padding: 24px 18px 18px;
+  }
+  .pay-sum {
+    font-size: 30px;
+  }
+}
+
+/* Кому системная настройка просит меньше движения — окно просто появляется. */
+@media (prefers-reduced-motion: reduce) {
+  .pay-overlay,
+  .pay {
+    animation: none;
+  }
+  .pay-method:hover:not(:disabled) {
+    transform: none;
+  }
+}

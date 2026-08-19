@@ -7,6 +7,7 @@ import { SetupGuide } from "../components/SetupGuide.jsx";
 import { Picture } from "../components/Picture.jsx";
 import { Controls } from "../components/Controls.jsx";
 import { PasswordDialog } from "../components/PasswordDialog.jsx";
+import { PaymentDialog } from "../components/PaymentDialog.jsx";
 import { useI18n } from "../lib/i18n/index.jsx";
 import "./account.css";
 
@@ -172,9 +173,7 @@ export function Account() {
             onApply={apply}
           />
         )}
-        {data && tab === "plan" && (
-          <PlanTab data={data} preselected={wantedPlan} onChanged={load} />
-        )}
+        {data && tab === "plan" && <PlanTab data={data} preselected={wantedPlan} />}
         {data && tab === "setup" && <SetupGuide login={data.login} />}
       </main>
 
@@ -267,7 +266,12 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply })
           ) : (
             <div className="ac-devices">
               {data.devices.map((d) => (
-                <DeviceRow key={d.id} device={d} onChanged={onChanged} />
+                <DeviceRow
+                  key={`${d.kind || "app"}-${d.id}`}
+                  device={d}
+                  onChanged={onChanged}
+                  onApply={onApply}
+                />
               ))}
             </div>
           )}
@@ -369,6 +373,11 @@ function IosCard({ ios, active, onApply, onManage }) {
   const keys = ios?.keys || [];
   const total = ios?.max_keys || 5;
   const used = ios?.keys_count || 0;
+  // Отключённый ключ — одна строка на номер, даже когда стран несколько:
+  // это один iPhone, и включается он целиком.
+  const off = (ios?.disconnected_keys || []).filter(
+    (key, index, list) => list.findIndex((k) => k.slot === key.slot) === index,
+  );
 
   const run = async (call, fallback) => {
     setBusy(true);
@@ -438,6 +447,22 @@ function IosCard({ ios, active, onApply, onManage }) {
           {keys.map((key) => (
             <IosKeyRow
               key={String(key.slot) + "-" + String(key.server_id)}
+              item={key}
+              deletable={used > 1}
+              onApply={onApply}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Отключённые ключи. Не пропадают из карточки: ссылка осталась за
+          учёткой, и «Включить» вернёт ту же самую — человеку ничего не надо
+          переставлять в Amnezia. */}
+      {off.length > 0 && (
+        <div className="ac-ios-keys">
+          {off.map((key) => (
+            <IosKeyOffRow
+              key={"off-" + String(key.slot)}
               item={key}
               deletable={used > 1}
               onApply={onApply}
@@ -570,6 +595,74 @@ function IosKeyRow({ item, deletable, onApply }) {
 }
 
 /**
+ * Отключённый ключ: пометка, «Включить» и «Удалить».
+ *
+ * Ссылку не показываем и не даём копировать — она сейчас не работает, и
+ * копия мёртвой ссылки выглядит как поломка. «Включить» возвращает на узел
+ * тот же пир: ссылка, вставленная в Amnezia, оживает без переустановки, а
+ * после подключения ключ снова появляется в «Подключённых устройствах».
+ */
+function IosKeyOffRow({ item, deletable, onApply }) {
+  const { t, f } = useI18n();
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+
+  const run = async (action, call) => {
+    setBusy(action);
+    setError("");
+    try {
+      onApply(await call());
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("account.iosFailed"));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const meta = item.traffic_bytes
+    ? t("account.iosTrafficUsed", { value: f.bytes(item.traffic_bytes) })
+    : t("account.iosNeverUsed");
+
+  return (
+    <div className="ac-ios-key ac-ios-key-off">
+      <div className="ac-ios-key-head">
+        <span className="ac-ios-key-name">
+          {t("account.iosKeyTitle", { n: item.slot })}
+          <span className="ac-ios-key-server">
+            {item.country || item.server}
+            {item.city ? ", " + item.city : ""}
+          </span>
+          <span className="ac-ios-off-tag">{t("account.iosOffTag")}</span>
+        </span>
+        <button
+          className="ac-ios-copy"
+          disabled={busy === "on"}
+          onClick={() => run("on", () => api.enableIosKey(item.slot))}
+        >
+          {busy === "on" ? t("account.iosEnableBusy") : t("account.iosEnable")}
+        </button>
+      </div>
+
+      <div className="ac-ios-key-foot">
+        <span className="ac-ios-key-meta">
+          {meta} · {t("account.iosOffHint")}
+        </span>
+        {deletable && (
+          <button
+            className="ac-device-off"
+            disabled={busy === "del"}
+            onClick={() => run("del", () => api.deleteIosKey(item.slot))}
+          >
+            {busy === "del" ? "…" : t("account.iosDelete")}
+          </button>
+        )}
+      </div>
+      {error && <p className="ac-ios-error">{error}</p>}
+    </div>
+  );
+}
+
+/**
  * Почта для чеков: показать, добавить, сменить.
  *
  * Учётка из регистрации рождается без почты, и продление упиралось в
@@ -666,21 +759,34 @@ function EmailRow({ email, onChanged }) {
  * этого устройства с узлов, то есть туннель на нём падает сразу. Поэтому
  * спрашиваем подтверждение — действие видно человеку на другом конце — и
  * поэтому же честно говорим, если узел не ответил и доступ мог остаться.
+ *
+ * Ключ AmneziaVPN (kind === "ios_key") — тоже устройство: он появляется в
+ * списке, как только через него пошёл трафик, и занимает место наравне с
+ * приложением. Отключается своим маршрутом — токена за ним нет, есть пир,
+ * — а ссылка остаётся за учёткой: включить её обратно можно в карточке
+ * ключей, и после подключения строка вернётся сюда сама.
  */
-function DeviceRow({ device, onChanged }) {
+function DeviceRow({ device, onChanged, onApply }) {
   const { t, f } = useI18n();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
+  const isKey = device.kind === "ios_key";
 
   const unlink = async () => {
     setBusy(true);
     setError("");
     try {
-      const result = await api.unlinkDevice(device.id);
-      if (result?.problems?.length) setError(t("account.disconnectPartly"));
+      if (isKey) {
+        // Ответ — кабинет целиком: строка исчезает, а ключ в карточке
+        // ключей получает пометку «отключён» одним и тем же ответом.
+        onApply(await api.disconnectIosKey(device.slot));
+      } else {
+        const result = await api.unlinkDevice(device.id);
+        if (result?.problems?.length) setError(t("account.disconnectPartly"));
+        onChanged();
+      }
       setAsking(false);
-      onChanged();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("account.disconnectFailed"));
     } finally {
@@ -694,14 +800,19 @@ function DeviceRow({ device, onChanged }) {
     android: "Android",
     ios: "iOS",
     macos: "macOS",
+    amnezia: "AmneziaVPN",
     web: t("account.platformWeb"),
   };
+
+  const name = isKey
+    ? t("account.iosDeviceName", { n: device.slot })
+    : device.name || platform[device.platform] || t("account.deviceFallback");
 
   return (
     <div className="ac-device">
       <span className="ac-device-body">
         <span className="ac-device-name">
-          {device.name || platform[device.platform] || t("account.deviceFallback")}
+          {name}
           {device.is_connected && (
             <span className="ac-device-live">
               <span className="ac-device-live-dot" />
@@ -736,50 +847,49 @@ function DeviceRow({ device, onChanged }) {
   );
 }
 
-function PlanTab({ data, preselected, onChanged }) {
+function PlanTab({ data, preselected }) {
   const { t, f } = useI18n();
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [chosen, setChosen] = useState(null);
+  const [plans, setPlans] = useState(null);
+  const [paying, setPaying] = useState(null);
 
   /*
-  Тариф, выбранный на лендинге.
-
-  Название и цену берём из панели, а не из адреса: в адресе только код, и
-  писать рядом с ним цену значит однажды показать здесь одну сумму, а
-  выставить счёт на другую. Пока тариф не подгрузился, кнопка продлевает
-  текущий — как и раньше.
+  Тарифы берём из панели: там их заводят, там правят цены и сроки. Ни одной
+  суммы в вёрстке нет — иначе показанная цена однажды разойдётся с той, по
+  которой выставлен счёт.
   */
   useEffect(() => {
-    if (!preselected || preselected === data.plan) return;
     let alive = true;
     api
       .plans()
-      .then((list) => {
-        if (!alive || !Array.isArray(list)) return;
-        setChosen(list.find((p) => p.code === preselected && p.purchasable) || null);
-      })
-      .catch(() => {});
+      .then((list) => alive && Array.isArray(list) && setPlans(list.filter((p) => p.purchasable)))
+      .catch(() => alive && setPlans([]));
     return () => {
       alive = false;
     };
-  }, [preselected, data.plan]);
+  }, []);
 
-  const target = chosen ? chosen.code : data.plan;
+  /*
+  Оплачен тариф или идёт пробный — от этого зависит весь экран.
 
-  const renew = async () => {
-    setBusy(true);
-    setNotice("");
-    try {
-      await api.renew(target);
-      setNotice(t("account.renewCreated"));
-      onChanged();
-    } catch (err) {
-      setNotice(err instanceof ApiError ? err.message : t("account.renewFailed"));
-    } finally {
-      setBusy(false);
-    }
-  };
+  Пробный не продаётся (`purchasable: false`), поэтому среди платных его
+  нет: не нашли текущий тариф в списке — значит человек на пробном либо без
+  подписки вовсе, и ему показываем «Оформить» на каждом тарифе. Оплатившему
+  свой тариф предлагаем продлить, а остальные — как переход. Дни при этом
+  складываются: сначала дожидаются оставшиеся, потом в полную силу вступает
+  новый тариф, — и очередь видна тут же, под сводкой.
+  */
+  const list = plans || [];
+  const current = list.find((plan) => plan.code === data.plan) || null;
+  const paid = Boolean(current);
+  const upcoming = data.upcoming || [];
+
+  // Тариф, выбранный на лендинге, поднимаем наверх — человек уже сказал, за
+  // чем пришёл, и искать его глазами второй раз не должен.
+  const ordered = [...list].sort((a, b) => {
+    if (a.code === preselected) return -1;
+    if (b.code === preselected) return 1;
+    return a.duration_days - b.duration_days;
+  });
 
   return (
     <div className="ac-plan">
@@ -804,27 +914,73 @@ function PlanTab({ data, preselected, onChanged }) {
         </div>
       </div>
 
-      <div className="ac-card ac-renew">
-        <div className="ac-renew-body">
-          <h2>{chosen ? t("account.switchTitle", { plan: chosen.title }) : t("account.renewTitle")}</h2>
-          <p>
-            {chosen
-              ? t("account.switchText", {
-                  term: f.days(chosen.duration_days),
-                  price: f.moneyFromKopecks(chosen.price_kopecks, chosen.currency),
-                })
-              : t("account.renewText", {
-                  term: data.period_days
-                    ? f.days(data.period_days)
-                    : t("account.renewTermFallback"),
-                }) + (data.price ? t("account.renewPrice", { price: f.money(data.price) }) : "")}
-          </p>
+      {/* Очередь оплаченных периодов: после смены тарифа деньги не пропали —
+          новый тариф ждёт, пока дожатся оставшиеся дни текущего. */}
+      {upcoming.length > 0 && (
+        <div className="ac-card ac-plan-queue">
+          <h2>{t("account.planQueueTitle")}</h2>
+          {upcoming.map((next, i) => (
+            <p className="ac-plan-queue-row" key={i}>
+              {t("account.planQueued", {
+                plan: next.plan_title || next.plan,
+                term: f.days(next.period_days),
+                date: f.shortDate(next.starts_at),
+              })}
+            </p>
+          ))}
+          <p className="ac-plan-queue-hint">{t("account.planQueueHint")}</p>
         </div>
-        <button className="btn btn-primary ac-renew-btn" disabled={busy} onClick={renew}>
-          {busy ? t("account.renewBusy") : chosen ? t("account.switchAction") : t("account.renew")}
-        </button>
+      )}
+
+      <div className="ac-card ac-plans">
+        <div className="ac-card-head">
+          <h2>{paid ? t("account.plansTitlePaid") : t("account.plansTitleTrial")}</h2>
+        </div>
+        <p className="ac-empty">{paid ? t("account.plansHintPaid") : t("account.plansHintTrial")}</p>
+
+        {plans === null ? (
+          <p className="ac-empty">{t("account.plansLoading")}</p>
+        ) : ordered.length === 0 ? (
+          <p className="ac-empty">{t("account.plansEmpty")}</p>
+        ) : (
+          <div className="ac-plan-grid">
+            {ordered.map((plan) => {
+              const mine = plan.code === data.plan;
+              return (
+                <div className={`ac-plan-card${mine ? " ac-plan-mine" : ""}`} key={plan.code}>
+                  {mine && <span className="ac-plan-tag">{t("account.planCurrent")}</span>}
+                  <span className="ac-plan-name">{plan.title}</span>
+                  <span className="ac-plan-cost">
+                    {f.moneyFromKopecks(plan.price_kopecks, plan.currency)}
+                  </span>
+                  <span className="ac-plan-term-l">{f.days(plan.duration_days)}</span>
+                  <ul className="ac-plan-limits">
+                    <li>
+                      {plan.traffic_limit_bytes == null
+                        ? t("account.planUnlimited")
+                        : f.bytes(plan.traffic_limit_bytes)}
+                    </li>
+                    <li>{t("units.devices", { count: plan.device_limit })}</li>
+                  </ul>
+                  <button
+                    className={`btn ${mine ? "btn-primary" : "btn-outline"} ac-plan-btn`}
+                    type="button"
+                    onClick={() => setPaying(plan)}
+                  >
+                    {!paid
+                      ? t("account.planBuy")
+                      : mine
+                        ? t("account.planRenewBtn")
+                        : t("account.planSwitchBtn")}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-      {notice && <div className="ac-notice">{notice}</div>}
+
+      <PaymentDialog open={Boolean(paying)} plan={paying} onClose={() => setPaying(null)} />
 
       <div className="ac-card">
         <h2>{t("account.paymentsTitle")}</h2>

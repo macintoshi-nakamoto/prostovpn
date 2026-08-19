@@ -489,6 +489,12 @@ export const en = {
     iosFailed: "Could not issue the key",
     iosDeleteFailed: "Could not delete the key",
     iosNoSubscription: "Keys come with an active subscription — pick a plan first.",
+    // Key as a device row and the "disconnected" state.
+    iosDeviceName: "iPhone · key {n}",
+    iosOffTag: "disconnected",
+    iosEnable: "Turn on",
+    iosEnableBusy: "Turning on…",
+    iosOffHint: "the same link will work again once turned on",
 
     dataTitle: "Account details",
     fieldLogin: "Login",
@@ -506,6 +512,26 @@ export const en = {
     planTerm: "Term",
     planUntil: "Valid until",
     planLeft: "Remaining",
+
+    // Plan cards inside the account.
+    plansTitleTrial: "Pick a plan",
+    plansTitlePaid: "Plans",
+    plansHintTrial: "The trial ends on its own — pick a plan to keep your access.",
+    plansHintPaid: "Renew your plan or buy any other: the days add up.",
+    plansLoading: "Loading plans…",
+    plansEmpty: "Plans are unavailable right now — try again later.",
+    planCurrent: "Your plan",
+    planUnlimited: "Unlimited traffic",
+    planBuy: "Buy",
+    planRenewBtn: "Renew",
+    planSwitchBtn: "Switch",
+
+    // Paid periods queued after a plan change.
+    planQueueTitle: "Up next",
+    planQueued: "From {date} — {plan}, {term}",
+    planQueueHint:
+      "Days add up: the remaining days of your current plan run out first, then the new plan kicks in at full force.",
+
     renewTitle: "Renew subscription",
     renewText: "Renewing adds {term} to your current subscription.",
     renewPrice: " Price — {price}.",
@@ -524,6 +550,21 @@ export const en = {
     payDesc: "Description",
     paySum: "Amount",
     payFallback: "Payment",
+  },
+
+  // Payment method dialog. Only Telegram Stars works today; the rest are
+  // honestly marked "soon".
+  pay: {
+    title: "{plan} plan",
+    term: "Access for {term}",
+    stars: "Telegram Stars",
+    starsSub: "Opens in Telegram",
+    sbp: "SBP",
+    crypto: "Crypto",
+    soon: "soon",
+    soonSub: "Being connected",
+    note: "Days add up to your current subscription: paying doesn't reset the time left.",
+    close: "Close",
   },
 
   setup: {

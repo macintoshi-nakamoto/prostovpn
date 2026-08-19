@@ -16,6 +16,20 @@ const EN_MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+/**
+ * Время с бэкенда — всегда UTC, но без пометки зоны.
+ *
+ * `new Date("2026-08-19T13:20:00")` считает такую строку МЕСТНЫМ временем, и
+ * у человека в Москве только что подключившееся устройство показывалось как
+ * «был 3 часа назад». Дописываем Z, если зоны нет, — дальше обычные
+ * get-методы сами переводят в местное время читателя.
+ */
+function parseUtc(iso) {
+  if (iso instanceof Date) return iso;
+  const hasZone = /Z$|[+-]\d{2}:?\d{2}$/.test(iso);
+  return new Date(hasZone ? iso : `${iso}Z`);
+}
+
 export function money(rubles, currency = "RUB", lang = "ru") {
   if (rubles == null) return "";
   const sign = currency === "RUB" ? " ₽" : ` ${currency}`;
@@ -34,14 +48,14 @@ export function moneyFromKopecks(kopecks, currency = "RUB", lang = "ru") {
 
 export function longDate(iso, lang = "ru") {
   if (!iso) return "";
-  const d = new Date(iso);
+  const d = parseUtc(iso);
   if (lang === "en") return `${EN_MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
   return `${d.getDate()} ${RU_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 export function shortDate(iso, lang = "ru") {
   if (!iso) return "";
-  const d = new Date(iso);
+  const d = parseUtc(iso);
   const p = (n) => String(n).padStart(2, "0");
   // Порядок частей разный не для красоты: 05.08 и 08/05 в одном виде читались
   // бы как разные даты, и человек ошибётся в дне окончания подписки.
@@ -88,7 +102,7 @@ export function days(count, lang = "ru") {
 export function ago(iso, lang = "ru") {
   if (!iso) return "";
   const en = lang === "en";
-  const diff = Date.now() - new Date(iso).getTime();
+  const diff = Date.now() - parseUtc(iso).getTime();
   const min = Math.floor(diff / 60000);
   if (min < 3) return en ? "active now" : "активно сейчас";
   if (min < 60) return en ? `${min} min ago` : `был ${min} мин назад`;

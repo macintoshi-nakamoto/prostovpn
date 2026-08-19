@@ -46,6 +46,7 @@ from ..models import (
     ios_slot,
     ios_slot_number,
     is_ios_slot,
+    utcnow,
 )
 from .errors import PanelError
 from .keys import active_servers, ensure_keys, issue_key, revoke_key
@@ -92,6 +93,9 @@ class IosKey:
     last_handshake_at: dt.datetime | None
     created_at: dt.datetime
     is_active: bool
+    # Отключён самим человеком из списка устройств: пир снят, но пара и
+    # адрес за слотом остались — «включить» вернёт ту же ссылку.
+    disconnected: bool = False
 
 
 def _live_slot_keys(user: User) -> list[UserKey]:
@@ -153,9 +157,17 @@ def enable(db: OrmSession, user: User) -> list[str]:
     Тем же действием ключ и возвращается: пара ключей и адрес сохраняются,
     на узел возвращается тот же пир — ссылка, лежащая у человека в Amnezia,
     продолжает работать. Новый ключ выдаёт только «перевыпустить».
+
+    Пометки «отключён из кабинета» тоже снимаются — все разом: «включить
+    обратно» здесь значит «пусть ключи работают», а не «верните всё, кроме
+    того, что человек выключал». Точечное включение одного ключа живёт в
+    reconnect_key.
     """
     user.ios_access = True
     user.ios_blocked = False
+    for key in user.keys:
+        if is_ios_slot(key.device_id):
+            key.disconnected_at = None
     db.commit()
     return sync(db, user)
 
@@ -225,6 +237,78 @@ def add_key(db: OrmSession, user: User) -> tuple[int, list[str]]:
     warnings = ensure_keys(db, user, devices={ios_slot(number)})
     db.refresh(user)
     return number, warnings
+
+
+def disconnect_key(db: OrmSession, user: User, number: int) -> list[str]:
+    """
+    «Отключить» на строке устройства — руками самого человека.
+
+    Пир уходит с узла, туннель на том iPhone падает сразу, строка исчезает
+    из «Подключённых устройств». Пара ключей и адрес остаются за слотом, и
+    «включить» вернёт ту же ссылку, что уже вставлена в Amnezia, — человек
+    ничего не переустанавливает, а после подключения строка появляется в
+    устройствах снова.
+
+    Пометка `disconnected_at` — то, что отличает это отключение от снятия
+    по концу подписки: слот выпадает из раздачи (`User.ios_slots`), и ни
+    продление, ни вход не вернут пира без явного «включить».
+
+    Рукопожатие обнуляем: строка устройства появляется по нему, и без
+    обнуления ключ после включения возвращался бы в список со старым «был
+    N часов назад», хотя человек ещё не подключился.
+    """
+    slot = ios_slot(number)
+    rows = [key for key in user.keys if (key.device_id or "") == slot]
+    if not rows:
+        raise PanelError(f"ключа {number} у этой учётки нет")
+
+    problems: list[str] = []
+    now = utcnow()
+    for key in rows:
+        if key.revoked_at is None:
+            try:
+                revoke_key(db, key)
+            except Exception as exc:
+                # Узел не ответил — доступ там мог остаться, и молчать об
+                # этом нельзя. Ключ всё равно отзываем: пира, которому в базе
+                # нечего предъявить, снимет сверка reconcile_peers.
+                problems.append(f"{key.server.name}: {exc}")
+                key.revoked_at = now
+        key.disconnected_at = now
+        key.last_handshake_at = None
+    db.commit()
+    db.refresh(user)
+    return problems
+
+
+def reconnect_key(db: OrmSession, user: User, number: int) -> list[str]:
+    """
+    Возвращает отключённый ключ: тот же пир, та же ссылка.
+
+    Обратная сторона disconnect_key. Ключ «включается», а не «выдаётся
+    заново»: `ensure_keys` переиспользует сохранённую пару и адрес, поэтому
+    ссылка, оставшаяся у человека в Amnezia, оживает как была. Подключится
+    он — и строка вернётся в «Подключённые устройства» по первому
+    рукопожатию.
+    """
+    if user.ios_blocked:
+        raise PanelError("ключи отключены администратором — напишите в поддержку")
+    if not user.has_access():
+        raise PanelError("ключ включается по действующей подписке")
+
+    slot = ios_slot(number)
+    rows = [key for key in user.keys if (key.device_id or "") == slot]
+    if not rows:
+        raise PanelError(f"ключа {number} у этой учётки нет")
+
+    user.ios_access = True
+    for key in rows:
+        key.disconnected_at = None
+    db.commit()
+
+    warnings = ensure_keys(db, user, devices={slot})
+    db.refresh(user)
+    return warnings
 
 
 def remove_key(db: OrmSession, user: User, number: int) -> list[str]:
@@ -334,20 +418,27 @@ def _vpn_url(server: Server, key: UserKey, name: str) -> str:
     )
 
 
-def keys(user: User, include_revoked: bool = False) -> list[IosKey]:
+def keys(
+    user: User, include_revoked: bool = False, include_disconnected: bool = False
+) -> list[IosKey]:
     """
     Ключи человека готовыми ссылками — для кабинета, бота и панели.
 
     Ссылка собирается на месте, а не хранится: в базе лежит конфиг пира, а
     `vpn://` — всего лишь его упаковка. Хранить обе формы значит однажды
     показать человеку ссылку от пира, которого на узле уже нет.
+
+    `include_disconnected` добавляет ключи, отключённые самим человеком из
+    списка устройств: кабинету и панели их надо показывать с кнопкой
+    «включить», а бот и прочие читатели по умолчанию видят только рабочие.
     """
     out: list[IosKey] = []
     for key in sorted(user.keys, key=lambda k: (slot_number(k.device_id), k.server_id)):
         if not is_ios_slot(key.device_id):
             continue
         if key.revoked_at is not None and not include_revoked:
-            continue
+            if not (include_disconnected and key.disconnected_at is not None):
+                continue
         server = key.server
         if server.provisioning != Provisioning.SSH or not key.config:
             continue
@@ -369,6 +460,7 @@ def keys(user: User, include_revoked: bool = False) -> list[IosKey]:
                 last_handshake_at=key.last_handshake_at,
                 created_at=key.created_at,
                 is_active=key.revoked_at is None,
+                disconnected=key.disconnected_at is not None,
             )
         )
     return out

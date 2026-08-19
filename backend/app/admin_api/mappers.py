@@ -24,6 +24,7 @@ from ..models import (
     TunnelFile,
     User,
     UserKey,
+    ios_slot_number,
     is_ios_slot,
     utcnow,
 )
@@ -81,6 +82,23 @@ def _session_connected(user: User, session: Session, now: dt.datetime) -> bool:
     return False
 
 
+def _ios_device_slots(user: User) -> set[int]:
+    """
+    Номера ключей AmneziaVPN, за которыми стоит настоящее устройство.
+
+    Тот же признак, что и в кабинете: живой пир, через который хоть раз шёл
+    трафик. Выданный, но ни разу не подключавшийся ключ устройством не
+    считается — ссылку могли даже не вставить.
+    """
+    return {
+        ios_slot_number(k.device_id)
+        for k in user.keys
+        if k.revoked_at is None
+        and is_ios_slot(k.device_id)
+        and k.last_handshake_at is not None
+    }
+
+
 def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
     moment = now or utcnow()
     sub = user.active_subscription(moment)
@@ -128,16 +146,24 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         sessions_count=sum(1 for s in sessions if s.revoked_at is None),
         # Лимит тарифа считает устройства, а не входы: вкладка кабинета в
         # браузере места в нём не занимает — см. models.WEB_PLATFORMS.
-        devices_used=len(user.device_sessions(moment)),
+        # iPhone с вставленным ключом AmneziaVPN — устройство: ключ, через
+        # который хоть раз шёл трафик, занимает место наравне с приложением.
+        devices_used=len(user.device_sessions(moment)) + len(_ios_device_slots(user)),
         device_limit=user.device_limit(moment),
         servers_count=sum(1 for k in user.keys if k.revoked_at is None),
         ios_access=user.ios_access,
         ios_blocked=user.ios_blocked,
         # Ключей столько, сколько номеров, а не строк: на каждый номер
         # приходится по пиру на каждой стране, и «ключей 3» у человека с
-        # одним ключом и тремя странами — неправда.
+        # одним ключом и тремя странами — неправда. Отключённый из кабинета
+        # тоже в счёте: слот занят, пока ключ не удалён.
         ios_keys_count=len(
-            {k.device_id for k in user.keys if k.revoked_at is None and is_ios_slot(k.device_id)}
+            {
+                k.device_id
+                for k in user.keys
+                if is_ios_slot(k.device_id)
+                and (k.revoked_at is None or k.disconnected_at is not None)
+            }
         ),
         created_at=user.created_at,
     )
@@ -274,13 +300,18 @@ def user_detail(
             for s in sorted(user.subscriptions, key=lambda s: s.expires_at, reverse=True)
         ],
         keys=[key_out(k) for k in sorted(user.keys, key=lambda k: k.server_id)],
-        ios_keys=[ios_key_out(k) for k in ios.keys(user)],
+        # Вместе с отключёнными из кабинета: панель обязана видеть, что
+        # человек выключил сам, — с кнопкой «включить», а не пустым местом.
+        ios_keys=[
+            ios_key_out(k, moment) for k in ios.keys(user, include_disconnected=True)
+        ],
         ios_max_keys=IOS_MAX_KEYS,
         ios_can_add=user.has_access(moment) and ios.free_slot(user) is not None,
     )
 
 
-def ios_key_out(key: "ios.IosKey") -> schemas.IosKeyOut:
+def ios_key_out(key: "ios.IosKey", now: dt.datetime | None = None) -> schemas.IosKeyOut:
+    moment = now or utcnow()
     return schemas.IosKeyOut(
         id=key.id,
         slot=key.slot,
@@ -296,6 +327,12 @@ def ios_key_out(key: "ios.IosKey") -> schemas.IosKeyOut:
         last_handshake_at=key.last_handshake_at,
         created_at=key.created_at,
         is_active=key.is_active,
+        is_connected=(
+            key.is_active
+            and key.last_handshake_at is not None
+            and key.last_handshake_at > moment - HANDSHAKE_WINDOW
+        ),
+        disconnected=key.disconnected,
     )
 
 

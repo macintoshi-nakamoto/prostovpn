@@ -40,6 +40,7 @@ from .models import (
     Plan,
     Session,
     User,
+    ios_slot_number,
     normalize_email,
     utcnow,
 )
@@ -391,6 +392,15 @@ def current_user(
 
 class DeviceOut(BaseModel):
     id: int
+    # Что за строка: вход приложения (`app`) или ключ AmneziaVPN
+    # (`ios_key`). За ключом нет ни токена, ни входа — это пир, который
+    # человек вставил ссылкой в Amnezia, — поэтому и отключается он своим
+    # маршрутом, а не DELETE /account/devices/{id}.
+    kind: str = "app"
+    # Номер ключа AmneziaVPN — только у строк kind="ios_key". У них же id
+    # отрицательный (минус номер), чтобы не пересечься с номерами сессий у
+    # читателей, различающих строки только по id.
+    slot: int | None = None
     name: str | None = None
     platform: str | None = None
     app_version: str | None = None
@@ -434,6 +444,9 @@ class IosKeyOut(BaseModel):
     # Amnezia, — иначе перемена молчаливая.
     created_at: dt.datetime | None = None
     is_connected: bool = False
+    # Отключён самим человеком из списка устройств. Ссылка за слотом
+    # осталась и вернётся кнопкой «включить» — той же самой.
+    disconnected: bool = False
 
 
 class IosOut(BaseModel):
@@ -441,6 +454,10 @@ class IosOut(BaseModel):
     # Отключён администратором: ключа нет и выдать себе новый нельзя.
     blocked: bool = False
     keys: list[IosKeyOut] = []
+    # Ключи, отключённые самим человеком. Отдельным списком, а не флагом в
+    # общем: `keys` читают и бот, и старые сборки кабинета как «рабочие
+    # ссылки», и мёртвая ссылка среди них выглядела бы живой.
+    disconnected_keys: list[IosKeyOut] = []
     # Сколько ключей человек может завести всего и сколько уже завёл.
     # Кабинету нужны оба числа: он пишет «2 из 5» и гасит кнопку на потолке,
     # а считать ключи по списку он не может — там строка на каждую страну.
@@ -475,6 +492,22 @@ class TunnelFileOut(BaseModel):
     url: str = "/api/v1/tunnel-file/download"
 
 
+class UpcomingOut(BaseModel):
+    """
+    Оплаченный период, который ещё не начался.
+
+    Появляется при смене тарифа: новый встаёт в очередь за текущим, и
+    кабинет обязан показать, что деньги не пропали — сначала дожидаются
+    оставшиеся дни, потом в полную силу вступает новый тариф.
+    """
+
+    plan: str
+    plan_title: str | None = None
+    starts_at: dt.datetime
+    expires_at: dt.datetime
+    period_days: int
+
+
 class AccountOut(BaseModel):
     login: str
     email: str | None = None
@@ -484,8 +517,12 @@ class AccountOut(BaseModel):
     period_days: int | None = None
     price: float | None = None
     active: bool
+    # Конец текущего периода. Общий конец доступа, вместе с очередью ещё не
+    # начавшихся периодов, — в expires_total_at.
     expires_at: dt.datetime | None = None
     days_left: int | None = None
+    expires_total_at: dt.datetime | None = None
+    upcoming: list[UpcomingOut] = []
     device_limit: int
     devices: list[DeviceOut]
     traffic_used_bytes: int = 0
@@ -531,8 +568,8 @@ def _ios_out(user: User, now: dt.datetime) -> IosOut:
             notice="Ключи отключены. Напишите в поддержку — разберёмся, в чём дело.",
         )
 
-    keys = [
-        IosKeyOut(
+    def key_out(key: "services.ios.IosKey") -> IosKeyOut:
+        return IosKeyOut(
             slot=key.slot,
             name=key.name,
             server_id=key.server_id,
@@ -548,29 +585,74 @@ def _ios_out(user: User, now: dt.datetime) -> IosOut:
                 key.last_handshake_at is not None
                 and key.last_handshake_at > now - HANDSHAKE_WINDOW
             ),
+            disconnected=key.disconnected,
         )
-        for key in services.ios.keys(user)
-    ]
+
+    everything = services.ios.keys(user, include_disconnected=True)
+    keys = [key_out(k) for k in everything if k.is_active]
+    off = [key_out(k) for k in everything if not k.is_active and k.disconnected]
 
     notice = None
-    if not keys:
+    if not keys and not off:
         if not user.has_access(now):
             notice = "Ключи отключены: подписка кончилась или закрыт доступ."
         else:
             notice = "Готовим ключи, это займёт около минуты — обновите страницу."
 
     # Ключей у человека столько, сколько номеров, а не строк: на каждый
-    # номер приходится по ссылке на каждую страну.
-    used = len({key.slot for key in keys})
+    # номер приходится по ссылке на каждую страну. Отключённые тоже в счёте:
+    # слот занят, пока ключ не удалён.
+    used = len({key.slot for key in keys} | {key.slot for key in off})
     return IosOut(
         available=True,
         keys=keys,
+        disconnected_keys=off,
         max_keys=IOS_MAX_KEYS,
         keys_count=used,
         can_add=user.has_access(now) and services.ios.free_slot(user) is not None,
         guide_url=settings().guide_link,
         notice=notice,
     )
+
+
+def _ios_device_rows(user: User, now: dt.datetime) -> list[DeviceOut]:
+    """
+    Ключи AmneziaVPN в списке «Подключённые устройства».
+
+    Ключ становится устройством по первому рукопожатию: сам факт выдачи —
+    ещё не устройство (ссылку могли даже не вставить), а ключ, через
+    который пошёл трафик, — уже оно, и место в списке занимает наравне с
+    телефоном с приложением. Пропадает строка вместе с пиром: «отключить»
+    в кабинете, снятие по концу подписки — и появляется снова с первым
+    рукопожатием после включения.
+
+    Строка одна на ключ, а не на пир: пиры одного слота на разных странах —
+    это один iPhone, и рукопожатие берётся самое свежее из них.
+    """
+    by_slot: dict[int, list] = {}
+    for key in user.keys:
+        number = ios_slot_number(key.device_id)
+        if number > 0 and key.revoked_at is None:
+            by_slot.setdefault(number, []).append(key)
+
+    rows: list[DeviceOut] = []
+    for number, slot_keys in sorted(by_slot.items()):
+        stamps = [k.last_handshake_at for k in slot_keys if k.last_handshake_at is not None]
+        if not stamps:
+            continue
+        last = max(stamps)
+        rows.append(
+            DeviceOut(
+                id=-number,
+                kind="ios_key",
+                slot=number,
+                platform="amnezia",
+                last_seen_at=last,
+                created_at=min(k.created_at for k in slot_keys),
+                is_connected=last > now - HANDSHAKE_WINDOW,
+            )
+        )
+    return rows
 
 
 def _tunnel_out(db: OrmSession) -> TunnelFileOut:
@@ -593,6 +675,24 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
     plan = subscription.plan_ref if subscription else None
     now = utcnow()
 
+    # Приложения и ключи AmneziaVPN в одном списке: и то и другое — место в
+    # лимите тарифа, и человек должен видеть, что iPhone с вставленным
+    # ключом занимает его так же, как телефон с приложением.
+    devices = [
+        DeviceOut(
+            id=session.id,
+            name=session.device_name,
+            platform=session.platform,
+            app_version=session.app_version,
+            last_seen_at=session.last_seen_at,
+            created_at=session.created_at,
+            is_current=session.id == current.id,
+            is_connected=_device_connected(user, session.device_key, now),
+        )
+        for session in user.device_sessions(now)
+    ] + _ios_device_rows(user, now)
+    devices.sort(key=lambda d: d.last_seen_at, reverse=True)
+
     return AccountOut(
         login=user.login,
         # Свой адрес человек видеть может — шифрование защищает базу от
@@ -606,25 +706,22 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         active=user.has_access(now),
         expires_at=subscription.expires_at if subscription else None,
         days_left=max(0, (subscription.expires_at - now).days) if subscription else None,
-        device_limit=user.device_limit(now),
-        # Только приложения. Вкладка браузера, из которой человек читает эту
-        # самую страницу, устройством не является: туннеля в ней нет,
-        # отключать нечего, а место в лимите тарифа она занимала.
-        devices=[
-            DeviceOut(
-                id=session.id,
-                name=session.device_name,
-                platform=session.platform,
-                app_version=session.app_version,
-                last_seen_at=session.last_seen_at,
-                created_at=session.created_at,
-                is_current=session.id == current.id,
-                is_connected=_device_connected(user, session.device_key, now),
+        expires_total_at=user.access_expires_at(now),
+        upcoming=[
+            UpcomingOut(
+                plan=s.plan,
+                plan_title=s.plan_ref.name if s.plan_ref else s.plan,
+                starts_at=s.starts_at,
+                expires_at=s.expires_at,
+                period_days=s.period_days,
             )
-            for session in sorted(
-                user.device_sessions(now), key=lambda s: s.last_seen_at, reverse=True
-            )
+            for s in user.upcoming_subscriptions(now)
         ],
+        device_limit=user.device_limit(now),
+        # Приложения и ключи AmneziaVPN; вкладка браузера, из которой человек
+        # читает эту самую страницу, устройством не является: туннеля в ней
+        # нет, отключать нечего, а место в лимите тарифа она занимала.
+        devices=devices,
         traffic_used_bytes=user.traffic_used_bytes,
         traffic_limit_bytes=user.effective_traffic_limit(now),
         payments=[
@@ -761,6 +858,73 @@ def delete_ios_key(
 
     for problem in problems:
         log.warning("ключ %s AmneziaVPN для %s: %s", slot, user.public_id, problem)
+    return _account_out(db, user, session)
+
+
+@router.post("/account/ios/keys/{slot}/disconnect", response_model=AccountOut)
+def disconnect_ios_key(
+    slot: int,
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    """
+    «Отключить» на строке ключа в «Подключённых устройствах».
+
+    Пир уходит с узла, туннель на том iPhone падает сразу — как у
+    устройства с приложением. Ссылка при этом остаётся за учёткой:
+    «включить» вернёт ту же самую, и после подключения строка снова
+    появится в устройствах. Насовсем ссылку убирает удаление ключа.
+    """
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+
+    try:
+        problems = services.ios.disconnect_key(db, user, slot)
+    except services.PanelError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": "ios_off_failed"}
+        ) from exc
+
+    for problem in problems:
+        # Узел не ответил — пир снимет сверка; человеку доступ уже закрыт.
+        log.warning("отключение ключа %s у %s: %s", slot, user.public_id, problem)
+    return _account_out(db, user, session)
+
+
+@router.post("/account/ios/keys/{slot}/enable", response_model=AccountOut)
+def enable_ios_key(
+    slot: int,
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    """
+    Включает отключённый ключ: тот же пир, та же ссылка.
+
+    Человеку не нужно ничего переустанавливать — ссылка, вставленная в
+    Amnezia, оживает как была. Отключение администратора так не снимается:
+    оно про другое и снимается только из панели.
+    """
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+
+    if user.ios_blocked:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "ключ отключён — напишите в поддержку",
+            headers={"X-Error-Code": "ios_blocked"},
+        )
+
+    try:
+        warnings = services.ios.reconnect_key(db, user, slot)
+    except services.PanelError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": "ios_on_failed"}
+        ) from exc
+
+    for warning in warnings:
+        log.warning("включение ключа %s у %s: %s", slot, user.public_id, warning)
     return _account_out(db, user, session)
 
 

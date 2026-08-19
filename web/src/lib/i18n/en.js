@@ -43,15 +43,15 @@ export const en = {
       line1: "The internet",
       line2: "kept private",
       lead:
-        "One tap to connect, 60+ countries and speeds up to 1 Gbps. No logs, no setup " +
-        "and no throttling.",
+        "One tap to connect, 60+ countries and speeds up to 1 Gbps. No logs, no " +
+        "complicated setup, no fuss.",
       primary: "Get started",
       ghost: "How it works",
       platforms: "iOS · Android · macOS · Windows · TV",
     },
 
     features: {
-      speed: { title: "Up to 1 Gbps", text: "No throttling, even at peak hours" },
+      speed: { title: "Up to 1 Gbps", text: "Stable speeds at any time of day" },
       countries: { title: "60+ countries", text: "Over 900 servers on five continents" },
       devices: { text: "One subscription for the whole family" },
       logs: { title: "No logs", text: "We keep no record of what you connect to" },
@@ -452,7 +452,7 @@ export const en = {
     deviceFallback: "Device",
     platformWeb: "Browser",
 
-    bypassTitle: "Russian sites bypass",
+    bypassTitle: "Russian sites go direct",
     bypassText:
       "Needed on iPhone only: banks, government services and other Russian sites work as if the " +
       "VPN were off. The ProstoVPN app for Windows, Android and macOS already has this built in.",

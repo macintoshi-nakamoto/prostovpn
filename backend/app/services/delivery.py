@@ -124,6 +124,15 @@ def _send(db: OrmSession, job: DeliveryJob) -> None:
 
         if job.template == "credentials":
             text, html = mail.credentials_body(user.login, _password(user), expires, ios=ios)
+        elif job.template == "recurring_on":
+            name, price, interval, next_charge = _recurring_context(db, user)
+            text, html = mail.recurring_on_body(name, price, interval, next_charge)
+        elif job.template == "recurring_failed":
+            name, price, _interval, _next = _recurring_context(db, user)
+            text, html = mail.recurring_failed_body(name, price, expires)
+        elif job.template == "recurring_off":
+            name, _price, _interval, _next = _recurring_context(db, user)
+            text, html = mail.recurring_off_body(name, expires)
         else:
             text, html = mail.renewed_body(user.login, expires, ios=ios)
         mail.send(job.target, settings().mail_subject, text, html)
@@ -132,6 +141,15 @@ def _send(db: OrmSession, job: DeliveryJob) -> None:
     if job.channel == "telegram":
         if job.template == "credentials":
             body = telegram.credentials_text(user.login, _password(user), expires, site, ios=ios)
+        elif job.template == "recurring_on":
+            name, price, interval, next_charge = _recurring_context(db, user)
+            body = telegram.recurring_on_text(name, price, interval, next_charge, site)
+        elif job.template == "recurring_failed":
+            name, price, _interval, _next = _recurring_context(db, user)
+            body = telegram.recurring_failed_text(name, price, expires, site)
+        elif job.template == "recurring_off":
+            name, _price, _interval, _next = _recurring_context(db, user)
+            body = telegram.recurring_off_text(name, expires, site)
         else:
             body = telegram.renewed_text(user.login, expires, site, ios=ios)
         telegram.send(job.target, body)
@@ -283,6 +301,7 @@ def _reminder_letter(user: User):
 METHODS = {
     "yookassa": "Банковская карта",
     "cryptocloud": "Криптовалюта",
+    "platega": "СБП",
     "mock": "Тестовая оплата",
     "панель": "Вручную",
     "panel": "Вручную",
@@ -291,6 +310,33 @@ METHODS = {
 
 def _method_label(method: str | None) -> str:
     return METHODS.get((method or "").lower(), method or "—")
+
+
+def _recurring_context(db: OrmSession, user: User) -> tuple[str, str, str, str]:
+    """
+    Название тарифа, цена, слово про интервал и дата следующего списания —
+    из последней записи автосписания. Письмо собирается в момент отправки,
+    поэтому данные берутся из базы, а не кладутся в задание: между выдачей
+    и отправкой статус мог уже смениться.
+    """
+    from ..models import Plan, RecurringSub
+    from .recurring import INTERVAL_LABELS
+
+    sub = db.scalar(
+        select(RecurringSub)
+        .where(RecurringSub.user_id == user.id)
+        .order_by(RecurringSub.id.desc())
+        .limit(1)
+    )
+    if sub is None:
+        raise RuntimeError("запись автосписания не найдена, письмо не собрать")
+    plan = db.scalar(select(Plan).where(Plan.code == sub.plan_code))
+    name = plan.name if plan else sub.plan_code
+    currency = "₽" if sub.currency.upper() == "RUB" else sub.currency
+    price = f"{sub.amount_kopecks / 100:.0f} {currency}"
+    interval = INTERVAL_LABELS.get(sub.interval, "")
+    next_charge = sub.next_charge_at.strftime("%d.%m.%Y") if sub.next_charge_at else ""
+    return name, price, interval, next_charge
 
 
 def _password(user: User) -> str:

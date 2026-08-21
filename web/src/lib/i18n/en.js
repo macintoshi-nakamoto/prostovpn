@@ -550,6 +550,32 @@ export const en = {
     payDesc: "Description",
     paySum: "Amount",
     payFallback: "Payment",
+
+    payReturnChecking: "Checking your payment…",
+    payReturnPaid: "Payment received — your plan is extended.",
+    payReturnPending:
+      "The payment isn't confirmed yet. If you've paid, access will activate within a couple of minutes — refresh the page.",
+    payReturnFailed: "The payment didn't go through. Nothing was charged — try again.",
+
+    recTitle: "Auto-renewal",
+    recLoading: "Loading…",
+    recUnavailable: "Auto-renewal isn't available for the current plans.",
+    recOffer:
+      "Turn on auto-pay and your access renews itself, no reminders needed. Switch it off anytime.",
+    recMonth: "per month",
+    recYear: "per year",
+    recConnect: "Turn on",
+    recConnectBusy: "Setting up…",
+    recPending: "One step left: confirm the account link on the payment page.",
+    recContinue: "Finish linking",
+    recActive: "{plan}: {price} {interval}.",
+    recNext: " Next charge — {date}.",
+    recPastDue:
+      "The last charge didn't go through. Renew manually above — or turn auto-renewal off.",
+    recCancel: "Turn off",
+    recCancelBusy: "Turning off…",
+    recCancelled: "Auto-renewal is off. Your paid days remain.",
+    recFailed: "Something went wrong — try again.",
   },
 
   // Payment method dialog. Only Telegram Stars works today; the rest are
@@ -560,6 +586,8 @@ export const en = {
     stars: "Telegram Stars",
     starsSub: "Opens in Telegram",
     sbp: "SBP",
+    sbpSub: "Pay from your banking app",
+    sbpBusy: "Creating the invoice…",
     crypto: "Crypto",
     soon: "soon",
     soonSub: "Being connected",

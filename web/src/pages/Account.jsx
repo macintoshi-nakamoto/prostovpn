@@ -27,7 +27,15 @@ export function Account() {
   через форму входа, и запрос переживает её — см. Login.jsx.
   */
   const [params] = useSearchParams();
-  const wantedTab = TABS.includes(params.get("tab")) ? params.get("tab") : "account";
+  // Возврат с платёжной формы приходит с ?order= — человека интересует
+  // только одно: прошла ли оплата. Открываем сразу вкладку тарифа.
+  const returnOrder = params.get("order") || "";
+  const payFailed = params.get("failed") === "1";
+  const wantedTab = returnOrder
+    ? "plan"
+    : TABS.includes(params.get("tab"))
+      ? params.get("tab")
+      : "account";
   const wantedPlan = params.get("plan") || "";
   const [tab, setTab] = useState(wantedTab);
   const [data, setData] = useState(null);
@@ -173,7 +181,15 @@ export function Account() {
             onApply={apply}
           />
         )}
-        {data && tab === "plan" && <PlanTab data={data} preselected={wantedPlan} />}
+        {data && tab === "plan" && (
+          <PlanTab
+            data={data}
+            preselected={wantedPlan}
+            returnOrder={returnOrder}
+            payFailed={payFailed}
+            onChanged={load}
+          />
+        )}
         {data && tab === "setup" && <SetupGuide login={data.login} />}
       </main>
 
@@ -847,10 +863,56 @@ function DeviceRow({ device, onChanged, onApply }) {
   );
 }
 
-function PlanTab({ data, preselected }) {
+function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   const { t, f } = useI18n();
   const [plans, setPlans] = useState(null);
   const [paying, setPaying] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  /*
+  Возврат с платёжной формы. Сам по себе он ничего не подтверждает — оплату
+  фиксирует только вебхук провайдера, поэтому страница опрашивает статус
+  заказа, пока тот не станет paid, и лишь тогда радуется вслух.
+  */
+  useEffect(() => {
+    if (!returnOrder) return undefined;
+    if (payFailed) {
+      setNotice(t("account.payReturnFailed"));
+      return undefined;
+    }
+    let alive = true;
+    let tries = 0;
+    setNotice(t("account.payReturnChecking"));
+    const tick = async () => {
+      tries += 1;
+      try {
+        const status = await api.orderStatus(returnOrder);
+        if (!alive) return;
+        if (status.status === "paid") {
+          setNotice(t("account.payReturnPaid"));
+          onChanged();
+          return;
+        }
+        if (status.status === "failed" || status.status === "expired") {
+          setNotice(t("account.payReturnFailed"));
+          return;
+        }
+      } catch {
+        // Сеть мигнула — следующая попытка скажет точнее.
+      }
+      if (alive && tries < 20) {
+        setTimeout(tick, 3000);
+      } else if (alive) {
+        setNotice(t("account.payReturnPending"));
+      }
+    };
+    tick();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [returnOrder, payFailed]);
 
   /*
   Тарифы берём из панели: там их заводят, там правят цены и сроки. Ни одной
@@ -891,6 +953,32 @@ function PlanTab({ data, preselected }) {
     return a.duration_days - b.duration_days;
   });
 
+  /*
+  Оплата СБП из окна способов: заказ создаёт панель, дальше — платёжная
+  форма провайдера. Вернёмся сюда же с ?order= и дождёмся вебхука опросом
+  статуса — сам возврат ничего не подтверждает.
+  */
+  const paySbp = async () => {
+    if (!paying || busy) return;
+    setBusy(true);
+    setNotice("");
+    try {
+      const order = await api.renew(paying.code);
+      if (order && order.redirect_url) {
+        window.location.assign(order.redirect_url);
+        return;
+      }
+      setPaying(null);
+      setNotice(t("account.renewCreated"));
+      onChanged();
+    } catch (err) {
+      setPaying(null);
+      setNotice(err instanceof ApiError ? err.message : t("account.renewFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="ac-plan">
       <div className="ac-plan-summary">
@@ -913,6 +1001,8 @@ function PlanTab({ data, preselected }) {
           </span>
         </div>
       </div>
+
+      {notice && <div className="ac-notice">{notice}</div>}
 
       {/* Очередь оплаченных периодов: после смены тарифа деньги не пропали —
           новый тариф ждёт, пока дожатся оставшиеся дни текущего. */}
@@ -980,7 +1070,15 @@ function PlanTab({ data, preselected }) {
         )}
       </div>
 
-      <PaymentDialog open={Boolean(paying)} plan={paying} onClose={() => setPaying(null)} />
+      <PaymentDialog
+        open={Boolean(paying)}
+        plan={paying}
+        busy={busy}
+        onSbp={paySbp}
+        onClose={() => (busy ? null : setPaying(null))}
+      />
+
+      <RecurringCard onChanged={onChanged} />
 
       <div className="ac-card">
         <h2>{t("account.paymentsTitle")}</h2>
@@ -1003,6 +1101,161 @@ function PlanTab({ data, preselected }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/*
+Автопродление. Карточка живёт своей жизнью: своё состояние с сервера, свои
+действия. Главной кнопкой вкладки остаётся «Продлить» — здесь всё тише,
+действия оформлены контуром, а не заливкой.
+*/
+function RecurringCard({ onChanged }) {
+  const { t, f } = useI18n();
+  const [rec, setRec] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [plan, setPlan] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const fresh = await api.recurring();
+      setRec(fresh);
+      if (fresh.available.length && !fresh.available.some((p) => p.code === plan)) {
+        setPlan(fresh.available[0].code);
+      }
+    } catch {
+      setRec({ status: null, available: [] });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (rec === null) {
+    return (
+      <div className="ac-card ac-rec">
+        <h2>{t("account.recTitle")}</h2>
+        <p className="ac-empty">{t("account.recLoading")}</p>
+      </div>
+    );
+  }
+
+  const interval = (code) => t(code === "year" ? "account.recYear" : "account.recMonth");
+  const live = rec.status === "pending" || rec.status === "active" || rec.status === "past_due";
+
+  const connect = async () => {
+    setBusy(true);
+    setNote("");
+    try {
+      const fresh = await api.recurringCreate(plan);
+      if (fresh.redirect_url) {
+        window.location.assign(fresh.redirect_url);
+        return;
+      }
+      setRec(fresh);
+    } catch (err) {
+      setNote(err instanceof ApiError ? err.message : t("account.recFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancel = async () => {
+    setBusy(true);
+    setNote("");
+    try {
+      setRec(await api.recurringCancel());
+      setNote(t("account.recCancelled"));
+      onChanged();
+    } catch (err) {
+      setNote(err instanceof ApiError ? err.message : t("account.recFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="ac-card ac-rec">
+      <h2>{t("account.recTitle")}</h2>
+
+      {!live && rec.available.length === 0 && (
+        <p className="ac-empty">{t("account.recUnavailable")}</p>
+      )}
+
+      {!live && rec.available.length > 0 && (
+        <>
+          <p className="ac-rec-text">{t("account.recOffer")}</p>
+          <div className="ac-rec-row">
+            <div className="ac-rec-opts" role="radiogroup" aria-label={t("account.recTitle")}>
+              {rec.available.map((p) => (
+                <button
+                  key={p.code}
+                  type="button"
+                  role="radio"
+                  aria-checked={plan === p.code}
+                  className={`ac-rec-opt${plan === p.code ? " on" : ""}`}
+                  onClick={() => setPlan(p.code)}
+                >
+                  <span className="ac-rec-opt-name">{p.title}</span>
+                  <span className="ac-rec-opt-price">
+                    {f.moneyFromKopecks(p.amount_kopecks, p.currency)} {interval(p.interval)}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <button className="btn btn-outline ac-rec-btn" disabled={busy} onClick={connect}>
+              {busy ? t("account.recConnectBusy") : t("account.recConnect")}
+            </button>
+          </div>
+        </>
+      )}
+
+      {rec.status === "pending" && (
+        <div className="ac-rec-row">
+          <p className="ac-rec-text">{t("account.recPending")}</p>
+          <div className="ac-rec-actions">
+            {rec.redirect_url && (
+              <a className="btn btn-outline ac-rec-btn" href={rec.redirect_url}>
+                {t("account.recContinue")}
+              </a>
+            )}
+            <button className="ac-rec-cancel" disabled={busy} onClick={cancel}>
+              {busy ? t("account.recCancelBusy") : t("account.recCancel")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {rec.status === "active" && (
+        <div className="ac-rec-row">
+          <p className="ac-rec-text">
+            {t("account.recActive", {
+              plan: rec.plan_title,
+              price: f.moneyFromKopecks(rec.amount_kopecks, rec.currency),
+              interval: interval(rec.interval),
+            })}
+            {rec.next_charge_at &&
+              t("account.recNext", { date: f.shortDate(rec.next_charge_at) })}
+          </p>
+          <button className="ac-rec-cancel" disabled={busy} onClick={cancel}>
+            {busy ? t("account.recCancelBusy") : t("account.recCancel")}
+          </button>
+        </div>
+      )}
+
+      {rec.status === "past_due" && (
+        <div className="ac-rec-row">
+          <p className="ac-rec-text">{t("account.recPastDue")}</p>
+          <button className="ac-rec-cancel" disabled={busy} onClick={cancel}>
+            {busy ? t("account.recCancelBusy") : t("account.recCancel")}
+          </button>
+        </div>
+      )}
+
+      {note && <p className="ac-rec-note">{note}</p>}
     </div>
   );
 }

@@ -44,6 +44,7 @@ from .models import (
     normalize_email,
     utcnow,
 )
+from .payments import platega
 from .payments.base import WebhookRejected
 from .security import client_ip, verify_password
 
@@ -331,9 +332,22 @@ async def billing_webhook(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "неизвестный провайдер") from None
 
     try:
-        result = services.billing_webhook.handle(
-            db, provider_name=provider_name, headers=headers, raw_body=raw_body, client_ip=ip
-        )
+        if provider_name == payments.PlategaProvider.name:
+            # Подлинность до разбора: у Platega один адрес на все события, и
+            # прежде чем смотреть, платёж это или подписка, сверяем секрет.
+            platega.authenticate(headers)
+            if platega.is_subscription_event(raw_body):
+                result = services.recurring.handle_webhook(
+                    db, headers=headers, raw_body=raw_body, client_ip=ip
+                )
+            else:
+                result = services.billing_webhook.handle(
+                    db, provider_name=provider_name, headers=headers, raw_body=raw_body, client_ip=ip
+                )
+        else:
+            result = services.billing_webhook.handle(
+                db, provider_name=provider_name, headers=headers, raw_body=raw_body, client_ip=ip
+            )
     except WebhookRejected as exc:
         # Неподписанное уведомление — 403 и запись в лог. Тело не разбираем
         # и в базу не кладём: это данные неизвестного происхождения.
@@ -1139,13 +1153,6 @@ def renew(
     оплата и устроена так, как устроена.
     """
     user, _ = who
-    email = user.email_plain
-    if not email:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "к учётке не привязана почта — добавьте её в кабинете",
-            headers={"X-Error-Code": "email_required"},
-        )
 
     plan_code = body.plan_code
     if not plan_code:
@@ -1155,11 +1162,13 @@ def renew(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "выберите тариф")
 
     try:
-        order = services.create_order(
+        # Заказ привязан к учётке, а не к почте: продление не должно
+        # требовать почту, если человеку хватает кабинета и Telegram.
+        order = services.create_order_for_user(
             db,
+            user,
             plan_code=plan_code,
-            email=email,
-            telegram_id=user.telegram_id,
+            origin="site",
             ip=client_ip(request),
             # Продление с iPhone — тот же повод выдать ключ AmneziaVPN, что
             # и первая покупка: приложения там по-прежнему нет.
@@ -1215,6 +1224,114 @@ def tunnel_file_download(db: OrmSession = Depends(get_db)) -> Response:
             "Cache-Control": "no-cache",
         },
     )
+
+
+# --- автопродление ------------------------------------------------------------
+
+
+class RecurringPlanOut(BaseModel):
+    """Тариф, на который можно подключить автосписание."""
+
+    code: str
+    title: str
+    amount_kopecks: int
+    currency: str
+    interval: str  # month | year
+
+
+class RecurringOut(BaseModel):
+    """
+    Автосписание глазами кабинета.
+
+    `subscription` пуст, когда подключать ещё нечего или уже нечего, — тогда
+    кабинет показывает предложение из `available`.
+    """
+
+    status: str | None = None
+    plan_code: str | None = None
+    plan_title: str | None = None
+    amount_kopecks: int | None = None
+    currency: str | None = None
+    interval: str | None = None
+    next_charge_at: dt.datetime | None = None
+    last_charge_error: str | None = None
+    # Ссылка на привязку счёта — только пока подписка ждёт подтверждения.
+    redirect_url: str | None = None
+    available: list[RecurringPlanOut] = []
+
+
+def _recurring_out(db: OrmSession, user: User) -> RecurringOut:
+    sub = services.recurring.get_live(db, user)
+    plans_by_code = {plan.code: plan for plan in services.site_plans(db)}
+    available = [
+        RecurringPlanOut(
+            code=plan.code,
+            title=plan.name,
+            amount_kopecks=plan.price_kopecks,
+            currency=plan.currency,
+            interval=services.recurring.plan_interval(plan) or "month",
+        )
+        for plan in services.recurring.eligible_plans(db)
+    ]
+    if sub is None:
+        return RecurringOut(available=available)
+    plan = plans_by_code.get(sub.plan_code)
+    return RecurringOut(
+        status=sub.status,
+        plan_code=sub.plan_code,
+        plan_title=plan.name if plan else sub.plan_code,
+        amount_kopecks=sub.amount_kopecks,
+        currency=sub.currency,
+        interval=sub.interval,
+        next_charge_at=sub.next_charge_at,
+        last_charge_error=sub.last_charge_error,
+        redirect_url=sub.redirect_url if sub.status == "pending" else None,
+        available=available,
+    )
+
+
+@router.get("/account/recurring", response_model=RecurringOut)
+def recurring_status(
+    who: tuple[User, Session] = Depends(current_user), db: OrmSession = Depends(get_db)
+) -> RecurringOut:
+    user, _ = who
+    return _recurring_out(db, user)
+
+
+class RecurringIn(BaseModel):
+    plan_code: str
+
+
+@router.post("/account/recurring", response_model=RecurringOut, status_code=status.HTTP_201_CREATED)
+def recurring_create(
+    body: RecurringIn,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> RecurringOut:
+    user, _ = who
+    try:
+        sub = services.recurring.create(db, user, body.plan_code, origin="site")
+    except services.PanelError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    out = _recurring_out(db, user)
+    # Свежесозданной подписке ссылка нужна сразу — человек уходит по ней.
+    out.redirect_url = sub.redirect_url
+    return out
+
+
+@router.post("/account/recurring/cancel", response_model=RecurringOut)
+def recurring_cancel(
+    who: tuple[User, Session] = Depends(current_user), db: OrmSession = Depends(get_db)
+) -> RecurringOut:
+    user, _ = who
+    sub = services.recurring.get_live(db, user)
+    if sub is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "автосписание не подключено")
+    try:
+        services.recurring.cancel(db, sub)
+    except services.PanelError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return _recurring_out(db, user)
 
 
 # --- скачивание ---------------------------------------------------------------

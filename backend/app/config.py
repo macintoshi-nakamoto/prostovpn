@@ -112,7 +112,7 @@ class Settings(BaseSettings):
     signup_max_per_ip: int = 3
     signup_window_minutes: int = 1440
 
-    # Активный провайдер оплаты: mock | yookassa | cryptocloud.
+    # Активный провайдер оплаты: mock | yookassa | cryptocloud | platega.
     payment_provider: str = "mock"
 
     # MockProvider: сам себе отправляет вебхук, чтобы весь путь оплаты можно
@@ -134,6 +134,18 @@ class Settings(BaseSettings):
     cryptocloud_shop_id: str = ""
     # Секрет для проверки подписи уведомления CryptoCloud.
     cryptocloud_secret: str = ""
+
+    # Platega: разовые платежи и подписки с автосписанием. Уведомления она
+    # авторизует теми же X-MerchantId и X-Secret, что и наши запросы к ней.
+    platega_merchant_id: str = ""
+    platega_secret: str = ""
+    platega_api_url: str = "https://app.platega.io"
+    # Каким методом платят разовые заказы: 2 — СБП, 11 — карты, 13 — крипта,
+    # 14 — SberPay. Подписки метод не выбирают, у них свой (6).
+    platega_payment_method: int = 2
+
+    # Куда возвращать человека после оплаты заказа, созданного из бота.
+    telegram_bot_username: str = "prostovpnn_bot"
 
     # Заказ без оплаты живёт сутки, дальше уходит в expired.
     order_ttl_hours: int = 24

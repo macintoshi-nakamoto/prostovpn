@@ -94,3 +94,30 @@ def renewed_text(login: str, expires_at: str, site: str, ios: bool = False) -> s
         + ("\nКлюч для AmneziaVPN тоже прежний." if ios else "")
         + f"\n\nЛичный кабинет: {site}/account.html"
     )
+
+
+def recurring_on_text(
+    plan_name: str, price_label: str, interval_label: str, next_charge: str, site: str
+) -> str:
+    next_line = f"Следующее списание — {next_charge}.\n" if next_charge else ""
+    return (
+        f"Автопродление подключено: «{plan_name}», {price_label} {interval_label}.\n"
+        f"{next_line}\n"
+        f"Отключить можно в любой момент: {site}/account"
+    )
+
+
+def recurring_failed_text(plan_name: str, price_label: str, expires_at: str, site: str) -> str:
+    return (
+        f"Не получилось списать оплату за продление — «{plan_name}», {price_label}.\n\n"
+        f"Доступ действует до {expires_at}. Чтобы он не прервался, "
+        f"продлите подписку вручную: {site}/account"
+    )
+
+
+def recurring_off_text(plan_name: str, expires_at: str, site: str) -> str:
+    return (
+        f"Автопродление по тарифу «{plan_name}» отключено — больше ничего "
+        f"списываться не будет.\n\n"
+        f"Оплаченный доступ действует до {expires_at}."
+    )

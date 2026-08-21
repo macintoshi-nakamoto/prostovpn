@@ -193,6 +193,22 @@ export const api = {
   resetPassword: (token, password) =>
     request("/api/v1/password/reset", { method: "POST", body: { token, password } }),
 
+  // Статус заказа опрашивает страница возврата с оплаты: оплаченным заказ
+  // делает только вебхук провайдера, возврат в браузере ничего не значит.
+  orderStatus: (orderId) => request(`/api/v1/orders/${encodeURIComponent(orderId)}/status`),
+
+  recurring: () => request("/api/v1/account/recurring", { auth: true }),
+
+  recurringCreate: (planCode) =>
+    request("/api/v1/account/recurring", {
+      method: "POST",
+      auth: true,
+      body: { plan_code: planCode },
+    }),
+
+  recurringCancel: () =>
+    request("/api/v1/account/recurring/cancel", { method: "POST", auth: true }),
+
   logout: () => request("/api/v1/logout", { method: "POST", auth: true }).catch(() => {}),
 
   plans: () => request("/api/v1/plans"),

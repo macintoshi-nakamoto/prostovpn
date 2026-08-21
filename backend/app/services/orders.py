@@ -145,6 +145,52 @@ def create_order(
         # заказ, человек мог купить по той же почте с другого устройства.
         is_renewal=users.find_by_email(db, address) is not None,
     )
+    return _register_with_provider(db, order, name)
+
+
+def create_order_for_user(
+    db: OrmSession,
+    user: User,
+    plan_code: str,
+    origin: str = "site",
+    ip: str | None = None,
+    provider_name: str | None = None,
+    platform: str | None = None,
+) -> Order:
+    """
+    Заказ для уже известной учётки: продление из кабинета или из бота.
+
+    Отличие от `create_order` одно, но принципиальное: заказ привязан к
+    человеку по `user_id`, а не по почте. У пришедших из Telegram почты
+    может не быть вовсе, и выдача не должна от неё зависеть — а завести
+    вторую учётку на ту же почту такой заказ не может по построению.
+    """
+    plan = db.scalar(select(Plan).where(Plan.code == plan_code))
+    if plan is None or not plan.is_active:
+        raise OrderError("такого тарифа нет")
+    if plan.price_kopecks <= 0:
+        raise OrderError("этот тариф не продаётся")
+
+    name = provider_name or payments.active_name()
+    order = Order(
+        plan_code=plan.code,
+        email=user.email_plain or "",
+        telegram_id=user.telegram_id,
+        amount_kopecks=plan.price_kopecks,
+        currency=plan.currency,
+        status=OrderStatus.PENDING.value,
+        provider=name,
+        ip=ip,
+        platform=(platform or "").strip().lower() or None,
+        origin=origin,
+        user_id=user.id,
+        is_renewal=True,
+    )
+    return _register_with_provider(db, order, name)
+
+
+def _register_with_provider(db: OrmSession, order: Order, name: str) -> Order:
+    """Общий хвост создания: записать заказ и получить ссылку на оплату."""
     db.add(order)
     db.commit()
     db.refresh(order)
@@ -242,7 +288,13 @@ def fulfil(db: OrmSession, order: Order, manual_by: int | None = None) -> Fulfil
     if plan is None:
         raise PanelError(f"тариф «{order.plan_code}» удалён, выдать нечего")
 
-    existing = users.find_by_email(db, order.email)
+    # Заказ, привязанный к учётке, выдаётся ей же: почты у человека из бота
+    # может не быть, а у человека с сайта она могла смениться между заказом
+    # и оплатой. Поиск по почте — путь для заказов с витрины, где кроме неё
+    # ничего нет.
+    existing = db.get(User, order.user_id) if order.user_id else None
+    if existing is None and order.email:
+        existing = users.find_by_email(db, order.email)
     password: str | None = None
 
     if existing is not None:
@@ -385,30 +437,34 @@ def _enqueue_delivery(db: OrmSession, order: Order, user: User, is_renewal: bool
     from ..models import DeliveryJob
 
     template = "renewed" if is_renewal else "credentials"
-    db.add(
-        DeliveryJob(
-            channel="email",
-            template=template,
-            target=order.email,
-            user_id=user.id,
-            order_id=order.id,
+    # Почта на заказе бывает пустой (покупка из бота без привязанной почты):
+    # тогда письма нет, а доступ доставляется в Telegram строкой ниже.
+    email = order.email or user.email_plain
+    if email:
+        db.add(
+            DeliveryJob(
+                channel="email",
+                template=template,
+                target=email,
+                user_id=user.id,
+                order_id=order.id,
+            )
         )
-    )
-    # Чек — отдельным письмом, а не абзацем в письме с доступами.
-    #
-    # Их читают в разное время и по разным поводам: доступы открывают сразу,
-    # чек ищут через месяц, когда сверяют списания. Склеенные в одно письмо,
-    # они мешают и тому и другому — а ещё чек уходит и при продлении, когда
-    # доступы человеку заново не нужны.
-    db.add(
-        DeliveryJob(
-            channel="email",
-            template="receipt",
-            target=order.email,
-            user_id=user.id,
-            order_id=order.id,
+        # Чек — отдельным письмом, а не абзацем в письме с доступами.
+        #
+        # Их читают в разное время и по разным поводам: доступы открывают
+        # сразу, чек ищут через месяц, когда сверяют списания. Склеенные в
+        # одно письмо, они мешают и тому и другому — а ещё чек уходит и при
+        # продлении, когда доступы человеку заново не нужны.
+        db.add(
+            DeliveryJob(
+                channel="email",
+                template="receipt",
+                target=email,
+                user_id=user.id,
+                order_id=order.id,
+            )
         )
-    )
     if order.telegram_id:
         db.add(
             DeliveryJob(

@@ -170,6 +170,77 @@ def renewed_body(login: str, expires_at: str, ios: bool = False) -> tuple[str, s
     return text, html
 
 
+def recurring_on_body(
+    plan_name: str, price_label: str, interval_label: str, next_charge: str
+) -> tuple[str, str]:
+    """Автопродление подключено: что, почём и когда спишется."""
+    base = settings().site_url.rstrip("/")
+    next_line = f"Следующее списание — {next_charge}.\n" if next_charge else ""
+    text = f"""Здравствуйте!
+
+Автопродление подключено: тариф «{plan_name}», {price_label} {interval_label}.
+{next_line}
+Доступ будет продлеваться сам, каждое продление мы подтверждаем письмом.
+Отключить автопродление можно в любой момент в личном кабинете:
+{base}/account
+
+{_support_line()}"""
+    next_html = f'<p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">Следующее списание — {next_charge}.</p>' if next_charge else ""
+    html = f"""<!doctype html>
+<html lang="ru"><body style="margin:0;padding:32px 16px;background:#0b0b0c;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ea">
+<div style="max-width:520px;margin:0 auto">
+  <p style="font-size:15px;line-height:1.6;margin:0 0 20px">Автопродление подключено: тариф «{plan_name}», <b style="color:#ff6a1f">{price_label} {interval_label}</b>.</p>
+  {next_html}
+  <p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">Доступ будет продлеваться сам, каждое продление мы подтверждаем письмом. Отключить автопродление можно в любой момент в <a href="{base}/account" style="color:#ff6a1f;text-decoration:none">личном кабинете</a>.</p>
+  {_support_html()}
+</div></body></html>"""
+    return text, html
+
+
+def recurring_failed_body(plan_name: str, price_label: str, expires_at: str) -> tuple[str, str]:
+    """Списание не прошло: что случилось и что делать."""
+    base = settings().site_url.rstrip("/")
+    text = f"""Здравствуйте!
+
+Не получилось списать оплату за продление — тариф «{plan_name}», {price_label}.
+Банк отклонил платёж или на счёте не хватило средств.
+
+Доступ действует до {expires_at}. Чтобы он не прервался, продлите подписку
+вручную в личном кабинете: {base}/account
+
+{_support_line()}"""
+    html = f"""<!doctype html>
+<html lang="ru"><body style="margin:0;padding:32px 16px;background:#0b0b0c;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ea">
+<div style="max-width:520px;margin:0 auto">
+  <p style="font-size:15px;line-height:1.6;margin:0 0 20px">Не получилось списать оплату за продление — тариф «{plan_name}», {price_label}. Банк отклонил платёж или на счёте не хватило средств.</p>
+  <p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">Доступ действует до <b style="color:#ff6a1f">{expires_at}</b>. Чтобы он не прервался, продлите подписку вручную в <a href="{base}/account" style="color:#ff6a1f;text-decoration:none">личном кабинете</a>.</p>
+  {_support_html()}
+</div></body></html>"""
+    return text, html
+
+
+def recurring_off_body(plan_name: str, expires_at: str) -> tuple[str, str]:
+    """Автопродление отключено: оплаченные дни остаются."""
+    base = settings().site_url.rstrip("/")
+    text = f"""Здравствуйте!
+
+Автопродление по тарифу «{plan_name}» отключено. Больше ничего списываться
+не будет.
+
+Оплаченный доступ действует до {expires_at}. Продлить можно в любой момент
+в личном кабинете: {base}/account
+
+{_support_line()}"""
+    html = f"""<!doctype html>
+<html lang="ru"><body style="margin:0;padding:32px 16px;background:#0b0b0c;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ea">
+<div style="max-width:520px;margin:0 auto">
+  <p style="font-size:15px;line-height:1.6;margin:0 0 20px">Автопродление по тарифу «{plan_name}» отключено. Больше ничего списываться не будет.</p>
+  <p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">Оплаченный доступ действует до <b style="color:#ff6a1f">{expires_at}</b>. Продлить можно в любой момент в <a href="{base}/account" style="color:#ff6a1f;text-decoration:none">личном кабинете</a>.</p>
+  {_support_html()}
+</div></body></html>"""
+    return text, html
+
+
 # --- отправка -----------------------------------------------------------------
 
 

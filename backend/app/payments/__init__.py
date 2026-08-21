@@ -26,12 +26,14 @@ from .base import (
 )
 from .cryptocloud import CryptoCloudProvider
 from .mock import MockProvider
+from .platega import PlategaProvider
 from .yookassa import YooKassaProvider
 
 _FACTORIES = {
     MockProvider.name: MockProvider,
     YooKassaProvider.name: YooKassaProvider,
     CryptoCloudProvider.name: CryptoCloudProvider,
+    PlategaProvider.name: PlategaProvider,
 }
 
 KNOWN = tuple(_FACTORIES)
@@ -79,6 +81,7 @@ __all__ = [
     "KIND_SUCCEEDED",
     "CryptoCloudProvider",
     "MockProvider",
+    "PlategaProvider",
     "PaymentError",
     "PaymentProvider",
     "PaymentSession",

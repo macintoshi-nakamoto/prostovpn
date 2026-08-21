@@ -1043,6 +1043,10 @@ class Order(Base):
     failure_reason: Mapped[str | None] = mapped_column(Text, default=None)
     ip: Mapped[str | None] = mapped_column(String(64), default=None)
 
+    # Откуда пришёл заказ: site | bot | recurring. От этого зависит, куда
+    # возвращать человека с платёжной формы и какие каналы доставки нужны.
+    origin: Mapped[str] = mapped_column(String(16), default="site")
+
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
     paid_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
@@ -1077,6 +1081,80 @@ class BillingEvent(Base):
     # Чем закончилась обработка: ok, duplicate, amount_mismatch, unknown_order.
     result: Mapped[str | None] = mapped_column(String(32), default=None)
     received_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class RecurringStatus(str, enum.Enum):
+    """
+    Жизнь автосписания на стороне провайдера.
+
+    `pending` — ссылка на привязку счёта создана, человек ещё не подтвердил.
+    Дальше статусами управляют только вебхуки провайдера и явная отмена;
+    сама панель их не выдумывает.
+    """
+
+    PENDING = "pending"
+    ACTIVE = "active"
+    PAST_DUE = "past_due"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+
+
+class RecurringSub(Base):
+    """
+    Подписка с автосписанием у платёжного провайдера.
+
+    Отдельная сущность от `Subscription` намеренно: та — оплаченный период
+    доступа, эта — обещание провайдера списывать деньги по расписанию. Одно
+    успешное списание порождает обычный заказ и обычный период доступа —
+    вся выдача идёт тем же путём, что и разовая оплата, со всеми её
+    рубежами.
+    """
+
+    __tablename__ = "recurring_subs"
+    __table_args__ = (
+        UniqueConstraint("provider", "external_id", name="uq_recurring_provider_external"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), default="platega")
+    # Идентификатор подписки у провайдера: по нему приходят списания.
+    external_id: Mapped[str] = mapped_column(String(128), index=True)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Код тарифа денормализован по той же причине, что и в Subscription:
+    # тариф могут удалить, а история списаний должна остаться читаемой.
+    plan_code: Mapped[str] = mapped_column(String(64))
+    amount_kopecks: Mapped[int] = mapped_column(Integer)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB")
+    # month | year — интервал списаний у провайдера.
+    interval: Mapped[str] = mapped_column(String(16), default="month")
+
+    status: Mapped[str] = mapped_column(
+        String(16), default=RecurringStatus.PENDING.value, index=True
+    )
+    # Ссылка на страницу привязки счёта: живёт, пока подписка pending, чтобы
+    # человек мог вернуться и дооформить.
+    redirect_url: Mapped[str | None] = mapped_column(Text, default=None)
+
+    next_charge_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    last_charge_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    # Последняя беда со списанием — показывается человеку в кабинете.
+    last_charge_error: Mapped[str | None] = mapped_column(Text, default=None)
+
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+    activated_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    cancelled_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    user: Mapped[User] = relationship()
+
+    @property
+    def is_live(self) -> bool:
+        """Подписка, о которой стоит говорить в кабинете: ждёт или работает."""
+        return self.status in (
+            RecurringStatus.PENDING.value,
+            RecurringStatus.ACTIVE.value,
+            RecurringStatus.PAST_DUE.value,
+        )
 
 
 class DeliveryJob(Base):

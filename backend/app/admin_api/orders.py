@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession, selectinload
 
@@ -256,3 +257,51 @@ def list_events(
         )
         for row in rows
     ]
+
+
+# --- заказ из бота ------------------------------------------------------------
+
+
+class BotOrderIn(BaseModel):
+    login: str
+    plan_code: str
+
+
+class BotOrderOut(BaseModel):
+    id: str
+    status: str
+    plan_code: str
+    amount_kopecks: int
+    currency: str
+    redirect_url: str | None = None
+
+
+@router.post("/for-user", response_model=BotOrderOut, status_code=status.HTTP_201_CREATED)
+def create_for_user(
+    body: BotOrderIn,
+    db: OrmSession = Depends(get_db),
+    admin: Admin = Depends(current_admin),
+) -> BotOrderOut:
+    """
+    Заказ для оплаты из бота: человек уже вошёл, тариф выбрал — нужна
+    ссылка на платёжную форму. Дальше всё как у сайта: провайдер, вебхук,
+    выдача; бот только показывает кнопку с этой ссылкой.
+    """
+    user = db.scalar(select(User).where(User.login == body.login))
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"учётка «{body.login}» не найдена")
+
+    try:
+        order = services.create_order_for_user(db, user, plan_code=body.plan_code, origin="bot")
+    except services.OrderError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    audit(db, admin, "order.create_bot", order.id, f"{user.login}, {body.plan_code}")
+    return BotOrderOut(
+        id=order.id,
+        status=order.status,
+        plan_code=order.plan_code,
+        amount_kopecks=order.amount_kopecks,
+        currency=order.currency,
+        redirect_url=order.redirect_url,
+    )

@@ -18,6 +18,7 @@ from . import (
     orders,
     passwords,
     ratelimit,
+    recurring,
     tunnel,
 )
 from .diagnostics import can_serve, check as check_server
@@ -48,6 +49,7 @@ from .keys import active_servers, ensure_keys, find_key, issue_key, known_device
 from .orders import (
     OrderError,
     create_order,
+    create_order_for_user,
     expire_stale,
     fulfil,
     public_plans,

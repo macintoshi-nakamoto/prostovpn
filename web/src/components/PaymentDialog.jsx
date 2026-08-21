@@ -7,17 +7,16 @@ import "./payment-dialog.css";
 /**
  * Выбор способа оплаты.
  *
- * Пока настоящая оплата есть только в боте (Telegram Stars), поэтому окно
- * честно говорит, что работает, а что готовится: способ со словом «скоро»
- * нажать нельзя, и человек не упирается в пустую форму, решив, что
- * сломалось. Ссылка ведёт в того же бота, что и поддержка, — одно окно на
- * всё, см. contacts.js.
+ * СБП — настоящая оплата: панель создаёт заказ и уводит на платёжную
+ * форму провайдера. Telegram Stars живут в боте (ссылка ведёт в того же
+ * бота, что и поддержка, — одно окно на всё, см. contacts.js), а способ со
+ * словом «скоро» нажать нельзя: лучше честная пометка, чем пустая форма.
  *
  * Анимация — только `opacity` и `transform`: их браузер считает на
  * видеокарте, окно открывается плавно даже на слабом телефоне. Тем, кто
  * просил в системе меньше движения, окно появляется без него совсем.
  */
-export function PaymentDialog({ open, plan, onClose }) {
+export function PaymentDialog({ open, plan, busy = false, onSbp, onClose }) {
   const { t, f } = useI18n();
 
   useEffect(() => {
@@ -64,15 +63,25 @@ export function PaymentDialog({ open, plan, onClose }) {
             <span className="pay-method-go">→</span>
           </a>
 
-          <button className="pay-method" type="button" disabled>
+          {/* СБП — настоящая оплата: заказ в панели и платёжная форма
+              провайдера. Пока заказ создаётся, окно закрыть нельзя — повторный
+              клик наплодил бы заказов. */}
+          <button
+            className="pay-method"
+            type="button"
+            disabled={!onSbp || busy}
+            onClick={onSbp}
+          >
             <span className="pay-icon">
               <SbpIcon />
             </span>
             <span className="pay-method-body">
               <span className="pay-method-name">{t("pay.sbp")}</span>
-              <span className="pay-method-sub">{t("pay.soonSub")}</span>
+              <span className="pay-method-sub">
+                {busy ? t("pay.sbpBusy") : t("pay.sbpSub")}
+              </span>
             </span>
-            <span className="pay-method-soon">{t("pay.soon")}</span>
+            <span className="pay-method-go">→</span>
           </button>
 
           <button className="pay-method" type="button" disabled>

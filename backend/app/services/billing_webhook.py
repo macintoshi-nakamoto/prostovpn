@@ -178,6 +178,16 @@ def _order_exists(db: OrmSession, order_id: str | None) -> bool:
     return bool(order_id) and db.get(Order, order_id) is not None
 
 
+# Те же рубежи нужны событиям подписок (services/recurring.py): застолбить
+# вставкой и дописать итог. Публичные имена, чтобы не звать приватное чужое.
+def claim_event(db: OrmSession, event: WebhookEvent) -> bool:
+    return _claim(db, event)
+
+
+def mark_event(db: OrmSession, event_id: str, result: str, detail: str | None = None) -> None:
+    _mark(db, event_id, result, detail)
+
+
 def _mark(db: OrmSession, event_id: str, result: str, detail: str | None = None) -> None:
     """Дописывает итог в уже записанное событие."""
     row = db.get(BillingEvent, event_id)
@@ -365,7 +375,11 @@ def retry_stuck(db: OrmSession, limit: int = 25) -> int:
                         BillingEvent.result.is_(None),
                         BillingEvent.received_at < deadline,
                     ),
-                )
+                ),
+                # События подписок (sub.status, sub.charge) живут по своим
+                # правилам в services/recurring.py: заказный _process по ним
+                # только зря пометил бы «не восстановить».
+                or_(BillingEvent.kind.is_(None), BillingEvent.kind.notlike("sub.%")),
             )
             .order_by(BillingEvent.received_at)
             .limit(limit)

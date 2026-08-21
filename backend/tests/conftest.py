@@ -33,6 +33,10 @@ os.environ.update(
         "PANEL_ADMIN_LOGIN": "admin",
         "PANEL_ADMIN_PASSWORD": "admin",
         "PANEL_PAYMENT_PROVIDER": "mock",
+        # Platega в тестах не активный провайдер, но её вебхук и подписки
+        # проверяются напрямую — ключи нужны для сверки заголовков.
+        "PANEL_PLATEGA_MERCHANT_ID": "11111111-2222-3333-4444-555555555555",
+        "PANEL_PLATEGA_SECRET": "test-platega-secret",
         "PANEL_MAIL_PROVIDER": "console",
         "PANEL_SECRETS_KEY": "test-secrets-key-for-pytest",
         "PANEL_SITE_DIR": "",

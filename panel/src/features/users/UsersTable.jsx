@@ -1,6 +1,6 @@
 import { ago, bytes, date, days, money, trafficLimit } from "../../lib/format";
 import { trafficColor, userStatus } from "../../lib/status";
-import { Bar, CellName, Dot, StatusDot } from "../../ui";
+import { Bar, CellName, Chip, Dot, StatusDot } from "../../ui";
 
 /**
  * Колонки списка пользователей.
@@ -17,6 +17,7 @@ export const userColumns = [
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
         <Dot color={userStatus(u.status).color} glow={u.isOnline} />
         <CellName title={u.name || u.login} sub={u.login} />
+        {u.isFree && <Chip color="var(--gd-gold)">фри</Chip>}
       </div>
     ),
   },

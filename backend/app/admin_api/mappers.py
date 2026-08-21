@@ -124,6 +124,7 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         status=user_status(user, moment),
         is_active=user.is_active,
         is_blocked=user.is_blocked,
+        is_free=user.is_free,
         plan=sub.plan if sub else None,
         plan_name=plan_ref.name if plan_ref else (sub.plan if sub else None),
         price=Decimal(str(sub.price)) if sub else Decimal(0),
@@ -284,6 +285,7 @@ def user_detail(
                 currency=p.currency,
                 method=p.method,
                 comment=p.comment,
+                external_id=p.external_id,
                 paid_at=p.paid_at,
             )
             for p in sorted(user.payments, key=lambda p: p.paid_at, reverse=True)

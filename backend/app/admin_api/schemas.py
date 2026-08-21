@@ -88,6 +88,9 @@ class UserRow(Schema):
     status: str
     is_active: bool
     is_blocked: bool
+    # Бесплатный доступ: продления не пишут платежей, прогноз выручки
+    # эту учётку не ждёт.
+    is_free: bool = False
 
     plan: str | None
     plan_name: str | None
@@ -152,6 +155,8 @@ class PaymentOut(Schema):
     currency: str
     method: str | None
     comment: str | None
+    # Номер транзакции у провайдера — по нему платёж ищут в кабинете Platega.
+    external_id: str | None = None
     paid_at: dt.datetime
 
 
@@ -290,6 +295,7 @@ class UserUpdate(Schema):
     contact: str | None = None
     email: str | None = None
     note: str | None = None
+    is_free: bool | None = None
 
 
 class TrafficLimitIn(Schema):

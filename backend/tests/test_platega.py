@@ -388,3 +388,90 @@ def test_charge_for_unknown_subscription_is_kept_for_admin(client, fake_api):
     )
     assert r.status_code == 200
     assert r.json()["result"] == "unknown_sub"
+
+
+# --- переиспользование платёжной ссылки ---------------------------------------
+
+
+def test_pending_order_with_live_link_is_reused(client, fake_api):
+    """Повторное «оплатить» возвращает тот же заказ, пока ссылка жива."""
+    order_id = _paid_user(client, fake_api, "platega-reuse@example.com")
+    with SessionLocal() as db:
+        user_id = db.get(Order, order_id).user_id
+
+    fake_api["routes"][("POST", "/transaction/process")] = {
+        "transactionId": "tx-reuse-1",
+        "redirect": "https://pay.platega.io/?id=tx-reuse-1",
+        "expiresIn": "00:30:00",
+    }
+
+    from app.services import create_order_for_user
+
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        first = create_order_for_user(db, user, "basic", provider_name="platega")
+        first_id = first.id
+        assert first.link_expires_at is not None
+
+    # Тот же тариф, живая ссылка — тот же заказ, к Platega не ходим.
+    calls_before = len(fake_api["calls"])
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        second = create_order_for_user(db, user, "basic", provider_name="platega")
+        assert second.id == first_id
+    assert len(fake_api["calls"]) == calls_before
+
+    # Другой тариф — другой заказ: счёт на 199 ₽ не годится для 1499 ₽.
+    fake_api["routes"][("POST", "/transaction/process")] = {
+        "transactionId": "tx-reuse-year",
+        "redirect": "https://pay.platega.io/?id=tx-reuse-year",
+        "expiresIn": "00:30:00",
+    }
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        other = create_order_for_user(db, user, "year", provider_name="platega")
+        assert other.id != first_id
+
+    # Ссылка истекла — заводится новый заказ, старый остаётся ждать крона.
+    import datetime as _dt
+
+    from app.models import utcnow as _utcnow
+
+    with SessionLocal() as db:
+        stale = db.get(Order, first_id)
+        stale.link_expires_at = _utcnow() - _dt.timedelta(minutes=1)
+        db.commit()
+
+    fake_api["routes"][("POST", "/transaction/process")] = {
+        "transactionId": "tx-reuse-2",
+        "redirect": "https://pay.platega.io/?id=tx-reuse-2",
+        "expiresIn": "00:30:00",
+    }
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        third = create_order_for_user(db, user, "basic", provider_name="platega")
+        assert third.id != first_id
+        assert third.provider_payment_id == "tx-reuse-2"
+
+
+def test_recurring_pending_link_is_reused(client, fake_api):
+    """Повторное оформление подписки не плодит их у провайдера."""
+    order_id = _paid_user(client, fake_api, "platega-rec-reuse@example.com")
+    with SessionLocal() as db:
+        user_id = db.get(Order, order_id).user_id
+
+    fake_api["routes"][("POST", "/transaction/process")] = {
+        "transactionId": "sub-reuse-1",
+        "redirect": "https://pay.platega.io/subscription/sub-reuse-1",
+    }
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        first = recurring_service.create(db, user, "basic")
+        first_id = first.id
+
+    calls_before = len(fake_api["calls"])
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        second = recurring_service.create(db, user, "basic")
+        assert second.id == first_id
+    assert len(fake_api["calls"]) == calls_before

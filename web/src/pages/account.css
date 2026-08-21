@@ -961,13 +961,6 @@
   color: var(--text-muted);
   max-width: 560px;
 }
-.ac-rec-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-}
 .ac-rec-opts {
   display: flex;
   gap: 12px;
@@ -1003,15 +996,6 @@
   font-size: 14px;
   color: var(--text-muted);
 }
-.ac-rec-btn {
-  flex: none;
-}
-.ac-rec-actions {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-wrap: wrap;
-}
 /* Отключение — намеренно тихое: текстовая ссылка в стороне от главного пути. */
 .ac-rec-cancel {
   background: none;
@@ -1036,15 +1020,36 @@
 }
 
 @media (max-width: 720px) {
-  .ac-rec-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
   .ac-rec-opt {
     min-width: 0;
     flex: 1;
   }
-  .ac-rec-btn {
-    width: 100%;
-  }
+}
+
+/* Строка автопродления под блоками вкладки: настройка, а не сценарий. */
+.ac-rec-line {
+  margin-top: -6px;
+}
+.ac-rec-line-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 10px 0;
+  font-size: 14px;
+  color: var(--text-muted);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.ac-rec-line-btn:hover {
+  color: var(--accent-dark);
+}
+.ac-rec-line-btn.warn {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+.ac-rec-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
 }

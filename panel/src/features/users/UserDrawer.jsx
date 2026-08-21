@@ -134,6 +134,7 @@ export function UserDrawer({ userId, plans, onClose, onChanged }) {
                 <span className="gd-mono" style={{ fontSize: 12, color: "var(--gd-faint)" }}>
                   {user.publicId}
                 </span>
+                {user.isFree && <Chip color="var(--gd-gold)">бесплатно</Chip>}
               </div>
             </div>
           </>
@@ -547,6 +548,16 @@ function Orders({ user }) {
   );
 }
 
+// Как назвать способ оплаты человеку: внутренние коды в списке выглядят ошибкой.
+const PAY_METHODS = {
+  platega: "СБП",
+  yookassa: "Карта",
+  cryptocloud: "Криптовалюта",
+  mock: "Тестовая оплата",
+  "панель": "Вручную",
+  panel: "Вручную",
+};
+
 function Payments({ user }) {
   if (!user.payments.length) return <Empty>Оплат пока не было</Empty>;
 
@@ -558,7 +569,18 @@ function Payments({ user }) {
             <div key={payment.id} className="gd-r">
               <div style={{ minWidth: 0 }}>
                 <div className="amt">{money(payment.amount, payment.currency)}</div>
-                <div className="gd-cellsub">{payment.comment || payment.method || "Оплата"}</div>
+                <div className="gd-cellsub">{payment.comment || "Оплата"}</div>
+                {(payment.method || payment.externalId) && (
+                  <div className="gd-cellsub" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {payment.method && (
+                      <span>{PAY_METHODS[String(payment.method).toLowerCase()] || payment.method}</span>
+                    )}
+                    {/* Номер транзакции провайдера — по нему платёж ищут в кабинете Platega. */}
+                    {payment.externalId && (
+                      <span className="gd-mono" style={{ fontSize: 11.5 }}>{payment.externalId}</span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="r">{dateTime(payment.paidAt)}</div>
             </div>

@@ -113,8 +113,18 @@ def create(db: OrmSession, user: User, plan_code: str, origin: str = "site") -> 
     if current is not None and current.status != RecurringStatus.PENDING.value:
         raise PanelError("автосписание уже подключено — сначала отключите текущее")
     if current is not None:
-        # Недооформленную бросили и начали заново: старая ссылка живёт
-        # полчаса, держаться за неё смысла нет.
+        # Недооформленная с живой ссылкой на тот же тариф — возвращаем её же:
+        # повторные нажатия не должны плодить подписки у провайдера, а
+        # человек обязан попасть на ту привязку, которую уже начал.
+        fresh = current.created_at > utcnow() - dt.timedelta(minutes=25)
+        if (
+            fresh
+            and current.plan_code == plan.code
+            and current.amount_kopecks == plan.price_kopecks
+            and current.redirect_url
+        ):
+            return current
+        # Другой тариф или протухшая ссылка: старую закрываем, заводим новую.
         current.status = RecurringStatus.FAILED.value
         current.last_charge_error = "привязка не завершена, оформлена новая"
         db.commit()

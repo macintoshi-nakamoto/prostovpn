@@ -42,6 +42,60 @@ class OrderError(PanelError):
     """Заказ создать не удалось — текст показывается человеку на сайте."""
 
 
+# Свежесть платёжной ссылки, когда провайдер не сообщил срок её жизни.
+LINK_FRESH_MINUTES = 10
+# Запас до конца ссылки: почти истёкшую не переиспользуем — человек успеет
+# открыть форму ровно к нулю на таймере.
+LINK_SAFETY_MINUTES = 3
+
+
+def _reusable_order(
+    db: OrmSession,
+    plan: Plan,
+    provider: str,
+    origin: str,
+    user_id: int | None = None,
+    email: str | None = None,
+) -> Order | None:
+    """
+    Неоплаченный заказ с ещё живой платёжной ссылкой — или None.
+
+    Повторное «оплатить» не должно плодить заказы: у провайдера копятся
+    брошенные счета, а человек, закрывший вкладку, при следующем нажатии
+    обязан попасть на тот же счёт, который уже начал оплачивать. Сверяем и
+    сумму: если администратор сменил цену тарифа, старый счёт уже врёт, и
+    его отдавать нельзя.
+    """
+    query = (
+        select(Order)
+        .where(
+            Order.status == OrderStatus.PENDING.value,
+            Order.provider == provider,
+            Order.plan_code == plan.code,
+            Order.origin == origin,
+            Order.amount_kopecks == plan.price_kopecks,
+            Order.currency == plan.currency,
+            Order.redirect_url.is_not(None),
+        )
+        .order_by(Order.created_at.desc())
+    )
+    if user_id is not None:
+        query = query.where(Order.user_id == user_id)
+    elif email:
+        query = query.where(Order.email == email, Order.user_id.is_(None))
+    else:
+        return None
+
+    now = utcnow()
+    for order in db.scalars(query.limit(3)):
+        if order.link_expires_at is not None:
+            if order.link_expires_at > now + dt.timedelta(minutes=LINK_SAFETY_MINUTES):
+                return order
+        elif order.created_at > now - dt.timedelta(minutes=LINK_FRESH_MINUTES):
+            return order
+    return None
+
+
 # --- создание -----------------------------------------------------------------
 
 
@@ -130,6 +184,10 @@ def create_order(
         raise OrderError("этот тариф не продаётся через сайт")
 
     name = provider_name or payments.active_name()
+    existing = _reusable_order(db, plan, name, origin="site", email=address)
+    if existing is not None:
+        return existing
+
     order = Order(
         plan_code=plan.code,
         email=address,
@@ -172,6 +230,10 @@ def create_order_for_user(
         raise OrderError("этот тариф не продаётся")
 
     name = provider_name or payments.active_name()
+    existing = _reusable_order(db, plan, name, origin=origin, user_id=user.id)
+    if existing is not None:
+        return existing
+
     order = Order(
         plan_code=plan.code,
         email=user.email_plain or "",
@@ -206,6 +268,7 @@ def _register_with_provider(db: OrmSession, order: Order, name: str) -> Order:
 
     order.provider_payment_id = session.payment_id
     order.redirect_url = session.redirect_url
+    order.link_expires_at = session.expires_at
     db.commit()
     db.refresh(order)
 

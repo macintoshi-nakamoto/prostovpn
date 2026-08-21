@@ -180,6 +180,14 @@ def update_user(
         user.contact = body.contact
     if body.note is not None:
         user.note = body.note
+    if body.is_free is not None and body.is_free != user.is_free:
+        user.is_free = body.is_free
+        audit(
+            db,
+            admin,
+            "user.free_on" if body.is_free else "user.free_off",
+            user.public_id,
+        )
     if body.email is not None:
         address = normalize_email(body.email)
         # Почта — ключ, по которому повторная покупка находит человека.
@@ -324,7 +332,10 @@ def extend_subscription(
         sub = services.grant_subscription(
             db, user, days=days, plan=plan, price=float(price) if price is not None else None
         )
-        if body.register_payment and price and price > 0:
+        # Бесплатной учётке платёж не пишется, даже если галка осталась
+        # нажатой: выдуманные деньги в кассе хуже, чем лишний клик. Реальные
+        # оплаты таких людей идут через провайдера и в кассу попадают.
+        if body.register_payment and price and price > 0 and not user.is_free:
             services.add_payment(
                 db,
                 amount=price,

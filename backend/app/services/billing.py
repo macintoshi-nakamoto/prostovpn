@@ -342,6 +342,9 @@ def _expected_between(
             Subscription.is_cancelled.is_(False),
             Subscription.auto_renew.is_(True),
             User.is_blocked.is_(False),
+            # Бесплатные учётки денег не приносят по определению — их
+            # «продления» в ожидаемой выручке были бы самообманом.
+            User.is_free.is_(False),
         )
         .order_by(Subscription.expires_at.desc())
     )

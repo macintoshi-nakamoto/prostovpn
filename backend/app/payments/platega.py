@@ -18,6 +18,7 @@ X-MerchantId и X-Secret, которыми мы ходим в её API. Это �
 
 from __future__ import annotations
 
+import datetime as dt
 import hmac
 import json
 import logging
@@ -201,7 +202,11 @@ class PlategaProvider:
         if not transaction_id or not redirect:
             log.error("Platega не вернула transactionId/redirect: %s", data)
             raise PaymentError("Platega не вернула ссылку на оплату")
-        return PaymentSession(payment_id=str(transaction_id), redirect_url=str(redirect))
+        return PaymentSession(
+            payment_id=str(transaction_id),
+            redirect_url=str(redirect),
+            expires_at=_link_deadline(data.get("expiresIn")),
+        )
 
     # --- уведомление ----------------------------------------------------------
 
@@ -280,3 +285,24 @@ class PlategaProvider:
         except PaymentError as exc:
             log.error("не удалось перепроверить транзакцию %s: %s", transaction_id, exc)
             return None
+
+
+def _link_deadline(expires_in: object) -> dt.datetime | None:
+    """
+    «00:15:00» из ответа Platega → момент, когда ссылка умрёт (наивный UTC).
+
+    По этому моменту повторное «оплатить» решает, вернуть тот же заказ или
+    завести новый. Не разобрали — вернём None, и заказ оценят по возрасту.
+    """
+    if not isinstance(expires_in, str) or expires_in.count(":") != 2:
+        return None
+    try:
+        hours, minutes, seconds = (int(part) for part in expires_in.split(":"))
+    except ValueError:
+        return None
+    delta = dt.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+    if delta <= dt.timedelta(0):
+        return None
+    from ..models import utcnow
+
+    return utcnow() + delta

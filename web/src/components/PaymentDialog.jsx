@@ -16,7 +16,7 @@ import "./payment-dialog.css";
  * видеокарте, окно открывается плавно даже на слабом телефоне. Тем, кто
  * просил в системе меньше движения, окно появляется без него совсем.
  */
-export function PaymentDialog({ open, plan, busy = false, onSbp, onClose }) {
+export function PaymentDialog({ open, plan, busy = false, invoice = null, onSbp, onNewInvoice, onClose }) {
   const { t, f } = useI18n();
 
   useEffect(() => {
@@ -51,6 +51,10 @@ export function PaymentDialog({ open, plan, busy = false, onSbp, onClose }) {
           <span className="pay-term">{t("pay.term", { term })}</span>
         </div>
 
+        {invoice ? (
+          <PayInvoice invoice={invoice} onNewInvoice={onNewInvoice} onClose={onClose} />
+        ) : (
+          <>
         <div className="pay-methods">
           <a className="pay-method pay-tg" href={SUPPORT_TELEGRAM} target="_blank" rel="noreferrer">
             <span className="pay-icon pay-icon-tg">
@@ -97,7 +101,66 @@ export function PaymentDialog({ open, plan, busy = false, onSbp, onClose }) {
         </div>
 
         <p className="pay-note">{t("pay.note")}</p>
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+/*
+Состояние выставленного счёта. Страница оплаты открыта в соседней вкладке,
+а это окно живёт своей жизнью: опрос статуса ведёт вкладка тарифов, здесь
+только отражение — ждём, оплачено, истекло. Кнопка-ссылка обязательна:
+блокировщик всплывающих окон мог не пустить автоматическое открытие.
+*/
+function PayInvoice({ invoice, onNewInvoice, onClose }) {
+  const { t } = useI18n();
+
+  if (invoice.status === "paid") {
+    return (
+      <div className="pay-invoice">
+        <span className="pay-inv-mark ok" aria-hidden="true">
+          ✓
+        </span>
+        <p className="pay-inv-title">{t("pay.invPaid")}</p>
+        <p className="pay-inv-sub">{t("pay.invPaidSub")}</p>
+        <button className="btn btn-primary pay-inv-btn" type="button" onClick={onClose}>
+          {t("pay.invDone")}
+        </button>
+      </div>
+    );
+  }
+
+  if (invoice.status === "failed") {
+    return (
+      <div className="pay-invoice">
+        <span className="pay-inv-mark bad" aria-hidden="true">
+          !
+        </span>
+        <p className="pay-inv-title">{t("pay.invFailed")}</p>
+        <p className="pay-inv-sub">{t("pay.invFailedSub")}</p>
+        <button className="btn btn-primary pay-inv-btn" type="button" onClick={onNewInvoice}>
+          {t("pay.invRetry")}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pay-invoice">
+      <span className="pay-inv-pulse" aria-hidden="true" />
+      <p className="pay-inv-title">{t("pay.invWaiting")}</p>
+      <p className="pay-inv-sub">{t("pay.invWaitingSub")}</p>
+      <a
+        className="btn btn-primary pay-inv-btn"
+        href={invoice.url}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {t("pay.invOpen")}
+      </a>
+      <p className="pay-inv-hint">{t("pay.invHint")}</p>
     </div>
   );
 }

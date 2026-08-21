@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ban, Gauge, KeyRound, Power, Smartphone, Trash2, Wallet } from "lucide-react";
+import { Ban, Gauge, Gift, KeyRound, Power, Smartphone, Trash2, Wallet } from "lucide-react";
 import { usersApi } from "../../lib/api";
 import { money, trafficLimit } from "../../lib/format";
 import { Button, Section, Toggle, confirmDialog } from "../../ui";
@@ -36,6 +36,8 @@ export function UserControls({ user, plans, onResult, onDeleted }) {
 
   const toggleActive = () =>
     run("active", () => (user.isActive ? usersApi.disable(user.id) : usersApi.enable(user.id)));
+
+  const toggleFree = () => run("free", () => usersApi.update(user.id, { isFree: !user.isFree }));
 
   const toggleBlock = async () => {
     if (user.isBlocked) return run("block", () => usersApi.unblock(user.id));
@@ -112,6 +114,18 @@ export function UserControls({ user, plans, onResult, onDeleted }) {
             sub={user.isActive ? "Приложение получает серверы" : "Вход есть, серверы не выдаются"}
           >
             <Toggle on={user.isActive} disabled={busy === "active" || user.isBlocked} onChange={toggleActive} />
+          </ControlRow>
+
+          <ControlRow
+            icon={<Gift size={16} />}
+            title="Бесплатный доступ"
+            sub={
+              user.isFree
+                ? "Продления не пишут платежей, прогноз выручки эту учётку не ждёт"
+                : "Метка для друзей и промо: выдуманные деньги не попадают в статистику"
+            }
+          >
+            <Toggle on={user.isFree} disabled={busy === "free"} onChange={toggleFree} />
           </ControlRow>
 
           <ControlRow

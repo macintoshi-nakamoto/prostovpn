@@ -869,6 +869,8 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   const [paying, setPaying] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  // Выставленный счёт: { planCode, orderId, url, status: pending|paid|failed }.
+  const [invoice, setInvoice] = useState(null);
 
   /*
   Возврат с платёжной формы. Сам по себе он ничего не подтверждает — оплату
@@ -954,30 +956,94 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   });
 
   /*
-  Оплата СБП из окна способов: заказ создаёт панель, дальше — платёжная
-  форма провайдера. Вернёмся сюда же с ?order= и дождёмся вебхука опросом
-  статуса — сам возврат ничего не подтверждает.
+  Оплата СБП: страница оплаты уходит в соседнюю вкладку, а окно способов
+  превращается в состояние счёта и ждёт вебхук. Окно открывается синхронно,
+  в жесте клика, — после await блокировщики всплывающих окон его уже не
+  разрешат; не открылось — в состоянии счёта остаётся кнопка-ссылка.
+
+  Панель не плодит заказы: пока прежний счёт жив, повторное нажатие
+  возвращает его же — и человек попадает на ту же страницу оплаты.
   */
   const paySbp = async () => {
     if (!paying || busy) return;
+    const win = window.open("about:blank", "_blank");
     setBusy(true);
     setNotice("");
     try {
       const order = await api.renew(paying.code);
       if (order && order.redirect_url) {
-        window.location.assign(order.redirect_url);
+        if (win) {
+          try {
+            // Отвязываем opener: чужая страница не должна уметь рулить кабинетом.
+            win.opener = null;
+          } catch {
+            /* не дали — не страшно */
+          }
+          win.location = order.redirect_url;
+        }
+        setInvoice({
+          planCode: paying.code,
+          orderId: order.id,
+          url: order.redirect_url,
+          status: "pending",
+        });
         return;
       }
+      if (win) win.close();
       setPaying(null);
       setNotice(t("account.renewCreated"));
       onChanged();
     } catch (err) {
+      if (win) win.close();
       setPaying(null);
       setNotice(err instanceof ApiError ? err.message : t("account.renewFailed"));
     } finally {
       setBusy(false);
     }
   };
+
+  /*
+  Счёт выставлен — ждём вебхук. Опрос живёт и при закрытом окне способов:
+  человек платит в соседней вкладке, а кабинет сам скажет «оплачено»,
+  когда деньги дошли.
+  */
+  useEffect(() => {
+    if (!invoice || invoice.status !== "pending") return undefined;
+    let alive = true;
+    let timer = 0;
+    let tries = 0;
+    const finish = (status) => {
+      setInvoice((inv) =>
+        inv && inv.orderId === invoice.orderId ? { ...inv, status } : inv,
+      );
+    };
+    const tick = async () => {
+      tries += 1;
+      try {
+        const status = await api.orderStatus(invoice.orderId);
+        if (!alive) return;
+        if (status.status === "paid") {
+          finish("paid");
+          onChanged();
+          return;
+        }
+        if (status.status === "failed" || status.status === "expired") {
+          finish("failed");
+          return;
+        }
+      } catch {
+        // Сеть мигнула — следующая попытка скажет точнее.
+      }
+      // Ссылка живёт до получаса — дольше опрашивать нечего.
+      if (alive && tries < 600) timer = setTimeout(tick, 3000);
+    };
+    timer = setTimeout(tick, 3000);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice && invoice.orderId, invoice && invoice.status]);
 
   return (
     <div className="ac-plan">
@@ -1055,7 +1121,14 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
                   <button
                     className={`btn ${mine ? "btn-primary" : "btn-outline"} ac-plan-btn`}
                     type="button"
-                    onClick={() => setPaying(plan)}
+                    onClick={() => {
+                      // Завершённый счёт этого тарифа не показываем заново:
+                      // новое открытие окна — новый заход на оплату.
+                      if (invoice && invoice.planCode === plan.code && invoice.status !== "pending") {
+                        setInvoice(null);
+                      }
+                      setPaying(plan);
+                    }}
                   >
                     {!paid
                       ? t("account.planBuy")
@@ -1074,11 +1147,11 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
         open={Boolean(paying)}
         plan={paying}
         busy={busy}
+        invoice={paying && invoice && invoice.planCode === paying.code ? invoice : null}
         onSbp={paySbp}
+        onNewInvoice={() => setInvoice(null)}
         onClose={() => (busy ? null : setPaying(null))}
       />
-
-      <RecurringCard onChanged={onChanged} />
 
       <div className="ac-card">
         <h2>{t("account.paymentsTitle")}</h2>
@@ -1101,18 +1174,20 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
           </div>
         )}
       </div>
+
+      <RecurringControl onChanged={onChanged} />
     </div>
   );
 }
 
 /*
-Автопродление. Карточка живёт своей жизнью: своё состояние с сервера, свои
-действия. Главной кнопкой вкладки остаётся «Продлить» — здесь всё тише,
-действия оформлены контуром, а не заливкой.
-*/
-function RecurringCard({ onChanged }) {
+Автопродление. Нарочно не карточка: главный сценарий вкладки — разовая
+оплата, а автосписание — тихая настройка. Строка внизу открывает окно
+управления, и всё происходит там, не раздувая страницу.
+*/function RecurringControl({ onChanged }) {
   const { t, f } = useI18n();
   const [rec, setRec] = useState(null);
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [plan, setPlan] = useState("");
@@ -1121,42 +1196,64 @@ function RecurringCard({ onChanged }) {
     try {
       const fresh = await api.recurring();
       setRec(fresh);
-      if (fresh.available.length && !fresh.available.some((p) => p.code === plan)) {
-        setPlan(fresh.available[0].code);
-      }
+      setPlan((prev) =>
+        fresh.available.some((p) => p.code === prev) ? prev : fresh.available[0]?.code || "",
+      );
     } catch {
-      setRec({ status: null, available: [] });
+      setRec((prev) => prev || { status: null, available: [] });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  if (rec === null) {
-    return (
-      <div className="ac-card ac-rec">
-        <h2>{t("account.recTitle")}</h2>
-        <p className="ac-empty">{t("account.recLoading")}</p>
-      </div>
-    );
-  }
+  // Открытое окно всегда со свежим состоянием: статус могли сменить
+  // вебхуком, из бота или из соседней вкладки.
+  useEffect(() => {
+    if (!open) return undefined;
+    setNote("");
+    load();
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, load]);
+
+  /*
+  Пока подписка ждёт привязки счёта, окно опрашивает статус: человек
+  подтверждает в соседней вкладке, а здесь само появляется «подключено».
+  */
+  useEffect(() => {
+    if (!open || !rec || rec.status !== "pending") return undefined;
+    const timer = setInterval(load, 4000);
+    return () => clearInterval(timer);
+  }, [open, rec, load]);
 
   const interval = (code) => t(code === "year" ? "account.recYear" : "account.recMonth");
-  const live = rec.status === "pending" || rec.status === "active" || rec.status === "past_due";
 
   const connect = async () => {
+    if (busy || !plan) return;
+    // Страницу привязки — в новое окно, синхронно с кликом (см. paySbp).
+    const win = window.open("about:blank", "_blank");
     setBusy(true);
     setNote("");
     try {
       const fresh = await api.recurringCreate(plan);
-      if (fresh.redirect_url) {
-        window.location.assign(fresh.redirect_url);
-        return;
+      if (fresh.redirect_url && win) {
+        try {
+          win.opener = null;
+        } catch {
+          /* не дали — не страшно */
+        }
+        win.location = fresh.redirect_url;
+      } else if (win) {
+        win.close();
       }
       setRec(fresh);
     } catch (err) {
+      if (win) win.close();
       setNote(err instanceof ApiError ? err.message : t("account.recFailed"));
     } finally {
       setBusy(false);
@@ -1177,85 +1274,145 @@ function RecurringCard({ onChanged }) {
     }
   };
 
+  if (rec === null) return null;
+
+  const live = rec.status === "pending" || rec.status === "active" || rec.status === "past_due";
+  const label =
+    rec.status === "active"
+      ? t("account.recLineOn", {
+          price: f.moneyFromKopecks(rec.amount_kopecks, rec.currency),
+          interval: interval(rec.interval),
+        })
+      : rec.status === "pending"
+        ? t("account.recLinePending")
+        : rec.status === "past_due"
+          ? t("account.recLineDue")
+          : rec.available.length
+            ? t("account.recLineOff")
+            : null;
+  if (!label) return null;
+
   return (
-    <div className="ac-card ac-rec">
-      <h2>{t("account.recTitle")}</h2>
+    <>
+      <p className="ac-rec-line">
+        <button
+          type="button"
+          className={`ac-rec-line-btn${rec.status === "past_due" ? " warn" : ""}`}
+          onClick={() => setOpen(true)}
+        >
+          {label}
+        </button>
+      </p>
 
-      {!live && rec.available.length === 0 && (
-        <p className="ac-empty">{t("account.recUnavailable")}</p>
-      )}
+      {open && (
+        <div className="pay-overlay" onMouseDown={() => (busy ? null : setOpen(false))}>
+          <div
+            className="pay"
+            role="dialog"
+            aria-modal="true"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              className="pay-close"
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label={t("account.recClose")}
+            >
+              ✕
+            </button>
 
-      {!live && rec.available.length > 0 && (
-        <>
-          <p className="ac-rec-text">{t("account.recOffer")}</p>
-          <div className="ac-rec-row">
-            <div className="ac-rec-opts" role="radiogroup" aria-label={t("account.recTitle")}>
-              {rec.available.map((p) => (
-                <button
-                  key={p.code}
-                  type="button"
-                  role="radio"
-                  aria-checked={plan === p.code}
-                  className={`ac-rec-opt${plan === p.code ? " on" : ""}`}
-                  onClick={() => setPlan(p.code)}
-                >
-                  <span className="ac-rec-opt-name">{p.title}</span>
-                  <span className="ac-rec-opt-price">
-                    {f.moneyFromKopecks(p.amount_kopecks, p.currency)} {interval(p.interval)}
+            <div className="pay-head">
+              <span className="pay-plan">{t("account.recTitle")}</span>
+              {rec.status === "active" && (
+                <>
+                  <span className="pay-sum">
+                    {f.moneyFromKopecks(rec.amount_kopecks, rec.currency)}
                   </span>
-                </button>
-              ))}
+                  <span className="pay-term">
+                    {rec.plan_title} · {interval(rec.interval)}
+                  </span>
+                </>
+              )}
             </div>
-            <button className="btn btn-outline ac-rec-btn" disabled={busy} onClick={connect}>
-              {busy ? t("account.recConnectBusy") : t("account.recConnect")}
-            </button>
-          </div>
-        </>
-      )}
 
-      {rec.status === "pending" && (
-        <div className="ac-rec-row">
-          <p className="ac-rec-text">{t("account.recPending")}</p>
-          <div className="ac-rec-actions">
-            {rec.redirect_url && (
-              <a className="btn btn-outline ac-rec-btn" href={rec.redirect_url}>
-                {t("account.recContinue")}
-              </a>
+            {!live && rec.available.length > 0 && (
+              <>
+                <p className="ac-rec-text">{t("account.recOffer")}</p>
+                <div className="ac-rec-opts" role="radiogroup" aria-label={t("account.recTitle")}>
+                  {rec.available.map((p) => (
+                    <button
+                      key={p.code}
+                      type="button"
+                      role="radio"
+                      aria-checked={plan === p.code}
+                      className={`ac-rec-opt${plan === p.code ? " on" : ""}`}
+                      onClick={() => setPlan(p.code)}
+                    >
+                      <span className="ac-rec-opt-name">{p.title}</span>
+                      <span className="ac-rec-opt-price">
+                        {f.moneyFromKopecks(p.amount_kopecks, p.currency)} {interval(p.interval)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="btn btn-primary pay-inv-btn"
+                  type="button"
+                  disabled={busy}
+                  onClick={connect}
+                >
+                  {busy ? t("account.recConnectBusy") : t("account.recConnect")}
+                </button>
+              </>
             )}
-            <button className="ac-rec-cancel" disabled={busy} onClick={cancel}>
-              {busy ? t("account.recCancelBusy") : t("account.recCancel")}
-            </button>
+
+            {rec.status === "pending" && (
+              <div className="pay-invoice">
+                <span className="pay-inv-pulse" aria-hidden="true" />
+                <p className="pay-inv-title">{t("account.recPendTitle")}</p>
+                <p className="pay-inv-sub">{t("account.recPending")}</p>
+                {rec.redirect_url && (
+                  <a
+                    className="btn btn-primary pay-inv-btn"
+                    href={rec.redirect_url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("account.recContinue")}
+                  </a>
+                )}
+                <button className="ac-rec-cancel" type="button" disabled={busy} onClick={cancel}>
+                  {busy ? t("account.recCancelBusy") : t("account.recCancelPending")}
+                </button>
+              </div>
+            )}
+
+            {rec.status === "active" && (
+              <div className="ac-rec-modal-body">
+                <p className="ac-rec-text">
+                  {rec.next_charge_at
+                    ? t("account.recNextFull", { date: f.shortDate(rec.next_charge_at) })
+                    : t("account.recActiveNote")}
+                </p>
+                <button className="ac-rec-cancel" type="button" disabled={busy} onClick={cancel}>
+                  {busy ? t("account.recCancelBusy") : t("account.recCancel")}
+                </button>
+              </div>
+            )}
+
+            {rec.status === "past_due" && (
+              <div className="ac-rec-modal-body">
+                <p className="ac-rec-text">{t("account.recPastDue")}</p>
+                <button className="ac-rec-cancel" type="button" disabled={busy} onClick={cancel}>
+                  {busy ? t("account.recCancelBusy") : t("account.recCancel")}
+                </button>
+              </div>
+            )}
+
+            {note && <p className="ac-rec-note">{note}</p>}
           </div>
         </div>
       )}
-
-      {rec.status === "active" && (
-        <div className="ac-rec-row">
-          <p className="ac-rec-text">
-            {t("account.recActive", {
-              plan: rec.plan_title,
-              price: f.moneyFromKopecks(rec.amount_kopecks, rec.currency),
-              interval: interval(rec.interval),
-            })}
-            {rec.next_charge_at &&
-              t("account.recNext", { date: f.shortDate(rec.next_charge_at) })}
-          </p>
-          <button className="ac-rec-cancel" disabled={busy} onClick={cancel}>
-            {busy ? t("account.recCancelBusy") : t("account.recCancel")}
-          </button>
-        </div>
-      )}
-
-      {rec.status === "past_due" && (
-        <div className="ac-rec-row">
-          <p className="ac-rec-text">{t("account.recPastDue")}</p>
-          <button className="ac-rec-cancel" disabled={busy} onClick={cancel}>
-            {busy ? t("account.recCancelBusy") : t("account.recCancel")}
-          </button>
-        </div>
-      )}
-
-      {note && <p className="ac-rec-note">{note}</p>}
-    </div>
+    </>
   );
 }

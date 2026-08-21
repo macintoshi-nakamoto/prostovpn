@@ -217,3 +217,77 @@
     transform: none;
   }
 }
+
+/* ── Состояние счёта ─────────────────────────────────────────────────────────
+ *
+ * Пульс — единственная анимация, и она объясняет состояние: «мы ждём».
+ * С prefers-reduced-motion остаётся неподвижная точка.
+ */
+.pay-invoice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 6px 0 2px;
+}
+.pay-inv-pulse {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin: 10px 0 2px;
+  animation: pay-pulse 1.3s ease-in-out infinite;
+}
+@keyframes pay-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pay-inv-pulse {
+    animation: none;
+  }
+}
+.pay-inv-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+.pay-inv-mark.ok {
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+}
+.pay-inv-mark.bad {
+  background: var(--bg-field);
+  color: var(--text-muted);
+}
+.pay-inv-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+.pay-inv-sub {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 330px;
+}
+.pay-inv-btn {
+  margin-top: 6px;
+}
+.pay-inv-hint {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}

@@ -388,6 +388,12 @@ class User(Base):
     blocked_reason: Mapped[str | None] = mapped_column(Text, default=None)
     blocked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
+    # Бесплатный доступ: друзья, тесты, промо. Метка меняет только деньги:
+    # админское продление не пишет платёж, а календарь прибыли не ждёт от
+    # этой учётки продлений. Если такой человек вдруг заплатит сам — платёж
+    # честно запишется: реальные деньги в кассе важнее метки.
+    is_free: Mapped[bool] = mapped_column(Boolean, default=False)
+
     # Личный лимит трафика. None — берём из тарифа; тариф с None — безлимит.
     traffic_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
     # Личный безлимит, сильнее тарифного лимита.
@@ -1028,6 +1034,9 @@ class Order(Base):
     provider: Mapped[str | None] = mapped_column(String(32), default=None)
     provider_payment_id: Mapped[str | None] = mapped_column(String(128), default=None)
     redirect_url: Mapped[str | None] = mapped_column(Text, default=None)
+    # Пока ссылка жива, повторное «оплатить» возвращает этот же заказ, а не
+    # плодит новые. Срок сообщает провайдер при создании; None — не сообщил.
+    link_expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None

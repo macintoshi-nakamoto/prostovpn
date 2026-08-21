@@ -13,7 +13,8 @@ export function ExtendModal({ user, plans, onClose, onSaved }) {
   const activePlans = plans.filter((p) => p.isActive);
   const [planCode, setPlanCode] = useState(user.plan || activePlans[0]?.code || "");
   const [customDays, setCustomDays] = useState("");
-  const [registerPayment, setRegisterPayment] = useState(true);
+  // Бесплатной учётке платёж не пишется — бэкенд это тоже не позволит.
+  const [registerPayment, setRegisterPayment] = useState(!user.isFree);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
@@ -77,11 +78,14 @@ export function ExtendModal({ user, plans, onClose, onSaved }) {
         <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, cursor: "pointer" }}>
           <input
             type="checkbox"
-            checked={registerPayment}
+            checked={registerPayment && !user.isFree}
+            disabled={user.isFree}
             onChange={(e) => setRegisterPayment(e.target.checked)}
             style={{ width: 16, height: 16, accentColor: "var(--gd-gold)" }}
           />
-          Записать оплату {plan ? money(plan.price, plan.currency) : ""} в календарь прибыли
+          {user.isFree
+            ? "Бесплатная учётка — платёж не записывается"
+            : `Записать оплату ${plan ? money(plan.price, plan.currency) : ""} в календарь прибыли`}
         </label>
 
         <div style={{ fontSize: 12.5, color: "var(--gd-faint)", lineHeight: 1.5 }}>

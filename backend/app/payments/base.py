@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
@@ -48,6 +49,9 @@ class PaymentSession:
 
     payment_id: str
     redirect_url: str
+    # Когда ссылка протухнет (наивный UTC). None — провайдер не сообщил;
+    # вызывающий тогда оценивает свежесть по времени создания заказа.
+    expires_at: dt.datetime | None = None
 
 
 @dataclass(slots=True)

@@ -142,7 +142,12 @@ def api_request(method: str, path: str, body: dict | None = None) -> dict:
 
     if response.status_code >= 400:
         log.error("Platega ответила %s на %s %s: %s", response.status_code, method, path, response.text[:500])
-        raise PaymentError(f"Platega отказала ({response.status_code})")
+        error = PaymentError(f"Platega отказала ({response.status_code})")
+        # Тело — атрибутом, а не текстом ошибки: текст показывается людям,
+        # а по телу вызывающие различают причины (например, «метод не
+        # включён на мерчанте») и подбирают человеческую формулировку.
+        error.body = response.text[:300]
+        raise error
 
     try:
         data = response.json()

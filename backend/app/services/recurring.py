@@ -135,6 +135,14 @@ def create(db: OrmSession, user: User, plan_code: str, origin: str = "site") -> 
         data = platega.api_request("POST", "/transaction/process", body)
     except PaymentError as exc:
         log.error("создание подписки не удалось: %s", exc)
+        detail = getattr(exc, "body", "") or ""
+        if "paymentMethod" in detail and "Subscription" in detail:
+            # Метод «Подписка» ещё не включён на мерчанте: это состояние на
+            # стороне Platega, и человеку нужен честный ответ, а не «позже».
+            raise PanelError(
+                "автосписание ещё подключается платёжным сервисом — "
+                "пока оплатите подписку разово"
+            ) from exc
         raise PanelError("платёжный сервис сейчас недоступен, попробуйте позже") from exc
     external_id = data.get("transactionId")
     redirect = data.get("redirect") or data.get("url")

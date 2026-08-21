@@ -79,11 +79,42 @@ COLORED = (
     "Оформить",
     "Оплатить",
     "Stars",
+    "СБП",
     "карта",
     "Назад",
     "Отмена",
     "Меню",
     "Выйти",
+)
+
+FAKE_REC_ACTIVE = panel.Recurring(
+    status="active",
+    plan_code="basic",
+    plan_title="Базовый",
+    amount_kopecks=19900,
+    currency="RUB",
+    interval="month",
+    next_charge_at=NOW + dt.timedelta(days=30),
+)
+
+FAKE_REC_PENDING = panel.Recurring(
+    status="pending",
+    plan_code="basic",
+    plan_title="Базовый",
+    amount_kopecks=19900,
+    currency="RUB",
+    interval="month",
+    redirect_url="https://pay.example/sub",
+)
+
+FAKE_REC_PAST_DUE = panel.Recurring(
+    status="past_due",
+    plan_code="basic",
+    plan_title="Базовый",
+    amount_kopecks=19900,
+    currency="RUB",
+    interval="month",
+    last_charge_error="списание не прошло",
 )
 
 
@@ -100,6 +131,12 @@ def check_keyboards() -> None:
         "cabinet_ios": menus.cabinet_menu(True, ios=True),
         "methods": menus.payment_methods_menu(),
         "plans": menus.plans_menu([FAKE_PLAN], method_by_code("stars")),
+        "plans_sbp": menus.plans_menu([FAKE_PLAN], method_by_code("sbp")),
+        "pay_link": menus.pay_link_menu("https://pay.example/invoice"),
+        "autorenew_offer": menus.autorenew_menu(None, [FAKE_PLAN]),
+        "autorenew_pending": menus.autorenew_menu(FAKE_REC_PENDING, []),
+        "autorenew_active": menus.autorenew_menu(FAKE_REC_ACTIVE, []),
+        "autorenew_past_due": menus.autorenew_menu(FAKE_REC_PAST_DUE, []),
         "support": menus.support_menu(),
         "topic": menus.topic_menu(SUPPORT_TOPICS[0].code),
         "about": menus.about_menu(True, FAKE_APPS),
@@ -176,6 +213,36 @@ def check_keyboards() -> None:
 
     assert any("iPhone" in label for label in ios_labels), "в кабинете iOS нет кнопки ключа"
 
+    # Автопродление: в кабинете есть вход, счёт даёт кнопку-ссылку, отключение
+    # везде одно и серое — случайный клик не должен отменять подписку.
+    cabinet_labels = [b.text for row in cabinet_rows for b in row]
+
+    assert any("Автопродление" in label for label in cabinet_labels), (
+        "в кабинете нет кнопки автопродления"
+    )
+
+    pay_buttons = [b for row in boards["pay_link"].inline_keyboard for b in row]
+
+    assert any(b.url and "Оплатить" in b.text for b in pay_buttons), (
+        "на экране счёта нет кнопки-ссылки «Оплатить»"
+    )
+
+    pending_buttons = [b for row in boards["autorenew_pending"].inline_keyboard for b in row]
+
+    assert any(b.url and "Привязать" in b.text for b in pending_buttons), (
+        "на экране оформления нет ссылки на привязку счёта"
+    )
+
+    for name in ("autorenew_pending", "autorenew_active", "autorenew_past_due"):
+        off_buttons = [
+            b
+            for row in boards[name].inline_keyboard
+            for b in row
+            if b.callback_data == "rec:off"
+        ]
+
+        assert len(off_buttons) == 1, f"{name}: отключение должно быть одной кнопкой"
+
     print(f"клавиатуры: {len(boards)} экранов, цветных кнопок {colored}, остальные серые")
 
 
@@ -201,6 +268,12 @@ def check_texts() -> None:
         texts.cabinet_text(EMPTY_ACCOUNT),
         texts.methods_text(),
         texts.plans_text(method_by_code("stars"), [FAKE_PLAN]),
+        texts.plans_text(method_by_code("sbp"), [FAKE_PLAN]),
+        texts.invoice_text(FAKE_PLAN),
+        texts.autorenew_text(None, [FAKE_PLAN]),
+        texts.autorenew_text(FAKE_REC_PENDING, []),
+        texts.autorenew_text(FAKE_REC_ACTIVE, []),
+        texts.autorenew_text(FAKE_REC_PAST_DUE, []),
         texts.paid_text(FAKE_PLAN, FAKE_ACCOUNT),
         texts.paid_text(FAKE_PLAN, None),
         texts.about_text(),

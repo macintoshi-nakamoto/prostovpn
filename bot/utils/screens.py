@@ -139,6 +139,83 @@ def plans(file_id: str | None, method: PayMethod, available: list[Plan]) -> list
     return rich.screen(file_id, *blocks)
 
 
+def invoice(file_id: str | None, plan: Plan) -> list[dict]:
+    """Счёт на оплату по ссылке. Кнопка «Оплатить» - в клавиатуре под экраном."""
+    return rich.screen(
+        file_id,
+        rich.title("Счёт на оплату"),
+        rich.facts(
+            ("Тариф", plan.title),
+            ("Сумма", f"{plan.rub} ₽"),
+            ("Срок", timeutils.plural_days(plan.duration_days)),
+        ),
+        rich.paragraph(
+            "Нажмите «Оплатить» и завершите платёж на открывшейся странице. "
+            "Ссылка действует 15 минут."
+        ),
+        rich.paragraph(rich.italic("Доступ включится сам, подтверждение придёт сюда.")),
+    )
+
+
+def autorenew(file_id: str | None, rec, options: list[Plan]) -> list[dict]:
+    """Автопродление: своё состояние - свой экран, кнопки в menus.autorenew_menu."""
+    if rec is None or not rec.live:
+        blocks = [
+            rich.title("Автопродление"),
+            rich.paragraph(
+                "Подключите автосписание - доступ будет продлеваться сам, "
+                "без напоминаний. Отключается в один клик."
+            ),
+        ]
+
+        for plan in options:
+            word = "в год" if plan.duration_days >= 365 else "в месяц"
+            blocks.append(rich.paragraph(rich.bold(f"{plan.title} - {plan.rub} ₽ {word}")))
+
+        return rich.screen(file_id, *blocks)
+
+    title = rec.plan_title or rec.plan_code or "Подписка"
+
+    if rec.status == "pending":
+        return rich.screen(
+            file_id,
+            rich.title("Автопродление"),
+            rich.facts(("Тариф", title), ("Сумма", f"{rec.rub} ₽ {rec.interval_label}")),
+            rich.paragraph(
+                "Осталось привязать счёт: нажмите «Привязать счёт» и подтвердите "
+                "на странице оплаты."
+            ),
+            rich.paragraph(rich.italic("Денег на этом шаге не списывается.")),
+        )
+
+    if rec.status == "past_due":
+        return rich.screen(
+            file_id,
+            rich.title("Автопродление"),
+            rich.paragraph(rich.bold("Последнее списание не прошло.")),
+            rich.paragraph(
+                "Продлите подписку вручную в «Тарифы и оплата» - или отключите "
+                "автопродление."
+            ),
+        )
+
+    rows: list[tuple[str, object]] = [
+        ("Статус", "работает"),
+        ("Тариф", title),
+        ("Сумма", f"{rec.rub} ₽ {rec.interval_label}"),
+    ]
+
+    if rec.next_charge_at:
+        rows.append(("Следующее списание", timeutils.human_date(rec.next_charge_at)))
+
+    return rich.screen(
+        file_id,
+        rich.title("Автопродление"),
+        rich.facts(*rows),
+        rich.paragraph(rich.italic("Каждое продление подтверждаем сообщением сюда.")),
+    )
+
+
 def paid(file_id: str | None, plan: Plan, account: Account | None) -> list[dict]:
     rows: list[tuple[str, object]] = [
         ("Тариф", plan.title),

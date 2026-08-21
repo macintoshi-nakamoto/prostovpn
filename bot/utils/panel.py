@@ -471,3 +471,112 @@ async def extend(user_login: str, plan: Plan, method: str) -> None:
             "method": method,
         },
     )
+
+
+# --------------------------------------------------------------------------
+# Оплата по ссылке и автопродление (Platega)
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PaymentLink:
+    order_id: str
+    url: str
+    amount_kopecks: int
+    currency: str
+
+    @property
+    def rub(self) -> int:
+        return self.amount_kopecks // 100
+
+
+@dataclass(frozen=True)
+class Recurring:
+    """Автосписание глазами бота. Пустой статус - не подключено."""
+
+    status: str | None = None
+    plan_code: str | None = None
+    plan_title: str | None = None
+    amount_kopecks: int | None = None
+    currency: str | None = None
+    interval: str | None = None
+    next_charge_at: dt.datetime | None = None
+    last_charge_error: str | None = None
+    redirect_url: str | None = None
+
+    @property
+    def rub(self) -> int:
+        return (self.amount_kopecks or 0) // 100
+
+    @property
+    def live(self) -> bool:
+        return self.status in ("pending", "active", "past_due")
+
+    @property
+    def interval_label(self) -> str:
+        return {"month": "раз в месяц", "year": "раз в год"}.get(self.interval or "", "")
+
+
+def _recurring(body: dict) -> Recurring:
+    return Recurring(
+        status=body.get("status"),
+        plan_code=body.get("plan_code"),
+        plan_title=body.get("plan_title"),
+        amount_kopecks=body.get("amount_kopecks"),
+        currency=body.get("currency"),
+        interval=body.get("interval"),
+        next_charge_at=_parse_time(body.get("next_charge_at")),
+        last_charge_error=body.get("last_charge_error"),
+        redirect_url=body.get("redirect_url"),
+    )
+
+
+async def payment_link(user_login: str, plan: Plan) -> PaymentLink:
+    """Счёт на разовую оплату: панель регистрирует заказ у провайдера.
+
+    Дальше бот только показывает кнопку со ссылкой - оплату подтверждает
+    вебхук провайдера в панели, и подтверждение человеку приходит от неё же.
+    """
+    body = await _admin_request(
+        "POST",
+        f"{ADMIN}/orders/for-user",
+        payload={"login": user_login, "plan_code": plan.code},
+    )
+
+    url = body.get("redirect_url")
+
+    if not url:
+        raise PanelError("платёжная ссылка не создана")
+
+    return PaymentLink(
+        order_id=body["id"],
+        url=url,
+        amount_kopecks=body["amount_kopecks"],
+        currency=body.get("currency", "RUB"),
+    )
+
+
+async def recurring_state(user_login: str) -> Recurring:
+    body = await _admin_request("GET", f"{ADMIN}/recurring/by-login/{user_login}")
+
+    return _recurring(body)
+
+
+async def recurring_create(user_login: str, plan_code: str) -> Recurring:
+    body = await _admin_request(
+        "POST",
+        f"{ADMIN}/recurring",
+        payload={"login": user_login, "plan_code": plan_code},
+    )
+
+    return _recurring(body)
+
+
+async def recurring_cancel(user_login: str) -> Recurring:
+    body = await _admin_request(
+        "POST",
+        f"{ADMIN}/recurring/cancel",
+        payload={"login": user_login},
+    )
+
+    return _recurring(body)

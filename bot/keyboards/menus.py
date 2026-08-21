@@ -82,6 +82,8 @@ def cabinet_menu(active: bool, ios: bool = False) -> InlineKeyboardMarkup:
             make_btn("Платежи", callback_data="history", emoji="history"),
             make_btn("Пароль", callback_data="password", emoji="key"),
         ],
+        # Рядом с платежами: автопродление - тоже про деньги.
+        [make_btn("Автопродление", callback_data="autorenew", emoji="calendar")],
     ]
 
     if ios:
@@ -140,6 +142,49 @@ def plans_menu(plans: list[Plan], method: PayMethod) -> InlineKeyboardMarkup:
 
 def price(plan: Plan, method: PayMethod) -> str:
     return f"{plan.stars} ★" if method.code == "stars" else f"{plan.rub} ₽"
+
+
+def pay_link_menu(url: str) -> InlineKeyboardMarkup:
+    """Счёт на оплату: одна зелёная кнопка со ссылкой, остальное тихое."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [make_btn("Оплатить", url=url, emoji="wallet", style=SUCCESS)],
+            [make_btn("Личный кабинет", callback_data="cabinet", emoji="profile")],
+            [make_btn("Меню", callback_data="home", emoji="back", style=DANGER)],
+        ]
+    )
+
+
+def autorenew_menu(rec, options: list[Plan]) -> InlineKeyboardMarkup:
+    """
+    Автопродление. Кнопки зависят от состояния: не подключено - выбор
+    тарифа, ждёт привязки - ссылка и отмена, работает - только отключение.
+    Отключение намеренно серое и одно: случайно не нажмёшь.
+    """
+    rows: list[list] = []
+
+    if rec is None or not rec.live:
+        rows = [
+            [
+                make_btn(
+                    f"{plan.title} · {plan.rub} ₽ {'в год' if plan.duration_days >= 365 else 'в месяц'}",
+                    callback_data=f"rec:on:{plan.code}",
+                    emoji="calendar",
+                )
+            ]
+            for plan in options
+        ]
+    elif rec.status == "pending":
+        if rec.redirect_url:
+            rows.append([make_btn("Привязать счёт", url=rec.redirect_url, emoji="wallet")])
+
+        rows.append([make_btn("Отменить оформление", callback_data="rec:off", emoji="cross")])
+    else:
+        rows.append([make_btn("Отключить автопродление", callback_data="rec:off", emoji="cross")])
+
+    rows.append([make_btn("Назад", callback_data="cabinet", emoji="back", style=DANGER)])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def support_menu() -> InlineKeyboardMarkup:

@@ -4,8 +4,9 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery, LabeledPrice
 
 from config.settings import config, method_by_code
+from database import models
 from handlers.common import show_error, show_screen
-from keyboards.menus import payment_methods_menu, plans_menu
+from keyboards.menus import pay_link_menu, payment_methods_menu, plans_menu
 from middlewares.auth import AuthMiddleware
 from utils import assets, panel, screens, texts
 from utils.timeutils import plural_days
@@ -93,6 +94,35 @@ async def buy(callback: CallbackQuery) -> None:
 
     if not plan:
         await callback.answer("Тариф больше недоступен", show_alert=True)
+        return
+
+    if method.code == "sbp":
+        # Оплата по ссылке: счёт выставляет панель у провайдера, бот
+        # показывает кнопку. Оплату подтвердит вебхук - и панель напишет
+        # сюда же о продлении, самому боту проверять нечего.
+        session = await models.get_session(callback.from_user.id)
+        login = session.panel_login if session else await models.last_login(callback.from_user.id)
+
+        if not login:
+            await callback.answer("Сначала войдите в аккаунт", show_alert=True)
+            return
+
+        try:
+            link = await panel.payment_link(login, plan)
+        except panel.PanelError as error:
+            await show_error(callback, texts.panel_error(error))
+            await callback.answer()
+            return
+
+        await show_screen(
+            callback,
+            lambda file_id: screens.invoice(file_id, plan),
+            pay_link_menu(link.url),
+            text=texts.invoice_text(plan),
+            animation=assets.PLANS,
+        )
+
+        await callback.answer()
         return
 
     title = f"{config.brand} — {plan.title}"

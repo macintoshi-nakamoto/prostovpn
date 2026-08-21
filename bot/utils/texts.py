@@ -228,6 +228,66 @@ def plans_text(method: PayMethod, plans: list[Plan]) -> str:
     return "\n".join(lines)
 
 
+def invoice_text(plan: Plan) -> str:
+    """Счёт на оплату по ссылке: что, почём и что будет дальше."""
+    return (
+        f'{tg("wallet")} <b>Счёт на оплату</b>\n\n'
+        f"<b>{escape(plan.title)}</b> - {plan.rub} ₽ · {escape(plan_terms(plan))}\n\n"
+        "Нажмите «Оплатить» и завершите платёж на открывшейся странице. "
+        "Ссылка действует 15 минут.\n\n"
+        "Доступ включится сам, подтверждение придёт сюда."
+    )
+
+
+def autorenew_text(rec, options: list[Plan]) -> str:
+    """Автопродление. Что происходит - зависит от статуса подписки."""
+    head = f'{tg("calendar")} <b>Автопродление</b>\n\n'
+
+    if rec is None or not rec.live:
+        lines = [
+            "Подключите автосписание - доступ будет продлеваться сам, "
+            "без напоминаний. Отключается в один клик.",
+            "",
+        ]
+
+        for plan in options:
+            word = "в год" if plan.duration_days >= 365 else "в месяц"
+            lines.append(f"<b>{escape(plan.title)}</b> - {plan.rub} ₽ {word}")
+
+        return head + "\n".join(lines)
+
+    title = escape(rec.plan_title or rec.plan_code or "Подписка")
+
+    if rec.status == "pending":
+        return (
+            head
+            + f"{title} - {rec.rub} ₽ {rec.interval_label}.\n\n"
+            "Осталось привязать счёт: нажмите «Привязать счёт» и подтвердите "
+            "на странице оплаты. Денег на этом шаге не списывается."
+        )
+
+    if rec.status == "past_due":
+        return (
+            head
+            + f'{tg("warn")} Последнее списание не прошло.\n\n'
+            "Продлите подписку вручную в «Тарифы и оплата» - или отключите "
+            "автопродление."
+        )
+
+    when = (
+        f"\nСледующее списание - {timeutils.human_date(rec.next_charge_at)}."
+        if rec.next_charge_at
+        else ""
+    )
+
+    return (
+        head
+        + f'{tg("check")} Работает.\n\n'
+        f"{title} - {rec.rub} ₽ {rec.interval_label}.{when}\n\n"
+        "Каждое продление подтверждаем сообщением сюда."
+    )
+
+
 def paid_text(plan: Plan, account: Account | None) -> str:
     until = (
         f"\nДо {timeutils.human_date(account.expires_at)}"

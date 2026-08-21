@@ -174,8 +174,9 @@ def card_payments_enabled() -> bool:
 def payment_methods() -> tuple[PayMethod, ...]:
     """Способы оплаты. Неготовые остаются на экране - но честно помечены."""
     methods = [
+        # СБП первым: оплата деньгами - основной путь, звёзды - запасной.
+        PayMethod("sbp", "СБП", ready=True),
         PayMethod("stars", "Telegram Stars", ready=True),
-        PayMethod("sbp", "СБП", catalog_only=True),
         PayMethod("crypto", "Криптовалюта"),
     ]
 

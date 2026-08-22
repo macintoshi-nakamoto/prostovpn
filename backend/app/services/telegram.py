@@ -26,6 +26,10 @@ class TelegramError(RuntimeError):
     """Сообщение не ушло — задание вернётся в очередь."""
 
 
+class TelegramFatal(TelegramError):
+    """Отправлять некуда: повторять бессмысленно, задание закрывается."""
+
+
 def enabled() -> bool:
     return bool(settings().telegram_bot_token)
 
@@ -55,6 +59,11 @@ def send(chat_id: str | int, text: str) -> None:
             # Человек не начал диалог с ботом. Ретраи бессмысленны: пока он
             # сам не напишет боту, отправить нельзя.
             raise TelegramError(f"бот заблокирован или диалог не начат: {body}")
+        if response.status_code == 400 and "chat not found" in body.lower():
+            # Такого чата нет и не появится: идентификатор чужой, выдуманный
+            # или из другого бота. Повторять восемь раз незачем — сразу
+            # закрываем задание, чтобы очередь не толкалась в стену.
+            raise TelegramFatal(f"чат не найден: {body}")
         raise TelegramError(f"Telegram вернул {response.status_code}: {body}")
 
 

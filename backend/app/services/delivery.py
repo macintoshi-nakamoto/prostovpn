@@ -63,6 +63,15 @@ def _deliver(db: OrmSession, job: DeliveryJob) -> bool:
     job.attempts += 1
     try:
         _send(db, job)
+    except telegram.TelegramFatal as exc:
+        # Адресата не существует — повторы ничего не изменят. Закрываем
+        # задание израсходованными попытками: в панели оно останется видимым
+        # как недоставленное, но очередь его больше не поднимает.
+        job.last_error = str(exc)[:500]
+        job.attempts = settings().delivery_max_attempts
+        db.commit()
+        log.warning("доставка %s#%d отменена: %s", job.channel, job.id, exc)
+        return False
     except Exception as exc:
         job.last_error = str(exc)[:500]
         job.next_attempt_at = utcnow() + _backoff(job.attempts)

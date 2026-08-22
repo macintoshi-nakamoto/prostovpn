@@ -222,10 +222,15 @@ def test_quantity_ignored_for_regular_plans(client, auth):
     _make_user(client, auth, "tr_qty_regular", plan="trial")
     token = _token(client, "tr_qty_regular")
 
+    # Цену берём из витрины, а не из константы: соседние тесты правят тарифы
+    # в общей базе, и сравнение с числом ловило бы их, а не эту проверку.
+    with SessionLocal() as db:
+        price = db.scalar(select(Plan).where(Plan.code == "basic")).price_kopecks
+
     r = client.post(
         "/api/v1/account/renew",
         json={"plan_code": "basic", "quantity": 5},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert r.status_code == 201, r.text
-    assert r.json()["amount_kopecks"] == 19_900, "пятикратной цены месяца быть не должно"
+    assert r.json()["amount_kopecks"] == price, "пятикратной цены месяца быть не должно"

@@ -26,9 +26,13 @@ EnvironmentFile=/opt/prosto-vpn/backend/.env
 # рассчитаны на несколько процессов и переживут их, но SQLite при
 # параллельной записи упирается в блокировки. Второй воркер добавляют
 # вместе с переездом на PostgreSQL, не раньше.
+# --no-access-log: путь запроса содержит токен подписки (/s/<token>), а
+# access-лог uvicorn пишет полный путь в journald — это утечка живых ссылок в
+# обход правила «в базе только хэш». Access-логирование остальных маршрутов
+# обеспечивает nginx (и там /s/ уже с access_log off).
 ExecStart=/opt/prosto-vpn/backend/.venv/bin/uvicorn app.main:app \
     --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers \
-    --forwarded-allow-ips 127.0.0.1
+    --forwarded-allow-ips 127.0.0.1 --no-access-log
 
 Restart=always
 RestartSec=3

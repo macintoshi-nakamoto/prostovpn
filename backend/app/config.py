@@ -35,6 +35,15 @@ class Settings(BaseSettings):
     # Токен веб-панели живёт меньше: с админского места уходят и забывают.
     admin_token_days: int = 7
 
+    # Сколько живёт токен подписки (ссылка /s/<token>). Срок скользящий:
+    # активный клиент опрашивает подписку раз в полчаса и продлевает её, а
+    # забытая/утёкшая ссылка без активности сама умирает через полгода.
+    subscription_token_days: int = 180
+    # Базовый адрес подписки. Пусто — берётся site_url. На бою здесь
+    # https://sub.prostovpn.cc, чтобы ссылка жила на отдельном поддомене и её
+    # можно было проксировать/логировать отдельно от кабинета.
+    subscription_url: str = ""
+
     # Валюта для статистики выручки — только для подписи в интерфейсе.
     currency: str = "RUB"
 
@@ -220,6 +229,11 @@ class Settings(BaseSettings):
         if self.guide_url.strip():
             return self.guide_url.strip()
         return f"{self.site_url.rstrip('/')}/{self.guide_path.strip('/')}"
+
+    @property
+    def subscription_base(self) -> str:
+        """Начало ссылки подписки без хвостового слэша."""
+        return (self.subscription_url.strip() or self.site_url).rstrip("/")
 
     @property
     def cors_origin_list(self) -> list[str]:

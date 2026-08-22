@@ -30,6 +30,9 @@ export const usersApi = {
   resetTraffic: (id) => http.post(`${BASE}/users/${id}/traffic-reset`),
   extend: (id, payload) => http.post(`${BASE}/users/${id}/extend`, payload),
   resetPassword: (id) => http.post(`${BASE}/users/${id}/password`),
+  // «Ссылка подписки скомпрометирована»: меняет WG-пары всех устройств и
+  // гасит все ссылки /s/. Устройства переподключатся с новым конфигом.
+  reissueSubscription: (id) => http.post(`${BASE}/users/${id}/subscription/reissue`),
   // Показ пароля — POST, а не GET: GET оседает в истории браузера и логах
   // прокси, а каждый такой запрос пишется в журнал поимённо.
   revealPassword: (id) => http.post(`${BASE}/users/${id}/reveal`),

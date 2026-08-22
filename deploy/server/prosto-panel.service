@@ -10,7 +10,7 @@ User=prostovpn
 Group=prostovpn
 WorkingDirectory=/opt/prosto-vpn/backend
 EnvironmentFile=/opt/prosto-vpn/backend/.env
-ExecStart=/opt/prosto-vpn/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+ExecStart=/opt/prosto-vpn/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 Restart=always
 RestartSec=3
 

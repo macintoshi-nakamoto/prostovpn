@@ -258,13 +258,105 @@ def with_endpoint_port(config: str, port: int) -> str:
     return ENDPOINT_LINE.sub(lambda m: f"{m.group(1)}{m.group(2)}:{port}", config, count=1)
 
 
+def with_endpoint_host(config: str, host: str) -> str:
+    """
+    Тот же конфиг, но эндпоинт смотрит на другой хост, порт не трогаем.
+
+    Ключ к цели «сменил IP ноды — доступ у всех обновился без перевыпуска».
+    Раньше host был вшит в текст `key.config` намертво, и переезд узла делал
+    все выданные конфиги мусором. Теперь host подставляется из `Server.host`
+    в момент отдачи, а хранимый текст остаётся снимком на случай отката.
+    """
+    if not config:
+        return config
+
+    # «Голый» IPv6 (в нём есть «:») обязан быть в скобках, иначе `host:port`
+    # не разобрать: 2a01:4f8::1:51820 — где адрес, где порт, непонятно.
+    literal = f"[{host}]" if (":" in host and not host.startswith("[")) else host
+
+    def _sub(m: re.Match) -> str:
+        tail = f":{m.group(3)}" if m.group(3) else ""
+        return f"{m.group(1)}{literal}{tail}"
+
+    return ENDPOINT_LINE.sub(_sub, config, count=1)
+
+
+# Плейсхолдер на месте вырезанного открытого приватного ключа. Строка
+# `PrivateKey = ...` остаётся в конфиге (не пустеет), но реального ключа в ней
+# нет — его подставляют при отдаче из `private_key_enc`.
+ENCRYPTED_PLACEHOLDER = "__ENCRYPTED__"
+
+PRIVATE_KEY_LINE = re.compile(r"(?im)^([ \t]*PrivateKey[ \t]*=[ \t]*).*$")
+
+
+def with_private_key(config: str, private_key: str) -> str:
+    """
+    Подставляет приватный ключ в строку `PrivateKey =` конфига.
+
+    Пустой ключ не подставляем: лучше оставить как есть (или плейсхолдер),
+    чем записать `PrivateKey = ` и молча сломать разбор. Меняем ровно строку
+    приватного ключа — публичный ключ пира в [Peer] не трогается.
+    """
+    if not config or not private_key:
+        return config
+    return PRIVATE_KEY_LINE.sub(lambda m: f"{m.group(1)}{private_key}", config, count=1)
+
+
+def private_key_for(key: UserKey) -> str:
+    """
+    Приватный ключ клиента: сначала из шифра, потом откат на открытый текст.
+
+    Единая точка чтения для всех, кто собирает конфиг или ссылку. Пока идёт
+    переход, ключ лежит и там и там; после вычистки плейнтекста остаётся только
+    шифр. Если шифр не читается (нет/сменили PANEL_SECRETS_KEY) и в тексте уже
+    плейсхолдер — возвращаем пустую строку: пусть туннель честно не поднимется,
+    чем в конфиг попадёт мусорное `__ENCRYPTED__`.
+    """
+    if key.private_key_enc:
+        from . import crypto
+
+        try:
+            return crypto.decrypt(key.private_key_enc)
+        except crypto.SecretsUnavailable:
+            pass  # откат на открытый текст ниже — он ещё может быть в config
+
+    value = interface_params(key.config or "").get("PrivateKey", "")
+    return "" if value == ENCRYPTED_PLACEHOLDER else value
+
+
 def config_for(server: Server, key: UserKey | None) -> str | None:
-    """Что отдать приложению для этого сервера."""
+    """Что отдать приложению для этого сервера (снимок, без свежего host/ключа)."""
     if server.provisioning == Provisioning.SHARED:
         return server.shared_config
     if key is not None and key.revoked_at is None:
         return key.config
     return None
+
+
+def serving_config(server: Server, key: UserKey | None) -> str | None:
+    """
+    Конфиг, готовый к отдаче: свежий host из `Server.host` и расшифрованный
+    приватный ключ.
+
+    Порт здесь не трогаем — его выбирает и подставляет вызывающий (подбор
+    рабочего порта живёт в api_client). Для SHARED-узлов возвращаем общий
+    конфиг как есть: там host принадлежит чужому узлу и подменять его нельзя,
+    а приватный ключ общий и в шифровании не участвует.
+    """
+    base = config_for(server, key)
+    if not base:
+        return base
+    if server.provisioning != Provisioning.SSH or key is None:
+        return base
+    base = with_endpoint_host(base, server.host)
+    private_key = private_key_for(key)
+    if not private_key:
+        # Приватник не разрешился: шифр не читается (потерян/сменён
+        # PANEL_SECRETS_KEY), а открытый текст уже вычищен. Отдать конфиг с
+        # плейсхолдером вместо ключа хуже, чем не отдать: туннель молча не
+        # поднимется. Роняем узел — вызывающий отсеет его по `if not config`.
+        return None
+    return with_private_key(base, private_key)
 
 
 # --- SSH: создание пира на своём сервере -------------------------------------

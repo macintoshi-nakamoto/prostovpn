@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 
-from .. import provisioning
+from .. import crypto, provisioning
 from ..models import Provisioning, Server, User, UserKey, utcnow
 from .errors import PanelError
 
@@ -184,6 +184,13 @@ def issue_key(
     provisioning.add_peer_over_ssh(server, public_key, address)
 
     key.config = config
+    # Шифр приватника обязан ехать вместе с новой парой. Иначе при перевыпуске
+    # (rotate=True, «скомпрометирован», перевыпуск iOS) в private_key_enc остаётся
+    # СТАРЫЙ ключ, а provisioning.private_key_for предпочитает шифр тексту — и
+    # клиент получил бы конфиг со старым приватником при новом пире на узле:
+    # рукопожатие не проходит. Нет ключа шифрования — обнуляем enc, чтобы чтение
+    # честно откатилось на свежий открытый текст в config.
+    key.private_key_enc = crypto.encrypt(private_key) if crypto.available() else None
     key.public_key = public_key
     key.address = address
     key.revoked_at = None

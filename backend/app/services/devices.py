@@ -100,6 +100,13 @@ def disconnect(db: OrmSession, session: Session, reason: str = "") -> list[str]:
         key.revoked_at = now
     db.commit()
 
+    # И ссылку подписки этого устройства: иначе выкинутый по лимиту или
+    # отключённый вручную телефон продолжал бы получать конфиг по /s/, минуя
+    # снятый пир и погашенный токен приложения.
+    from . import subscription
+
+    subscription.revoke_for_device(db, user.id, device_id)
+
     log.info(
         "отключено устройство %s пользователя %s%s%s",
         session.id,

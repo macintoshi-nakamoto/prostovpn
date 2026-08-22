@@ -49,6 +49,7 @@ def backfill(db: OrmSession) -> None:
     _backfill_plan_kopecks(db)
     _encrypt_legacy_passwords(db)
     _encrypt_legacy_emails(db)
+    _encrypt_key_private_keys(db)
     _measure_published_releases(db)
 
 
@@ -342,6 +343,55 @@ def _encrypt_legacy_emails(db: OrmSession) -> None:
         user.set_email(user.email)
     db.commit()
     log.info("миграция: %d адресов почты зашифровано", len(stale))
+
+
+def _encrypt_key_private_keys(db: OrmSession) -> None:
+    """
+    Шифрует приватные ключи клиентов из текста конфига в `private_key_enc`.
+
+    Первый из двух шагов перехода на шифрование at-rest: открытый текст
+    `PrivateKey = ...` внутри `config` НЕ трогаем — он остаётся аварийной
+    копией на случай, если сборка из шифра где-то ошиблась. Вычистка
+    плейнтекста — отдельный осознанный шаг (tools/strip_plaintext_keys.py),
+    только после проверки, что все пути читают ключ из шифра.
+
+    Без ключа шифрования ничего не делаем и не падаем: приватники остаются как
+    были, читатели берут их из текста через provisioning.private_key_for.
+    """
+    from . import crypto, provisioning
+
+    stale = list(
+        db.scalars(
+            select(UserKey).where(
+                UserKey.private_key_enc.is_(None), UserKey.config.isnot(None)
+            )
+        )
+    )
+    if not stale:
+        return
+
+    if not crypto.available():
+        log.warning(
+            "%d приватных ключей лежат открытым текстом, но PANEL_SECRETS_KEY не задан — "
+            "задайте ключ и перезапустите панель",
+            len(stale),
+        )
+        return
+
+    changed = 0
+    for key in stale:
+        pk = provisioning.interface_params(key.config or "").get("PrivateKey", "")
+        if not pk or pk == provisioning.ENCRYPTED_PLACEHOLDER:
+            continue
+        key.private_key_enc = crypto.encrypt(pk)
+        changed += 1
+    if changed:
+        db.commit()
+        log.info(
+            "миграция: %d приватных ключей зашифровано "
+            "(открытый текст пока оставлен как аварийная копия)",
+            changed,
+        )
 
 
 def _measure_published_releases(db: OrmSession) -> None:

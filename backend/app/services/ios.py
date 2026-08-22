@@ -409,9 +409,14 @@ def reissue(db: OrmSession, user: User) -> list[str]:
 
 
 def _vpn_url(server: Server, key: UserKey, name: str) -> str:
+    # serving_config подставляет расшифрованный приватный ключ и свежий host:
+    # без него ссылка собиралась бы из текста config, где после вычистки
+    # плейнтекста стоит плейсхолдер вместо ключа, и профиль в Amnezia молча
+    # рвался бы. Откат на key.config — на случай, если serving_config пуст.
+    config = provisioning.serving_config(server, key) or key.config
     return provisioning.build_vpn_key(
         server.host,
-        key.config,
+        config,
         port=server.port,
         name=name,
         address=key.address,

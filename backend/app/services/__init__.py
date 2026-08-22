@@ -20,6 +20,7 @@ from . import (
     ratelimit,
     recurring,
     referrals,
+    subscription,
     transfers,
     tunnel,
 )
@@ -131,6 +132,8 @@ __all__ = [
     "revenue_summary",
     "calendar_month",
     "dashboard_totals",
+    # подписка (ссылка /s/<token>)
+    "subscription",
     # заказы и оплата с сайта
     "orders",
     "passwords",

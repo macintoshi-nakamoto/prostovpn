@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ban, Gauge, Gift, KeyRound, Power, Smartphone, Trash2, Wallet } from "lucide-react";
+import { Ban, Gauge, Gift, KeyRound, Power, ShieldAlert, Smartphone, Trash2, Wallet } from "lucide-react";
 import { usersApi } from "../../lib/api";
 import { money, trafficLimit } from "../../lib/format";
 import { Button, Section, Toggle, confirmDialog } from "../../ui";
@@ -73,6 +73,29 @@ export function UserControls({ user, plans, onResult, onDeleted }) {
       setCredentials({ login: user.login, password });
     } catch (err) {
       setError(err.message || "Не удалось сменить пароль");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const reissueSubscription = async () => {
+    const ok = await confirmDialog({
+      title: "Ссылка подписки скомпрометирована?",
+      message:
+        "Сменим ключи всех устройств и погасим все ссылки подписки. Устройства " +
+        "переподключатся сами с новым конфигом, а утёкшая ссылка станет бесполезной.",
+      confirmText: "Перевыпустить",
+      danger: true,
+    });
+    if (!ok) return;
+
+    setBusy("compromised");
+    setError(null);
+    try {
+      const fresh = await usersApi.reissueSubscription(user.id);
+      onResult(fresh);
+    } catch (err) {
+      setError(err.message || "Не удалось перевыпустить подписку");
     } finally {
       setBusy(null);
     }
@@ -215,6 +238,20 @@ export function UserControls({ user, plans, onResult, onDeleted }) {
           <ControlRow icon={<KeyRound size={16} />} title="Пароль" sub="Показывается один раз после смены">
             <Button size="sm" disabled={busy === "password"} onClick={resetPassword}>
               Сменить
+            </Button>
+          </ControlRow>
+
+          <ControlRow
+            icon={<ShieldAlert size={16} />}
+            title="Подписка"
+            sub="Ссылка утекла — сменить ключи и погасить ссылки"
+          >
+            <Button
+              size="sm"
+              disabled={busy === "compromised"}
+              onClick={reissueSubscription}
+            >
+              {busy === "compromised" ? "…" : "Перевыпустить"}
             </Button>
           </ControlRow>
 

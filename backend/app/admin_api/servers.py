@@ -46,6 +46,17 @@ def _apply(server: Server, body: schemas.ServerIn) -> None:
     держится выдача доступа: сохранение узла ради переименования оставляло
     бы его без шаблона и без доступа по SSH.
     """
+    # Что влияет на точку подключения клиента. Смена любого поднимает
+    # endpoint_rev — по нему подписка отдаёт revision, и клиент видит, что
+    # endpoint изменился. Для нового сервера (id ещё нет) не бампаем: он и так
+    # стартует с 1. awg_template учитываем тоже: смена обфускации меняет конфиг.
+    _endpoint_before = (
+        server.host,
+        server.port,
+        server.alt_ports or "",
+        server.awg_template or "",
+    )
+
     server.name = body.name
     server.country = body.country
     server.country_en = body.country_en
@@ -80,6 +91,15 @@ def _apply(server: Server, body: schemas.ServerIn) -> None:
 
     server.is_active = body.is_active
     server.sort_order = body.sort_order
+
+    _endpoint_after = (
+        server.host,
+        server.port,
+        server.alt_ports or "",
+        server.awg_template or "",
+    )
+    if server.id is not None and _endpoint_before != _endpoint_after:
+        server.endpoint_rev = (server.endpoint_rev or 1) + 1
 
 
 def _check_usable(server: Server) -> None:

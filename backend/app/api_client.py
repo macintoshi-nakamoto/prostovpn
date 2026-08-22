@@ -25,7 +25,7 @@ from . import geo, provisioning, services
 from .config import settings
 from .db import get_db
 from .models import Provisioning, Server, Session, User, UserKey, is_ios_slot, utcnow
-from .provisioning import config_for
+from .provisioning import serving_config
 from .security import client_ip
 
 log = logging.getLogger("panel.client")
@@ -114,6 +114,11 @@ class LoginResponse(BaseModel):
     account: AccountOut
     subscription: SubscriptionOut
     servers: list[ServerOut]
+    # Ссылка подписки sub.prostovpn.cc/s/<token> для этого устройства. Выдаётся
+    # один раз при входе — сырой токен восстановить из базы нельзя. Старое
+    # приложение поле игнорирует; браузеру (кабинету) ссылка не нужна и не
+    # выдаётся (None).
+    subscription_url: str | None = None
     # Почему список пуст. Пустой массив без объяснения — худшее, что может
     # показать приложение: человек ввёл логин с паролем, вошёл, и дальше
     # тишина. См. _notice_for.
@@ -214,6 +219,20 @@ def _renew_url() -> str:
     return f"{settings().site_url.rstrip('/')}/account"
 
 
+def _subscription_url(db: OrmSession, session: Session) -> str | None:
+    """
+    Ссылка подписки для этого входа — только устройствам.
+
+    Браузер (кабинет) туннеля не поднимает, ссылка ему не нужна, а токен на
+    device_id="" браузера смешался бы с «ключом учётки» старых приложений.
+    Устройству токен выдаём при каждом входе (прежний той же пары гасится):
+    приложение хранит последнюю ссылку, потеря её не страшна.
+    """
+    if not session.is_device:
+        return None
+    return services.subscription.url_for(services.subscription.mint_for_session(db, session))
+
+
 def _provision_missing_keys(user_id: int, device_id: str) -> None:
     """
     Досоздаёт недостающие ключи в фоне, уже после ответа приложению.
@@ -285,28 +304,28 @@ def _notice_for(db: OrmSession, user: User, servers: list[ServerOut]) -> str | N
     return "Готовим подключение, это займёт около минуты. Потяните экран, чтобы обновить."
 
 
-def _servers_out(
+def _serve_targets(
     db: OrmSession,
     user: User,
-    session: Session | None = None,
+    device_id: str,
     background: BackgroundTasks | None = None,
-) -> list[ServerOut]:
+) -> list[tuple[Server, UserKey | None]]:
     """
-    Серверы, доступные этому устройству прямо сейчас.
+    Пары (сервер, ключ устройства), которые можно отдавать этому человеку.
 
-    Без действующей подписки список пустой: платящий и неплатящий не должны
-    получать одно и то же.
+    Единая точка допуска для обоих способов выдачи — /api/v1/servers и /s/:
+    без действующей подписки список пуст, iOS-слоты чужие, недоделанные и
+    демонстрационные узлы отсеяны. Расходиться этим двум путям нельзя, иначе
+    подписка отдавала бы то, что вход не отдаёт (или наоборот).
 
-    Конфиг берётся по устройству, а не по учётке: у каждого свой пир, и
-    отдать телефону конфиг ноутбука значит вернуть ровно ту общую пару
-    ключей, из-за которой отключение одного устройства было невозможно.
+    Конфиг берётся по устройству, а не по учётке: у каждого свой пир.
     """
     if not user.has_access():
         return []
 
-    device_id = session.device_key if session is not None else ""
-    by_server: dict[int, object] = {}
-    shared: dict[int, object] = {}
+    device_id = device_id or ""
+    by_server: dict[int, UserKey] = {}
+    shared: dict[int, UserKey] = {}
     for key in user.keys:
         if key.revoked_at is None:
             # Слоты `ios-N` — ключи для AmneziaVPN на iPhone, у них своя
@@ -341,7 +360,7 @@ def _servers_out(
     for server_id, key in shared.items():
         by_server.setdefault(server_id, key)
 
-    out: list[ServerOut] = []
+    targets: list[tuple[Server, UserKey | None]] = []
     for server in services.active_servers(db):
         if services.diagnostics.is_documentation_address(server.host):
             # Адрес из диапазона для примеров в документации — подключаться
@@ -355,9 +374,30 @@ def _servers_out(
                 server.host,
             )
             continue
+        targets.append((server, by_server.get(server.id)))
+    return targets
 
-        key = by_server.get(server.id)
-        config = config_for(server, key)
+
+def _servers_out(
+    db: OrmSession,
+    user: User,
+    session: Session | None = None,
+    background: BackgroundTasks | None = None,
+) -> list[ServerOut]:
+    """
+    Серверы, доступные этому устройству прямо сейчас (для /api/v1/servers).
+
+    Без действующей подписки список пустой: платящий и неплатящий не должны
+    получать одно и то же.
+    """
+    device_id = session.device_key if session is not None else ""
+    out: list[ServerOut] = []
+    for server, key in _serve_targets(db, user, device_id, background):
+        # serving_config подставляет свежий host из Server.host и расшифрованный
+        # приватный ключ (для SSH), поэтому смена IP узла долетает даже до уже
+        # установленных приложений — контракт /servers не меняется. Порт
+        # выбирает _with_chosen_port ниже, host он уже не трогает.
+        config = serving_config(server, key)
         if not config:
             # Сервер есть, но конфига для этого человека пока нет —
             # показывать его в приложении нельзя: подключение упадёт.
@@ -510,6 +550,7 @@ def login(
         subscription=_subscription_out(user),
         servers=servers,
         notice=_notice_for(db, user, servers),
+        subscription_url=_subscription_url(db, session),
     )
 
 
@@ -653,6 +694,7 @@ def register(
         subscription=_subscription_out(user),
         servers=servers,
         notice=_notice_for(db, user, servers),
+        subscription_url=_subscription_url(db, session),
     )
 
 
@@ -721,3 +763,28 @@ def logout(
     session.revoked_at = services.utcnow()
     db.commit()
     return {"ok": True}
+
+
+class RotateOut(BaseModel):
+    subscription_url: str
+
+
+@router.post("/subscription/rotate", response_model=RotateOut)
+def subscription_rotate(
+    session: Session = Depends(current_session),
+    db: OrmSession = Depends(get_db),
+) -> RotateOut:
+    """
+    Меняет ссылку подписки этого устройства: прежняя перестаёт работать сразу.
+
+    Только ссылку — пару ключей WG не перевыпускает. Утёкшую ссылку это
+    обрывает, но уже отданный по ней приватный ключ остаётся живым; на случай
+    настоящей компрометации в панели есть отдельная кнопка с перевыпуском пары.
+    """
+    raw = services.subscription.rotate(
+        db,
+        session.user_id,
+        session.device_key,
+        label=session.device_name or session.platform,
+    )
+    return RotateOut(subscription_url=services.subscription.url_for(raw))

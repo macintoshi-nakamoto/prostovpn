@@ -335,6 +335,14 @@ class Server(Base):
     # списка серверов не должно от этого зависеть.
     facts: Mapped[dict | None] = mapped_column(JSON, default=None)
 
+    # Номер ревизии точки подключения. Растёт при каждой смене host/port/
+    # запасных портов узла — подписка отдаёт клиенту max(endpoint_rev) как
+    # `revision`, по нему видно, что endpoint изменился, без сравнения тел.
+    # Целое со скалярным дефолтом намеренно: миграция ALTER проставит DEFAULT 1
+    # существующим строкам (callable-дефолт вроде utcnow миграция бы не
+    # проставила — колонка осталась бы NULL).
+    endpoint_rev: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     keys: Mapped[list["UserKey"]] = relationship(back_populates="server", cascade="all, delete-orphan")
@@ -754,7 +762,19 @@ class UserKey(Base):
     )
 
     # Текст wg-quick либо ссылка vpn:// — приложение принимает оба вида.
+    #
+    # Приватный ключ клиента живёт ДВАЖДЫ и это переходное состояние: строкой
+    # `PrivateKey = ...` внутри `config` (как было всегда) и зашифрованным в
+    # `private_key_enc`. Читатели берут ключ через `provisioning.private_key_for`
+    # — тот предпочитает шифр, а на текст откатывается, пока он ещё там. Открытый
+    # текст вычищается отдельным шагом (tools/strip_plaintext_keys.py) только
+    # после проверки, что всё читается из шифра; тогда в `config` остаётся
+    # `PrivateKey = __ENCRYPTED__` (строка не пустеет — иначе reuse-guard в
+    # keys.issue_key счёл бы ключ отсутствующим и перевыпустил бы пиры всем).
     config: Mapped[str] = mapped_column(Text)
+    # Приватный ключ клиента, зашифрованный тем же AES-GCM, что пароли и почта
+    # (crypto.py). NULL — ещё не зашифрован (старая строка до бэкфилла).
+    private_key_enc: Mapped[str | None] = mapped_column(Text, default=None)
     public_key: Mapped[str | None] = mapped_column(String(64), default=None)
     address: Mapped[str | None] = mapped_column(String(64), default=None)
 
@@ -930,6 +950,60 @@ class Session(Base):
         появления пиров на устройство.
         """
         return (self.device_id or "").strip()
+
+
+class SubscriptionToken(Base):
+    """
+    Отзываемый ключ доступа к подписке — ссылке `sub.prostovpn.cc/s/<token>`.
+
+    Зачем отдельно от `Session`. Bearer-токен приложения даёт доступ ко всему
+    кабинету (продление, устройства, смена почты). Ссылку подписки человек
+    кладёт в сторонний клиент (AmneziaVPN), она живёт в буфере обмена и в
+    чужом приложении — ей нельзя давать те же права. Поэтому свой токен: он
+    открывает только выдачу конфига, привязан к устройству, ротируется и
+    отзывается независимо от входа.
+
+    В базе, как и у сессии, только `token_hash`: утечка дампа не отдаёт живых
+    ссылок. Приватного ключа WG токен не содержит — он лишь называет, чей
+    конфиг собрать; сам конфиг с ключом уходит держателю токена под TLS.
+    Поэтому «утечка = отзываемый инцидент» выполняется полностью только вместе
+    с перевыпуском пары ключей (кнопка «скомпрометирован» в панели), а простая
+    ротация токена лишь обрывает саму ссылку.
+    """
+
+    __tablename__ = "subscription_tokens"
+    __table_args__ = (
+        # Один живой токен на устройство: ротация заводит новый и гасит
+        # прежний, поэтому отозванных на одну пару может быть сколько угодно, а
+        # живой — ровно один. Частичный уникальный индекс (WHERE revoked_at IS
+        # NULL) это и выражает; отзыв ставит revoked_at и выводит строку из-под
+        # ограничения. Индексом, а не UniqueConstraint: миграции досоздают на
+        # живой таблице только индексы.
+        Index(
+            "uq_sub_token_user_device",
+            "user_id",
+            "device_id",
+            unique=True,
+            sqlite_where=sa_text("revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Пустая строка — «ключ учётки», как у UserKey.device_id и Session.device_key.
+    device_id: Mapped[str] = mapped_column(String(64), default="", server_default="", index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # Платформа или имя устройства — чтобы в панели было видно, чья это ссылка.
+    label: Mapped[str | None] = mapped_column(String(96), default=None)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+    # Когда по ссылке в последний раз ходили — наблюдаемость и повод ротации.
+    last_used_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    # Скользящий срок: активный клиент (опрос раз в 30 мин) не теряет ссылку
+    # никогда, а забытая/утёкшая без активности сама умирает. NULL — бессрочно.
+    expires_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    user: Mapped[User] = relationship()
 
 
 class PasswordReset(Base):

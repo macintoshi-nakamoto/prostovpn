@@ -324,7 +324,7 @@ User=$APP_USER
 Group=$APP_USER
 WorkingDirectory=$APP_DIR/backend
 EnvironmentFile=$APP_DIR/backend/.env
-ExecStart=$APP_DIR/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+ExecStart=$APP_DIR/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --no-access-log
 Restart=always
 RestartSec=3
 

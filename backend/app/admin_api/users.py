@@ -541,6 +541,24 @@ def reissue_ios(
     return detail
 
 
+@router.post("/{user_id}/subscription/reissue", response_model=schemas.UserDetail)
+def reissue_subscription(
+    user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
+) -> schemas.UserDetail:
+    """
+    «Ссылка скомпрометирована»: меняет WG-пары всех устройств и гасит все
+    ссылки подписки. Устройства переподключатся с новым конфигом; утёкшая
+    ссылка и утёкший вместе с ней приватный ключ становятся бесполезны.
+    """
+    user = _load(db, user_id)
+    problems = services.subscription.reissue_user(db, user)
+    audit(db, admin, "user.subscription_reissue", user.public_id)
+    detail = _detail(db, user_id)
+    if problems:
+        detail.blocked_reason = "Перевыпуск прошёл не везде: " + "; ".join(problems)
+    return detail
+
+
 @router.post("/{user_id}/password", response_model=schemas.PasswordOut)
 def reset_password(
     user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)

@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from . import admin_api, api_client, public_api, services
+from . import admin_api, api_client, public_api, services, subscription_api
 from .config import settings
 from .db import SessionLocal, init_db
 
@@ -208,9 +208,11 @@ async def _json_errors(request: Request, exc: StarletteHTTPException):
     Ошибки API — JSON, ошибки страниц сайта — страница.
 
     Сайт отдаётся тем же приложением, и 404 на опечатку в адресе не должна
-    показывать человеку `{"detail":"Not Found"}`.
+    показывать человеку `{"detail":"Not Found"}`. Подписка /s/ — наоборот:
+    её дёргает клиент, ему нужен JSON, а не страница 404 сайта.
     """
-    if not request.url.path.startswith("/api/"):
+    path = request.url.path
+    if not (path.startswith("/api/") or path.startswith("/s/")):
         site = _site_dir()
         if site is not None and exc.status_code == 404 and (site / "404.html").is_file():
             return FileResponse(site / "404.html", status_code=404)
@@ -233,6 +235,9 @@ def healthz() -> dict[str, str]:
 app.include_router(api_client.router)
 app.include_router(public_api.router)
 app.include_router(admin_api.router)
+# Подписка живёт в корне поддомена (/s/...), без префикса /api. Подключаем до
+# site-catch-all ниже, иначе тот проглотил бы /s/ как маршрут SPA.
+app.include_router(subscription_api.router)
 
 
 # --- статика ------------------------------------------------------------------

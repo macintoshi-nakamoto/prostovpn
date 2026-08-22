@@ -195,6 +195,11 @@ object PanelApi {
                 cityEn = item.optString("city_en").takeIf { it.isNotEmpty() },
                 countryCode = item.optString("country_code").takeIf { it.isNotEmpty() },
                 config = config,
+                altPorts = item.optJSONArray("alt_ports")?.let { ports ->
+                    (0 until ports.length()).mapNotNull { n ->
+                        ports.optInt(n).takeIf { it in 1..65535 }
+                    }
+                } ?: emptyList(),
             )
         }
     }

@@ -267,6 +267,8 @@ class BotOrderIn(BaseModel):
     plan_code: str
     # Сколько раз берём тариф: для посуточного это и есть число дней.
     quantity: int = 1
+    # Чем платить: «sbp», «crypto». Не сказали — способ из настроек панели.
+    payment_method: str | None = None
 
 
 class BotOrderOut(BaseModel):
@@ -295,12 +297,23 @@ def create_for_user(
 
     try:
         order = services.create_order_for_user(
-            db, user, plan_code=body.plan_code, origin="bot", quantity=body.quantity
+            db,
+            user,
+            plan_code=body.plan_code,
+            origin="bot",
+            quantity=body.quantity,
+            payment_method=body.payment_method,
         )
     except services.OrderError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    audit(db, admin, "order.create_bot", order.id, f"{user.login}, {body.plan_code}")
+    audit(
+        db,
+        admin,
+        "order.create_bot",
+        order.id,
+        f"{user.login}, {body.plan_code}, {order.payment_method or 'способ по умолчанию'}",
+    )
     return BotOrderOut(
         id=order.id,
         status=order.status,

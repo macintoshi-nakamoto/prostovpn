@@ -237,6 +237,9 @@ class OrderRow(Schema):
     currency: str
     status: str  # pending | paid | failed | refunded | expired
     provider: str | None = None
+    # Чем платили внутри провайдера: у Platega через один адрес идут и СБП,
+    # и криптовалюта, и без этого поля в списке заказов они неразличимы.
+    payment_method: str | None = None
     provider_payment_id: str | None = None
     is_renewal: bool
     failure_reason: str | None = None

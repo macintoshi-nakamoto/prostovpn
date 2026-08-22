@@ -557,6 +557,8 @@ export const en = {
     payReturnPaid: "Payment received — your plan is extended.",
     payReturnPending:
       "The payment isn't confirmed yet. If you've paid, access will activate within a couple of minutes — refresh the page.",
+    payReturnPendingCrypto:
+      "The transfer isn't confirmed on-chain yet. That's normal — confirmation takes a few minutes or more. Access will activate on its own; refresh the page later.",
     payReturnFailed: "The payment didn't go through. Nothing was charged — try again.",
 
     recTitle: "Auto-renewal",
@@ -616,23 +618,25 @@ export const en = {
     starsSub: "Opens in Telegram",
     sbp: "SBP",
     sbpSub: "Pay from your banking app",
-    sbpBusy: "Creating the invoice…",
-    autoTitle: "Renew automatically",
-    autoSub: "We'll set it up after the payment. Turn it off any time.",
+    crypto: "Crypto",
+    cryptoSub: "No card, no bank",
+    creating: "Creating the invoice…",
     invWaiting: "Waiting for the payment…",
     invWaitingSub:
       "The payment page opened in a new tab. Access activates on its own as soon as the bank confirms.",
+    invWaitingSubCrypto:
+      "The payment page opened in a new tab. Access activates on its own once the transfer is confirmed on-chain.",
     invOpen: "Open the payment page",
     invHint: "The invoice lives for about 30 minutes. Feel free to close this window — the payment still counts.",
+    invHintCrypto:
+      "Send the exact amount to the address on the payment page. On-chain confirmation takes a few minutes or more; you can close this window.",
     invPaid: "Paid",
     invPaidSub: "Your plan is extended, the days are already added.",
     invDone: "Great",
     invFailed: "Invoice not paid",
     invFailedSub: "The link expired or the payment didn't go through. Nothing was charged.",
     invRetry: "Create a new invoice",
-    crypto: "Crypto",
-    soon: "soon",
-    soonSub: "Being connected",
+    invOther: "Choose another method",
     note: "Days add up to your current subscription: paying doesn't reset the time left.",
     close: "Close",
   },

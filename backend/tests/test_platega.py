@@ -21,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.config import settings
 from app.db import SessionLocal, init_db
 from app.main import app
 from app.models import (
@@ -475,3 +476,69 @@ def test_recurring_pending_link_is_reused(client, fake_api):
         second = recurring_service.create(db, user, "basic")
         assert second.id == first_id
     assert len(fake_api["calls"]) == calls_before
+
+
+def test_payment_method_reaches_platega_and_splits_orders(client, fake_api):
+    """
+    Способ оплаты доезжает до тела запроса, а заказы по разным способам не
+    подменяют друг друга.
+
+    Второе важнее первого: пока способ не участвовал в сверке
+    переиспользования, человек, начавший платить по СБП и передумавший в
+    пользу криптовалюты, получал обратно старый счёт СБП — нажал одно,
+    открылось другое.
+    """
+    order_id = _paid_user(client, fake_api, "platega-method@example.com")
+    with SessionLocal() as db:
+        user_id = db.get(Order, order_id).user_id
+
+    from app.services import create_order_for_user
+
+    def _route(tx: str) -> None:
+        fake_api["routes"][("POST", "/transaction/process")] = {
+            "transactionId": tx,
+            "redirect": f"https://pay.platega.io/?id={tx}",
+            "expiresIn": "00:30:00",
+        }
+
+    # Криптовалюта — метод 13 у Platega.
+    _route("tx-method-crypto")
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        crypto_order = create_order_for_user(
+            db, user, "basic", provider_name="platega", payment_method="crypto"
+        )
+        crypto_id = crypto_order.id
+        assert crypto_order.payment_method == "crypto"
+    assert fake_api["calls"][-1][2]["paymentMethod"] == platega.METHODS["crypto"] == 13
+
+    # СБП — метод 2 и ОТДЕЛЬНЫЙ заказ, а не тот же самый.
+    _route("tx-method-sbp")
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        sbp_order = create_order_for_user(
+            db, user, "basic", provider_name="platega", payment_method="sbp"
+        )
+        assert sbp_order.id != crypto_id
+        assert sbp_order.payment_method == "sbp"
+    assert fake_api["calls"][-1][2]["paymentMethod"] == 2
+
+    # Повтор того же способа возвращает свой заказ и к Platega не ходит.
+    calls_before = len(fake_api["calls"])
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        again = create_order_for_user(
+            db, user, "basic", provider_name="platega", payment_method="crypto"
+        )
+        assert again.id == crypto_id
+    assert len(fake_api["calls"]) == calls_before
+
+    # Незнакомый способ не роняет покупку: заказ идёт методом из настроек.
+    _route("tx-method-junk")
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        junk = create_order_for_user(
+            db, user, "year", provider_name="platega", payment_method="dogecoin"
+        )
+        assert junk.payment_method is None
+    assert fake_api["calls"][-1][2]["paymentMethod"] == settings().platega_payment_method

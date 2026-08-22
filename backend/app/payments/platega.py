@@ -56,6 +56,35 @@ _KINDS = {
 # его нет намеренно: подписки создаёт сервис recurring, а не заказ.
 SUBSCRIPTION_METHOD = 6
 
+# Способы разовой оплаты: наше имя → код метода Platega.
+#
+# Список закрытый, и это не перестраховка. Адрес /transaction/process у
+# разовых платежей и у подписок один, различаются они только телом запроса.
+# Принимай мы код числом из запроса — любой желающий создал бы через путь
+# обычного заказа транзакцию с методом 6, то есть подписку.
+METHODS = {
+    "sbp": 2,
+    "card": 11,
+    "crypto": 13,
+    "sberpay": 14,
+}
+
+
+def method_code(name: str | None) -> int:
+    """
+    Код метода для Platega по нашему имени способа.
+
+    Незнакомое имя и None одинаково откатываются на метод из настроек:
+    у старых заказов способа не записано, и платиться они должны так же,
+    как платились до появления выбора.
+    """
+    if name:
+        code = METHODS.get(name)
+        if code is not None:
+            return code
+        log.warning("неизвестный способ оплаты %r, беру метод из настроек", name)
+    return settings().platega_payment_method
+
 
 def _base_url() -> str:
     return settings().platega_api_url.rstrip("/")
@@ -179,7 +208,8 @@ class PlategaProvider:
             failed_url = f"{site}/account?order={order.id}&failed=1"
 
         body = {
-            "paymentMethod": config.platega_payment_method,
+            # Способ берём из заказа — тем же приёмом, что origin выше.
+            "paymentMethod": method_code(getattr(order, "payment_method", None)),
             "paymentDetails": {
                 # Platega считает в рублях, как и пример в её документации.
                 "amount": order.amount_kopecks / 100,

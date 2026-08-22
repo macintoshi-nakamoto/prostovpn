@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -118,6 +119,11 @@ def list_plans(db: OrmSession = Depends(get_db)) -> list[PlanOut]:
 # --- заказы -------------------------------------------------------------------
 
 
+# Способы оплаты, которые принимаются снаружи. Держим Literal, а не строку:
+# опечатка получает честный 422 вместо тихого отката на способ по умолчанию.
+PaymentMethodIn = Literal["sbp", "card", "crypto", "sberpay"] | None
+
+
 class OrderIn(BaseModel):
     plan_code: str = Field(min_length=1, max_length=32)
     email: str = Field(min_length=5, max_length=255, pattern=EMAIL_PATTERN)
@@ -131,6 +137,8 @@ class OrderIn(BaseModel):
     # платформу определяет сервер по строке браузера. Значение решает ровно
     # один вопрос — готовить ли ключ для AmneziaVPN, см. fulfil.
     platform: str | None = Field(default=None, max_length=16)
+    # Чем платить. См. RenewIn.payment_method.
+    payment_method: PaymentMethodIn = None
 
 
 class OrderOut(BaseModel):
@@ -141,6 +149,11 @@ class OrderOut(BaseModel):
     currency: str
     redirect_url: str | None = None
     created_at: dt.datetime
+    # Способ, которым заказ реально создан, — а не тот, что просили. Они
+    # расходятся, когда вернулся уже существующий заказ или когда способ не
+    # указали и он взялся из настроек. Окно оплаты подписывает состояние
+    # ожидания по этому полю, и врать оно не должно.
+    payment_method: str | None = None
 
 
 class OrderStatusOut(BaseModel):
@@ -198,6 +211,7 @@ def create_order(
             # а решение «нужен ли ключ для AmneziaVPN» принимается там.
             platform=body.platform
             or services.orders.platform_from_user_agent(request.headers.get("user-agent")),
+            payment_method=body.payment_method,
         )
     except services.OrderError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -210,6 +224,7 @@ def create_order(
         currency=order.currency,
         redirect_url=order.redirect_url,
         created_at=order.created_at,
+        payment_method=order.payment_method,
     )
 
 
@@ -1144,6 +1159,10 @@ class RenewIn(BaseModel):
     # Сколько раз берём тариф. Осмысленно только для посуточного: там это и
     # есть «на сколько дней». Остальные тарифы количество игнорируют.
     quantity: int = 1
+    # Чем платить. Список закрыт намеренно — см. platega.METHODS: у разовых
+    # платежей и у подписок один адрес, и произвольный код метода из запроса
+    # позволил бы создать подписку путём обычного заказа.
+    payment_method: PaymentMethodIn = None
 
 
 @router.post("/account/renew", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -1186,6 +1205,7 @@ def renew(
                 if user.ios_access
                 else services.orders.platform_from_user_agent(request.headers.get("user-agent"))
             ),
+            payment_method=body.payment_method,
         )
     except services.OrderError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -1198,6 +1218,7 @@ def renew(
         currency=order.currency,
         redirect_url=order.redirect_url,
         created_at=order.created_at,
+        payment_method=order.payment_method,
     )
 
 

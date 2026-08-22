@@ -1378,6 +1378,14 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(16), default=OrderStatus.PENDING.value, index=True)
 
     provider: Mapped[str | None] = mapped_column(String(32), default=None)
+    # Чем именно платят внутри провайдера: «sbp», «crypto» и так далее.
+    # Провайдер при этом один и тот же — у Platega и СБП, и криптовалюта
+    # живут на одном адресе вебхука, и заказ ищется по provider. Поэтому
+    # способ и лежит отдельным полем, а не подменяет провайдера.
+    #
+    # None у старых заказов и у тех, где способ не выбирали: тогда берётся
+    # метод из настроек, то есть прежнее поведение.
+    payment_method: Mapped[str | None] = mapped_column(String(16), default=None)
     provider_payment_id: Mapped[str | None] = mapped_column(String(128), default=None)
     redirect_url: Mapped[str | None] = mapped_column(Text, default=None)
     # Пока ссылка жива, повторное «оплатить» возвращает этот же заказ, а не

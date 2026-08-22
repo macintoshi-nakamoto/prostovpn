@@ -184,6 +184,7 @@ def order_row(order: Order, delivery_status: str | None = None) -> schemas.Order
         currency=order.currency,
         status=order.status,
         provider=order.provider,
+        payment_method=order.payment_method,
         provider_payment_id=order.provider_payment_id,
         is_renewal=order.is_renewal,
         failure_reason=order.failure_reason,

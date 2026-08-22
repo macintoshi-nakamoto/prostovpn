@@ -29,6 +29,15 @@ import {
 
 const kopecks = (value, currency) => money(Number(value || 0) / 100, currency);
 
+// Способ оплаты человеческими словами. Незнакомый код показываем как есть:
+// новый способ на стороне провайдера не должен превращаться в прочерк.
+const PAY_METHODS = {
+  sbp: "СБП",
+  crypto: "Криптовалюта",
+  card: "Карта",
+  sberpay: "SberPay",
+};
+
 /**
  * Заказы с сайта.
  *
@@ -146,7 +155,14 @@ export function OrdersPage() {
       key: "amount",
       title: "Сумма",
       num: true,
-      render: (row) => kopecks(row.amountKopecks, row.currency),
+      // Способ под суммой: у Platega через один адрес идут и СБП, и
+      // криптовалюта, и в спорном платеже различить их больше нечем.
+      render: (row) => (
+        <CellName
+          title={kopecks(row.amountKopecks, row.currency)}
+          sub={PAY_METHODS[row.paymentMethod] || row.paymentMethod || row.provider || "—"}
+        />
+      ),
     },
     {
       key: "user",

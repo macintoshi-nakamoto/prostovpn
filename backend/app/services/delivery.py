@@ -317,6 +317,10 @@ def _reminder_letter(user: User):
 
 # Как назвать способ оплаты в чеке. Внутренние коды провайдеров человеку
 # ничего не говорят, а «panel» в чеке выглядит как ошибка.
+#
+# «platega» здесь означает СБП только для старых платежей: пока у Platega был
+# включён один способ, имя провайдера и было способом. Новые платежи пишут
+# способ явно — см. PAYMENT_METHODS ниже.
 METHODS = {
     "yookassa": "Банковская карта",
     "cryptocloud": "Криптовалюта",
@@ -326,9 +330,33 @@ METHODS = {
     "panel": "Вручную",
 }
 
+# Способ внутри провайдера. У Platega через один адрес идут и СБП, и
+# криптовалюта, поэтому одного имени провайдера чеку мало.
+PAYMENT_METHODS = {
+    "sbp": "СБП",
+    "crypto": "Криптовалюта",
+    "card": "Банковская карта",
+    "sberpay": "SberPay",
+}
+
 
 def _method_label(method: str | None) -> str:
-    return METHODS.get((method or "").lower(), method or "—")
+    """
+    Название способа для чека.
+
+    В `Payment.method` лежит либо одно имя провайдера («platega» — так писали
+    до появления выбора), либо провайдер со способом («platega · crypto»).
+    Человеку в чеке нужен способ, которым он платил, а не наш внутренний код,
+    поэтому склейку разбираем и называем именно способ.
+    """
+    raw = (method or "").strip()
+    if not raw:
+        return "—"
+    provider, separator, inner = raw.partition("·")
+    if separator:
+        code = inner.strip().lower()
+        return PAYMENT_METHODS.get(code, code or provider.strip())
+    return METHODS.get(raw.lower(), raw)
 
 
 def _gift_context(job: DeliveryJob) -> tuple[int, str]:

@@ -685,7 +685,9 @@ def _recurring(body: dict) -> Recurring:
     )
 
 
-async def payment_link(user_login: str, plan: Plan, quantity: int = 1) -> PaymentLink:
+async def payment_link(
+    user_login: str, plan: Plan, quantity: int = 1, method: str | None = None
+) -> PaymentLink:
     """Счёт на разовую оплату: панель регистрирует заказ у провайдера.
 
     Дальше бот только показывает кнопку со ссылкой - оплату подтверждает
@@ -694,7 +696,12 @@ async def payment_link(user_login: str, plan: Plan, quantity: int = 1) -> Paymen
     body = await _admin_request(
         "POST",
         f"{ADMIN}/orders/for-user",
-        payload={"login": user_login, "plan_code": plan.code, "quantity": quantity},
+        payload={
+            "login": user_login,
+            "plan_code": plan.code,
+            "quantity": quantity,
+            "payment_method": method,
+        },
     )
 
     url = body.get("redirect_url")

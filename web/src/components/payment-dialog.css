@@ -90,8 +90,8 @@
   gap: 10px;
 }
 
-/* Строка способа — одинаковая для ссылки и для кнопки: разница между
-   «работает» и «скоро» должна быть в словах, а не в размере строки. */
+/* Строка способа — одинаковая для ссылки и для кнопки: способ, уводящий в
+   Telegram, не должен отличаться от остальных ничем, кроме слов. */
 .pay-method {
   display: flex;
   align-items: center;
@@ -99,46 +99,97 @@
   width: 100%;
   text-align: left;
   border: 1.5px solid var(--border);
-  background: var(--bg-field);
+  /* Прозрачные, а не залитые: цвет в этом окне принадлежит сумме и трём
+     фирменным знакам. Заливка строк спорила бы и с тем, и с другим. */
+  background: transparent;
   border-radius: 16px;
   padding: 14px 16px;
-  /* Одинаковая высота у всех трёх: строка «скоро» и стрелка не должны
+  /* Одинаковая высота у всех трёх: подпись в одну строку и в две не должна
      делать соседние способы разного роста — ряд читается как небрежный. */
   min-height: 72px;
   font: inherit;
   color: var(--ink);
+  /* Строка способа бывает и ссылкой (<a> на бота), и кнопкой. Подчёркивание
+     снимаем здесь, иначе ссылка выбивается из ряда. */
+  text-decoration: none;
   cursor: pointer;
-  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease,
+    color 0.14s ease;
 }
-.pay-method:hover:not(:disabled) {
+/* На прозрачной строке одного сдвига на пиксель мало — наведение должно
+   читаться само по себе, поэтому добавляется смыв и темнеет рамка.
+   `color` обязателен: строка Telegram — это <a>, и без него глобальное
+   правило a:hover перекрасило бы её в акцентный оранжевый, а соседние
+   строки-кнопки остались бы тёмными. */
+.pay-method:hover:not(:disabled):not([aria-busy="true"]) {
   transform: translate3d(0, -1px, 0);
+  background: var(--bg-field);
+  border-color: var(--text-faint);
+  color: var(--ink);
 }
-.pay-method:disabled {
+/* Нажатие возвращает строку на место: подъём без ответа на клик читается
+   как «не нажалось». */
+.pay-method:active:not(:disabled):not([aria-busy="true"]) {
+  transform: none;
+  transition-duration: 0.06s;
+}
+/* Клавиатурный фокус был не виден вовсе — в окне не было ни одного правила
+   focus-visible, и человек без мыши выбирал способ вслепую. */
+.pay-method:focus-visible,
+.pay-close:focus-visible,
+.pay-inv-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Гасим точечно, а не прозрачностью: `opacity: 0.62` роняла подпись до
+   2.75:1 — ниже нормы 4.5:1, и это видно в самом частом случае, когда
+   строка занята и пишет «Создаём счёт…». */
+/* Занятая строка выглядит как недоступная, но остаётся в фокусе — см.
+   aria-busy в PaymentDialog. Поэтому гасим оба состояния одинаково. */
+.pay-method:disabled,
+.pay-method[aria-busy="true"] {
   cursor: default;
-  opacity: 0.62;
+  border-color: var(--line);
+  /* Именно --text-muted, тот же, что у подписи: --text-dim в обеих темах
+     светлее подписи, и название получалось бледнее собственного пояснения.
+     Порядок внутри строки держат размер и вес, а не цвет. */
+  color: var(--text-muted);
+}
+.pay-method:disabled .pay-icon,
+.pay-method[aria-busy="true"] .pay-icon {
+  opacity: 0.5;
 }
 
-/* Значки в одинаковой коробке: разнокалиберные логотипы в ряду читаются
-   как небрежность, даже когда каждый сам по себе аккуратен. */
+/* Знаки лежат прямо на строке: подложка под них была цвета --surface, то
+   есть в светлой теме ровно цвета самого окна, — коробка существовала
+   только в тёмной и только как еле заметное пятно. */
 .pay-icon {
   flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--surface);
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-/* Знак любого файла встаёт в одну коробку: `contain` не даёт квадратной
-   картинке растянуть соседей, а размер задан жёстко — знаки из разных
-   источников иначе выходят разного роста. */
-.pay-icon svg,
-.pay-icon img {
-  width: 24px;
-  height: 24px;
+/* Размер знака — по оптике, а не по рамке. Биткоин заполняет свой квадрат
+   целиком, знак СБП вытянут (97×120), и при равной высоте второй выглядит
+   заметно мельче первого. */
+.pay-icon img,
+.pay-icon svg {
   display: block;
   object-fit: contain;
+}
+.pay-icon-sbp img {
+  width: 34px;
+  height: 34px;
+}
+.pay-icon-crypto img {
+  width: 30px;
+  height: 30px;
+}
+.pay-icon-tg svg {
+  width: 30px;
+  height: 30px;
 }
 
 .pay-method-body {
@@ -156,41 +207,16 @@
   font-size: 13.5px;
   color: var(--text-muted);
 }
-.pay-method-soon {
-  flex: none;
-  line-height: 1.2;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--text-dim);
-  background: var(--surface);
-  border-radius: 999px;
-  padding: 5px 10px;
-}
 .pay-method-go {
   flex: none;
   font-size: 18px;
   opacity: 0.9;
 }
 
-/* Telegram — фирменной синевой: способ, который работает прямо сейчас,
-   должен быть виден сразу, а не читаться наравне с «скоро». */
-.pay-tg {
-  background: #229ed9;
-  border-color: #229ed9;
-  color: #fff;
-  text-decoration: none;
-}
-.pay-tg:hover {
-  background: #1d92c9;
-  border-color: #1d92c9;
-}
-.pay-tg .pay-method-sub {
-  color: rgba(255, 255, 255, 0.85);
-}
-.pay-tg .pay-icon-tg {
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-}
+/* Синей плашки Telegram больше нет намеренно. Она была нужна, пока это был
+   единственный работающий способ и его требовалось отличить от «скоро».
+   Теперь работают все три, и выделять один значит подсказывать выбор,
+   которого мы не делаем. Синеву забрал себе сам самолётик — см. PayIcons. */
 
 .pay-note {
   font-size: 13.5px;
@@ -213,7 +239,7 @@
   .pay {
     animation: none;
   }
-  .pay-method:hover:not(:disabled) {
+  .pay-method:hover:not(:disabled):not([aria-busy="true"]) {
     transform: none;
   }
 }
@@ -292,25 +318,9 @@
   color: var(--text-dim);
 }
 
-/* Автопродление в окне оплаты: спокойная строка под способами, не акцент. */
-.pay-auto {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  cursor: pointer;
-  font-size: 14px;
-  line-height: 1.45;
-}
-.pay-auto input {
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
-  accent-color: var(--accent);
-  flex: none;
-}
-.pay-auto-sub {
-  display: block;
-  color: var(--text-muted);
-  font-size: 13px;
+/* Дорога назад к выбору способа из окна ожидания: тихая ссылка под
+   подсказкой, а не кнопка — уходить отсюда человек будет редко. */
+.pay-inv-back {
   margin-top: 2px;
+  font-size: 13px;
 }

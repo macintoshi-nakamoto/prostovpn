@@ -174,11 +174,13 @@ export const api = {
   enableIosKey: (slot) =>
     request(`/api/v1/account/ios/keys/${slot}/enable`, { method: "POST", auth: true }),
 
-  renew: (planCode, quantity = 1) =>
+  // paymentMethod — «sbp» или «crypto». Не передали — заказ пойдёт способом
+  // из настроек панели, как ходили все заказы до появления выбора.
+  renew: (planCode, quantity = 1, paymentMethod = null) =>
     request("/api/v1/account/renew", {
       method: "POST",
       auth: true,
-      body: { plan_code: planCode || null, quantity },
+      body: { plan_code: planCode || null, quantity, payment_method: paymentMethod },
     }),
 
   // Перевод дней другу: своя история и само действие.

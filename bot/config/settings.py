@@ -181,7 +181,7 @@ def payment_methods() -> tuple[PayMethod, ...]:
         # СБП первым: оплата деньгами - основной путь, звёзды - запасной.
         PayMethod("sbp", "СБП", ready=True),
         PayMethod("stars", "Telegram Stars", ready=True),
-        PayMethod("crypto", "Криптовалюта"),
+        PayMethod("crypto", "Криптовалюта", ready=True),
     ]
 
     if card_payments_enabled():

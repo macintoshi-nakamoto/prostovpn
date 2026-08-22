@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
@@ -34,7 +34,10 @@ const TAB_BY_SECTION = { subscription: "plan", guide: "setup" };
 ожидания врало бы.
 */
 const INVOICE_KEY = "prosto_invoice";
+// Сколько окно ожидания переживает перезагрузку. По сроку жизни счёта:
+// у СБП ссылка живёт полчаса, криптоперевод ждут дольше — см. опрос статуса.
 const INVOICE_TTL_MS = 30 * 60 * 1000;
+const INVOICE_TTL_CRYPTO_MS = 2 * 60 * 60 * 1000;
 
 function readInvoice(login) {
   try {
@@ -46,7 +49,8 @@ function readInvoice(login) {
     // компьютере следующий вошедший иначе увидел бы чужое окно оплаты — и
     // ссылку на чужой счёт вместе с ним.
     if (!login || value.login !== login) return null;
-    if (Date.now() - value.savedAt > INVOICE_TTL_MS) {
+    const ttl = value.method === "crypto" ? INVOICE_TTL_CRYPTO_MS : INVOICE_TTL_MS;
+    if (Date.now() - value.savedAt > ttl) {
       localStorage.removeItem(INVOICE_KEY);
       return null;
     }
@@ -977,21 +981,34 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   const { t, f } = useI18n();
   const [plans, setPlans] = useState(null);
   const [paying, setPaying] = useState(null);
-  const [busy, setBusy] = useState(false);
+  // Какой способ сейчас создаёт заказ, или null: занята ровно одна строка.
+  const [busyMethod, setBusyMethod] = useState(null);
   const [notice, setNotice] = useState("");
+  /*
+  Сообщение стоит выше блока тарифов, а нажимают «Оплатить» ниже — у
+  человека, докрутившего до кнопок, отказ оказывался за краем экрана и
+  выглядел как «ничего не произошло». Подводим страницу к сообщению сами.
+  Тем, кто просил меньше движения, — без прокрутки-анимации.
+  */
+  const noticeRef = useRef(null);
+  useEffect(() => {
+    if (!notice || !noticeRef.current) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    noticeRef.current.scrollIntoView({
+      behavior: still ? "auto" : "smooth",
+      block: "center",
+    });
+  }, [notice]);
   // Сколько дней берут на посуточном тарифе. Семь — неделя: самый частый
   // ответ на «нужно ненадолго», и его же проще всего поправить стрелками.
   const [dailyDays, setDailyDays] = useState(7);
   /*
-  Продлевать ли автоматически. По умолчанию — да: человек, купивший
-  подписку, обычно хочет, чтобы она не обрывалась. Галочка на виду, снять
-  её можно тем же кликом, а само подключение происходит уже ПОСЛЕ оплаты:
-  привязка счёта — отдельный шаг у провайдера, и делать её до того, как
-  доступ открыт, значит просить деньги дважды.
-  */
-  const [autoRenew, setAutoRenew] = useState(true);
-  /*
-  Выставленный счёт: { planCode, orderId, url, quantity, status }.
+  Выставленный счёт: { planCode, orderId, url, quantity, status, method }.
+
+  `method` — способ, которым заказ РЕАЛЬНО создан: его возвращает сервер, а
+  не запоминает клик. Разойтись они могут легко — вернулся уже созданный
+  заказ или способ не указали, — а по этому полю подписывается состояние
+  ожидания, и оно обязано говорить правду.
 
   Живёт в localStorage, а не только в состоянии страницы: человек уходит
   платить в соседнюю вкладку, возвращается — и обновляет эту. Без хранения
@@ -1042,10 +1059,17 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
       } catch {
         // Сеть мигнула — следующая попытка скажет точнее.
       }
-      if (alive && tries < 20) {
+      /*
+      Криптоперевод подтверждается в сети своим ходом, поэтому и ждём его
+      дольше, и говорим о нём иначе: обещать «пару минут» блокчейну нельзя.
+      Способ берём из сохранённого счёта — он же и привёл человека сюда.
+      */
+      const crypto = readInvoice(data.login);
+      const isCrypto = crypto && crypto.orderId === returnOrder && crypto.method === "crypto";
+      if (alive && tries < (isCrypto ? 60 : 20)) {
         timer = setTimeout(tick, 3000);
       } else if (alive) {
-        setNotice(t("account.payReturnPending"));
+        setNotice(t(isCrypto ? "account.payReturnPendingCrypto" : "account.payReturnPending"));
       }
     };
     tick();
@@ -1125,14 +1149,14 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   Панель не плодит заказы: пока прежний счёт жив, повторное нажатие
   возвращает его же — и человек попадает на ту же страницу оплаты.
   */
-  const paySbp = async () => {
-    if (!paying || busy) return;
+  const payWith = async (method) => {
+    if (!paying || busyMethod) return;
     const days = isDaily(paying) ? dailyDays : 1;
     const win = window.open("about:blank", "_blank");
-    setBusy(true);
+    setBusyMethod(method);
     setNotice("");
     try {
-      const order = await api.renew(paying.code, days);
+      const order = await api.renew(paying.code, days, method);
       if (order && order.redirect_url) {
         if (win) {
           try {
@@ -1149,6 +1173,9 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
           url: order.redirect_url,
           quantity: days,
           status: "pending",
+          // Способ берём из ответа, а не из аргумента: сервер мог вернуть
+          // уже созданный заказ с другим способом.
+          method: order.payment_method || method,
         });
         return;
       }
@@ -1161,7 +1188,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
       setPaying(null);
       setNotice(err instanceof ApiError ? err.message : t("account.renewFailed"));
     } finally {
-      setBusy(false);
+      setBusyMethod(null);
     }
   };
 
@@ -1186,23 +1213,14 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
         const status = await api.orderStatus(invoice.orderId);
         if (!alive) return;
         if (status.status === "paid") {
+          // Подписку на автосписание здесь больше не заводим. Она у
+          // провайдера отдельная транзакция с привязкой банковского счёта,
+          // и пока этот способ у нас не подключён, единственным её итогом
+          // была строка «ждёт привязки счёта», которая ничего не ждала.
+          // Криптовалюте она к тому же противоречит по смыслу: человек
+          // ушёл от банка, а мы бы предложили ему банк привязать.
           finish("paid");
           onChanged();
-          // Обещали продлевать само — уводим на привязку счёта сразу после
-          // оплаты. Провайдер может не поддерживать подписки: тогда ответ
-          // будет отказом, и мы просто ничего не делаем.
-          const plan = (plans || []).find((p) => p.code === invoice.planCode);
-          const renewable = plan ? [30, 365].includes(plan.duration_days) : false;
-          if (autoRenew && renewable && invoice.planCode) {
-            // Подписку создаём, а страницу привязки НЕ открываем сами:
-            // window.open вне клика блокируется браузером, и человек решил
-            // бы, что всё готово. Ссылку показываем строкой автопродления —
-            // по ней он перейдёт сам, уже осознанно.
-            api
-              .recurringCreate(invoice.planCode)
-              .then(() => setNotice(t("account.autoQueued")))
-              .catch(() => {});
-          }
           return;
         }
         if (status.status === "failed" || status.status === "expired") {
@@ -1212,8 +1230,12 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
       } catch {
         // Сеть мигнула — следующая попытка скажет точнее.
       }
-      // Ссылка живёт до получаса — дольше опрашивать нечего.
-      if (alive && tries < 600) timer = setTimeout(tick, 3000);
+      // Опрашиваем ровно столько, сколько счёт может прожить. У СБП это
+      // полчаса жизни ссылки; криптоперевод подтверждается в сети своим
+      // ходом, и бросать ожидание на тридцатой минуте значит бросать его
+      // ровно тогда, когда деньги уже в пути.
+      const limit = invoice.method === "crypto" ? 2400 : 600;
+      if (alive && tries < limit) timer = setTimeout(tick, 3000);
     };
     timer = setTimeout(tick, 3000);
     return () => {
@@ -1246,7 +1268,16 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
         </div>
       </div>
 
-      {notice && <div className="ac-notice">{notice}</div>}
+      {/* role="alert" обязателен: сюда попадает и отказ в создании заказа.
+          Окно оплаты при отказе закрывается, а строка стоит ВЫШЕ блока
+          тарифов — то есть у человека, докрутившего до кнопки «Оплатить»,
+          она оказывается за краем экрана, и отказ выглядит как будто
+          ничего не произошло. */}
+      {notice && (
+        <div className="ac-notice" role="alert" ref={noticeRef}>
+          {notice}
+        </div>
+      )}
 
       {/* Очередь оплаченных периодов: после смены тарифа деньги не пропали —
           новый тариф ждёт, пока дожатся оставшиеся дни текущего. */}
@@ -1378,17 +1409,11 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
               ? Number(dailyDays) || 1
               : 1
         }
-        busy={busy}
+        busyMethod={busyMethod}
         invoice={paying && invoice && invoice.planCode === paying.code ? invoice : null}
-        // Автосписание у провайдера бывает раз в месяц и раз в год: на
-        // посуточном и трёхмесячном подключать нечего, и обещать это
-        // галочкой — врать. Список сроков тот же, что в services/recurring.
-        canAutoRenew={paying ? [30, 365].includes(paying.duration_days) : false}
-        autoRenew={autoRenew}
-        onAutoRenew={setAutoRenew}
-        onSbp={paySbp}
+        onPay={payWith}
         onNewInvoice={() => setInvoice(null)}
-        onClose={() => (busy ? null : setPaying(null))}
+        onClose={() => (busyMethod ? null : setPaying(null))}
       />
 
       <div className="ac-card">
@@ -1586,7 +1611,7 @@ function TransferCard({ data, onChanged }) {
 
   const connect = async () => {
     if (busy || !plan) return;
-    // Страницу привязки — в новое окно, синхронно с кликом (см. paySbp).
+    // Страницу привязки — в новое окно, синхронно с кликом (см. payWith).
     const win = window.open("about:blank", "_blank");
     setBusy(true);
     setNote("");
@@ -1628,6 +1653,18 @@ function TransferCard({ data, onChanged }) {
   if (rec === null) return null;
 
   const live = rec.status === "pending" || rec.status === "active" || rec.status === "past_due";
+
+  /*
+  Пока автосписание не включено платёжным сервисом, предлагать его нельзя.
+  Единственным итогом кнопки «Подключить» была строка «ждёт привязки
+  счёта», которая ничего не ждала, — а обещание в интерфейсе человек
+  запоминает как выполненное.
+
+  Раздел остаётся у тех, чья подписка уже живая: им нужно место, где её
+  видно и где её можно отменить. Вернуть предложение обратно — снять это
+  условие, ничего больше.
+  */
+  if (!live) return null;
   const label =
     rec.status === "active"
       ? t("account.recLineOn", {

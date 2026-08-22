@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 
 from .. import crypto, payments
+from ..payments import platega
 from ..config import settings
 from ..models import (
     AuditLog,
@@ -49,6 +50,25 @@ LINK_FRESH_MINUTES = 10
 LINK_SAFETY_MINUTES = 3
 
 
+def normalize_payment_method(name: str | None) -> str | None:
+    """
+    Имя способа оплаты, годное для записи в заказ, — или None.
+
+    Проверка ровно одна и здесь: способ приходит снаружи (сайт, бот,
+    админ-панель), а превращается в код метода у провайдера уже без
+    вопросов. Незнакомое имя молча становится None, и заказ платится
+    способом из настроек — так же, как платились все заказы до появления
+    выбора. Ронять покупку из-за опечатки в имени способа незачем.
+    """
+    cleaned = (name or "").strip().lower()
+    if not cleaned:
+        return None
+    if cleaned not in platega.METHODS:
+        log.warning("незнакомый способ оплаты %r — заказ пойдёт способом по умолчанию", cleaned)
+        return None
+    return cleaned
+
+
 def _reusable_order(
     db: OrmSession,
     plan: Plan,
@@ -57,6 +77,7 @@ def _reusable_order(
     user_id: int | None = None,
     email: str | None = None,
     quantity: int = 1,
+    payment_method: str | None = None,
 ) -> Order | None:
     """
     Неоплаченный заказ с ещё живой платёжной ссылкой — или None.
@@ -66,6 +87,10 @@ def _reusable_order(
     обязан попасть на тот же счёт, который уже начал оплачивать. Сверяем и
     сумму: если администратор сменил цену тарифа, старый счёт уже врёт, и
     его отдавать нельзя.
+
+    Способ оплаты — часть сверки. Иначе человек, начавший платить по СБП и
+    передумавший в пользу криптовалюты, получал бы обратно старый счёт СБП:
+    нажал одно, открылось другое.
     """
     query = (
         select(Order)
@@ -74,6 +99,12 @@ def _reusable_order(
             Order.provider == provider,
             Order.plan_code == plan.code,
             Order.origin == origin,
+            # is_() и == различают NULL правильно: у заказов, созданных до
+            # появления выбора, способ не записан, и совпасть они должны
+            # только с таким же «способ не указан».
+            Order.payment_method.is_(None)
+            if payment_method is None
+            else Order.payment_method == payment_method,
             Order.amount_kopecks == plan.price_kopecks * quantity,
             Order.quantity == quantity,
             Order.currency == plan.currency,
@@ -186,6 +217,7 @@ def create_order(
     provider_name: str | None = None,
     platform: str | None = None,
     quantity: int = 1,
+    payment_method: str | None = None,
 ) -> Order:
     """
     Заводит заказ и регистрирует платёж у провайдера.
@@ -207,7 +239,10 @@ def create_order(
 
     count = _clamp_quantity(plan, quantity)
     name = provider_name or payments.active_name()
-    existing = _reusable_order(db, plan, name, origin="site", email=address, quantity=count)
+    method = normalize_payment_method(payment_method)
+    existing = _reusable_order(
+        db, plan, name, origin="site", email=address, quantity=count, payment_method=method
+    )
     if existing is not None:
         return existing
 
@@ -220,6 +255,7 @@ def create_order(
         currency=plan.currency,
         status=OrderStatus.PENDING.value,
         provider=name,
+        payment_method=method,
         # IP покупателя не храним — след о человеке. См. security.ip_tag.
         ip=None,
         platform=(platform or "").strip().lower() or None,
@@ -240,6 +276,7 @@ def create_order_for_user(
     provider_name: str | None = None,
     platform: str | None = None,
     quantity: int = 1,
+    payment_method: str | None = None,
 ) -> Order:
     """
     Заказ для уже известной учётки: продление из кабинета или из бота.
@@ -257,7 +294,10 @@ def create_order_for_user(
 
     count = _clamp_quantity(plan, quantity)
     name = provider_name or payments.active_name()
-    existing = _reusable_order(db, plan, name, origin=origin, user_id=user.id, quantity=count)
+    method = normalize_payment_method(payment_method)
+    existing = _reusable_order(
+        db, plan, name, origin=origin, user_id=user.id, quantity=count, payment_method=method
+    )
     if existing is not None:
         return existing
 
@@ -270,6 +310,7 @@ def create_order_for_user(
         currency=plan.currency,
         status=OrderStatus.PENDING.value,
         provider=name,
+        payment_method=method,
         # IP покупателя не храним — след о человеке. См. security.ip_tag.
         ip=None,
         platform=(platform or "").strip().lower() or None,
@@ -293,6 +334,14 @@ def _register_with_provider(db: OrmSession, order: Order, name: str) -> Order:
         order.status = OrderStatus.FAILED.value
         order.failure_reason = str(exc)
         db.commit()
+        # Способ может быть просто не включён на мерчанте — это состояние на
+        # стороне платёжного сервиса, а не поломка. Человеку об этом нужно
+        # сказать так, чтобы он понял, что делать: выбрать другой способ.
+        detail = getattr(exc, "body", "") or ""
+        if order.payment_method and "paymentMethod" in detail:
+            raise OrderError(
+                "этот способ оплаты сейчас недоступен — выберите другой"
+            ) from exc
         raise OrderError(str(exc)) from exc
 
     order.provider_payment_id = session.payment_id
@@ -523,7 +572,12 @@ def _register_payment(db: OrmSession, order: Order, user: User, subscription_id:
             order_id=order.id,
             amount=Decimal(order.amount_kopecks) / 100,
             currency=order.currency,
-            method=order.provider,
+            # С провайдером, но и со способом: у Platega через один и тот же
+            # адрес идут и СБП, и криптовалюта. Без способа в кассе оба
+            # платежа выглядят одинаково, и разобрать спорный нечем.
+            method=f"{order.provider} · {order.payment_method}"
+            if order.payment_method
+            else order.provider,
             external_id=order.provider_payment_id,
             comment=f"Заказ {order.id[:8]}, тариф {order.plan_code}",
             paid_at=order.paid_at or utcnow(),

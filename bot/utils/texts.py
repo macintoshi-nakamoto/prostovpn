@@ -243,7 +243,7 @@ def daily_error() -> str:
     )
 
 
-def invoice_text(plan: Plan, quantity: int = 1) -> str:
+def invoice_text(plan: Plan, quantity: int = 1, method: str | None = None) -> str:
     """Счёт на оплату по ссылке: что, почём и что будет дальше."""
     terms = plan_terms(plan) if quantity == 1 else timeutils.plural_days(
         plan.duration_days * quantity
@@ -253,8 +253,14 @@ def invoice_text(plan: Plan, quantity: int = 1) -> str:
         f'{tg("wallet")} <b>Счёт на оплату</b>\n\n'
         f"<b>{escape(plan.title)}</b> - {plan.rub * quantity} ₽ · {escape(terms)}\n\n"
         "Нажмите «Оплатить» и завершите платёж на открывшейся странице. "
-        "Ссылка действует 15 минут.\n\n"
-        "Доступ включится сам, подтверждение придёт сюда."
+        # Срок у способов разный: банковская ссылка живёт минуты, а перевод
+        # в сети подтверждается своим ходом — обещать ему 15 минут нельзя.
+        + (
+            "Переведите точную сумму на указанный адрес.\n\n"
+            if method == "crypto"
+            else "Ссылка действует 15 минут.\n\n"
+        )
+        + "Доступ включится сам, подтверждение придёт сюда."
     )
 
 

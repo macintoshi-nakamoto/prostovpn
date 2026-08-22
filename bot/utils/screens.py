@@ -144,7 +144,9 @@ def plans(file_id: str | None, method: PayMethod, available: list[Plan]) -> list
     return rich.screen(file_id, *blocks)
 
 
-def invoice(file_id: str | None, plan: Plan, quantity: int = 1) -> list[dict]:
+def invoice(
+    file_id: str | None, plan: Plan, quantity: int = 1, method: str | None = None
+) -> list[dict]:
     """Счёт на оплату по ссылке. Кнопка «Оплатить» - в клавиатуре под экраном."""
     return rich.screen(
         file_id,
@@ -156,7 +158,11 @@ def invoice(file_id: str | None, plan: Plan, quantity: int = 1) -> list[dict]:
         ),
         rich.paragraph(
             "Нажмите «Оплатить» и завершите платёж на открывшейся странице. "
-            "Ссылка действует 15 минут."
+            + (
+                "Переведите точную сумму на указанный адрес."
+                if method == "crypto"
+                else "Ссылка действует 15 минут."
+            )
         ),
         rich.paragraph(rich.italic("Доступ включится сам, подтверждение придёт сюда.")),
     )

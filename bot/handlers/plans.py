@@ -19,6 +19,11 @@ from utils.timeutils import plural_days
 router = Router()
 router.callback_query.middleware(AuthMiddleware())
 
+# Способы, которые платятся ссылкой на форму провайдера: счёт выставляет
+# панель, бот только показывает кнопку. Остальные (звёзды, карта Telegram)
+# выставляют инвойс средствами самого Telegram и идут другой веткой.
+LINK_METHODS = frozenset({"sbp", "crypto"})
+
 
 @router.callback_query(F.data.in_({"plans", "home", "cabinet", "cancel"}), BuyDaily.days)
 async def cancel_daily(callback: CallbackQuery, state: FSMContext) -> None:
@@ -108,14 +113,16 @@ async def buy(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     # Посуточный берут пачкой дней: сначала спрашиваем сколько, потом счёт.
-    if plan.duration_days == 1 and method.code == "sbp":
+    if plan.duration_days == 1 and method.code in LINK_METHODS:
         await state.set_state(BuyDaily.days)
-        await state.update_data(plan=plan.code)
+        # Способ запоминаем вместе с тарифом: счёт выставится после ответа
+        # про количество дней, и к тому моменту выбор кнопки уже не виден.
+        await state.update_data(plan=plan.code, method=method.code)
         await callback.message.answer(texts.daily_prompt(plan))
         await callback.answer()
         return
 
-    if method.code == "sbp":
+    if method.code in LINK_METHODS:
         # Оплата по ссылке: счёт выставляет панель у провайдера, бот
         # показывает кнопку. Оплату подтвердит вебхук - и панель напишет
         # сюда же о продлении, самому боту проверять нечего.
@@ -127,7 +134,7 @@ async def buy(callback: CallbackQuery, state: FSMContext) -> None:
             return
 
         try:
-            link = await panel.payment_link(login, plan)
+            link = await panel.payment_link(login, plan, method=method.code)
         except panel.PanelError as error:
             await show_error(callback, texts.panel_error(error))
             await callback.answer()
@@ -135,9 +142,9 @@ async def buy(callback: CallbackQuery, state: FSMContext) -> None:
 
         await show_screen(
             callback,
-            lambda file_id: screens.invoice(file_id, plan),
+            lambda file_id: screens.invoice(file_id, plan, method=method.code),
             pay_link_menu(link.url),
-            text=texts.invoice_text(plan),
+            text=texts.invoice_text(plan, method=method.code),
             animation=assets.PLANS,
         )
 
@@ -168,7 +175,11 @@ async def buy(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(BuyDaily.days)
+# Только текст. Без этого фильтра хендлер ловит ЛЮБОЕ сообщение в состоянии
+# «сколько дней» — включая служебное successful_payment. Роутер plans
+# подключён раньше payments, поэтому подтверждение оплаты звёздами он
+# перехватывал первым: деньги списаны, а подписка не продлена.
+@router.message(BuyDaily.days, F.text)
 async def daily_days(message: Message, state: FSMContext) -> None:
     """Сколько дней берём на посуточном тарифе."""
     raw = (message.text or "").strip()
@@ -193,7 +204,9 @@ async def daily_days(message: Message, state: FSMContext) -> None:
         if plan is None:
             raise panel.PanelError("тариф больше недоступен")
 
-        link = await panel.payment_link(login, plan, quantity=int(raw))
+        link = await panel.payment_link(
+            login, plan, quantity=int(raw), method=data.get("method")
+        )
     except panel.PanelError as error:
         await show(message, lambda: (texts.panel_error(error), cancel_menu("plans")))
         return
@@ -201,8 +214,10 @@ async def daily_days(message: Message, state: FSMContext) -> None:
     await state.clear()
     await show_screen(
         message,
-        lambda file_id: screens.invoice(file_id, plan, quantity=int(raw)),
+        lambda file_id: screens.invoice(
+            file_id, plan, quantity=int(raw), method=data.get("method")
+        ),
         pay_link_menu(link.url),
-        text=texts.invoice_text(plan, quantity=int(raw)),
+        text=texts.invoice_text(plan, quantity=int(raw), method=data.get("method")),
         animation=assets.PLANS,
     )

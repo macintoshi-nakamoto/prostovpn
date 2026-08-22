@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 from dataclasses import dataclass, field
 
@@ -218,7 +219,13 @@ async def _request(
                 )
 
             return body
-    except aiohttp.ClientError as error:
+    # asyncio.TimeoutError сюда попадает НЕ случайно: общий таймаут
+    # aiohttp.ClientTimeout(total=...) поднимает именно его, а он не наследник
+    # aiohttp.ClientError. Пока его тут не было, зависшая (а не упавшая)
+    # панель роняла обработчик оплаты целиком — то есть ровно в том случае,
+    # ради которого написан запасной путь «уведомим админов», запасной путь
+    # и не срабатывал. Зависшая панель встречается чаще упавшей.
+    except (aiohttp.ClientError, asyncio.TimeoutError) as error:
         logger.warning("панель недоступна: %s %s — %s", method, path, error)
         raise PanelUnavailable("панель недоступна") from error
 
@@ -462,8 +469,18 @@ async def find_user_id(user_login: str) -> int | None:
     return None
 
 
-async def extend(user_login: str, plan: Plan, method: str) -> None:
-    """Продлевает подписку после оплаты и записывает платёж в кассу панели."""
+async def extend(
+    user_login: str, plan: Plan, method: str, external_id: str | None = None
+) -> None:
+    """
+    Продлевает подписку после оплаты и записывает платёж в кассу панели.
+
+    `external_id` — идентификатор платежа у того, кто взял деньги. Для звёзд
+    это telegram_payment_charge_id: по нему платёж находят при разборе и по
+    нему же возвращают. Сумма в кассу идёт рублёвая — цена тарифа, а не
+    число звёзд: касса считает выручку в одной валюте, иначе отчёты
+    складывают рубли со звёздами. Чем именно платили, видно в способе.
+    """
     user_id = await find_user_id(user_login)
 
     if user_id is None:
@@ -478,6 +495,7 @@ async def extend(user_login: str, plan: Plan, method: str) -> None:
             "price": plan.rub,
             "register_payment": True,
             "method": method,
+            "external_id": external_id,
         },
     )
 

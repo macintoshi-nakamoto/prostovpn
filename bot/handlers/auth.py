@@ -87,7 +87,7 @@ async def register_start(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(Register.login)
+@router.message(Register.login, F.text)
 async def register_login(message: Message, state: FSMContext) -> None:
     login = (message.text or "").strip()
     error = login_error(login)
@@ -109,7 +109,7 @@ async def register_login(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(Register.password)
+@router.message(Register.password, F.text)
 async def register_password(message: Message, state: FSMContext) -> None:
     password = message.text or ""
     await _hide(message)
@@ -130,7 +130,7 @@ async def register_password(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(Register.confirm)
+@router.message(Register.confirm, F.text)
 async def register_confirm(message: Message, state: FSMContext) -> None:
     repeat = message.text or ""
     await _hide(message)
@@ -198,7 +198,7 @@ async def login_start(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(Login.login)
+@router.message(Login.login, F.text)
 async def login_login(message: Message, state: FSMContext) -> None:
     login = (message.text or "").strip()
 
@@ -216,7 +216,7 @@ async def login_login(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(Login.password)
+@router.message(Login.password, F.text)
 async def login_password(message: Message, state: FSMContext) -> None:
     password = message.text or ""
     await _hide(message)
@@ -290,7 +290,7 @@ async def password_start(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(ChangePassword.current)
+@router.message(ChangePassword.current, F.text)
 async def password_current(message: Message, state: FSMContext) -> None:
     password = message.text or ""
     await _hide(message)
@@ -305,7 +305,7 @@ async def password_current(message: Message, state: FSMContext) -> None:
     )
 
 
-@router.message(ChangePassword.fresh)
+@router.message(ChangePassword.fresh, F.text)
 async def password_fresh(message: Message, state: FSMContext) -> None:
     password = message.text or ""
     await _hide(message)

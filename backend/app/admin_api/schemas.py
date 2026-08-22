@@ -320,6 +320,10 @@ class ExtendIn(Schema):
     # Отметить деньги как полученные: продление обычно и есть оплата.
     register_payment: bool = True
     method: str | None = None
+    # Идентификатор платежа у того, кто взял деньги. Для оплаты звёздами это
+    # telegram_payment_charge_id — по нему платёж находят и по нему же его
+    # возвращают. Без него звёздная оплата в кассе ничем не подтверждена.
+    external_id: str | None = None
 
 
 class PasswordOut(Schema):

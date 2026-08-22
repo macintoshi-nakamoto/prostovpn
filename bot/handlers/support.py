@@ -76,7 +76,7 @@ async def ticket_start(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(Support.message)
+@router.message(Support.message, F.text)
 async def ticket_text(message: Message, state: FSMContext) -> None:
     text = (message.text or message.caption or "").strip()
 

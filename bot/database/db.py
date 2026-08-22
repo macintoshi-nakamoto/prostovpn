@@ -53,6 +53,20 @@ SCHEMA = (
         answered_at TEXT
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS star_payments(
+        charge_id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        panel_login TEXT,
+        plan_code TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        currency TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'new',
+        created_at TEXT NOT NULL,
+        done_at TEXT,
+        note TEXT
+    )
+    """,
 )
 
 

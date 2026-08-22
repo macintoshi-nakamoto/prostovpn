@@ -6,8 +6,10 @@ from aiogram.types import CallbackQuery, Message
 from database import models
 from handlers.common import show_gate, show_home, show_screen, show_start
 from handlers.friends import inviter_from_payload, remember_invite
+from handlers.plans import plan_code_from_payload, send_stars_invoice
 from keyboards.menus import about_menu, docs_menu
 from utils import assets, panel, screens, texts
+from utils.logger import logger
 
 
 router = Router()
@@ -33,7 +35,50 @@ async def start_command(message: Message, command: CommandObject, state: FSMCont
     if inviter_id and not known:
         await remember_invite(message, inviter_id)
 
+    # Переход с сайта «оплатить звёздами»: в ссылке приехал тариф. Раньше
+    # такая кнопка вела в пустой чат, и выбор, сделанный на сайте, терялся
+    # целиком — человеку приходилось искать тариф заново.
+    if await offer_stars(message, command.args):
+        return
+
     await show_home(message, message.from_user.id)
+
+
+async def offer_stars(message: Message, payload: str | None) -> bool:
+    """
+    Счёт в звёздах сразу по переходу с сайта. False — обычный первый экран.
+
+    Отказываемся молча (возвращаем False и показываем домашний экран) во всех
+    случаях, когда счёт выставить нельзя: неизвестный тариф, тариф не
+    продаётся, панель молчит. Человек при этом оказывается в боте, а не в
+    сообщении об ошибке, и может дойти до оплаты обычным путём.
+    """
+    code = plan_code_from_payload(payload)
+
+    if not code:
+        return False
+
+    # Без учётки продлевать некому — сначала вход. Тариф при этом не теряется
+    # безвозвратно: он остаётся на витрине, и после входа человек выбирает
+    # его в два тапа.
+    user_id = message.from_user.id
+    session = await models.get_session(user_id)
+    login = session.panel_login if session else await models.last_login(user_id)
+
+    if not login:
+        await show_gate(message, user_id)
+        return True
+
+    try:
+        plan = await panel.plan_by_code(code)
+    except panel.PanelError as error:
+        logger.warning("тариф по ссылке %r не получен: %s", code, error)
+        return False
+
+    if plan is None or not plan.purchasable:
+        return False
+
+    return await send_stars_invoice(message, plan)
 
 
 @router.message(Command("menu"))

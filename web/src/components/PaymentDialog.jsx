@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useI18n } from "../lib/i18n/index.jsx";
-import { SUPPORT_TELEGRAM } from "../lib/contacts.js";
+import { starsPayUrl } from "../lib/contacts.js";
 import { CryptoIcon, SbpIcon, TelegramIcon } from "./PayIcons.jsx";
 import "./payment-dialog.css";
 
@@ -95,7 +95,12 @@ export function PaymentDialog({
 
           {/* Telegram Stars — не наш заказ, а бот: ссылка уводит из браузера,
               поэтому строка стоит последней и остаётся ссылкой, а не кнопкой. */}
-          <a className="pay-method" href={SUPPORT_TELEGRAM} target="_blank" rel="noreferrer">
+          <a
+            className="pay-method"
+            href={starsPayUrl(plan.code)}
+            target="_blank"
+            rel="noreferrer"
+          >
             <span className="pay-icon pay-icon-tg">
               <TelegramIcon />
             </span>

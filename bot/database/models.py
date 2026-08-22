@@ -133,7 +133,15 @@ async def get_session(user_id: int) -> Session | None:
         expires_at = timeutils.from_db(row["expires_at"])
 
         if expires_at <= timeutils.now():
-            await db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            # Стираем мёртвый токен, но логин ОСТАВЛЯЕМ.
+            #
+            # Раньше строка удалялась целиком, и вместе с ней пропадал ответ
+            # на вопрос «кому продлевать»: последний рубеж last_login ищет
+            # логин именно здесь. Человек с протухшей сессией платил
+            # звёздами, а продлевать оказывалось некому — деньги списаны,
+            # доступа нет. Явный выход из учётки по-прежнему удаляет строку
+            # целиком, см. close_session: это осознанное «забудьте меня».
+            await db.execute("UPDATE sessions SET token = '' WHERE user_id = ?", (user_id,))
             await db.commit()
             return None
 
@@ -282,3 +290,86 @@ async def answer_ticket(ticket_id: int, answer: str) -> None:
         )
 
         await db.commit()
+
+
+# --------------------------------------------------------------------------
+# Оплата звёздами
+#
+# Своя запись о каждом платеже нужна по трём причинам, и все три про деньги.
+#
+# Первая — повторы. Telegram присылает апдейт заново, если бот не успел его
+# подтвердить: перезапуск в неудачный момент, обрыв сети. Без отметки о том,
+# что этот платёж уже обработан, повтор продлевал бы подписку второй раз и
+# писал второй платёж в кассу.
+#
+# Вторая — возврат. Вернуть звёзды можно только по идентификатору платежа,
+# и если он нигде не сохранён, возвращать нечего.
+#
+# Третья — разбор. Заказ (Order) при оплате звёздами не создаётся, и когда
+# человек говорит «я заплатил», единственным доказательством остаётся эта
+# строка.
+# --------------------------------------------------------------------------
+
+
+async def claim_star_payment(
+    charge_id: str,
+    user_id: int,
+    plan_code: str,
+    amount: int,
+    currency: str,
+    panel_login: str | None,
+) -> bool:
+    """
+    Забирает платёж в работу. False — его уже забрали раньше.
+
+    Проверка и запись — одним оператором: два апдейта об одной оплате могут
+    прийти одновременно, и «сначала посмотреть, потом вставить» их не
+    развело бы.
+    """
+    async with _connect() as db:
+        cursor = await db.execute(
+            """
+            INSERT OR IGNORE INTO star_payments
+                (charge_id, user_id, panel_login, plan_code, amount, currency, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'new', ?)
+            """,
+            (charge_id, user_id, panel_login, plan_code, amount, currency, timeutils.now_str()),
+        )
+
+        await db.commit()
+
+        return cursor.rowcount > 0
+
+
+async def finish_star_payment(charge_id: str, status: str, note: str | None = None) -> None:
+    """Чем закончилось: «done» — подписка продлена, «failed» — разбирать руками."""
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE star_payments SET status = ?, done_at = ?, note = ? WHERE charge_id = ?",
+            (status, timeutils.now_str(), note, charge_id),
+        )
+
+        await db.commit()
+
+
+async def star_payment(charge_id: str) -> dict | None:
+    """Строка платежа как есть — для разбора и для возврата."""
+    async with _connect() as db:
+        cursor = await db.execute(
+            "SELECT * FROM star_payments WHERE charge_id = ?", (charge_id,)
+        )
+        row = await cursor.fetchone()
+
+    return dict(row) if row else None
+
+
+async def stuck_star_payments(limit: int = 50) -> list[dict]:
+    """Платежи, которые не довели до подписки. Их разбирают руками."""
+    async with _connect() as db:
+        cursor = await db.execute(
+            "SELECT * FROM star_payments WHERE status != 'done' ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        )
+        rows = await cursor.fetchall()
+
+    return [dict(row) for row in rows]

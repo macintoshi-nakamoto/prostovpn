@@ -67,6 +67,19 @@ def build_dispatcher() -> Dispatcher:
     dp.errors.register(on_error)
 
     dp.include_routers(
+        # Оплата — ПЕРВОЙ, и это не вкусовщина.
+        #
+        # Апдейт забирает первый подошедший роутер. Хендлеры состояний
+        # (`@router.message(Login.password)` и подобные) подходят под ЛЮБОЕ
+        # сообщение в своём состоянии — включая служебное successful_payment.
+        # Пока payments стоял восьмым, человек, начавший вводить пароль и
+        # оплативший счёт в том же чате, отдавал звёзды в никуда: подписку не
+        # продлевали, админам не сообщали, в журнале не было ни строки.
+        #
+        # Фильтры по типу сообщения на самих хендлерах состояний тоже стоят
+        # (так честнее), но порядок надёжнее: он защищает и от хендлера,
+        # который допишут завтра.
+        payments.router,
         start.router,
         admin.router,
         auth.router,
@@ -74,7 +87,6 @@ def build_dispatcher() -> Dispatcher:
         friends.router,
         transfer.router,
         plans.router,
-        payments.router,
         support.router,
     )
 
@@ -111,10 +123,19 @@ async def heartbeat() -> None:
         await asyncio.sleep(period)
 
 
-async def prepare(bot: Bot) -> bool:
-    """Снимает вебхук и здоровается. False — Telegram недоступен, пробуем позже."""
+async def prepare(bot: Bot, drop_pending: bool = False) -> bool:
+    """
+    Снимает вебхук и здоровается. False — Telegram недоступен, пробуем позже.
+
+    `drop_pending` — только для самого первого запуска процесса. Раньше он
+    стоял всегда, и это стоило денег: Telegram копит апдейты, пока бот лежит,
+    и среди них бывает successful_payment. Каждый рестарт (а он штатный —
+    Restart=always и watchdog) стирал накопленное вместе с оплатами: звёзды
+    списаны, подписки нет, в журнале ни строки. Теперь переподключение
+    забирает всё, что накопилось, и доводит до конца.
+    """
     try:
-        await bot.delete_webhook(drop_pending_updates=True)
+        await bot.delete_webhook(drop_pending_updates=drop_pending)
         me = await bot.get_me()
     except TelegramAPIError as error:
         logger.warning("Telegram молчит (%s) — ждём и пробуем снова", error)
@@ -137,10 +158,14 @@ async def describe(bot: Bot) -> None:
 
 async def poll_forever(dp: Dispatcher, bot: Bot) -> None:
     """Опрос, который сам поднимается: авария Telegram не должна ронять службу."""
+    # Первый заход снимает возможный мусор от прошлой жизни бота; дальше —
+    # ничего не выбрасываем, см. prepare.
+    first = True
     while True:
-        if not await prepare(bot):
+        if not await prepare(bot, drop_pending=first):
             await asyncio.sleep(RETRY_PAUSE)
             continue
+        first = False
 
         await describe(bot)
 

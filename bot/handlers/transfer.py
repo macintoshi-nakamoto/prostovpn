@@ -66,7 +66,7 @@ async def start(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.message(Transfer.recipient)
+@router.message(Transfer.recipient, F.text)
 async def recipient(message: Message, state: FSMContext) -> None:
     key = (message.text or "").strip()
 
@@ -82,7 +82,7 @@ async def recipient(message: Message, state: FSMContext) -> None:
     await show(message, lambda: (texts.transfer_days_prompt(key), cancel_menu("cabinet")))
 
 
-@router.message(Transfer.days)
+@router.message(Transfer.days, F.text)
 async def days(message: Message, state: FSMContext) -> None:
     raw = (message.text or "").strip()
 

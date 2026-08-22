@@ -203,7 +203,10 @@ def _vless_endpoints_for(
                 "protocol": "vless",
                 "transport": endpoint.transport,
                 "host": endpoint.public_host(server),
-                "port": endpoint.listen_port,
+                # Что реально доступно клиенту снаружи. За фронтом nginx это 443
+                # (advertise_port), а слушает xray на loopback:8444 — туда клиент
+                # не ходит вовсе, его заворачивает nginx по SNI.
+                "port": (endpoint.params or {}).get("advertise_port") or endpoint.listen_port,
                 "priority": 0,
                 "credentials": {
                     "type": "vless-reality",

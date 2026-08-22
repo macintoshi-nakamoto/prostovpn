@@ -570,3 +570,46 @@ def test_config_survives_domain_host(server_id, node):
             assert "example.com" not in value, "домен в routing.ip недопустим"
     # Приватные адреса всё равно закрыты — защита не потерялась.
     assert any("geoip:private" in (r.get("ip") or []) for r in config["routing"]["rules"])
+
+
+def test_front_mode_listens_loopback_and_advertises_external_port(server_id, node):
+    """
+    Режим «за фронтом nginx»: слушаем петлю, принимаем PROXY, рекламируем 443.
+
+    Снаружи 443 держит nginx (чтобы сайты пережили падение xray), а донорский
+    SNI он заворачивает в этот inbound на 127.0.0.1:8444. Клиенту в подписке
+    должен уйти внешний порт 443, а не порт петли.
+    """
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.services import subscription as sub_service
+
+    with SessionLocal() as db:
+        server = db.get(Server, server_id)
+        ep = xray.create_vless_endpoint(
+            db, server, listen_port=8444, server_names=["www.google.com"],
+            listen_addr="127.0.0.1", accept_proxy=True, advertise_port=443,
+            handle="vless-front-443",
+        )
+        ep.state = EndpointState.ACTIVE
+        db.commit()
+
+        config = xray.build_config(db, server)
+        inbound = next(i for i in config["inbounds"] if i["tag"] == "in-vless-front-443")
+        assert inbound["listen"] == "127.0.0.1"
+        assert inbound["port"] == 8444
+        assert inbound["streamSettings"]["tcpSettings"]["acceptProxyProtocol"] is True
+
+        user = _user(db, "front")
+        keys_service.issue_key(db, user, server, device_id="phone")
+        cred = xray.issue_cred(db, user, server, ep, device_id="phone")
+        # Ссылка и подписка несут внешний 443, а не 8444.
+        link = xray.share_link(ep, cred, server)
+        assert ":443?" in link and ":8444" not in link
+        raw = sub_service.mint(db, user.id, "phone")
+
+    with TestClient(app) as client:
+        body = client.get(f"/s/{raw}").json()
+    v = next(e for e in body["servers"][0]["endpoints"] if e["protocol"] == "vless")
+    assert v["port"] == 443

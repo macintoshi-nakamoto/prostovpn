@@ -112,6 +112,9 @@ def create_vless_endpoint(
     handle: str | None = None,
     capacity: int | None = None,
     note: str | None = None,
+    listen_addr: str = "0.0.0.0",
+    accept_proxy: bool = False,
+    advertise_port: int | None = None,
 ) -> NodeEndpoint:
     """
     Заводит точку входа VLESS+Reality в состоянии «черновик».
@@ -124,6 +127,16 @@ def create_vless_endpoint(
     ClientHello на `dest`, и зонд с чужим SNI получит сертификат не того сайта,
     который назвал. Поэтому один донор на точку входа, а ротация — это ВТОРАЯ
     точка входа, а не правка живой.
+
+    Три параметра — под режим «за фронтом nginx» на общем 443. Там 443 держит
+    nginx (чтобы сайты пережили падение xray), а донорский SNI он заворачивает
+    в этот inbound на loopback:
+      `listen_addr`     — 127.0.0.1: слушаем только петлю, снаружи виден nginx;
+      `accept_proxy`    — принимать PROXY-protocol от nginx (иначе потеряется
+                          адрес клиента там, где он важен);
+      `advertise_port`  — что писать клиенту в подписке (443 — внешний порт
+                          фронта), тогда как слушаем мы на другом (8444).
+    По умолчанию всё выключено — прямой inbound на своём порту, как 2053.
     """
     if not crypto.available():
         # UUID клиента — единственный секрет доступа, и хранить его открытым
@@ -171,6 +184,9 @@ def create_vless_endpoint(
             "dest": dest or f"{server_names[0]}:443",
             "fingerprint": "chrome",
             "api_port": API_PORT,
+            "listen_addr": listen_addr,
+            "accept_proxy": bool(accept_proxy),
+            "advertise_port": advertise_port,
         },
         secret_enc=crypto.encrypt(private_key),
         # Ниже awg: тот быстрее и дешевле по батарее.
@@ -256,24 +272,31 @@ def build_config(db: OrmSession, server: Server) -> dict:
                 {"id": identity, "flow": params.get("flow", FLOW), "email": cred.label}
             )
 
+        stream_settings = {
+            "network": "tcp",
+            "security": "reality",
+            "realitySettings": {
+                "show": False,
+                "dest": params.get("dest", ""),
+                "serverNames": params.get("server_names", []),
+                "privateKey": private_key,
+                "shortIds": params.get("short_ids", []),
+            },
+        }
+        # За фронтом nginx: inbound слушает петлю и принимает PROXY-protocol,
+        # который nginx шлёт, чтобы не потерять адрес клиента. Без tcpSettings
+        # xray снаружи не отличит адрес nginx от адреса человека.
+        if params.get("accept_proxy"):
+            stream_settings["tcpSettings"] = {"acceptProxyProtocol": True}
+
         inbounds.append(
             {
                 "tag": f"in-{endpoint.handle}",
-                "listen": "0.0.0.0",
+                "listen": params.get("listen_addr") or "0.0.0.0",
                 "port": endpoint.listen_port,
                 "protocol": "vless",
                 "settings": {"clients": clients, "decryption": "none"},
-                "streamSettings": {
-                    "network": "tcp",
-                    "security": "reality",
-                    "realitySettings": {
-                        "show": False,
-                        "dest": params.get("dest", ""),
-                        "serverNames": params.get("server_names", []),
-                        "privateKey": private_key,
-                        "shortIds": params.get("short_ids", []),
-                    },
-                },
+                "streamSettings": stream_settings,
                 "sniffing": {"enabled": True, "destOverride": ["http", "tls"]},
             }
         )
@@ -729,4 +752,5 @@ def share_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -
 
     tail = urlencode({k: v for k, v in query.items() if v})
     name = quote(f"{server.country or server.name}")
-    return f"vless://{identity}@{host}:{endpoint.listen_port}?{tail}#{name}"
+    port = (params.get("advertise_port")) or endpoint.listen_port
+    return f"vless://{identity}@{host}:{port}?{tail}#{name}"

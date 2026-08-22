@@ -321,7 +321,8 @@ def _make_sessions(
                 token_hash=token_hash(new_token()),
                 platform=platform,
                 app_version=version,
-                ip=f"{rnd.randint(31, 213)}.{rnd.randint(0, 255)}.{rnd.randint(0, 255)}.{rnd.randint(1, 254)}",
+                # IP демо-сессий не выдумываем: приватность — база не хранит адреса.
+                ip=None,
                 created_at=last_seen - dt.timedelta(days=rnd.randint(0, 30)),
                 last_seen_at=last_seen,
                 expires_at=now + dt.timedelta(days=rnd.randint(1, 30)),

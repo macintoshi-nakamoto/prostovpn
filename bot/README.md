@@ -46,6 +46,7 @@ venv\Scripts\python.exe selfcheck.py
 | Переменная | Зачем |
 |---|---|
 | `BOT_TOKEN` | токен бота из @BotFather |
+| `BOT_USERNAME` | имя бота без «@» — из него собирается реферальная ссылка `t.me/<имя>?start=ref<id>` |
 | `ADMIN_IDS` | ID администраторов через запятую — им приходят обращения и оплаты (`/myid` в боте) |
 | `PANEL_URL` | адрес панели: на сервере `http://127.0.0.1:8000`, снаружи `https://prostovpn.cc` |
 | `PANEL_ADMIN_LOGIN`, `PANEL_ADMIN_PASSWORD` | доступ к админскому API; на сервере берутся из `.env` панели |

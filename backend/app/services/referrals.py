@@ -21,13 +21,15 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import func, or_, select
+import datetime as dt
+
+from sqlalchemy import func, or_, select, update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 
 from ..config import settings
 from ..models import DeliveryJob, Referral, User, utcnow
-from .billing import add_bonus_days
+from .billing import add_bonus_days, take_bonus_days
 from .errors import PanelError
 
 log = logging.getLogger("panel.referrals")
@@ -40,7 +42,12 @@ class ReferralError(PanelError):
 def _find_user(db: OrmSession, telegram_id: int | None) -> User | None:
     if not telegram_id:
         return None
-    return db.scalar(select(User).where(User.telegram_id == telegram_id).limit(1))
+    # Один Telegram может оказаться у нескольких учёток (человек заводил
+    # вторую или покупал с сайта). Берём самую раннюю: она же и будет
+    # выбрана в следующий раз — бонусы не должны разбредаться по учёткам.
+    return db.scalar(
+        select(User).where(User.telegram_id == telegram_id).order_by(User.id).limit(1)
+    )
 
 
 # --- переход по ссылке --------------------------------------------------------
@@ -103,6 +110,53 @@ def register(
     return referral
 
 
+def _claim_bonus(db: OrmSession, referral: Referral, field: str, days: int) -> bool:
+    """
+    Атомарно помечает бонус выданным. False — его уже выдал кто-то другой.
+
+    UPDATE со сверкой пустой отметки, а не присваивание в объекте: два
+    одновременных запроса (человек нажал ссылку дважды, вход из двух
+    устройств) оба прочитали бы «не начислено» и оба начислили. Побеждает
+    один — тот, чей UPDATE изменил строку.
+    """
+    stamp = utcnow()
+    days_field = f"{field}_days"
+    at_field = f"{field}_at"
+    claimed = db.execute(
+        sa_update(Referral)
+        .where(Referral.id == referral.id, getattr(Referral, at_field).is_(None))
+        .values(**{at_field: stamp, days_field: days})
+    ).rowcount
+    db.commit()
+    if claimed:
+        db.refresh(referral)
+    return bool(claimed)
+
+
+def _join_bonus_exhausted(db: OrmSession, telegram_id: int) -> bool:
+    """
+    Не слишком ли много «переходов» за сутки у одного пригласившего.
+
+    Дни за переход даются до того, как приглашённый что-то заплатил, —
+    значит, это самая дешёвая для накрутки часть: заводи телеграм-аккаунты и
+    жми ссылку. Потолок не мешает живому человеку (столько друзей в день не
+    приводят) и обрывает конвейер.
+    """
+    limit = settings().referral_join_daily_limit
+    if limit <= 0:
+        return False
+
+    since = utcnow() - dt.timedelta(days=1)
+    granted = db.scalar(
+        select(func.count(Referral.id)).where(
+            Referral.inviter_telegram_id == telegram_id,
+            Referral.join_bonus_at.is_not(None),
+            Referral.join_bonus_at >= since,
+        )
+    )
+    return bool(granted and granted >= limit)
+
+
 def _settle_join_bonus(db: OrmSession, referral: Referral) -> bool:
     """Дарит дни за переход, если ещё не дарили и есть кому."""
     if referral.join_bonus_at is not None:
@@ -117,10 +171,15 @@ def _settle_join_bonus(db: OrmSession, referral: Referral) -> bool:
     if days <= 0:
         return False
 
+    if _join_bonus_exhausted(db, referral.inviter_telegram_id):
+        log.warning("реферал: суточный потолок переходов у %s", referral.inviter_telegram_id)
+        return False
+
+    if not _claim_bonus(db, referral, "join_bonus", days):
+        return False
+
     add_bonus_days(db, inviter, days, f"приглашён {referral.invited_telegram_id}", commit=False)
     referral.inviter_user_id = inviter.id
-    referral.join_bonus_days = days
-    referral.join_bonus_at = utcnow()
     _notify(db, referral.inviter_telegram_id, inviter, "referral_join", days)
     db.commit()
     log.info(
@@ -194,8 +253,15 @@ def _credit_purchase(db: OrmSession, user: User) -> bool:
     conditions = [Referral.invited_user_id == user.id]
     if user.telegram_id:
         conditions.append(Referral.invited_telegram_id == user.telegram_id)
-    referral = db.scalar(select(Referral).where(or_(*conditions)))
-    if referral is None or referral.purchase_bonus_at is not None:
+    # Только незакрытые: по одной учётке может найтись и старая строка с уже
+    # выданным бонусом, и та, за которую ещё не платили.
+    referral = db.scalar(
+        select(Referral)
+        .where(or_(*conditions), Referral.purchase_bonus_at.is_(None))
+        .order_by(Referral.id)
+        .limit(1)
+    )
+    if referral is None:
         return False
 
     inviter = referral.inviter or _find_user(db, referral.inviter_telegram_id)
@@ -208,15 +274,57 @@ def _credit_purchase(db: OrmSession, user: User) -> bool:
     if days <= 0:
         return False
 
+    if not _claim_bonus(db, referral, "purchase_bonus", days):
+        return False
+
     add_bonus_days(db, inviter, days, f"оплата приглашённого {user.public_id}", commit=False)
     referral.invited_user_id = user.id
     referral.inviter_user_id = inviter.id
-    referral.purchase_bonus_days = days
-    referral.purchase_bonus_at = utcnow()
     _notify(db, referral.inviter_telegram_id, inviter, "referral_purchase", days)
     db.commit()
     log.info("реферал: %s получил +%d дн. за покупку %s", inviter.public_id, days, user.public_id)
     return True
+
+
+def revoke_purchase_bonus(db: OrmSession, user: User, reason: str) -> bool:
+    """
+    Возврат оплаты забирает и подаренные за неё дни.
+
+    Зовётся из `orders.refund` до коммита возврата. Ошибки гасим по той же
+    причине, что и при начислении: возврат денег важнее бонусной арифметики,
+    и споткнуться на ней он не должен.
+    """
+    try:
+        conditions = [Referral.invited_user_id == user.id]
+        if user.telegram_id:
+            conditions.append(Referral.invited_telegram_id == user.telegram_id)
+        referral = db.scalar(
+            select(Referral)
+            .where(or_(*conditions), Referral.purchase_bonus_at.is_not(None))
+            .order_by(Referral.id.desc())
+            .limit(1)
+        )
+        if referral is None or referral.purchase_bonus_days <= 0:
+            return False
+
+        inviter = referral.inviter or _find_user(db, referral.inviter_telegram_id)
+        if inviter is None:
+            return False
+
+        take_bonus_days(
+            db,
+            inviter,
+            referral.purchase_bonus_days,
+            f"возврат по учётке {user.public_id}: {reason}",
+            commit=False,
+        )
+        referral.purchase_bonus_days = 0
+        # Отметку не снимаем: повторно дарить за ту же покупку не будем.
+        log.info("реферал: у %s снят бонус за возврат %s", inviter.public_id, user.public_id)
+        return True
+    except Exception:  # pragma: no cover - возврат денег важнее бонуса
+        log.exception("не удалось снять реферальный бонус за возврат %s", user.public_id)
+        return False
 
 
 # --- витрина ------------------------------------------------------------------

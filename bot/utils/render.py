@@ -43,6 +43,12 @@ async def show(
 ) -> None:
     for attempt in (0, 1):
         text, markup = build()
+        # На повторе премиум-эмодзи уже отключены, но текст мог быть собран
+        # раньше — тогда он всё ещё несёт теги, из-за которых Telegram и
+        # отказал. Снимаем их с готовой строки, иначе вторая попытка падает
+        # ровно там же, где первая.
+        if not ui.custom_emoji_enabled():
+            text = ui.strip_custom_emoji(text)
 
         try:
             await _deliver(event, text, markup, animation)

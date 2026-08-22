@@ -7,6 +7,8 @@ Telegram принимает только четыре стиля, остальн
 ошибкой "invalid button style specified".
 """
 
+import re
+
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CopyTextButton, InlineKeyboardButton
 
@@ -87,6 +89,21 @@ def premium_rejected(error: TelegramBadRequest) -> bool:
     description = str(error).lower()
 
     return "emoji" in description or "icon" in description
+
+
+# Премиум-эмодзи в готовом HTML: <tg-emoji emoji-id="…">🌍</tg-emoji>.
+_TG_EMOJI_RE = re.compile(r"<tg-emoji emoji-id=\"\d+\">(.*?)</tg-emoji>", re.DOTALL)
+
+
+def strip_custom_emoji(text: str) -> str:
+    """
+    Убирает премиум-эмодзи из уже собранного текста, оставляя символ пары.
+
+    Нужно для повторной попытки: текст экрана собирается до отправки, и к
+    моменту, когда Telegram отказался его принимать, пересобрать его из
+    исходных данных уже нечем — они остались в вызывающем коде.
+    """
+    return _TG_EMOJI_RE.sub(r"\1", text)
 
 
 def tg(name: str, fallback: str | None = None) -> str:

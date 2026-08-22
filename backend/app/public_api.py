@@ -121,7 +121,10 @@ def list_plans(db: OrmSession = Depends(get_db)) -> list[PlanOut]:
 class OrderIn(BaseModel):
     plan_code: str = Field(min_length=1, max_length=32)
     email: str = Field(min_length=5, max_length=255, pattern=EMAIL_PATTERN)
-    telegram_id: int | None = None
+    # Telegram здесь не принимается намеренно. Запрос никем не подписан, а
+    # идентификатор из него попадал бы на учётку: чужой номер увёл бы туда
+    # доступы, уведомления и реферальные бонусы. Свой Telegram человек
+    # привязывает входом в бота — там он подтверждён самим Telegram.
     # С какого устройства покупают. Сайт может сказать прямо; если молчит,
     # платформу определяет сервер по строке браузера. Значение решает ровно
     # один вопрос — готовить ли ключ для AmneziaVPN, см. fulfil.
@@ -186,7 +189,6 @@ def create_order(
             db,
             plan_code=body.plan_code,
             email=str(body.email),
-            telegram_id=body.telegram_id,
             ip=ip,
             # Что сказал сайт, а иначе — что видно по браузеру. Определять
             # платформу надо сейчас: к приходу вебхука заголовков уже нет,

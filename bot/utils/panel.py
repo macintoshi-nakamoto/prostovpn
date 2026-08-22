@@ -194,7 +194,16 @@ async def _request(
             json=payload,
             headers=headers,
         ) as response:
-            body = await response.json(content_type=None)
+            try:
+                body = await response.json(content_type=None)
+            except (ValueError, aiohttp.ContentTypeError):
+                # Панель ответила неJSON-ом: 500 от Starlette приходит
+                # обычным текстом, 502 — страницей nginx. Разбирать нечего,
+                # но и падать посреди экрана нельзя.
+                body = None
+
+                if response.status < 400:
+                    raise PanelUnavailable("панель ответила непонятным")
 
             if response.status >= 400:
                 detail = ""

@@ -109,14 +109,26 @@ def grant_subscription(
     # Платный период во время пробного вступает СРАЗУ, а не после него: остаток
     # бесплатных дней ничего не стоит, и досиживать пробные лимиты после оплаты
     # человек не должен. Идущий пробный уступает — снимаем его.
+    #
+    # Подаренные дни — другое дело: они заработаны приглашениями и обязаны
+    # пережить покупку. Поэтому остаток бонусного периода не сгорает, а
+    # переезжает в оплаченный: человек получает купленный тариф сразу и с
+    # теми же лишними днями, что у него были.
+    carry = dt.timedelta(0)
     if price_dec > 0 and running is not None and (running.price or 0) <= 0:
+        if running.is_bonus:
+            carry = max(dt.timedelta(0), running.expires_at - now)
         running.is_cancelled = True
         running = None
 
     # Тариф, на котором человек окажется в конце: хвост очереди, иначе идущий.
     tail = upcoming[-1] if upcoming else running
     if tail is not None and tail.plan == code:
-        tail.expires_at = tail.expires_at + dt.timedelta(days=days)
+        tail.expires_at = tail.expires_at + dt.timedelta(days=days) + carry
+        # Оплаченное продление — повод напомнить о следующем конце срока:
+        # пометка о прежнем напоминании снимается, иначе письмо ушло бы один
+        # раз за всю жизнь учётки.
+        tail.reminder_sent_at = None
         # Продление своей ценой и не двигает `price`: он остаётся ценой периода.
         return _finish(tail)
 
@@ -135,7 +147,7 @@ def grant_subscription(
         period_days=days,
         auto_renew=auto_renew,
         starts_at=starts,
-        expires_at=starts + dt.timedelta(days=days),
+        expires_at=starts + dt.timedelta(days=days) + carry,
     )
     db.add(sub)
     return _finish(sub)
@@ -251,6 +263,7 @@ def add_bonus_days(
             period_days=days,
             # Продления от подарка не ждём: в календаре прибыли ему не место.
             auto_renew=False,
+            is_bonus=True,
             starts_at=now,
             expires_at=now + dt.timedelta(days=days),
         )
@@ -272,6 +285,49 @@ def add_bonus_days(
     else:
         db.flush()
     return ends_at
+
+
+def take_bonus_days(db: OrmSession, user: User, days: int, reason: str, commit: bool = True) -> None:
+    """
+    Забирает подаренные дни обратно: возврат оплаты отменяет и бонус за неё.
+
+    Иначе накрутка выглядит так: пригласил себя со второго телефона, купил
+    самый дешёвый тариф, получил пять дней, сделал возврат — деньги вернули,
+    дни остались. Снимаем с самого дальнего живого периода и не заходим за
+    сегодняшний день: отбирать уже прожитое бессмысленно.
+    """
+    if days <= 0:
+        return
+
+    now = utcnow()
+    live = list(
+        db.scalars(
+            select(Subscription)
+            .where(
+                Subscription.user_id == user.id,
+                Subscription.is_cancelled.is_(False),
+                Subscription.expires_at > now,
+            )
+            .order_by(Subscription.expires_at)
+        )
+    )
+    if not live:
+        return
+
+    tail = live[-1]
+    tail.expires_at = max(now, tail.expires_at - dt.timedelta(days=days))
+    if tail.expires_at <= tail.starts_at:
+        tail.is_cancelled = True
+
+    from ..models import AuditLog
+
+    db.add(
+        AuditLog(action="user.bonus_revoked", target=user.public_id, detail=f"-{days} дн., {reason}")
+    )
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
 
 # --- платежи -----------------------------------------------------------------

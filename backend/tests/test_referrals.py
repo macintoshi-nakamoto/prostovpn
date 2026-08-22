@@ -206,3 +206,146 @@ def test_referral_survives_missing_inviter(client, auth):
         db.commit()
         invited = db.get(User, invited_id)
         assert referrals_service.credit_purchase(db, invited) is False
+
+
+# --- находки аудита -----------------------------------------------------------
+
+
+def test_purchase_keeps_bonus_days(client, auth):
+    """Оплата не сжигает подаренные дни, а забирает их с собой."""
+    from app.services import billing, grant_subscription
+
+    user_id = _make_user(client, auth, "ref_carry", 900_000_060)
+    with SessionLocal() as db:
+        # Ни одного живого периода: бонус ляжет отдельной строкой.
+        for sub in db.scalars(select(Subscription).where(Subscription.user_id == user_id)):
+            sub.is_cancelled = True
+        db.commit()
+        user = db.get(User, user_id)
+        billing.add_bonus_days(db, user, 6, "приглашения")
+
+    before = _access_until(user_id)
+
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        grant_subscription(db, user, days=30, plan="basic", price=199.0)
+
+    after = _access_until(user_id)
+    # 30 оплаченных дней сверху шести подаренных: подарок не пропал.
+    assert (after - before).days == 30, f"было {before}, стало {after}"
+
+    with SessionLocal() as db:
+        live = list(
+            db.scalars(
+                select(Subscription).where(
+                    Subscription.user_id == user_id, Subscription.is_cancelled.is_(False)
+                )
+            )
+        )
+        assert len(live) == 1, "оплаченный период один, бонусный в него влился"
+        assert float(live[0].price) == 199.0
+
+
+def test_refund_keeps_bonus_days(client, auth):
+    """Возврат снимает дни своей оплаты, но не подаренные."""
+    from app.services import billing, grant_subscription, refund
+    from app.models import Order, OrderStatus
+
+    user_id = _make_user(client, auth, "ref_refund_keep", 900_000_070)
+    with SessionLocal() as db:
+        for sub in db.scalars(select(Subscription).where(Subscription.user_id == user_id)):
+            sub.is_cancelled = True
+        db.commit()
+        user = db.get(User, user_id)
+        billing.add_bonus_days(db, user, 7, "приглашения")
+        sub = grant_subscription(db, user, days=30, plan="basic", price=199.0)
+        order = Order(
+            plan_code="basic",
+            email="ref-refund@example.com",
+            amount_kopecks=19900,
+            currency="RUB",
+            status=OrderStatus.PAID.value,
+            provider="platega",
+            user_id=user_id,
+            subscription_id=sub.id,
+        )
+        db.add(order)
+        db.commit()
+        order_id = order.id
+
+    with SessionLocal() as db:
+        refund(db, db.get(Order, order_id), reason="проверка")
+
+    with SessionLocal() as db:
+        user = db.get(User, user_id)
+        left = (user.access_expires_at(utcnow()) - utcnow()).days if user.access_expires_at(utcnow()) else -1
+        assert 5 <= left <= 7, f"подаренные дни должны остаться, осталось {left}"
+        assert not user.is_blocked, "за возврат при живых подаренных днях не банят"
+
+
+def test_refund_takes_back_referral_bonus(client, auth):
+    """Возврат оплаты приглашённого забирает у пригласившего его пять дней."""
+    from app.models import Order, OrderStatus
+    from app.services import grant_subscription, refund
+
+    inviter_id = _make_user(client, auth, "ref_cheater", 900_000_080)
+    invited_tg = 900_000_081
+
+    r = client.post(
+        "/api/admin/referrals/invite",
+        json={"inviter_telegram_id": 900_000_080, "invited_telegram_id": invited_tg},
+        headers=auth,
+    )
+    assert r.status_code == 201
+
+    invited_id = _make_user(client, auth, "ref_cheater_friend", invited_tg)
+    with SessionLocal() as db:
+        invited = db.get(User, invited_id)
+        assert referrals_service.credit_purchase(db, invited) is True
+
+    with_bonus = _access_until(inviter_id)
+
+    # Приглашённый оспорил платёж.
+    with SessionLocal() as db:
+        invited = db.get(User, invited_id)
+        sub = grant_subscription(db, invited, days=30, plan="basic", price=199.0)
+        order = Order(
+            plan_code="basic",
+            email="cheat@example.com",
+            amount_kopecks=19900,
+            currency="RUB",
+            status=OrderStatus.PAID.value,
+            provider="platega",
+            user_id=invited_id,
+            subscription_id=sub.id,
+        )
+        db.add(order)
+        db.commit()
+        order_id = order.id
+
+    with SessionLocal() as db:
+        refund(db, db.get(Order, order_id), reason="чарджбек")
+
+    after = _access_until(inviter_id)
+    assert (with_bonus - after).days == 5, "подаренные за оплату дни должны вернуться назад"
+
+
+def test_join_bonus_has_daily_cap(client, auth):
+    """Конвейер из одноразовых аккаунтов упирается в суточный потолок."""
+    from app.config import settings
+
+    limit = settings().referral_join_daily_limit
+    assert limit > 0
+
+    inviter_id = _make_user(client, auth, "ref_farm", 900_000_090)
+    before = _access_until(inviter_id)
+
+    for i in range(limit + 3):
+        client.post(
+            "/api/admin/referrals/invite",
+            json={"inviter_telegram_id": 900_000_090, "invited_telegram_id": 900_100_000 + i},
+            headers=auth,
+        )
+
+    after = _access_until(inviter_id)
+    assert (after - before).days == limit * 2, "сверх потолка дни не начисляются"

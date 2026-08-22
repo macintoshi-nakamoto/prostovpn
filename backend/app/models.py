@@ -825,6 +825,11 @@ class Subscription(Base):
     # часть календаря прибыли.
     auto_renew: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Подаренные дни: приглашения, компенсации, промо. Цена у такого периода
+    # тоже ноль, но с пробным его путать нельзя — пробный при оплате
+    # снимается, а подаренные дни обязаны пережить покупку и сложиться с ней.
+    is_bonus: Mapped[bool] = mapped_column(Boolean, default=False)
+
     starts_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     expires_at: Mapped[dt.datetime] = mapped_column(DateTime, index=True)
     is_cancelled: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -478,7 +478,7 @@ export function Landing() {
                   ))}
                 </ul>
                 <Link
-                  to={`${PLAN_TAB}&plan=${encodeURIComponent(p.code || "")}`}
+                  to={`${PLAN_TAB}?plan=${encodeURIComponent(p.code || "")}`}
                   className={`btn ld-plan-btn ${p.featured ? "btn-primary" : "btn-outline"}`}
                 >
                   {t("landing.plans.choose")}

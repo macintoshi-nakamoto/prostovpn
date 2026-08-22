@@ -96,7 +96,12 @@ export function Account() {
       setError("");
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
-        navigate("/login", { replace: true });
+        // Куда возвращаться после входа: человек читал инструкцию или ждал
+        // оплату — и должен попасть обратно туда же, а не в общий обзор.
+        navigate("/login", {
+          replace: true,
+          state: { from: { pathname: window.location.pathname, search: window.location.search } },
+        });
         return;
       }
       setError(t("account.loadError"));
@@ -163,13 +168,18 @@ export function Account() {
           </Link>
           <nav className="ac-tabs">
             {TABS.map((id) => (
-              <button
+              <Link
                 key={id}
+                to={sectionPath(id)}
+                // Ссылка, а не кнопка: раздел живёт по адресу, и его должно
+                // быть можно открыть в новой вкладке или скопировать.
+                // Повторный клик по своему же разделу историю не плодит —
+                // иначе «назад» упирается в тот же экран.
+                replace={tab === id}
                 className={tab === id ? "active" : ""}
-                onClick={() => navigate(sectionPath(id))}
               >
                 {t(`account.tabs.${id}`)}
-              </button>
+              </Link>
             ))}
           </nav>
           <Controls />

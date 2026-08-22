@@ -273,6 +273,13 @@ def check_referrals() -> None:
     assert inviter_from_payload("ref") is None
     assert inviter_from_payload("мусор") is None
     assert inviter_from_payload(None) is None
+    # Надстрочные цифры проходят isdigit, но int их не берёт: обработчик
+    # /start не должен падать на присланном руками мусоре.
+    assert inviter_from_payload("ref²") is None
+    assert inviter_from_payload("ref-5") is None
+    # Пробелы обрезаются намеренно: в payload Telegram их не бывает, а
+    # скопированная руками ссылка может принести хвост.
+    assert inviter_from_payload("ref 12 ") == 12
 
     blocks = screens.friends(None, FAKE_REFERRALS, url)
     dumped = json.dumps(blocks, ensure_ascii=False)
@@ -299,7 +306,17 @@ def check_emoji() -> None:
     for name, value in EMOJI_IDS.items():
         assert value.isdigit(), f"{name}: идентификатор эмодзи не число"
 
-    print(f"эмодзи: {len(EMOJI_IDS)} слотов, у каждого есть запасной символ")
+    # Запасной путь: если Telegram отверг премиум-эмодзи, из готового текста
+    # теги снимаются — иначе повторная попытка падает там же, где первая.
+    from keyboards.ui import strip_custom_emoji, tg
+
+    sample = f'{tg("brand")} <b>Prosto</b>'
+    assert "tg-emoji" in sample
+    cleaned = strip_custom_emoji(sample)
+    assert "tg-emoji" not in cleaned, "премиум-эмодзи не вычистились из текста"
+    assert EMOJI_FALLBACK["brand"] in cleaned, "запасной символ потерялся"
+
+    print(f"эмодзи: {len(EMOJI_IDS)} слотов, запасной символ и очистка тегов на месте")
 
 
 def check_texts() -> None:

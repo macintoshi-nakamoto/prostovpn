@@ -36,7 +36,9 @@ def inviter_from_payload(payload: str | None) -> int | None:
 
     tail = payload[len(REF_PREFIX) :].strip()
 
-    return int(tail) if tail.isdigit() else None
+    # Только ASCII-цифры: `isdigit` пропускает «²» и подобное, а `int` их
+    # не принимает — обработчик /start падал бы на присланном руками мусоре.
+    return int(tail) if tail.isascii() and tail.isdigit() else None
 
 
 async def remember_invite(message: Message, inviter_id: int) -> None:
@@ -69,6 +71,13 @@ async def remember_invite(message: Message, inviter_id: int) -> None:
 @router.callback_query(F.data == "friends")
 async def friends(callback: CallbackQuery) -> None:
     user_id = callback.from_user.id
+
+    # Связку освежаем прямо здесь: сессии бота живут месяцами, и тот, кто
+    # вошёл до появления приглашений, иначе никогда бы не связался с
+    # учёткой — а без связи его бонусы висели бы неначисленными.
+    session = await models.get_session(user_id)
+    if session:
+        await panel.referral_link_account(user_id, session.panel_login)
 
     try:
         stats = await panel.referral_stats(user_id)

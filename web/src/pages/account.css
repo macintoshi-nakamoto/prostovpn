@@ -28,7 +28,11 @@
   align-items: center;
   gap: 6px;
 }
-.ac-tabs button {
+/* Вкладки — ссылки: у раздела есть адрес, и его открывают в новой вкладке
+   так же, как любую ссылку. Кнопочные правила оставлены рядом: на них
+   держатся другие панели с тем же классом. */
+.ac-tabs button,
+.ac-tabs a {
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -37,12 +41,16 @@
   font-weight: 600;
   padding: 10px 18px;
   border-radius: 999px;
+  text-decoration: none;
+  white-space: nowrap;
   transition: background 0.2s ease, color 0.2s ease;
 }
-.ac-tabs button:hover {
+.ac-tabs button:hover,
+.ac-tabs a:hover {
   color: var(--ink);
 }
-.ac-tabs button.active {
+.ac-tabs button.active,
+.ac-tabs a.active {
   background: var(--accent-tint);
   color: var(--tint-fg);
 }

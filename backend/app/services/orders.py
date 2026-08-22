@@ -604,6 +604,11 @@ def refund(db: OrmSession, order: Order, reason: str = "возврат плат�
     _register_refund(db, order, reason)
 
     user = db.get(User, order.user_id) if order.user_id else None
+    if user is not None:
+        # Бонус пригласившему давался за эту оплату — вместе с ней и уходит.
+        from .referrals import revoke_purchase_bonus
+
+        revoke_purchase_bonus(db, user, reason)
     db.commit()
 
     if user is not None:
@@ -624,24 +629,12 @@ def _shrink_subscription_after_refund(db: OrmSession, order: Order, subscription
     оплаченные и не оспоренные дни остальных: ровно то, чего возврат делать
     не обещает. Возвращены деньги одного заказа — снимаем ровно его дни.
     """
-    others = (
-        db.scalars(
-            select(Order.id)
-            .where(
-                Order.subscription_id == subscription.id,
-                Order.id != order.id,
-                Order.status == OrderStatus.PAID.value,
-            )
-            .limit(1)
-        ).first()
-        is not None
-    )
-    if not others:
-        subscription.is_cancelled = True
-        return
-
     plan = db.scalar(select(Plan).where(Plan.code == order.plan_code))
     days = plan.period_days if plan else subscription.period_days
+    # Вычитаем ровно дни возвращённого заказа — и когда на строке висят
+    # другие оплаты, и когда она одна. К этой же строке приклеены дни,
+    # подаренные за приглашения: сжигать их за чужой возврат нельзя, они
+    # оплачены не деньгами.
     subscription.expires_at -= dt.timedelta(days=days)
     if subscription.expires_at <= subscription.starts_at:
         # Срезали до нуля и дальше: оплаченного не осталось, строка гаснет.

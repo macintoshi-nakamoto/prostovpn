@@ -8,6 +8,8 @@
 
 from __future__ import annotations
 
+import datetime as dt
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -349,3 +351,88 @@ def test_join_bonus_has_daily_cap(client, auth):
 
     after = _access_until(inviter_id)
     assert (after - before).days == limit * 2, "сверх потолка дни не начисляются"
+
+
+def test_existing_customer_invite_is_voided(client, auth):
+    """
+    Клиент с сайта, тапнувший чужую ссылку, дней не приносит.
+
+    В момент перехода о нём известен только Telegram, и отличить его от
+    новичка нечем. Правда всплывает при входе в бота под давним логином —
+    тогда приглашение гасится, а выданные дни забираются обратно.
+    """
+    inviter_tg = 900_000_100
+    victim_tg = 900_000_101
+
+    inviter_id = _make_user(client, auth, "ref_void_inviter", inviter_tg)
+    before = _access_until(inviter_id)
+
+    # Давний клиент: учётка заведена ДО приглашения и уже платила.
+    victim_id = _make_user(client, auth, "ref_void_victim", None)
+    with SessionLocal() as db:
+        victim = db.get(User, victim_id)
+        victim.created_at = utcnow() - dt.timedelta(days=365)
+        db.add(
+            Payment(user_id=victim_id, amount=199, currency="RUB", method="platega")
+        )
+        db.commit()
+
+    r = client.post(
+        "/api/admin/referrals/invite",
+        json={"inviter_telegram_id": inviter_tg, "invited_telegram_id": victim_tg},
+        headers=auth,
+    )
+    assert r.status_code == 201
+    assert (_access_until(inviter_id) - before).days == 2, "на переходе дни выдаются авансом"
+
+    # Он входит в бота под своим давним логином — правда открывается.
+    r = client.post(
+        "/api/admin/referrals/link",
+        json={"telegram_id": victim_tg, "login": "ref_void_victim"},
+        headers=auth,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["invited"] == 0, "аннулированное приглашение уходит из статистики"
+    assert _access_until(inviter_id) == before, "авансом выданные дни забраны обратно"
+
+    # Его покупка бонуса тоже не принесёт.
+    with SessionLocal() as db:
+        victim = db.get(User, victim_id)
+        assert referrals_service.credit_purchase(db, victim) is False
+    assert _access_until(inviter_id) == before
+
+    # Повторный переход по ссылке ничего не переигрывает.
+    r = client.post(
+        "/api/admin/referrals/invite",
+        json={"inviter_telegram_id": inviter_tg, "invited_telegram_id": victim_tg},
+        headers=auth,
+    )
+    assert r.status_code == 400
+
+
+def test_account_of_another_telegram_is_not_invited(client, auth):
+    """Учётку, привязанную к другому Telegram, приглашённой не считают."""
+    inviter_tg = 900_000_110
+    fresh_tg = 900_000_111
+
+    inviter_id = _make_user(client, auth, "ref_foreign_inviter", inviter_tg)
+    before = _access_until(inviter_id)
+
+    # Учётка уже принадлежит другому телеграму.
+    other_id = _make_user(client, auth, "ref_foreign_acc", 900_000_112)
+
+    r = client.post(
+        "/api/admin/referrals/invite",
+        json={"inviter_telegram_id": inviter_tg, "invited_telegram_id": fresh_tg},
+        headers=auth,
+    )
+    assert r.status_code == 201
+    assert (_access_until(inviter_id) - before).days == 2
+
+    r = client.post(
+        "/api/admin/referrals/link",
+        json={"telegram_id": fresh_tg, "login": "ref_foreign_acc"},
+        headers=auth,
+    )
+    assert r.status_code == 200
+    assert _access_until(inviter_id) == before, "дни за чужую учётку возвращены"

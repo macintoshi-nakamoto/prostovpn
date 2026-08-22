@@ -74,6 +74,10 @@ def register(
         select(Referral).where(Referral.invited_telegram_id == invited_telegram_id)
     )
     if existing is not None:
+        if existing.voided_at is not None:
+            # Один раз выяснили, что это не новый клиент, — второй раз по той
+            # же ссылке дни не выдаём, кем бы ни был пригласивший.
+            raise ReferralError("это приглашение уже не действует")
         if existing.inviter_telegram_id == inviter_telegram_id:
             return existing
         raise ReferralError("этого человека уже пригласил другой участник")
@@ -152,6 +156,7 @@ def _join_bonus_exhausted(db: OrmSession, telegram_id: int) -> bool:
             Referral.inviter_telegram_id == telegram_id,
             Referral.join_bonus_at.is_not(None),
             Referral.join_bonus_at >= since,
+            Referral.voided_at.is_(None),
         )
     )
     return bool(granted and granted >= limit)
@@ -210,8 +215,29 @@ def attach_user(db: OrmSession, telegram_id: int, user: User) -> None:
         user.telegram_id = telegram_id
         db.commit()
 
-    invited = db.scalar(select(Referral).where(Referral.invited_telegram_id == telegram_id))
+    invited = db.scalar(
+        select(Referral).where(
+            Referral.invited_telegram_id == telegram_id, Referral.voided_at.is_(None)
+        )
+    )
     if invited is not None and invited.invited_user_id is None:
+        # Момент истины. В переходе по ссылке о человеке не известно ничего,
+        # кроме Telegram: клиент, купивший на сайте и не открывавший бота,
+        # выглядит там ровно как новый. Здесь он впервые называет свою
+        # учётку — и если она старше приглашения или уже платила, значит
+        # приведён был не новый клиент, а свой же. Приглашение аннулируем.
+        stale = user.created_at < invited.created_at or bool(user.payments)
+        # Чужая привязка: учётка уже принадлежит другому Telegram. Считать её
+        # приглашённой нельзя — иначе одну учётку «приводят» по очереди.
+        foreign = bool(user.telegram_id) and user.telegram_id != telegram_id
+        if stale or foreign:
+            _void(
+                db,
+                invited,
+                "учётка существовала до приглашения" if stale else "учётка привязана к другому Telegram",
+            )
+            return
+
         invited.invited_user_id = user.id
         db.commit()
 
@@ -226,6 +252,26 @@ def attach_user(db: OrmSession, telegram_id: int, user: User) -> None:
     for referral in pending:
         referral.inviter_user_id = user.id
         _settle_join_bonus(db, referral)
+
+
+def _void(db: OrmSession, referral: Referral, reason: str) -> None:
+    """
+    Гасит приглашение и забирает выданные за него дни.
+
+    Отзыв — не наказание пригласившего, а возврат к правде: за действующего
+    клиента дни не полагались. Отметка `voided_at` закрывает и будущий бонус
+    за покупку: этот человек в статистике приглашений больше не участвует.
+    """
+    referral.voided_at = utcnow()
+    referral.void_reason = reason
+
+    inviter = referral.inviter or _find_user(db, referral.inviter_telegram_id)
+    if inviter is not None and referral.join_bonus_days > 0:
+        take_bonus_days(db, inviter, referral.join_bonus_days, f"отменено: {reason}", commit=False)
+        referral.join_bonus_days = 0
+
+    db.commit()
+    log.info("реферал %s аннулирован: %s", referral.id, reason)
 
 
 # --- первая оплата приглашённого ---------------------------------------------
@@ -257,7 +303,11 @@ def _credit_purchase(db: OrmSession, user: User) -> bool:
     # выданным бонусом, и та, за которую ещё не платили.
     referral = db.scalar(
         select(Referral)
-        .where(or_(*conditions), Referral.purchase_bonus_at.is_(None))
+        .where(
+            or_(*conditions),
+            Referral.purchase_bonus_at.is_(None),
+            Referral.voided_at.is_(None),
+        )
         .order_by(Referral.id)
         .limit(1)
     )
@@ -333,7 +383,11 @@ def revoke_purchase_bonus(db: OrmSession, user: User, reason: str) -> bool:
 def stats(db: OrmSession, telegram_id: int) -> dict[str, int]:
     """Сводка для экрана «Друзья» в боте."""
     rows = list(
-        db.scalars(select(Referral).where(Referral.inviter_telegram_id == telegram_id))
+        db.scalars(
+            select(Referral).where(
+                Referral.inviter_telegram_id == telegram_id, Referral.voided_at.is_(None)
+            )
+        )
     )
     return {
         "invited": len(rows),

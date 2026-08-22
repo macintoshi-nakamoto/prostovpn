@@ -1223,6 +1223,13 @@ class Referral(Base):
 
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
+    # Приглашение оказалось недействительным: по ссылке пришёл не новый
+    # человек, а действующий клиент — просто он до сих пор не открывал бота,
+    # и в момент перехода отличить его было нечем. Подаренные дни при этом
+    # забираются обратно, а бонус за покупку уже не выдаётся.
+    voided_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    void_reason: Mapped[str | None] = mapped_column(Text, default=None)
+
     inviter: Mapped["User | None"] = relationship(foreign_keys=[inviter_user_id])
     invited: Mapped["User | None"] = relationship(foreign_keys=[invited_user_id])
 

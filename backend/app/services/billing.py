@@ -121,6 +121,17 @@ def grant_subscription(
         running.is_cancelled = True
         running = None
 
+    # Подаренные дни, стоящие в очереди, тоже переезжают в оплаченный период.
+    #
+    # Их туда кладёт add_bonus_days, когда идущий период бесплатный (пробный):
+    # приклеить подарок к пробному нельзя — сгорит вместе с ним. Но и
+    # оставить в очереди при покупке нельзя: ниже очередь чистится, и тогда
+    # сгорит уже сам подарок. Забираем их дни с собой.
+    for gift in [period for period in upcoming if period.is_bonus]:
+        carry += max(dt.timedelta(0), gift.expires_at - max(now, gift.starts_at))
+        gift.is_cancelled = True
+    upcoming = [period for period in upcoming if not period.is_bonus]
+
     # Тариф, на котором человек окажется в конце: хвост очереди, иначе идущий.
     tail = upcoming[-1] if upcoming else running
     if tail is not None and tail.plan == code:
@@ -239,6 +250,12 @@ def add_bonus_days(
         )
     )
     tail = live[-1] if live else None
+    # К бесплатному периоду (пробному) дни не клеим: при первой же оплате
+    # он снимается целиком вместе с ними — `grant_subscription` переносит
+    # остаток только у периодов с пометкой `is_bonus`. Такому человеку
+    # заводим отдельную бонусную строку: она покупку переживёт.
+    if tail is not None and (tail.price or 0) <= 0 and not tail.is_bonus:
+        tail = None
 
     if tail is not None:
         tail.expires_at += dt.timedelta(days=days)
@@ -254,6 +271,9 @@ def add_bonus_days(
         )
         code = last.plan if last else settings().signup_plan_code
         plan_ref = db.scalar(select(Plan).where(Plan.code == code))
+        # Встаём в очередь за уже оплаченным: иначе подаренные дни идут
+        # параллельно пробному и просто сгорают вместе с ним.
+        starts = max((period.expires_at for period in live), default=now)
         bonus = Subscription(
             user_id=user.id,
             plan=plan_ref.code if plan_ref else code,
@@ -264,8 +284,8 @@ def add_bonus_days(
             # Продления от подарка не ждём: в календаре прибыли ему не место.
             auto_renew=False,
             is_bonus=True,
-            starts_at=now,
-            expires_at=now + dt.timedelta(days=days),
+            starts_at=starts,
+            expires_at=starts + dt.timedelta(days=days),
         )
         db.add(bonus)
         ends_at = bonus.expires_at
@@ -287,17 +307,22 @@ def add_bonus_days(
     return ends_at
 
 
-def take_bonus_days(db: OrmSession, user: User, days: int, reason: str, commit: bool = True) -> None:
+def take_bonus_days(db: OrmSession, user: User, days: int, reason: str, commit: bool = True) -> int:
     """
-    Забирает подаренные дни обратно: возврат оплаты отменяет и бонус за неё.
+    Забирает дни обратно. Возвращает, сколько дней реально удалось снять.
 
-    Иначе накрутка выглядит так: пригласил себя со второго телефона, купил
-    самый дешёвый тариф, получил пять дней, сделал возврат — деньги вернули,
-    дни остались. Снимаем с самого дальнего живого периода и не заходим за
-    сегодняшний день: отбирать уже прожитое бессмысленно.
+    Снимаем по цепочке живых периодов, от самого дальнего к ближнему, пока
+    не наберём нужное. Одним хвостом обойтись нельзя: у человека бывает
+    очередь (идёт месячный, за ним стоит купленный посуточный), и списание
+    только с последнего периода снимало бы меньше запрошенного — а
+    вызывающий считал бы, что снял всё. Именно на этом расхождении перевод
+    дней превращался в печатный станок: разрешали отдать весь остаток
+    очереди, а забирали лишь её хвост.
+
+    Прожитое не отбираем: период укорачивается максимум до «сейчас».
     """
     if days <= 0:
-        return
+        return 0
 
     now = utcnow()
     live = list(
@@ -312,22 +337,43 @@ def take_bonus_days(db: OrmSession, user: User, days: int, reason: str, commit: 
         )
     )
     if not live:
-        return
+        return 0
 
-    tail = live[-1]
-    tail.expires_at = max(now, tail.expires_at - dt.timedelta(days=days))
-    if tail.expires_at <= tail.starts_at:
-        tail.is_cancelled = True
+    left = dt.timedelta(days=days)
+    taken = dt.timedelta(0)
+
+    # От дальних к ближним: сначала уходит то, до чего человек ещё не дожил.
+    for period in reversed(live):
+        if left <= dt.timedelta(0):
+            break
+        floor = max(now, period.starts_at)
+        available = period.expires_at - floor
+        if available <= dt.timedelta(0):
+            continue
+        cut = min(available, left)
+        period.expires_at -= cut
+        left -= cut
+        taken += cut
+        if period.expires_at <= floor:
+            # От периода ничего не осталось — гасим, чтобы он не мешался
+            # в очереди пустой строкой.
+            period.is_cancelled = True
 
     from ..models import AuditLog
 
+    snatched = int(taken.total_seconds() // 86400)
     db.add(
-        AuditLog(action="user.bonus_revoked", target=user.public_id, detail=f"-{days} дн., {reason}")
+        AuditLog(
+            action="user.bonus_revoked",
+            target=user.public_id,
+            detail=f"-{snatched} из {days} дн., {reason}",
+        )
     )
     if commit:
         db.commit()
     else:
         db.flush()
+    return snatched
 
 
 # --- платежи -----------------------------------------------------------------

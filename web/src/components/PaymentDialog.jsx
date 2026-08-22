@@ -22,6 +22,7 @@ export function PaymentDialog({
   quantity = 1,
   busy = false,
   invoice = null,
+  canAutoRenew = true,
   autoRenew = true,
   onAutoRenew,
   onSbp,
@@ -114,7 +115,10 @@ export function PaymentDialog({
         </div>
 
         {/* Автопродление — по умолчанию включено: подписку берут, чтобы она
-            не обрывалась. Галочка на виду, снимается тем же кликом. */}
+            не обрывалась. Галочка на виду, снимается тем же кликом. На
+            тарифах, где автосписания не бывает, её нет вовсе: обещать
+            подключение, которое не состоится, хуже, чем промолчать. */}
+        {canAutoRenew && (
         <label className="pay-auto">
           <input
             type="checkbox"
@@ -126,6 +130,7 @@ export function PaymentDialog({
             <span className="pay-auto-sub">{t("pay.autoSub")}</span>
           </span>
         </label>
+        )}
 
         <p className="pay-note">{t("pay.note")}</p>
           </>

@@ -25,6 +25,22 @@ router = Router()
 router.callback_query.middleware(AuthMiddleware())
 
 
+@router.callback_query(F.data.in_({"cabinet", "home", "cancel", "plans"}), Transfer.recipient)
+@router.callback_query(F.data.in_({"cabinet", "home", "cancel", "plans"}), Transfer.days)
+async def cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    """
+    Выход из перевода по любой кнопке возврата.
+
+    Без этого состояние переживало «Отмену»: человек уходил в кабинет, потом
+    писал боту что угодно — и следующее же число уходило переводом.
+    Обработчик стоит выше остальных: он должен перехватить кнопку раньше,
+    чем её увидит обычный маршрут.
+    """
+    await state.clear()
+    await show_cabinet(callback, callback.from_user.id)
+    await callback.answer()
+
+
 @router.callback_query(F.data == "transfer")
 async def start(callback: CallbackQuery, state: FSMContext) -> None:
     session = await models.get_session(callback.from_user.id)

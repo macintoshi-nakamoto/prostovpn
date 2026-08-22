@@ -623,10 +623,11 @@ def refund(db: OrmSession, order: Order, reason: str = "возврат плат�
     order.status = OrderStatus.REFUNDED.value
     order.failure_reason = reason
 
+    unpaid_days = 0
     if order.subscription_id:
         subscription = db.get(Subscription, order.subscription_id)
         if subscription is not None:
-            _shrink_subscription_after_refund(db, order, subscription)
+            unpaid_days = _shrink_subscription_after_refund(db, order, subscription)
 
     _register_refund(db, order, reason)
 
@@ -636,6 +637,14 @@ def refund(db: OrmSession, order: Order, reason: str = "возврат плат�
         from .referrals import revoke_purchase_bonus
 
         revoke_purchase_bonus(db, user, reason)
+
+        # Дней у самого плательщика не хватило — значит, он успел их
+        # раздать. Догоняем: иначе «купил, передал другу, сделал возврат»
+        # остаётся рабочей схемой получить доступ бесплатно.
+        if unpaid_days > 0:
+            from .transfers import claw_back
+
+            claw_back(db, user, unpaid_days, reason, commit=False)
     db.commit()
 
     if user is not None:
@@ -646,7 +655,7 @@ def refund(db: OrmSession, order: Order, reason: str = "возврат плат�
     db.commit()
 
 
-def _shrink_subscription_after_refund(db: OrmSession, order: Order, subscription: Subscription) -> None:
+def _shrink_subscription_after_refund(db: OrmSession, order: Order, subscription: Subscription) -> int:
     """
     Что снять с подписки — зависит от того, одна ли на ней оплата.
 
@@ -662,10 +671,16 @@ def _shrink_subscription_after_refund(db: OrmSession, order: Order, subscription
     # другие оплаты, и когда она одна. К этой же строке приклеены дни,
     # подаренные за приглашения: сжигать их за чужой возврат нельзя, они
     # оплачены не деньгами.
+    before = subscription.expires_at
     subscription.expires_at -= dt.timedelta(days=days)
     if subscription.expires_at <= subscription.starts_at:
         # Срезали до нуля и дальше: оплаченного не осталось, строка гаснет.
+        subscription.expires_at = subscription.starts_at
         subscription.is_cancelled = True
+
+    # Сколько дней снять не удалось — их человек мог успеть раздать.
+    cut = (before - subscription.expires_at).days
+    return max(0, days - cut)
 
 
 def _register_refund(db: OrmSession, order: Order, reason: str) -> None:

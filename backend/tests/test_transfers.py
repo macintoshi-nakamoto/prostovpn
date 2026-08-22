@@ -234,3 +234,224 @@ def test_quantity_ignored_for_regular_plans(client, auth):
     )
     assert r.status_code == 201, r.text
     assert r.json()["amount_kopecks"] == price, "пятикратной цены месяца быть не должно"
+
+
+# --- находки аудита -----------------------------------------------------------
+
+
+def test_transfer_cannot_mint_days_from_queue(client, auth):
+    """
+    Очередь периодов не превращается в печатный станок.
+
+    У человека идёт месячный тариф и стоит в очереди докупленный посуточный.
+    Раньше остаток считался по всей очереди, а списание трогало только её
+    хвост: отдать можно было 34 дня, а уходило 5 — остальные появлялись у
+    получателя из воздуха.
+    """
+    from app.services import grant_subscription
+
+    sender_id = _make_user(client, auth, "tr_mint_sender")
+    recipient_id = _make_user(client, auth, "tr_mint_recipient")
+
+    # Хвост очереди: другой тариф встаёт после идущего.
+    with SessionLocal() as db:
+        grant_subscription(db, db.get(User, sender_id), days=5, plan="daily", price=50.0)
+
+    before_sender = _days_left(sender_id)
+    before_recipient = _days_left(recipient_id)
+    assert before_sender > 30, "в очереди должны быть оба периода"
+
+    token = _token(client, "tr_mint_sender")
+    move = before_sender - 2
+    r = client.post(
+        "/api/v1/account/transfers",
+        json={"recipient": "tr_mint_recipient", "days": move},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 201, r.text
+
+    after_sender = _days_left(sender_id)
+    after_recipient = _days_left(recipient_id)
+
+    # Сколько ушло — столько и пришло: сумма дней у двоих не изменилась.
+    assert before_sender - after_sender == move, "у отправителя списали не столько"
+    assert after_recipient - before_recipient == move, "получателю начислили не столько"
+    assert (after_sender + after_recipient) == (before_sender + before_recipient)
+
+
+def test_transfer_of_everything_leaves_nothing(client, auth):
+    """Отдать весь остаток можно ровно один раз."""
+    sender_id = _make_user(client, auth, "tr_all_sender")
+    _make_user(client, auth, "tr_all_recipient")
+
+    everything = _days_left(sender_id)
+    token = _token(client, "tr_all_sender")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post(
+        "/api/v1/account/transfers",
+        json={"recipient": "tr_all_recipient", "days": everything},
+        headers=headers,
+    )
+    assert r.status_code == 201, r.text
+    assert _days_left(sender_id) == 0
+
+    # Второй такой же перевод отдавать уже нечего.
+    r = client.post(
+        "/api/v1/account/transfers",
+        json={"recipient": "tr_all_recipient", "days": everything},
+        headers=headers,
+    )
+    assert r.status_code == 400
+    assert _days_left(sender_id) == 0
+
+
+def test_received_days_survive_first_purchase(client, auth):
+    """Переданные дни не сгорают, когда получатель впервые платит."""
+    from app.services import grant_subscription
+
+    sender_id = _make_user(client, auth, "tr_keep_sender")
+    # Получатель на пробном: именно на нём дни и сгорали.
+    recipient_id = _make_user(client, auth, "tr_keep_recipient", plan="trial")
+
+    token = _token(client, "tr_keep_sender")
+    r = client.post(
+        "/api/v1/account/transfers",
+        json={"recipient": "tr_keep_recipient", "days": 20},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 201, r.text
+    with_gift = _days_left(recipient_id)
+    assert with_gift >= 20
+
+    # Первая покупка: пробный снимается, подарок обязан остаться.
+    with SessionLocal() as db:
+        grant_subscription(db, db.get(User, recipient_id), days=30, plan="basic", price=199.0)
+
+    after_purchase = _days_left(recipient_id)
+    assert after_purchase >= 49, f"подарок сгорел: было {with_gift}, стало {after_purchase}"
+
+
+def test_recipient_lookup_ignores_like_wildcards(client, auth):
+    """«%» в поле «кому» не уводит дни случайному человеку."""
+    _make_user(client, auth, "tr_wild_sender")
+    _make_user(client, auth, "tr_wild_target")
+
+    token = _token(client, "tr_wild_sender")
+    for needle in ("%", "tr_wild_%", "tr_wild_targe_"):
+        r = client.post(
+            "/api/v1/account/transfers",
+            json={"recipient": needle, "days": 1},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 400, f"«{needle}» нашёл получателя: {r.text}"
+        assert "такого аккаунта нет" in r.json()["detail"]
+
+
+def test_refund_claws_back_transferred_days(client, auth):
+    """Купил, передал другу, сделал возврат — дни возвращаются назад."""
+    from app.models import Order, OrderStatus
+    from app.services import grant_subscription, refund
+
+    buyer_id = _make_user(client, auth, "tr_cheat_buyer", plan="trial")
+    friend_id = _make_user(client, auth, "tr_cheat_friend", plan="trial")
+
+    # Покупка 30 дней и заказ под неё.
+    with SessionLocal() as db:
+        buyer = db.get(User, buyer_id)
+        sub = grant_subscription(db, buyer, days=30, plan="basic", price=199.0)
+        order = Order(
+            plan_code="basic",
+            email="cheat-transfer@example.com",
+            amount_kopecks=19900,
+            currency="RUB",
+            status=OrderStatus.PAID.value,
+            provider="platega",
+            user_id=buyer_id,
+            subscription_id=sub.id,
+        )
+        db.add(order)
+        db.commit()
+        order_id = order.id
+
+    # Сразу отдаём всё другу.
+    token = _token(client, "tr_cheat_buyer")
+    everything = _days_left(buyer_id)
+    r = client.post(
+        "/api/v1/account/transfers",
+        json={"recipient": "tr_cheat_friend", "days": everything},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 201, r.text
+    friend_after_gift = _days_left(friend_id)
+
+    # И оспариваем платёж.
+    with SessionLocal() as db:
+        refund(db, db.get(Order, order_id), reason="чарджбек")
+
+    friend_after_refund = _days_left(friend_id)
+    assert friend_after_refund < friend_after_gift, "дни остались у друга после возврата"
+
+    with SessionLocal() as db:
+        moved = db.scalar(
+            select(DayTransfer).where(DayTransfer.from_user_id == buyer_id)
+        )
+        assert moved.reverted_days > 0, "отзыв не отмечен в переводе"
+
+
+def test_bot_transfer_is_marked_and_limited(client, auth):
+    """Перевод из бота помечается своим origin и считается в лимите."""
+    sender_id = _make_user(client, auth, "tr_bot_sender")
+    _make_user(client, auth, "tr_bot_friend")
+
+    r = client.post(
+        "/api/admin/transfers",
+        json={
+            "fromUserId": sender_id,
+            "recipient": "tr_bot_friend",
+            "days": 1,
+            "origin": "bot",
+        },
+        headers=auth,
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["origin"] == "bot", "перевод из Telegram не должен выглядеть ручным"
+
+    # Ручной перевод поддержки остаётся panel.
+    r = client.post(
+        "/api/admin/transfers",
+        json={"fromUserId": sender_id, "recipient": "tr_bot_friend", "days": 1},
+        headers=auth,
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["origin"] == "panel"
+
+
+def test_admin_transfers_filter_by_user(client, auth):
+    """Фильтр по клиенту отдаёт только его переводы, а не все подряд."""
+    a_id = _make_user(client, auth, "tr_filter_a")
+    b_id = _make_user(client, auth, "tr_filter_b")
+    _make_user(client, auth, "tr_filter_c")
+
+    token = _token(client, "tr_filter_a")
+    client.post(
+        "/api/v1/account/transfers",
+        json={"recipient": "tr_filter_b", "days": 2},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    other = _token(client, "tr_filter_c")
+    client.post(
+        "/api/v1/account/transfers",
+        json={"recipient": "tr_filter_b", "days": 3},
+        headers={"Authorization": f"Bearer {other}"},
+    )
+
+    rows = client.get(f"/api/admin/transfers?user_id={a_id}", headers=auth).json()
+    assert rows, "переводы этого клиента должны найтись"
+    assert all(
+        row["fromId"] == a_id or row["toId"] == a_id for row in rows
+    ), "в карточку попали чужие переводы"
+
+    # У получателя видно обе стороны: и от a, и от c.
+    both = client.get(f"/api/admin/transfers?user_id={b_id}", headers=auth).json()
+    assert len(both) >= 2

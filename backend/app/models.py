@@ -1261,6 +1261,11 @@ class DayTransfer(Base):
     # пользуется, и по чьей воле дни ушли — своей или администратора.
     origin: Mapped[str] = mapped_column(String(16), default="site")
     note: Mapped[str | None] = mapped_column(String(160), default=None)
+    # Сколько дней из этого перевода уже отозвано назад. Больше нуля бывает
+    # после возврата оплаты: дни, купленные и тут же переданные другому,
+    # возвращаются вместе с деньгами — иначе чарджбек оставлял бы их
+    # работать на второй учётке.
+    reverted_days: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
 
     sender: Mapped[User] = relationship(foreign_keys=[from_user_id])

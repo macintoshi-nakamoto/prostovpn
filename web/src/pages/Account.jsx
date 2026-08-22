@@ -36,12 +36,16 @@ const TAB_BY_SECTION = { subscription: "plan", guide: "setup" };
 const INVOICE_KEY = "prosto_invoice";
 const INVOICE_TTL_MS = 30 * 60 * 1000;
 
-function readInvoice() {
+function readInvoice(login) {
   try {
     const raw = localStorage.getItem(INVOICE_KEY);
     if (!raw) return null;
     const value = JSON.parse(raw);
     if (!value || !value.orderId || !value.savedAt) return null;
+    // Счёт принадлежит той учётке, которая его выставила. На общем
+    // компьютере следующий вошедший иначе увидел бы чужое окно оплаты — и
+    // ссылку на чужой счёт вместе с ним.
+    if (!login || value.login !== login) return null;
     if (Date.now() - value.savedAt > INVOICE_TTL_MS) {
       localStorage.removeItem(INVOICE_KEY);
       return null;
@@ -52,10 +56,15 @@ function readInvoice() {
   }
 }
 
-function writeInvoice(value) {
+function writeInvoice(value, login) {
   try {
     if (!value) localStorage.removeItem(INVOICE_KEY);
-    else localStorage.setItem(INVOICE_KEY, JSON.stringify({ ...value, savedAt: Date.now() }));
+    else {
+      localStorage.setItem(
+        INVOICE_KEY,
+        JSON.stringify({ ...value, login, savedAt: Date.now() }),
+      );
+    }
   } catch {
     /* приватный режим — окно проживёт до перезагрузки, и ладно */
   }
@@ -989,14 +998,17 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   окно ожидания пропадало бы вместе с самим ожиданием, а счёт при этом
   оставался бы неоплаченным и живым.
   */
-  const [invoice, setInvoiceState] = useState(() => readInvoice());
-  const setInvoice = useCallback((next) => {
-    setInvoiceState((prev) => {
-      const value = typeof next === "function" ? next(prev) : next;
-      writeInvoice(value);
-      return value;
-    });
-  }, []);
+  const [invoice, setInvoiceState] = useState(() => readInvoice(data.login));
+  const setInvoice = useCallback(
+    (next) => {
+      setInvoiceState((prev) => {
+        const value = typeof next === "function" ? next(prev) : next;
+        writeInvoice(value, data.login);
+        return value;
+      });
+    },
+    [data.login],
+  );
 
   /*
   Возврат с платёжной формы. Сам по себе он ничего не подтверждает — оплату
@@ -1091,11 +1103,18 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   или вот-вот подгрузится.
   */
   useEffect(() => {
-    if (!invoice || paying || !plans) return;
+    // Только ждущий счёт: оплаченный и сорвавшийся показывать заново при
+    // каждом заходе на вкладку незачем — человек их уже видел.
+    if (!invoice || invoice.status !== "pending" || paying || !plans) return;
     const plan = plans.find((p) => p.code === invoice.planCode);
-    if (plan) setPaying(plan);
+    if (plan) {
+      setPaying(plan);
+      // Счётчик подтягиваем к счёту: иначе после перезагрузки в шапке
+      // окажется семь дней по умолчанию, а ссылка поведёт на другую сумму.
+      if (invoice.quantity) setDailyDays(invoice.quantity);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [invoice && invoice.orderId, plans]);
+  }, [invoice && invoice.orderId, invoice && invoice.status, plans]);
 
   /*
   Оплата СБП: страница оплаты уходит в соседнюю вкладку, а окно способов
@@ -1172,12 +1191,16 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
           // Обещали продлевать само — уводим на привязку счёта сразу после
           // оплаты. Провайдер может не поддерживать подписки: тогда ответ
           // будет отказом, и мы просто ничего не делаем.
-          if (autoRenew && invoice.planCode) {
+          const plan = (plans || []).find((p) => p.code === invoice.planCode);
+          const renewable = plan ? [30, 365].includes(plan.duration_days) : false;
+          if (autoRenew && renewable && invoice.planCode) {
+            // Подписку создаём, а страницу привязки НЕ открываем сами:
+            // window.open вне клика блокируется браузером, и человек решил
+            // бы, что всё готово. Ссылку показываем строкой автопродления —
+            // по ней он перейдёт сам, уже осознанно.
             api
               .recurringCreate(invoice.planCode)
-              .then((fresh) => {
-                if (fresh && fresh.redirect_url) window.open(fresh.redirect_url, "_blank");
-              })
+              .then(() => setNotice(t("account.autoQueued")))
               .catch(() => {});
           }
           return;
@@ -1344,9 +1367,23 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
       <PaymentDialog
         open={Boolean(paying)}
         plan={paying}
-        quantity={isDaily(paying) ? Number(dailyDays) || 1 : 1}
+        // Пока счёт жив, в шапке его собственное количество: человек мог
+        // покрутить счётчик после выставления счёта или вернуться на
+        // перезагруженную страницу, где счётчик сброшен в семь дней. Ссылка
+        // ведёт на прежнюю сумму, и показывать другую нельзя.
+        quantity={
+          invoice && invoice.planCode === (paying && paying.code) && invoice.status === "pending"
+            ? invoice.quantity || 1
+            : isDaily(paying)
+              ? Number(dailyDays) || 1
+              : 1
+        }
         busy={busy}
         invoice={paying && invoice && invoice.planCode === paying.code ? invoice : null}
+        // Автосписание у провайдера бывает раз в месяц и раз в год: на
+        // посуточном и трёхмесячном подключать нечего, и обещать это
+        // галочкой — врать. Список сроков тот же, что в services/recurring.
+        canAutoRenew={paying ? [30, 365].includes(paying.duration_days) : false}
         autoRenew={autoRenew}
         onAutoRenew={setAutoRenew}
         onSbp={paySbp}

@@ -13,8 +13,9 @@
 from __future__ import annotations
 
 import logging
+import threading
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 
 from ..models import AuditLog, DayTransfer, DeliveryJob, User, normalize_email, utcnow
@@ -60,8 +61,23 @@ def find_recipient(db: OrmSession, key: str) -> User | None:
 
         return find_by_email(db, address)
 
-    # Логин мог быть записан в другом регистре — ищем без учёта регистра.
-    return db.scalar(select(User).where(User.login.ilike(needle)))
+    # Логин мог быть записан в другом регистре — сравниваем в нижнем.
+    #
+    # Именно сравнение, а не ilike: в ilike «%» и «_» остаются шаблонами, и
+    # человек, отправивший «iva%» или просто «%», уводил бы дни случайному
+    # владельцу подходящего логина. Плюс по такой ручке удобно перебирать
+    # чужие логины по маске — этого тоже быть не должно.
+    return db.scalar(select(User).where(func.lower(User.login) == needle.lower()))
+
+
+# Переводы одного процесса выполняются по одному.
+#
+# Остаток читается, проверяется и списывается тремя отдельными шагами, и
+# два одновременных перевода успевали прочитать один и тот же остаток —
+# каждый считал, что дней хватает, и оба списывали с нуля. SQLite всё
+# равно не даёт двум транзакциям писать разом, так что очередь здесь
+# ничего не замедляет, зато делает проверку и списание неделимыми.
+_TRANSFER_LOCK = threading.Lock()
 
 
 def transfer(
@@ -92,7 +108,23 @@ def transfer(
     if recipient.is_blocked:
         raise TransferError("этот аккаунт заблокирован — дни ему не уйдут")
 
+    with _TRANSFER_LOCK:
+        return _do_transfer(db, sender, recipient, days, origin, note)
+
+
+def _do_transfer(
+    db: OrmSession,
+    sender: User,
+    recipient: User,
+    days: int,
+    origin: str,
+    note: str | None,
+) -> DayTransfer:
+    """Сам перевод. Зовётся под замком: проверка и списание неделимы."""
     now = utcnow()
+    # Перечитываем из базы: между проверкой вызывающего и этой строкой мог
+    # пройти чужой перевод или конец периода.
+    db.refresh(sender)
     left = sender.access_days_left(now) or 0
     if left <= 0:
         raise TransferError("передавать нечего: оплаченных дней не осталось")
@@ -101,7 +133,14 @@ def transfer(
 
     # Списание и начисление — одним коммитом: иначе на сбое между ними дни
     # исчезли бы у одного, не появившись у другого.
-    take_bonus_days(db, sender, days, f"передано {recipient.public_id}", commit=False)
+    taken = take_bonus_days(db, sender, days, f"передано {recipient.public_id}", commit=False)
+    if taken < days:
+        # Столько дней снять не вышло — значит, их и не было. Начислять
+        # получателю больше, чем ушло у отправителя, нельзя ни при каких
+        # обстоятельствах: это ровно то, как дни печатались из воздуха.
+        db.rollback()
+        raise TransferError(f"передать удалось бы только {taken} дн. — попробуйте меньше")
+
     add_bonus_days(db, recipient, days, f"получено от {sender.public_id}", commit=False)
 
     record = DayTransfer(
@@ -131,6 +170,57 @@ def transfer(
         origin,
     )
     return record
+
+
+def claw_back(db: OrmSession, user: User, days: int, reason: str, commit: bool = False) -> int:
+    """
+    Догоняет дни, которые человек успел раздать, и снимает их у получателей.
+
+    Нужно возврату оплаты. Схема, которую это закрывает: купить, сразу
+    перевести дни на вторую учётку, сделать чарджбек — деньги вернулись, а
+    дни продолжают работать, потому что у самого плательщика снимать уже
+    нечего.
+
+    Идём по его исходящим переводам от свежих к старым: возвращают обычно
+    то, что только что и ушло. Больше, чем реально переведено, не снимаем, а
+    у получателя забираем только оставшееся — прожитое им не отбираем.
+    Возвращает, сколько дней удалось вернуть.
+    """
+    if days <= 0:
+        return 0
+
+    recovered = 0
+    rows = db.scalars(
+        select(DayTransfer)
+        .where(DayTransfer.from_user_id == user.id, DayTransfer.days > DayTransfer.reverted_days)
+        .order_by(DayTransfer.created_at.desc())
+    )
+
+    for record in rows:
+        if recovered >= days:
+            break
+        recipient = db.get(User, record.to_user_id)
+        if recipient is None:
+            continue
+        available = record.days - record.reverted_days
+        want = min(available, days - recovered)
+        taken = take_bonus_days(
+            db, recipient, want, f"отозвано после возврата: {reason}", commit=False
+        )
+        if taken <= 0:
+            continue
+        record.reverted_days += taken
+        recovered += taken
+        log.info(
+            "возврат: у %s отозвано %d дн. из перевода #%d",
+            recipient.public_id,
+            taken,
+            record.id,
+        )
+
+    if recovered and commit:
+        db.commit()
+    return recovered
 
 
 def history(db: OrmSession, user: User, limit: int = 20) -> list[DayTransfer]:

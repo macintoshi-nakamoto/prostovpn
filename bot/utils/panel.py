@@ -519,6 +519,7 @@ async def transfer_days(user_login: str, recipient: str, days: int) -> Transfer:
             "recipient": recipient,
             "days": days,
             "note": "перевод из Telegram",
+            "origin": "bot",
         },
     )
 

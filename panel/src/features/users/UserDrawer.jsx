@@ -519,7 +519,9 @@ function Transfers({ user }) {
   useEffect(() => {
     let alive = true;
     transfersApi
-      .list({ userId: user.id })
+      // Именно user_id: ручка ждёт это имя, а с чужим параметром она
+      // отдавала переводы ВСЕХ клиентов, подписав их этой карточкой.
+      .list({ user_id: user.id })
       .then((data) => alive && setRows(data))
       .catch(() => alive && setRows([]));
     return () => {

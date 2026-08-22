@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session as OrmSession
 
 from .. import services
+from ..config import settings
 from ..db import get_db
 from ..models import Admin, DayTransfer, User
 from .deps import audit, current_admin
@@ -81,6 +82,10 @@ class AdminTransferIn(Schema):
     recipient: str
     days: int
     note: str | None = None
+    # Откуда перевод: bot — человек сделал его сам через Telegram, panel —
+    # за него это сделала поддержка. В журнале это разные события, и
+    # ограничение частоты у них тоже разное.
+    origin: str = "panel"
 
 
 @router.post("", response_model=TransferRow, status_code=status.HTTP_201_CREATED)
@@ -99,12 +104,36 @@ def make_transfer(
     if sender is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "отправитель не найден")
 
+    origin = "bot" if body.origin == "bot" else "panel"
+    if origin == "bot":
+        # Тот же лимит, что и на сайте: иначе перевод через Telegram
+        # оставался бы способом перебирать чужие логины без счётчика.
+        verdict = services.ratelimit.hit(
+            db,
+            f"transfer:{sender.id}",
+            limit=settings().order_max_per_hour,
+            window_minutes=60,
+        )
+        if not verdict.allowed:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "слишком много переводов подряд — попробуйте позже",
+            )
+
     try:
         record = services.transfers.transfer(
-            db, sender, body.recipient, body.days, origin="panel", note=body.note
+            db, sender, body.recipient, body.days, origin=origin, note=body.note
         )
     except services.transfers.TransferError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
-    audit(db, admin, "days.transfer_manual", sender.public_id, f"{body.days} дн. → {body.recipient}")
+    # Ручное действие администратора и перевод, который человек сделал сам,
+    # в журнале различаются: по первому спрашивают «кто это сделал».
+    audit(
+        db,
+        admin if origin == "panel" else None,
+        "days.transfer_manual" if origin == "panel" else "days.transfer_bot",
+        sender.public_id,
+        f"{body.days} дн. → {body.recipient}",
+    )
     return _row(db, record)

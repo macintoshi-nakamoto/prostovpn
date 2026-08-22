@@ -89,13 +89,26 @@ function toCards(list, t, f) {
     .sort((a, b) => a.duration_days - b.duration_days);
 
   const cards = paid.map((plan) => {
+    /*
+    Цена месяца считается только у тарифов от двух месяцев.
+
+    У короткого «месяц» — это выдумка: посуточный тариф при делении на
+    ноль месяцев показывал бы «10 ₽ / мес» — цену дня с подписью месяца.
+    Человек шёл в кабинет за десятью рублями и находил там триста.
+    */
+    const monthly = plan.duration_days >= 60;
     const months = Math.max(1, Math.round(plan.duration_days / 30));
-    const perMonth = Math.round(plan.price_kopecks / months);
+    const perMonth = monthly ? Math.round(plan.price_kopecks / months) : plan.price_kopecks;
     const full = f.moneyFromKopecks(plan.price_kopecks, plan.currency);
     const term = termLabel(plan.duration_days, t);
     return {
       code: plan.code,
       term,
+      // Подпись под ценой: «/ мес» — только там, где это правда.
+      per: monthly
+        ? t("landing.plans.perMonth")
+        : t(plan.duration_days === 1 ? "landing.plans.perDay" : "landing.plans.perTerm"),
+      monthly,
       perMonth: f.moneyFromKopecks(perMonth, plan.currency),
       perMonthValue: perMonth,
       note: plan.tagline || t("landing.plans.priceFor", { price: full, term }),
@@ -115,11 +128,18 @@ function toCards(list, t, f) {
     const longest = cards[cards.length - 1];
     longest.featured = true;
 
-    // Бейдж со скидкой — только если месяц действительно дешевле, чем на
-    // самом коротком тарифе. Нет выгоды — нет и обещания.
-    const shortest = cards[0];
-    const off = Math.round((1 - longest.perMonthValue / shortest.perMonthValue) * 100);
-    if (off >= 5) longest.badge = `−${off}%`;
+    /*
+    Бейдж со скидкой — только если месяц действительно дешевле, чем на
+    самом коротком МЕСЯЧНОМ тарифе. Нет выгоды — нет и обещания.
+
+    Сравнивать с посуточным нельзя: у него в этом поле цена дня, и год
+    выходил бы «дешевле на 99%» — красиво и неправда.
+    */
+    const shortest = cards.find((card) => card.monthly);
+    if (shortest && longest.monthly && shortest !== longest) {
+      const off = Math.round((1 - longest.perMonthValue / shortest.perMonthValue) * 100);
+      if (off >= 5) longest.badge = `−${off}%`;
+    }
   }
 
   const free = list.find((plan) => plan.price_kopecks === 0);
@@ -469,7 +489,7 @@ export function Landing() {
                 <span className="ld-plan-term">{p.term}</span>
                 <div className="ld-plan-price">
                   <span className="ld-plan-sum">{p.perMonth}</span>
-                  <span className="ld-plan-per">{t("landing.plans.perMonth")}</span>
+                  <span className="ld-plan-per">{p.per || t("landing.plans.perMonth")}</span>
                 </div>
                 <p className="ld-plan-note">{p.note}</p>
                 <ul className="ld-plan-limits">

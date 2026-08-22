@@ -20,6 +20,13 @@ router = Router()
 router.callback_query.middleware(AuthMiddleware())
 
 
+@router.callback_query(F.data.in_({"plans", "home", "cabinet", "cancel"}), BuyDaily.days)
+async def cancel_daily(callback: CallbackQuery, state: FSMContext) -> None:
+    """Выход из выбора числа дней: иначе следующее число купит доступ."""
+    await state.clear()
+    await methods(callback)
+
+
 @router.callback_query(F.data == "plans")
 async def methods(callback: CallbackQuery) -> None:
     await show_screen(

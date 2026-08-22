@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { SiteHeader } from "../components/SiteHeader.jsx";
+import { HeroOrbit } from "../components/HeroOrbit.jsx";
 import { useI18n } from "../lib/i18n/index.jsx";
 import "./login.css";
 
@@ -38,12 +39,30 @@ export function Reset() {
       <SiteHeader />
       <main className="lg">
         <div className="lg-glow" aria-hidden="true" />
+        {/* Тот же размытый декор, что на входе. На мобильном именно эта
+            верхняя зона (order: 1, отступ под шапку) отодвигает лист формы
+            от прозрачной фиксированной шапки — без неё заголовок оказывался
+            под лого и переключателями и наезжал на них. */}
+        <img className="lg-far lg-far-arc" src="/assets/ic-arc.webp" alt="" aria-hidden="true" />
+        <img
+          className="lg-far lg-far-devices"
+          src="/assets/ic-devices.webp"
+          alt=""
+          aria-hidden="true"
+        />
         <div className="wrap lg-in">
           <div className="lg-form">
             {token ? <SetPassword token={token} /> : <AskEmail />}
             <p className="lg-help">
               {t("login.help")} <Link to="/contacts">{t("login.helpLink")}</Link>
             </p>
+          </div>
+          {/* Ключ на орбите — как на входе. Держит правую колонку на десктопе
+              и верхнюю зону-отступ на мобильном. */}
+          <div className="lg-key">
+            <span className="lg-ring lg-ring-1" aria-hidden="true" />
+            <span className="lg-ring lg-ring-2" aria-hidden="true" />
+            <HeroOrbit src="/assets/obj-key.png" />
           </div>
         </div>
       </main>

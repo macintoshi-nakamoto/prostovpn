@@ -65,7 +65,8 @@ def request(db: OrmSession, email: str, ip: str | None = None) -> bool:
             user_id=user.id,
             token_hash=token_hash(token),
             expires_at=utcnow() + LIFETIME,
-            requested_ip=ip,
+            # IP запроса не храним.
+            requested_ip=None,
         )
     )
     db.add(

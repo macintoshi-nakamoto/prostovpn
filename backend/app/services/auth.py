@@ -16,7 +16,14 @@ from sqlalchemy.orm import Session as OrmSession
 
 from ..config import settings
 from ..models import Admin, AdminSession, Session, User, sanitize_device_id, utcnow
-from ..security import hash_password, needs_rehash, new_token, token_hash, verify_password
+from ..security import (
+    hash_password,
+    ip_tag,
+    needs_rehash,
+    new_token,
+    token_hash,
+    verify_password,
+)
 from . import ratelimit
 from .errors import PanelError
 
@@ -64,7 +71,7 @@ def _norm_login(login: str) -> str:
 
 
 def _login_key(login: str, ip: str | None) -> str:
-    return f"login:{ip or 'unknown'}:{_norm_login(login)}"
+    return f"login:{ip_tag(ip)}:{_norm_login(login)}"
 
 
 def _login_name_key(login: str) -> str:
@@ -79,7 +86,7 @@ def _login_name_key(login: str) -> str:
 
 
 def _login_ip_key(ip: str | None) -> str:
-    return f"login-ip:{ip or 'unknown'}"
+    return f"login-ip:{ip_tag(ip)}"
 
 
 def reset_login_throttle(db: OrmSession, login: str, ip: str | None) -> None:
@@ -133,7 +140,7 @@ def authenticate(
         # его сами, и общий NAT упирался бы в лимит без единого подбора.
         verdict = ratelimit.check(db, ip_key)
     if not verdict.allowed:
-        log.warning("вход заперт: %s", key)
+        log.warning("вход заперт по частоте")
         raise LoginThrottled(verdict.retry_after)
 
     user = db.scalar(select(User).where(User.login == login.strip()))
@@ -185,12 +192,16 @@ def authenticate(
         token_hash=token_hash(token),
         platform=platform,
         app_version=app_version,
-        ip=ip,
+        # IP клиента не храним НИКОГДА: даже дамп базы не должен выдавать,
+        # откуда человек заходил. Для лимита частоты хватает хэша адреса,
+        # который живёт в памяти процесса (security.ip_tag).
+        ip=None,
         # Идентификатор приходит от клиента, а `ios-N` — служебные слоты
         # ключей AmneziaVPN, которые заводит панель. Приложение с таким
         # идентификатором путалось бы с ними в списках ключей.
         device_id=sanitize_device_id(device_id),
-        device_name=device_name,
+        # Имя устройства — это «MacBook Ивана», след о человеке. Не храним.
+        device_name=None,
         expires_at=utcnow() + dt.timedelta(days=config.client_token_days),
     )
     db.add(session)
@@ -263,8 +274,8 @@ def session_for_token(db: OrmSession, token: str) -> Session | None:
 def touch(db: OrmSession, session: Session, ip: str | None = None) -> None:
     now = utcnow()
     session.last_seen_at = now
-    if ip:
-        session.ip = ip
+    # IP в сессию не пишем — см. authenticate. Параметр ip оставлен в сигнатуре
+    # ради вызывающих, но используется только как хэш в ключах ограничителя.
 
     # Обещание из config.client_token_days («активный пользователь не
     # разлогинивается») выполняет панель: приложение хранит один токен и на
@@ -288,7 +299,7 @@ ADMIN_BY_NAME_FACTOR = 10
 
 
 def _admin_key(login: str, ip: str | None) -> str:
-    return f"admin-login:{ip or 'unknown'}:{_norm_login(login)}"
+    return f"admin-login:{ip_tag(ip)}:{_norm_login(login)}"
 
 
 def _admin_name_key(login: str) -> str:
@@ -296,7 +307,7 @@ def _admin_name_key(login: str) -> str:
 
 
 def _admin_ip_key(ip: str | None) -> str:
-    return f"admin-login-ip:{ip or 'unknown'}"
+    return f"admin-login-ip:{ip_tag(ip)}"
 
 
 def authenticate_admin(
@@ -334,7 +345,7 @@ def authenticate_admin(
     if verdict.allowed:
         verdict = ratelimit.check(db, ip_key)
     if not verdict.allowed:
-        log.warning("вход в панель заперт: %s", key)
+        log.warning("вход в панель заперт по частоте")
         raise LoginThrottled(verdict.retry_after)
 
     admin = db.scalar(select(Admin).where(Admin.login == login.strip()))

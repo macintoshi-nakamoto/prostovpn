@@ -46,7 +46,7 @@ from .models import (
 )
 from .payments import platega
 from .payments.base import WebhookRejected
-from .security import client_ip, verify_password
+from .security import client_ip, verify_password, ip_tag
 
 log = logging.getLogger("panel.public")
 
@@ -177,7 +177,7 @@ def create_order(
     """
     ip = client_ip(request)
     verdict = services.ratelimit.hit(
-        db, f"order:{ip or 'unknown'}", limit=settings().order_max_per_hour, window_minutes=60
+        db, f"order:{ip_tag(ip)}", limit=settings().order_max_per_hour, window_minutes=60
     )
     if not verdict.allowed:
         raise HTTPException(

@@ -739,8 +739,12 @@ def test_register_is_rate_limited_per_address(client):
     # Адрес подставляем заголовком, как это делает nginx: у TestClient хост
     # «testclient», и проверку формата в client_ip он не проходит — все
     # запросы прогона иначе считались бы под одним ключом «unknown».
+    from app.security import ip_tag
+
     address = "203.0.113.77"
-    key = f"signup:{address}"
+    # Ключ ограничителя теперь по ХЭШУ адреса, а не по сырому: в базе не должно
+    # оставаться следа, откуда заходили. Механизм тот же, ключ — хэш.
+    key = f"signup:{ip_tag(address)}"
     with SessionLocal() as db:
         for _ in range(config.signup_max_per_ip):
             services.ratelimit.hit(

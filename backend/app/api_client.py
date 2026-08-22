@@ -35,7 +35,7 @@ from .models import (
     utcnow,
 )
 from .provisioning import serving_config
-from .security import client_ip
+from .security import client_ip, ip_tag
 
 log = logging.getLogger("panel.client")
 
@@ -666,13 +666,13 @@ def register(
     ip = client_ip(request)
     verdict = services.ratelimit.hit(
         db,
-        f"signup:{ip or 'unknown'}",
+        f"signup:{ip_tag(ip)}",
         limit=config.signup_max_per_ip,
         window_minutes=config.signup_window_minutes,
         lock_minutes=config.signup_window_minutes,
     )
     if not verdict.allowed:
-        log.warning("регистрация заперта для %s", ip)
+        log.warning("регистрация заперта по частоте")
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             "с этого адреса уже заводили аккаунты — попробуйте позже",

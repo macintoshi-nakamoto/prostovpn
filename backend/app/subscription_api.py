@@ -32,7 +32,7 @@ from .api_client import (
 )
 from .db import get_db
 from .models import Provisioning, Server, SubscriptionToken, UserKey
-from .security import client_ip, token_hash
+from .security import client_ip, ip_tag, token_hash
 
 log = logging.getLogger("panel.subscription_api")
 
@@ -69,7 +69,7 @@ def _if_none_match(header: str | None, etag: str) -> bool:
 def _rate_ok(db: OrmSession, token: str, ip: str | None) -> None:
     for key, limit in (
         (f"sub-tok:{token_hash(token)[:16]}", _RATE_PER_TOKEN),
-        (f"sub-ip:{ip or 'unknown'}", _RATE_PER_IP),
+        (f"sub-ip:{ip_tag(ip)}", _RATE_PER_IP),
     ):
         verdict = services.ratelimit.hit(
             db, key, limit=limit, window_minutes=_RATE_WINDOW_MIN, lock_minutes=0

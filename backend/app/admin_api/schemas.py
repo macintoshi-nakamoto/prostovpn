@@ -135,9 +135,11 @@ class SessionOut(Schema):
     id: int
     platform: str | None
     app_version: str | None
-    ip: str | None
+    # IP и имя устройства из карточки убраны намеренно: панель не должна
+    # показывать, откуда и с какого устройства заходит человек. device_id —
+    # это случайный идентификатор установки, он нужен логике лимита устройств
+    # и не выдаёт ни адреса, ни имени.
     device_id: str | None = None
-    device_name: str | None = None
     created_at: dt.datetime
     last_seen_at: dt.datetime
     expires_at: dt.datetime

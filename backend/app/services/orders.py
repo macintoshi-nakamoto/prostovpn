@@ -220,7 +220,8 @@ def create_order(
         currency=plan.currency,
         status=OrderStatus.PENDING.value,
         provider=name,
-        ip=ip,
+        # IP покупателя не храним — след о человеке. См. security.ip_tag.
+        ip=None,
         platform=(platform or "").strip().lower() or None,
         # Продление или первая покупка — видно уже сейчас, по почте. Значение
         # ещё раз уточняется при выдаче: за сутки, пока висит неоплаченный
@@ -269,7 +270,8 @@ def create_order_for_user(
         currency=plan.currency,
         status=OrderStatus.PENDING.value,
         provider=name,
-        ip=ip,
+        # IP покупателя не храним — след о человеке. См. security.ip_tag.
+        ip=None,
         platform=(platform or "").strip().lower() or None,
         origin=origin,
         user_id=user.id,

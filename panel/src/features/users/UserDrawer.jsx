@@ -767,7 +767,7 @@ function Sessions({ user, onChanged }) {
                 {session.revokedAt && <Chip color="var(--gd-faint)">завершена</Chip>}
               </div>
               <div className="gd-cellsub">
-                {session.ip || "адрес неизвестен"} · вход {dateTime(session.createdAt)}
+                вход {dateTime(session.createdAt)}
               </div>
             </div>
             <div className="r" style={{ display: "flex", alignItems: "center", gap: 10 }}>

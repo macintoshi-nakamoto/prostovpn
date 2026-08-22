@@ -54,6 +54,18 @@ export const usersApi = {
   iosEnableKey: (id, slot) => http.post(`${BASE}/users/${id}/ios/keys/${slot}/enable`),
 };
 
+// Точки входа узла: awg-интерфейсы со своими наборами обфускации и inbound'ы
+// VLESS. Правки набора обфускации здесь намеренно нет — смена H/S/J на живом
+// интерфейсе рвёт всех его пиров разом; ротация делается новой точкой входа.
+export const endpointsApi = {
+  list: (serverId) => http.get(`${BASE}/endpoints`, serverId ? { server_id: serverId } : undefined),
+  create: (payload) => http.post(`${BASE}/endpoints`, payload),
+  createVless: (payload) => http.post(`${BASE}/endpoints/vless`, payload),
+  apply: (id) => http.post(`${BASE}/endpoints/${id}/apply`),
+  sync: (id) => http.post(`${BASE}/endpoints/${id}/sync`),
+  setState: (id, state) => http.post(`${BASE}/endpoints/${id}/state`, { state }),
+};
+
 export const ordersApi = {
   list: (params, signal) => http.get(`${BASE}/orders`, params, signal),
   get: (id) => http.get(`${BASE}/orders/${id}`),

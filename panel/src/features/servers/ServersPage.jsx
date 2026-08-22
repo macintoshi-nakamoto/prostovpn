@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Stethoscope, Trash2, X } from "lucide-react";
 import { serversApi } from "../../lib/api";
+import { EndpointsPanel } from "./EndpointsPanel";
 import { useAsync } from "../../lib/hooks";
 import { ago, bytes, flag, num, plural } from "../../lib/format";
 import {
@@ -122,7 +123,7 @@ function Facts({ facts }) {
     ["Внешний адрес", facts.publicIp],
     ["AmneziaWG", facts.awgVersion],
     [
-      "Интерфейс awg0",
+      "Основной интерфейс",
       facts.interfaceUp === true
         ? `поднят${facts.interfaceAddress ? ` · ${facts.interfaceAddress}` : ""}${
             facts.listenPort ? ` · порт ${facts.listenPort}` : ""
@@ -197,7 +198,7 @@ function Facts({ facts }) {
           )}
           {facts.awgService && facts.awgService !== "active" && (
             <div style={{ marginTop: 8, fontSize: 12.5, color: "var(--gd-warn)" }}>
-              Служба awg-quick@awg0: {facts.awgService}
+              Служба основного интерфейса: {facts.awgService}
             </div>
           )}
         </div>
@@ -403,6 +404,7 @@ export function ServersPage() {
               </div>
 
               <Facts facts={server.facts} />
+              <EndpointsPanel serverId={server.id} />
             </Card>
           ))}
 

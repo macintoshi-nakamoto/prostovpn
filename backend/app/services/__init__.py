@@ -23,6 +23,7 @@ from . import (
     subscription,
     transfers,
     tunnel,
+    xray,
 )
 from .diagnostics import can_serve, check as check_server
 from .auth import (
@@ -134,6 +135,8 @@ __all__ = [
     "dashboard_totals",
     # подписка (ссылка /s/<token>)
     "subscription",
+    # второй протокол: VLESS + Reality
+    "xray",
     # заказы и оплата с сайта
     "orders",
     "passwords",

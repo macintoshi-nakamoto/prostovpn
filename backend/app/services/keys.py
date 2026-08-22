@@ -14,7 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 
 from .. import crypto, provisioning
-from ..models import Provisioning, Server, User, UserKey, utcnow
+from ..models import NodeEndpoint, Provisioning, Server, User, UserKey, utcnow
 from .errors import PanelError
 
 # Потолок на раздачу ключей одному пользователю. Недоступных серверов может
@@ -149,16 +149,34 @@ def issue_key(
     именно сменить. Тогда старый пир снимается, а человек получает новый
     конфиг при следующем обращении приложения к списку серверов.
     """
-    if not server.awg_template:
-        raise PanelError("не задан шаблон конфига")
-
     device_id = (device_id or "").strip()
     key = find_key(db, user, server, device_id)
+
+    # Куда селим. None — на узле точек входа нет вовсе (он старше фазы 2):
+    # работаем по-старому, с историческим awg0 и текстовым шаблоном сервера.
+    from .placement import pick_endpoint
+
+    endpoint = pick_endpoint(db, user, server, device_id)
+    if endpoint is None and not server.awg_template:
+        raise PanelError("не задан шаблон конфига")
+
+    # Имя интерфейса для команд на узле. У ключа без точки входа оно одно —
+    # исторический awg0.
+    interface = endpoint.handle if endpoint is not None else provisioning.INTERFACE
+    # Интерфейс, на котором лежит ПРЕЖНИЙ пир этой строки: снимать его надо
+    # оттуда, где он есть, а не оттуда, куда мы селим сейчас.
+    old_interface = interface
+    if key is not None and key.endpoint_id is not None:
+        old = db.get(NodeEndpoint, key.endpoint_id)
+        if old is not None:
+            old_interface = old.handle
 
     # Возвращаем прежний доступ: всё, что нужно, уже лежит в строке.
     reuse = not rotate and key is not None and key.config and key.public_key and key.address
     if reuse:
-        provisioning.add_peer_over_ssh(server, key.public_key, key.address)
+        provisioning.add_peer_over_ssh(
+            server, key.public_key, key.address, interface=old_interface
+        )
         key.revoked_at = None
         db.commit()
         db.refresh(key)
@@ -166,24 +184,32 @@ def issue_key(
 
     address = key.address if key is not None and key.address else None
     if address is None:
-        key, address = _reserve_address(db, key, user, server, device_id)
+        key, address = _reserve_address(db, key, user, server, device_id, endpoint=endpoint)
 
     private_key, public_key = provisioning.generate_keypair()
-    config = provisioning.render_from_template(server.awg_template, private_key, address)
+    if endpoint is not None:
+        config = provisioning.render_endpoint_config(endpoint, server, private_key, address)
+    else:
+        config = provisioning.render_from_template(server.awg_template, private_key, address)
 
     # Старый пир снимаем перед добавлением нового: иначе на узле остаются
     # два пира с разными ключами на один адрес, и сервер отвечает не тому.
     if key is not None and key.public_key and key.public_key != public_key:
         try:
-            provisioning.remove_peer_over_ssh(server, key.public_key)
+            provisioning.remove_peer_over_ssh(server, key.public_key, interface=old_interface)
         except Exception:
             # Узел мог не ответить. Не повод не выдавать доступ: лишний пир
             # подчистит сверка в reconcile_peers.
             pass
 
-    provisioning.add_peer_over_ssh(server, public_key, address)
+    provisioning.add_peer_over_ssh(server, public_key, address, interface=interface)
 
     key.config = config
+    # Точка входа закрепляется за строкой в тот же коммит, что и пара ключей:
+    # адрес взят из её подсети, конфиг собран из её набора обфускации, и пир
+    # заведён на её интерфейсе. Разъехаться этим четырём вещам нельзя.
+    if endpoint is not None:
+        key.endpoint_id = endpoint.id
     # Шифр приватника обязан ехать вместе с новой парой. Иначе при перевыпуске
     # (rotate=True, «скомпрометирован», перевыпуск iOS) в private_key_enc остаётся
     # СТАРЫЙ ключ, а provisioning.private_key_for предпочитает шифр тексту — и
@@ -206,7 +232,12 @@ def issue_key(
 
 
 def _reserve_address(
-    db: OrmSession, key: UserKey | None, user: User, server: Server, device_id: str = ""
+    db: OrmSession,
+    key: UserKey | None,
+    user: User,
+    server: Server,
+    device_id: str = "",
+    endpoint: NodeEndpoint | None = None,
 ) -> tuple[UserKey, str]:
     """
     Занимает свободный адрес в базе ДО захода по SSH.
@@ -233,11 +264,19 @@ def _reserve_address(
                 )
             )
         )
-        address = provisioning.next_address(taken)
+        # Адрес берём из подсети ТОЙ точки входа, куда селим: у каждого
+        # интерфейса своя сеть, и адрес из чужой не маршрутизируется — туннель
+        # поднимется, трафик не пойдёт.
+        if endpoint is not None and endpoint.subnet:
+            address = provisioning.next_address(taken, subnet=endpoint.subnet)
+        else:
+            address = provisioning.next_address(taken)
 
         if key is None:
             key = UserKey(user_id=user.id, server_id=server.id, device_id=device_id or "")
             db.add(key)
+        if endpoint is not None:
+            key.endpoint_id = endpoint.id
         key.address = address
         key.config = key.config or ""  # колонка NOT NULL, а конфига ещё нет
         key.revoked_at = utcnow()
@@ -254,10 +293,41 @@ def _reserve_address(
     raise PanelError("не удалось занять свободный адрес: адреса разбирают быстрее, чем выдаём")
 
 
+def xray_revoke(db: OrmSession, user_id: int, device_id: str | None = None) -> int:
+    """
+    Снимает доступы по второму протоколу.
+
+    Обёртка живёт здесь, а не зовётся напрямую: `services/users.py` уже
+    импортирует этот модуль, а прямой импорт xray оттуда замкнул бы круг
+    (xray → models → ... → users).
+    """
+    from . import xray
+
+    return xray.revoke_for_user(db, user_id, device_id=device_id)
+
+
+def interface_for(db: OrmSession, key: UserKey) -> str:
+    """
+    Интерфейс, на котором реально лежит пир этого ключа.
+
+    Ключ без точки входа — строка старше фазы 2: она живёт на историческом
+    awg0. Снимать пира надо оттуда, где он есть: `awg set <чужой> peer X remove`
+    возвращает 0 и ничего не делает, то есть панель сочтёт доступ отозванным, а
+    он продолжит работать.
+    """
+    if key.endpoint_id is not None:
+        endpoint = db.get(NodeEndpoint, key.endpoint_id)
+        if endpoint is not None:
+            return endpoint.handle
+    return provisioning.INTERFACE
+
+
 def revoke_key(db: OrmSession, key: UserKey) -> None:
     """Убирает пира с сервера и помечает ключ отозванным."""
     server = key.server
     if server.provisioning == Provisioning.SSH and key.public_key:
-        provisioning.remove_peer_over_ssh(server, key.public_key)
+        provisioning.remove_peer_over_ssh(
+            server, key.public_key, interface=interface_for(db, key)
+        )
     key.revoked_at = utcnow()
     db.commit()

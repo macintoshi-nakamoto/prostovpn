@@ -335,6 +335,15 @@ class Server(Base):
     # списка серверов не должно от этого зависеть.
     facts: Mapped[dict | None] = mapped_column(JSON, default=None)
 
+    # Точки входа этого узла уже заведены из исторического конфига.
+    #
+    # Флаг, а не проверка «есть ли строки»: бэкфилл исполняется при каждом
+    # старте, и без отметки удалённая администратором точка входа возвращалась
+    # бы каждым перезапуском панели.
+    endpoints_seeded: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0"
+    )
+
     # Номер ревизии точки подключения. Растёт при каждой смене host/port/
     # запасных портов узла — подписка отдаёт клиенту max(endpoint_rev) как
     # `revision`, по нему видно, что endpoint изменился, без сравнения тел.
@@ -346,6 +355,232 @@ class Server(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     keys: Mapped[list["UserKey"]] = relationship(back_populates="server", cascade="all, delete-orphan")
+    endpoints: Mapped[list["NodeEndpoint"]] = relationship(
+        back_populates="server", cascade="all, delete-orphan"
+    )
+
+    def live_endpoints(self, kind: "EndpointKind | None" = None) -> list["NodeEndpoint"]:
+        """Точки входа, с которых сейчас можно обслуживать (active + draining)."""
+        return [
+            ep
+            for ep in self.endpoints
+            if ep.is_live and (kind is None or ep.kind == kind)
+        ]
+
+
+class EndpointKind(str, enum.Enum):
+    """Чем именно слушает точка входа."""
+
+    AWG = "awg"
+    VLESS = "vless"
+
+
+class EndpointState(str, enum.Enum):
+    """
+    Жизненный цикл точки входа.
+
+    `draft` — заведена в панели, на узле ещё нет. `active` — принимает новых.
+    `draining` — работает, но новых не селим (так уходит старый набор
+    обфускации: люди переезжают сами на своём перевыпуске). `retired` — пиров
+    не осталось, можно гасить на узле.
+    """
+
+    DRAFT = "draft"
+    ACTIVE = "active"
+    DRAINING = "draining"
+    RETIRED = "retired"
+
+
+class NodeEndpoint(Base):
+    """
+    Точка входа узла — один слушающий сокет: awg-интерфейс или inbound xray.
+
+    Зачем отдельная сущность. Раньше «узел» и «точка подключения» были одним и
+    тем же: у сервера были host, port и один шаблон конфига, а на машине —
+    единственный интерфейс awg0. Из этого следовали обе проблемы, ради которых
+    затевались фазы 2 и 3: набор обфускации был один на всех (купивший доступ
+    получал сигнатуру всего парка), и второй протокол некуда было положить.
+
+    Теперь у узла несколько точек входа: несколько awg-интерфейсов с РАЗНЫМИ
+    наборами H/S на разных портах, а рядом — inbound VLESS. Пользователи
+    распределяются между ними, и отпечаток дробится.
+
+    Один awg-интерфейс = один набор обфускации для всех своих пиров: параметры
+    живут в секции [Interface] и не могут отличаться от пира к пиру. Отсюда и
+    вся конструкция — уникальность набора достигается числом интерфейсов, а не
+    попыткой дать каждому клиенту свой.
+    """
+
+    __tablename__ = "node_endpoints"
+    __table_args__ = (
+        # Имя на узле уникально в пределах узла: по нему строятся команды.
+        Index("uq_endpoint_server_handle", "server_id", "handle", unique=True),
+        # Один порт слушает ровно одна точка входа, иначе REDIRECT неоднозначен.
+        Index("uq_endpoint_server_port", "server_id", "listen_port", unique=True),
+        # Подсети точек входа одного узла не пересекаются. Это не гигиена, а
+        # несущая конструкция: на user_keys стоит уникальный индекс
+        # (server_id, address), снять который мягкая миграция не умеет. Пока
+        # подсети разные, он остаётся верным и продолжает защищать от двух
+        # пиров на одном адресе.
+        Index("uq_endpoint_server_subnet", "server_id", "subnet", unique=True),
+        Index("ix_endpoint_server_state", "server_id", "state"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), index=True)
+
+    kind: Mapped[EndpointKind] = mapped_column(
+        Enum(EndpointKind, native_enum=False), default=EndpointKind.AWG
+    )
+    # udp — awg, tcp — vless+reality, ws — vless за CDN (задел третьего уровня).
+    transport: Mapped[str] = mapped_column(String(8), default="udp", server_default="udp")
+
+    # Имя НА УЗЛЕ: awg0, awg1, vless-reality-0. Уходит в root-shell, поэтому
+    # проверяется белым списком (provisioning.iface_name).
+    handle: Mapped[str] = mapped_column(String(32))
+    listen_port: Mapped[int] = mapped_column(Integer)
+    # Запасные порты ЭТОЙ точки входа, через запятую: у каждой свои.
+    alt_ports: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    # Пусто — берётся Server.host. Задел под CDN: там клиент идёт на домен края,
+    # а не на адрес узла.
+    host_override: Mapped[str | None] = mapped_column(String(255), default=None)
+    # Своя подсеть у каждого awg-интерфейса. Для vless — NULL.
+    subnet: Mapped[str | None] = mapped_column(String(32), default=None)
+
+    # Всё, что специфично для вида точки входа. Для awg — набор обфускации,
+    # публичный ключ узла, DNS/MTU/AllowedIPs. Для vless — public_key Reality,
+    # short_ids, server_names, dest, flow.
+    #
+    # Секретов здесь нет по построению: то, что нельзя отдать клиенту, лежит в
+    # secret_enc. Поэтому params сериализуется наружу целиком, без белого
+    # списка полей — дисциплина «не забыть исключить» однажды нарушается.
+    params: Mapped[dict | None] = mapped_column(JSON, default=None)
+    # Секрет узла (приватный ключ Reality). Шифруется тем же AES-GCM, что
+    # пароли и приватники клиентов. Приватный ключ awg-интерфейса сюда НЕ
+    # попадает: он генерируется на узле и остаётся там.
+    secret_enc: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Порядок предложения клиенту: меньше — раньше. awg = 0, vless = 100,
+    # vless за CDN = 200. В подписке итоговый список перенумеровывается плотно.
+    priority: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Потолок живых грантов. NULL — без потолка.
+    capacity: Mapped[int | None] = mapped_column(Integer, default=None)
+    state: Mapped[EndpointState] = mapped_column(
+        Enum(EndpointState, native_enum=False), default=EndpointState.DRAFT
+    )
+    # Как читать счётчики трафика: absolute — как awg (растут от поднятия
+    # интерфейса), у xray они живут в памяти и обнуляются рестартом.
+    counter_mode: Mapped[str] = mapped_column(
+        String(16), default="absolute", server_default="absolute"
+    )
+    # Растёт при правке точки входа; уходит в revision подписки.
+    rev: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
+    note: Mapped[str | None] = mapped_column(Text, default=None)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+    server: Mapped["Server"] = relationship(back_populates="endpoints")
+
+    @property
+    def is_live(self) -> bool:
+        """Можно ли сейчас отдавать эту точку входа клиенту."""
+        return self.state in (EndpointState.ACTIVE, EndpointState.DRAINING)
+
+    @property
+    def accepts_new(self) -> bool:
+        """Можно ли селить сюда новых."""
+        return self.state == EndpointState.ACTIVE
+
+    def public_host(self, server: "Server | None" = None) -> str:
+        return self.host_override or (server or self.server).host
+
+    def alt_port_list(self) -> list[int]:
+        """Запасные порты числами, без основного и без мусора."""
+        out: list[int] = []
+        for chunk in (self.alt_ports or "").replace(";", ",").split(","):
+            chunk = chunk.strip()
+            if not chunk.isdigit():
+                continue
+            value = int(chunk)
+            if 0 < value < 65536 and value != self.listen_port and value not in out:
+                out.append(value)
+        return out
+
+    def obfuscation(self):
+        """Набор обфускации этой точки входа. Не awg — None."""
+        if self.kind != EndpointKind.AWG or not self.params:
+            return None
+        from .obfuscation import InvalidObfuscation, validate
+
+        try:
+            # strict=False: awg0 импортирован с историческим Jc=10, и отказать
+            # ему значит перестать обслуживать уже подключённых людей.
+            return validate(self.params, strict=False)
+        except InvalidObfuscation:
+            return None
+
+
+class UserEndpointCred(Base):
+    """
+    Доступ пользователя на точке входа, у которой нет пары ключей WireGuard.
+
+    Для awg такой строки нет: там доступ — это `UserKey` с парой ключей и
+    адресом в подсети, и ломать его ради единообразия значило бы пересобирать
+    живую таблицу. Здесь живут креды VLESS (и всего, что появится дальше):
+    UUID клиента, метка для статистики узла, параметры вроде flow и short_id.
+    """
+
+    __tablename__ = "user_endpoint_creds"
+    __table_args__ = (
+        # Одно устройство — один доступ на точке входа.
+        Index("uq_uec_slot", "endpoint_id", "user_id", "device_id", unique=True),
+        # Метка уникальна: по ней узел отдаёт счётчики трафика.
+        Index("uq_uec_label", "endpoint_id", "label", unique=True),
+        # Слепой индекс UUID: сверка без расшифровки.
+        Index("uq_uec_fp", "endpoint_id", "identity_fp", unique=True),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), index=True)
+    endpoint_id: Mapped[int] = mapped_column(
+        ForeignKey("node_endpoints.id", ondelete="CASCADE"), index=True
+    )
+    device_id: Mapped[str] = mapped_column(String(64), default="", server_default="", index=True)
+
+    cred_type: Mapped[str] = mapped_column(String(32), default="vless", server_default="vless")
+    # UUID клиента — единственный секрет доступа, хранится только шифротекстом.
+    identity_enc: Mapped[str | None] = mapped_column(Text, default=None)
+    identity_fp: Mapped[str | None] = mapped_column(String(64), default=None)
+    # Метка для статистики на узле. Непрозрачная и случайная намеренно: она
+    # попадает в логи и статистику xray, и человекочитаемый номер учётки там —
+    # готовое сопоставление «трафик ↔ клиент» для всякого, кто получил узел.
+    label: Mapped[str | None] = mapped_column(String(64), default=None)
+    extra: Mapped[dict | None] = mapped_column(JSON, default=None)
+
+    rx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    tx_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    last_seen_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    traffic_synced_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+    revoked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    disconnected_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    user: Mapped["User"] = relationship()
+    endpoint: Mapped["NodeEndpoint"] = relationship()
+
+    @property
+    def identity(self) -> str | None:
+        """UUID открытым текстом — только для сборки конфига клиенту."""
+        if not self.identity_enc:
+            return None
+        from . import crypto
+
+        try:
+            return crypto.decrypt(self.identity_enc)
+        except crypto.SecretsUnavailable:
+            return None
 
 
 class User(Base):
@@ -755,6 +990,19 @@ class UserKey(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), index=True)
+    # На какой точке входа узла живёт этот пир (node_endpoints.id).
+    #
+    # NULL — строка старше фазы 2, до которой ещё не дошёл бэкфилл. Такие
+    # трактуются как «подходит любой интерфейс»: сверка не имеет права счесть
+    # их чужими и снять — это 24 живых пира боевого узла.
+    #
+    # Намеренно БЕЗ ForeignKey: колонка приезжает в живую таблицу через ALTER,
+    # а мягкая миграция компилирует только тип и REFERENCES не эмитит. С
+    # объявленным FK схема на проде (голый INTEGER) разошлась бы со схемой на
+    # свежей базе тестов — худший источник «в тестах работает». Целостность
+    # держится кодом: строки node_endpoints не удаляются, а переводятся в
+    # retired.
+    endpoint_id: Mapped[int | None] = mapped_column(Integer, default=None, index=True)
     # Пустая строка, а не NULL, намеренно: в уникальном индексе NULL не равен
     # NULL, и «ключей учётки» на одну пару завелось бы сколько угодно.
     device_id: Mapped[str] = mapped_column(

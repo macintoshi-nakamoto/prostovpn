@@ -12,6 +12,7 @@ from fastapi import APIRouter
 from . import (
     audit,
     auth,
+    endpoints,
     finance,
     keys,
     orders,
@@ -30,6 +31,7 @@ router = APIRouter(prefix="/api/admin")
 router.include_router(auth.router)
 router.include_router(users.router)
 router.include_router(servers.router)
+router.include_router(endpoints.router)
 router.include_router(keys.router)
 router.include_router(plans.router)
 router.include_router(releases.router)

@@ -170,6 +170,12 @@ echo "public_ip=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null)"
 echo "ip_forward=$(cat /proc/sys/net/ipv4/ip_forward 2>/dev/null)"
 echo "panel_service=$(systemctl is-active prosto-panel 2>/dev/null)"
 echo "awg_service=$(systemctl is-active awg-quick@awg0 2>/dev/null)"
+echo "xray_service=$(systemctl is-active prosto-xray 2>/dev/null)"
+# Все awg-интерфейсы узла: по строке на каждый. Нужны, чтобы панель видела
+# интерфейс, поднятый мимо неё, — такой невидим и для учёта, и для сверки.
+for _i in $(ls /etc/amnezia/amneziawg/awg*.conf 2>/dev/null | sed 's#.*/##; s#\\.conf$##'); do
+  echo "iface:$_i=$(ip link show $_i >/dev/null 2>&1 && echo up || echo down),$(awg show $_i listen-port 2>/dev/null),$(awg show $_i peers 2>/dev/null | grep -c .)"
+done
 """
 
 
@@ -220,7 +226,27 @@ def collect_facts(server: Server) -> dict:
         "ip_forward": values.get("ip_forward") == "1",
         "panel_service": values.get("panel_service") or None,
         "awg_service": values.get("awg_service") or None,
+        "xray_service": values.get("xray_service") or None,
     }
+
+    # Все awg-интерфейсы узла — по строке `iface:awgN=up,51821,7`. Сумма пиров
+    # важнее числа по awg0: с несколькими интерфейсами показатель «пиров»
+    # только по первому вводит в заблуждение.
+    interfaces: list[dict] = []
+    total_peers = 0
+    for key, value in values.items():
+        if not key.startswith("iface:"):
+            continue
+        name = key[len("iface:") :]
+        parts = (value or "").split(",")
+        up = parts[0] == "up" if parts else False
+        port = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
+        peers = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+        interfaces.append({"name": name, "up": up, "listen_port": port, "peers": peers})
+        total_peers += peers
+    if interfaces:
+        facts["interfaces"] = sorted(interfaces, key=lambda item: item["name"])
+        facts["peers"] = total_peers
 
     if len(disk) >= 3:
         facts["disk_total_bytes"] = int(disk[0]) if disk[0].isdigit() else None

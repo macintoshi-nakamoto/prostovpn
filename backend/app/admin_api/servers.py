@@ -100,6 +100,18 @@ def _apply(server: Server, body: schemas.ServerIn) -> None:
     )
     if server.id is not None and _endpoint_before != _endpoint_after:
         server.endpoint_rev = (server.endpoint_rev or 1) + 1
+        # Историческая точка входа описывает тот же интерфейс, что поля узла.
+        # Без синхронизации поле «Запасные порты» в панели превратилось бы в
+        # пустышку: выдача читает порты точки входа, и правка узла до клиентов
+        # просто не доезжала бы — молча, без единого признака.
+        from ..models import EndpointKind, NodeEndpoint
+        from ..provisioning import INTERFACE
+
+        for endpoint in server.endpoints:
+            if endpoint.kind == EndpointKind.AWG and endpoint.handle == INTERFACE:
+                endpoint.listen_port = server.port
+                endpoint.alt_ports = server.alt_ports or ""
+                endpoint.rev = (endpoint.rev or 1) + 1
 
 
 def _check_usable(server: Server) -> None:

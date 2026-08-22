@@ -1,7 +1,7 @@
 # /etc/systemd/system/prosto-extra-ports.service
 [Unit]
 Description=Prosto VPN — дополнительные UDP-порты для AmneziaWG
-After=network-online.target amnezia-awg@awg0.service
+After=network-online.target awg-quick@awg0.service
 Wants=network-online.target
 
 [Service]

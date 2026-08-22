@@ -86,7 +86,11 @@ def disconnect(db: OrmSession, session: Session, reason: str = "") -> list[str]:
             try:
                 from .. import provisioning
 
-                provisioning.remove_peer_over_ssh(server, key.public_key)
+                from .keys import interface_for
+
+                provisioning.remove_peer_over_ssh(
+                    server, key.public_key, interface=interface_for(db, key)
+                )
             except Exception as exc:  # noqa: BLE001 — причина нужна администратору
                 problems.append(f"{server.name}: {exc}")
                 log.error("пир устройства %s не снят с узла %s: %s", session.id, server.name, exc)
@@ -103,9 +107,11 @@ def disconnect(db: OrmSession, session: Session, reason: str = "") -> list[str]:
     # И ссылку подписки этого устройства: иначе выкинутый по лимиту или
     # отключённый вручную телефон продолжал бы получать конфиг по /s/, минуя
     # снятый пир и погашенный токен приложения.
-    from . import subscription
+    from . import subscription, xray
 
     subscription.revoke_for_device(db, user.id, device_id)
+    # И доступ по второму протоколу: пир снят, а VLESS-креды жили бы дальше.
+    xray.revoke_for_user(db, user.id, device_id=device_id)
 
     log.info(
         "отключено устройство %s пользователя %s%s%s",

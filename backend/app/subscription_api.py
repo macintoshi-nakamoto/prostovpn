@@ -23,7 +23,13 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session as OrmSession
 
 from . import geo, provisioning, services
-from .api_client import _notice_for, _serve_targets, _subscription_out, _with_chosen_port
+from .api_client import (
+    _notice_for,
+    _ports_for,
+    _serve_targets,
+    _subscription_out,
+    _with_chosen_port,
+)
 from .db import get_db
 from .models import Provisioning, Server, SubscriptionToken, UserKey
 from .security import client_ip, token_hash
@@ -89,8 +95,14 @@ def _endpoints_for(db: OrmSession, server: Server, key: UserKey | None) -> list[
     if not base:
         return []
     primary = _with_chosen_port(db, server, key, base)
-    chosen = provisioning.endpoint_port(primary) or server.port
-    wheel = [chosen] + [p for p in ([server.port] + server.alt_port_list()) if p != chosen]
+    # Порты — той точки входа, где ЖИВЁТ пир, а не узла вообще. У каждого
+    # интерфейса свой слушающий порт и свой набор запасных: отдать человеку с
+    # awg1 порты awg0 значит отправить его на чужой интерфейс — пакеты уйдут,
+    # рукопожатия не будет никогда. Источник тот же, что у /api/v1/servers
+    # (_ports_for), чтобы две выдачи не разошлись.
+    main_port, spare_ports = _ports_for(db, server, key)
+    chosen = provisioning.endpoint_port(primary) or main_port
+    wheel = [chosen] + [p for p in ([main_port] + spare_ports) if p != chosen]
 
     interface, peer = provisioning.config_sections(primary)
     obf: dict[str, int | str] = {}
@@ -111,6 +123,9 @@ def _endpoints_for(db: OrmSession, server: Server, key: UserKey | None) -> list[
     for priority, port in enumerate(wheel):
         out.append(
             {
+                # Порядок внутри протокола: сначала залипший рабочий порт.
+                # Итоговый priority проставит перенумерация в _payload.
+                "_rank": (0, priority),
                 "protocol": "awg",
                 "transport": "udp",
                 "host": server.host,
@@ -132,6 +147,82 @@ def _endpoints_for(db: OrmSession, server: Server, key: UserKey | None) -> list[
     return out
 
 
+def _vless_endpoints_for(
+    db: OrmSession, server: Server, user, device_id: str
+) -> list[dict]:
+    """
+    Точки входа VLESS этого устройства — той же формы, что awg.
+
+    Доступ выдаётся лениво, при первом запросе подписки: заводить креды всем
+    заранее значит держать в конфиге узла тысячи клиентов, из которых
+    подключится десяток.
+
+    Форма записи та же самая («протокол + транспорт + host + port + креды»), и
+    в этом весь смысл контракта: клиенту не нужно знать, что появился новый
+    протокол, — ему нужно уметь читать `credentials` по типу.
+    """
+    from .models import EndpointKind
+    from .services import xray
+
+    live = [
+        ep
+        for ep in server.endpoints
+        if ep.kind == EndpointKind.VLESS and ep.is_live
+    ]
+    if not live:
+        return []
+
+    out: list[dict] = []
+    for rank, endpoint in enumerate(sorted(live, key=lambda e: (e.priority, e.id))):
+        creds = xray.live_creds(db, user, server, device_id)
+        cred = next((c for c in creds if c.endpoint_id == endpoint.id), None)
+        if cred is None:
+            if not endpoint.accepts_new:
+                continue
+            try:
+                cred = xray.issue_cred(db, user, server, endpoint, device_id)
+            except Exception:  # noqa: BLE001 — отказ vless не рвёт выдачу awg
+                log.exception("точка входа %s: не выдан доступ", endpoint.handle)
+                continue
+
+        identity = cred.identity
+        if not identity:
+            continue
+        # Отдаём только то, что реально стоит на узле. Пока конфиг не доехал,
+        # ссылка была бы мёртвой: клиент увидел бы рабочий с виду endpoint и
+        # не подключился. Доедет обходом — появится следующим опросом.
+        if not xray.is_on_node(endpoint):
+            log.info("точка входа %s ещё не синхронизирована — пропускаем", endpoint.handle)
+            continue
+        params = endpoint.params or {}
+        extra = cred.extra or {}
+        link = xray.share_link(endpoint, cred, server)
+        out.append(
+            {
+                "_rank": (1, rank),
+                "protocol": "vless",
+                "transport": endpoint.transport,
+                "host": endpoint.public_host(server),
+                "port": endpoint.listen_port,
+                "priority": 0,
+                "credentials": {
+                    "type": "vless-reality",
+                    "id": identity,
+                    "flow": extra.get("flow", ""),
+                    "security": params.get("security", "reality"),
+                    "sni": (params.get("server_names") or [""])[0],
+                    "public_key": params.get("public_key", ""),
+                    "short_id": extra.get("short_id", ""),
+                    "fingerprint": params.get("fingerprint", "chrome"),
+                    # Готовая ссылка для сторонних клиентов — им не нужно
+                    # собирать её из полей самим.
+                    "url": link or "",
+                },
+            }
+        )
+    return out
+
+
 def _payload(db: OrmSession, tok: SubscriptionToken, background: BackgroundTasks | None) -> dict:
     user = tok.user
     servers_json: list[dict] = []
@@ -147,9 +238,28 @@ def _payload(db: OrmSession, tok: SubscriptionToken, background: BackgroundTasks
         except Exception:  # noqa: BLE001 — один битый узел не роняет всю подписку
             log.exception("сервер «%s» пропущен: не собрались endpoints", server.name)
             continue
+        # Узел без рабочего awg в выдачу не попадает: клиенты умеют пока только
+        # его, и сервер, у которого остался бы один VLESS, для них выглядел бы
+        # рабочим и не подключался.
         if not endpoints:
             continue
+
+        try:
+            endpoints += _vless_endpoints_for(db, server, user, tok.device_id)
+        except Exception:  # noqa: BLE001
+            log.exception("сервер «%s»: не собрались vless-endpoints", server.name)
+
+        # Приоритет — перенумерацией итогового списка, а не константами:
+        # «vless ниже awg» становится свойством порядка, а не договорённости,
+        # и клиент получает плотный ряд 0..N-1.
+        endpoints.sort(key=lambda item: item.pop("_rank"))
+        for index, item in enumerate(endpoints):
+            item["priority"] = index
+
         revision = max(revision, server.endpoint_rev or 1)
+        for endpoint in server.endpoints:
+            if endpoint.is_live:
+                revision = max(revision, endpoint.rev or 1)
         servers_json.append(
             {
                 "id": server.id,

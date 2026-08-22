@@ -122,11 +122,15 @@ def ssh(monkeypatch):
     calls = {"add": [], "remove": []}
     monkeypatch.setattr(
         provisioning, "add_peer_over_ssh",
-        lambda server, pub, addr: calls["add"].append((server.id, pub, addr)),
+        lambda server, pub, addr, *, interface="awg0": calls["add"].append(
+            (server.id, pub, addr, interface)
+        ),
     )
     monkeypatch.setattr(
         provisioning, "remove_peer_over_ssh",
-        lambda server, pub: calls["remove"].append((server.id, pub)),
+        lambda server, pub, *, interface="awg0": calls["remove"].append(
+            (server.id, pub, interface)
+        ),
     )
     return calls
 

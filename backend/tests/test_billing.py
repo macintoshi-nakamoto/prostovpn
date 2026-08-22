@@ -857,8 +857,8 @@ def test_reissue_reuses_the_row_and_keeps_the_keypair(client, auth):
 
     added, removed = [], []
     real_add, real_remove = prov.add_peer_over_ssh, prov.remove_peer_over_ssh
-    prov.add_peer_over_ssh = lambda s, pk, addr: added.append(pk)
-    prov.remove_peer_over_ssh = lambda s, pk: removed.append(pk)
+    prov.add_peer_over_ssh = lambda s, pk, addr, **_kw: added.append(pk)
+    prov.remove_peer_over_ssh = lambda s, pk, **_kw: removed.append(pk)
 
     try:
         with SessionLocal() as db:

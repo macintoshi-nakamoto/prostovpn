@@ -66,15 +66,36 @@ SERVER_PUB="$(cat "$AWG_DIR/server_public.key")"
 if [[ ! -f "$AWG_DIR/obfuscation.env" ]]; then
     log "Генерируем параметры маскировки"
     python3 - > "$AWG_DIR/obfuscation.env" <<'PY'
-import random
-# H1..H4 обязаны отличаться друг от друга: это типы заголовков, и совпадение
-# двух из них ломает разбор пакетов.
-h = random.sample(range(5, 2_147_483_647), 4)
-print(f"JC={random.randint(3, 10)}")
-print(f"JMIN={random.randint(30, 70)}")
-print(f"JMAX={random.randint(500, 1000)}")
-print(f"S1={random.randint(15, 150)}")
-print(f"S2={random.randint(15, 150)}")
+import secrets
+
+rng = secrets.SystemRandom()
+
+# Правила ровно те же, что в backend/app/obfuscation.py — панель проверяет их
+# при импорте, и набор, собранный «примерно так же», она отвергнет.
+#
+# H1..H4 — четыре РАЗНЫХ числа не меньше 5: они замещают типы пакетов
+# WireGuard (1..4), и значение из этого диапазона возвращает канонический
+# заголовок. Совпадение двух H даёт «пакеты идут, рукопожатия нет никогда».
+h = rng.sample(range(5, 2_147_483_647), 4)
+
+# Jc — сколько мусорных пакетов уходит перед рукопожатием. Десяток, который
+# стоял раньше, это лишний трафик и лишний расход батареи на телефоне при
+# каждом подключении.
+jc = rng.randint(3, 6)
+jmin = rng.randint(16, 64)
+jmax = rng.randint(256, 1000)
+
+# S1 и S2 не должны давать пакеты одинаковой длины: 148 + S1 != 92 + S2.
+# Рукопожатие вычисляется по размеру, даже когда заголовки подменены.
+s1 = rng.randint(15, 130)
+forbidden = s1 + 148 - 92
+s2 = rng.choice([v for v in range(15, 131) if v != forbidden])
+
+print(f"JC={jc}")
+print(f"JMIN={jmin}")
+print(f"JMAX={jmax}")
+print(f"S1={s1}")
+print(f"S2={s2}")
 for i, v in enumerate(h, start=1):
     print(f"H{i}={v}")
 PY

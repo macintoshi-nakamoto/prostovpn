@@ -59,10 +59,14 @@ show_status() {
 }
 
 remove_rules() {
-    # Снимаем ровно свои правила: те, что ведут на порт AmneziaWG.
-    while iptables -t nat -S PREROUTING | grep -qE "REDIRECT.*--to-ports ${AWG_PORT}"; do
+    # Снимаем правила ровно СВОЕЙ цели: на узле теперь несколько
+    # awg-интерфейсов, и у каждого свои перенаправления. Снять чужие значит
+    # молча лишить запасных портов чужих пиров — а заметят это только те, у
+    # кого основной порт не проходит.
+    local target="${1:-$AWG_PORT}"
+    while iptables -t nat -S PREROUTING | grep -qE "REDIRECT.*--to-ports ${target}\b"; do
         local rule
-        rule="$(iptables -t nat -S PREROUTING | grep -E "REDIRECT.*--to-ports ${AWG_PORT}" | head -1)"
+        rule="$(iptables -t nat -S PREROUTING | grep -E "REDIRECT.*--to-ports ${target}\b" | head -1)"
         # shellcheck disable=SC2086
         iptables -t nat ${rule/-A/-D}
     done
@@ -71,11 +75,23 @@ remove_rules() {
 restore_rules() {
     # Восстановление после перезагрузки: список берём из файла, а не из
     # аргументов — юнит запускается без них.
+    #
+    # Восстанавливаем ВСЕ цели, а не только AWG_PORT: юнит стартует с дефолтным
+    # значением, и раньше это означало, что после перезагрузки все запасные
+    # порты узла заворачивались на 51820 — включая те, что принадлежали другому
+    # интерфейсу. Его пиры при этом уходили в чужую обфускацию: пакеты идут,
+    # рукопожатия нет.
     [[ -f "$RULES_FILE" ]] || exit 0
-    remove_rules
-    while read -r port; do
+    while IFS=: read -r port target; do
         [[ "$port" =~ ^[0-9]+$ ]] || continue
-        iptables -t nat -A PREROUTING -i "$WAN" -p udp --dport "$port" -j REDIRECT --to-ports "$AWG_PORT"
+        # Старый формат (одни порты, без цели) читаем как «цель — 51820».
+        [[ "$target" =~ ^[0-9]+$ ]] || target="$AWG_PORT"
+        remove_rules "$target"
+    done < "$RULES_FILE"
+    while IFS=: read -r port target; do
+        [[ "$port" =~ ^[0-9]+$ ]] || continue
+        [[ "$target" =~ ^[0-9]+$ ]] || target="$AWG_PORT"
+        iptables -t nat -A PREROUTING -i "$WAN" -p udp --dport "$port" -j REDIRECT --to-ports "$target"
     done < "$RULES_FILE"
     exit 0
 }
@@ -84,13 +100,23 @@ case "${1:-}" in
     --restore) restore_rules ;;
     --status) show_status; exit 0 ;;
     --close)
-        log "Убираем дополнительные порты"
-        remove_rules
-        rm -f "$RULES_FILE"
-        systemctl disable --now prosto-extra-ports.service 2>/dev/null || true
-        rm -f "$UNIT"
-        systemctl daemon-reload
-        ok "Порт ${AWG_PORT} не тронут, дополнительные сняты"
+        # Закрываем порты ТОЛЬКО своей цели: на узле несколько интерфейсов, и
+        # «убрать всё» из-под одного из них снесло бы запасные порты соседям.
+        log "Убираем дополнительные порты цели ${AWG_PORT}"
+        remove_rules "$AWG_PORT"
+        if [[ -f "$RULES_FILE" ]]; then
+            tmp_close="$(mktemp)"
+            grep -vE ":${AWG_PORT}$" "$RULES_FILE" > "$tmp_close" || true
+            mv "$tmp_close" "$RULES_FILE"
+        fi
+        # Юнит и файл сносим, только когда чужих записей не осталось.
+        if [[ ! -s "$RULES_FILE" ]]; then
+            rm -f "$RULES_FILE"
+            systemctl disable --now prosto-extra-ports.service 2>/dev/null || true
+            rm -f "$UNIT"
+            systemctl daemon-reload
+        fi
+        ok "Порт ${AWG_PORT} не тронут, его дополнительные сняты"
         exit 0
         ;;
 esac
@@ -129,7 +155,19 @@ if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "^Status: activ
     ufw allow "${AWG_PORT}/udp" >/dev/null 2>&1 || true
 fi
 
-printf '%s\n' "${ACCEPTED[@]}" > "$RULES_FILE"
+# Формат строки — «порт:цель». Раньше здесь лежали одни порты и файл
+# перезаписывался целиком: запуск скрипта для второго интерфейса стирал запись
+# про порты первого, и после ближайшей перезагрузки узла его пиры оставались
+# без запасных портов, а их порты заворачивались на чужой интерфейс.
+touch "$RULES_FILE"
+tmp_rules="$(mktemp)"
+# Свои прежние строки выкидываем, чужие сохраняем как есть.
+grep -vE ":${AWG_PORT}\$" "$RULES_FILE" > "$tmp_rules" || true
+for port in "${ACCEPTED[@]}"; do
+    printf '%s:%s\n' "$port" "$AWG_PORT" >> "$tmp_rules"
+done
+sort -u "$tmp_rules" > "$RULES_FILE"
+rm -f "$tmp_rules"
 
 # --- переживание перезагрузки -------------------------------------------------
 #
@@ -139,7 +177,7 @@ printf '%s\n' "${ACCEPTED[@]}" > "$RULES_FILE"
 cat > "$UNIT" <<UNITEOF
 [Unit]
 Description=Prosto VPN — дополнительные UDP-порты для AmneziaWG
-After=network-online.target amnezia-awg@awg0.service
+After=network-online.target awg-quick@awg0.service
 Wants=network-online.target
 
 [Service]

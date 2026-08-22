@@ -37,12 +37,16 @@ class FakeNode:
 
     def __init__(self) -> None:
         self.peers: set[str] = set()
+        self.placed: dict[str, str] = {}
+        self.removed_from: dict[str, str] = {}
 
-    def add(self, _server, public_key, _address) -> None:
+    def add(self, _server, public_key, _address, *, interface="awg0") -> None:
         self.peers.add(public_key)
+        self.placed[public_key] = interface
 
-    def remove(self, _server, public_key) -> None:
+    def remove(self, _server, public_key, *, interface="awg0") -> None:
         self.peers.discard(public_key)
+        self.removed_from[public_key] = interface
 
 
 @pytest.fixture

@@ -24,7 +24,16 @@ from sqlalchemy.orm import Session as OrmSession
 from . import geo, provisioning, services
 from .config import settings
 from .db import get_db
-from .models import Provisioning, Server, Session, User, UserKey, is_ios_slot, utcnow
+from .models import (
+    NodeEndpoint,
+    Provisioning,
+    Server,
+    Session,
+    User,
+    UserKey,
+    is_ios_slot,
+    utcnow,
+)
 from .provisioning import serving_config
 from .security import client_ip
 
@@ -402,6 +411,7 @@ def _servers_out(
             # Сервер есть, но конфига для этого человека пока нет —
             # показывать его в приложении нельзя: подключение упадёт.
             continue
+        main_port, spare_ports = _ports_for(db, server, key)
         config = _with_chosen_port(db, server, key, config)
         out.append(
             ServerOut(
@@ -434,7 +444,9 @@ def _servers_out(
                 # соберётся вообще без 51820 — единственного порта, про
                 # который точно известно, что узел его слушает. Клиент
                 # дедуплицирует, так что добавить его безопасно.
-                alt_ports=[server.port] + server.alt_port_list(),
+                #
+                # Порты — той точки входа, где живёт пир: у awg1 они свои.
+                alt_ports=[main_port] + spare_ports,
             )
         )
     return out
@@ -460,6 +472,22 @@ PORT_PROBE_SECONDS = 180
 PORT_PROBE_GRACE = dt.timedelta(minutes=10)
 
 
+def _ports_for(
+    db: OrmSession, server: Server, key: UserKey | None
+) -> tuple[int, list[int]]:
+    """
+    Основной и запасные порты для этого ключа.
+
+    У ключа без точки входа (строка старше фазы 2) это порты самого узла — они
+    и описывают исторический awg0.
+    """
+    if key is not None and key.endpoint_id is not None:
+        endpoint = db.get(NodeEndpoint, key.endpoint_id)
+        if endpoint is not None:
+            return endpoint.listen_port, endpoint.alt_port_list()
+    return server.port, server.alt_port_list()
+
+
 def _with_chosen_port(
     db: OrmSession, server: Server, key: UserKey | None, config: str
 ) -> str:
@@ -480,7 +508,11 @@ def _with_chosen_port(
       порт из списка. Рано или поздно попадётся тот, что проходит через его
       сеть, и он закрепится за ключом сам.
     """
-    ports = server.alt_port_list()
+    # Порты берём у ТОЙ точки входа, на которой живёт пир: у каждого
+    # интерфейса свой слушающий порт и свой набор запасных. Отдать человеку с
+    # awg1 порты awg0 значит отправить его на чужой интерфейс — пакеты уйдут,
+    # рукопожатия не будет никогда.
+    main_port, ports = _ports_for(db, server, key)
     if key is None or not ports:
         return config
 
@@ -489,10 +521,10 @@ def _with_chosen_port(
         # Либо рукопожатие уже было — и тогда работающее не чинят, — либо ключ
         # совсем свежий и человек ещё даже не пробовал. И там и там отдаём то,
         # что было: закреплённый порт, а если его нет — основной.
-        chosen = key.endpoint_port or provisioning.endpoint_port(config) or server.port
+        chosen = key.endpoint_port or provisioning.endpoint_port(config) or main_port
         return provisioning.with_endpoint_port(config, chosen)
 
-    wheel = [server.port] + ports
+    wheel = [main_port] + ports
     index = int(now.timestamp() // PORT_PROBE_SECONDS) % len(wheel)
     chosen = wheel[index]
     if key.endpoint_port != chosen:

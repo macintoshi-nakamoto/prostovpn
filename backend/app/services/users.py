@@ -19,6 +19,7 @@ from ..security import hash_password
 from . import credentials
 from .billing import grant_subscription
 from .errors import PanelError
+from . import keys as keys_service
 from .keys import ensure_keys
 from .translit import slugify
 
@@ -216,12 +217,17 @@ def set_user_active(db: OrmSession, user: User, active: bool) -> list[str]:
             server = key.server
             if server.provisioning == Provisioning.SSH and key.public_key:
                 try:
-                    provisioning.remove_peer_over_ssh(server, key.public_key)
+                    provisioning.remove_peer_over_ssh(
+                        server, key.public_key, interface=keys_service.interface_for(db, key)
+                    )
                 except Exception as exc:
                     problems.append(f"{server.name}: {exc}")
                     continue
             key.revoked_at = now
 
+    # И доступы по второму протоколу: пиры сняты, а VLESS-креды жили бы дальше
+    # — то есть блокировка блокировала бы не всё.
+    keys_service.xray_revoke(db, user.id)
     db.commit()
 
     if active:
@@ -257,12 +263,17 @@ def block_user(db: OrmSession, user: User, reason: str | None = None) -> list[st
         server = key.server
         if server.provisioning == Provisioning.SSH and key.public_key:
             try:
-                provisioning.remove_peer_over_ssh(server, key.public_key)
+                provisioning.remove_peer_over_ssh(
+                    server, key.public_key, interface=keys_service.interface_for(db, key)
+                )
             except Exception as exc:
                 problems.append(f"{server.name}: {exc}")
                 continue
         key.revoked_at = now
 
+    # И доступы по второму протоколу: пиры сняты, а VLESS-креды жили бы дальше
+    # — то есть блокировка блокировала бы не всё.
+    keys_service.xray_revoke(db, user.id)
     db.commit()
     return problems
 
@@ -345,7 +356,9 @@ def expire_overdue(db: OrmSession) -> int:
             server = key.server
             if server.provisioning == Provisioning.SSH and key.public_key:
                 try:
-                    provisioning.remove_peer_over_ssh(server, key.public_key)
+                    provisioning.remove_peer_over_ssh(
+                        server, key.public_key, interface=keys_service.interface_for(db, key)
+                    )
                 except Exception:
                     continue
             key.revoked_at = now

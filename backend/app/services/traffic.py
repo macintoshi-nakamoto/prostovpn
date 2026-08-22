@@ -10,12 +10,23 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session as OrmSession
 
 from .. import provisioning
-from ..models import Provisioning, Server, TrafficSample, User, UserKey, utcnow
+from ..models import (
+    EndpointState,
+    Provisioning,
+    Server,
+    TrafficSample,
+    User,
+    UserKey,
+    utcnow,
+)
+
+log = logging.getLogger("panel.traffic")
 
 # Интерфейс AmneziaWG на сервере — тот же, что использует provisioning.
 INTERFACE = "awg0"
@@ -110,16 +121,50 @@ def sync_server_traffic(db: OrmSession, server: Server) -> dict[str, object]:
         return _sync_server_traffic_locked(db, server)
 
 
+def server_interfaces(server: Server) -> list[str]:
+    """
+    Интерфейсы узла, с которых снимаем счётчики.
+
+    Исторический awg0 присутствует всегда, даже если точки входа ещё не
+    заведены: на нём живут ключи, у которых `endpoint_id` пуст.
+    """
+    from ..models import EndpointKind
+
+    names = [INTERFACE]
+    for endpoint in server.endpoints:
+        if endpoint.kind != EndpointKind.AWG:
+            continue
+        # Черновик на узле ещё не поднят, выведенный — уже погашен. Ждать
+        # ответа ни от того, ни от другого нельзя: молчание такого интерфейса
+        # означало бы вечную ошибку трафика на исправном узле.
+        if endpoint.state in (EndpointState.DRAFT, EndpointState.RETIRED):
+            continue
+        if endpoint.handle not in names:
+            names.append(endpoint.handle)
+    return names
+
+
 def _sync_server_traffic_locked(db: OrmSession, server: Server) -> dict[str, object]:
+    interfaces = server_interfaces(server)
     try:
-        raw = provisioning.run_over_ssh(server, f"awg show {INTERFACE} dump")
+        dumps = provisioning.dumps_over_ssh(server, interfaces)
     except Exception as exc:
         server.traffic_error = str(exc)
         server.traffic_synced_at = utcnow()
         db.commit()
         return {"server_id": server.id, "error": str(exc)}
 
-    peers = _parse_dump(raw)
+    # Счётчики со всех интерфейсов в один словарь: публичный ключ уникален в
+    # пределах узла (на этом стоит уникальный индекс по адресу), поэтому
+    # склейка однозначна.
+    peers: dict[str, dict] = {}
+    empty: list[str] = []
+    for name in interfaces:
+        raw = dumps.get(name, "")
+        if not raw.strip():
+            empty.append(name)
+            continue
+        peers.update(_parse_dump(raw))
     now = utcnow()
     updated = 0
     added_bytes = 0
@@ -177,13 +222,19 @@ def _sync_server_traffic_locked(db: OrmSession, server: Server) -> dict[str, obj
         updated += 1
 
     server.traffic_synced_at = now
-    server.traffic_error = None
+    # Молчащий интерфейс — не «всё хорошо». Раньше здесь стояло безусловное
+    # обнуление ошибки, и упавший awgN был бы невидим: счётчики его пиров
+    # просто перестали бы расти.
+    server.traffic_error = (
+        None if not empty else "не отвечают интерфейсы: " + ", ".join(empty)
+    )
     db.commit()
     return {
         "server_id": server.id,
         "name": server.name,
         "peers": updated,
         "added_bytes": added_bytes,
+        "silent_interfaces": empty,
     }
 
 
@@ -196,7 +247,23 @@ def sync_all_traffic(db: OrmSession) -> list[dict[str, object]]:
             )
         )
     )
-    return [sync_server_traffic(db, server) for server in servers]
+    out = []
+    for server in servers:
+        out.append(sync_server_traffic(db, server))
+        # Счётчики второго протокола — отдельным заходом и ВНЕ замка на сервер:
+        # он не реентрантный, а посчитать одну дельту дважды это ровно тот баг,
+        # который им и лечили.
+        from . import xray
+
+        try:
+            # Сначала досылаем то, что не доехало (отзыв мог не записаться при
+            # недоступном узле), потом снимаем счётчики. Порядок важен: иначе
+            # отозванный доступ прожил бы на узле лишний цикл.
+            xray.sync_pending(db, server)
+            out.append(xray.sync_traffic(db, server))
+        except Exception as exc:  # noqa: BLE001 — обход не должен падать целиком
+            log.warning("узел %s: обход VLESS не удался: %s", server.name, exc)
+    return out
 
 
 def reconcile_peers(db: OrmSession, server: Server) -> list[str]:
@@ -218,30 +285,65 @@ def reconcile_peers(db: OrmSession, server: Server) -> list[str]:
     if server.provisioning != Provisioning.SSH:
         return []
 
+    interfaces = server_interfaces(server)
     try:
-        raw = provisioning.run_over_ssh(server, f"awg show {INTERFACE} dump")
+        dumps = provisioning.dumps_over_ssh(server, interfaces)
     except Exception:
         return []
 
-    def live_public_keys() -> set[str]:
-        # Отдельная сессия на каждый снимок: с одной и той же коммит другой
-        # сессии не виден, пока текущая не завершит свою транзакцию, — а нам
-        # нужно именно свежее состояние базы между двумя чтениями.
+    def live_placement() -> dict[str, str | None]:
+        """
+        Публичный ключ → имя интерфейса, где он ДОЛЖЕН быть.
+
+        `None` в значении — «подходит любой»: так трактуются ключи, у которых
+        точка входа не проставлена. Это строки старше фазы 2, и на боевом узле
+        их два десятка. Считать их чужими и снимать — значит одним проходом
+        обхода лишить VPN всех действующих клиентов.
+
+        Отдельная сессия на каждый снимок: с одной и той же коммит другой
+        сессии не виден, пока текущая не завершит свою транзакцию, — а нам
+        нужно именно свежее состояние базы между двумя чтениями.
+        """
         from ..db import SessionLocal
+        from ..models import NodeEndpoint
 
         with SessionLocal() as snapshot:
-            return {
-                key.public_key
-                for key in snapshot.scalars(
-                    select(UserKey).where(
-                        UserKey.server_id == server.id, UserKey.revoked_at.is_(None)
+            handles = {
+                row[0]: row[1]
+                for row in snapshot.execute(
+                    select(NodeEndpoint.id, NodeEndpoint.handle).where(
+                        NodeEndpoint.server_id == server.id
                     )
-                )
-                if key.public_key
+                ).all()
             }
+            placement: dict[str, str | None] = {}
+            for key in snapshot.scalars(
+                select(UserKey).where(
+                    UserKey.server_id == server.id, UserKey.revoked_at.is_(None)
+                )
+            ):
+                if not key.public_key:
+                    continue
+                # Неизвестная точка входа тоже даёт None: строка ссылается на
+                # запись, которой уже нет, и снимать по такому признаку нельзя.
+                placement[key.public_key] = handles.get(key.endpoint_id)
+            return placement
 
-    known = live_public_keys()
-    suspects = [pk for pk in _parse_dump(raw) if pk not in known]
+    known = live_placement()
+
+    def _is_suspect(interface: str, public_key: str) -> bool:
+        if public_key not in known:
+            return True  # в базе живого ключа нет вовсе
+        expected = known[public_key]
+        # None — «подходит любой интерфейс» (ключ старше фазы 2).
+        return expected is not None and expected != interface
+
+    suspects = [
+        (name, pk)
+        for name in interfaces
+        for pk in _parse_dump(dumps.get(name, ""))
+        if _is_suspect(name, pk)
+    ]
     if not suspects:
         return []
 
@@ -253,14 +355,19 @@ def reconcile_peers(db: OrmSession, server: Server) -> list[str]:
     import time as _time
 
     _time.sleep(RECONCILE_GRACE_SECONDS)
-    known_after = live_public_keys()
+    known_after = live_placement()
 
     removed: list[str] = []
-    for public_key in suspects:
-        if public_key in known_after:
-            continue
+    for interface, public_key in suspects:
+        expected = known_after.get(public_key, ...)
+        if expected is not ...:
+            # Ключ появился (или уже был) в базе. Снимаем только если он
+            # закреплён за ДРУГИМ интерфейсом — это залипшая копия после
+            # неудачного переезда. Пустая привязка снова означает «подходит».
+            if expected is None or expected == interface:
+                continue
         try:
-            provisioning.remove_peer_over_ssh(server, public_key)
+            provisioning.remove_peer_over_ssh(server, public_key, interface=interface)
         except Exception:
             continue
         removed.append(public_key)
@@ -294,11 +401,18 @@ def enforce_access(db: OrmSession) -> list[str]:
     closed: list[str] = []
     now = utcnow()
 
+    from . import xray
+
     for user in db.scalars(select(User)):
         if user.has_access(now):
             continue
         live = [k for k in user.keys if k.revoked_at is None]
-        if not live:
+        # Доступы VLESS считаем наравне с awg-ключами: человек мог не иметь ни
+        # одного живого пира и при этом пользоваться вторым протоколом. Раньше
+        # такой выходил из цикла на первой же строке — и продолжал ходить в
+        # VPN без подписки.
+        live_creds = xray.revoke_for_user(db, user.id) if not user.has_access(now) else 0
+        if not live and not live_creds:
             continue
 
         reason = _why_no_access(user, now)

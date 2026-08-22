@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import Engine, inspect, select, text
+from sqlalchemy import Engine, inspect, select, text, update
 from sqlalchemy.orm import Session as OrmSession
 
 from .models import Base, Plan, User, UserKey, utcnow
@@ -50,6 +50,7 @@ def backfill(db: OrmSession) -> None:
     _encrypt_legacy_passwords(db)
     _encrypt_legacy_emails(db)
     _encrypt_key_private_keys(db)
+    _seed_node_endpoints(db)
     _measure_published_releases(db)
 
 
@@ -226,6 +227,16 @@ def _dedupe_key_addresses(engine: Engine) -> None:
 
     from . import provisioning
 
+    def _subnet_of(address: str | None) -> str:
+        """Подсеть /24, в которой лежит адрес пира."""
+        import ipaddress
+
+        try:
+            host = ipaddress.ip_address((address or "").split("/")[0])
+        except ValueError:
+            return "10.8.1.0/24"
+        return str(ipaddress.ip_network(f"{host}/24", strict=False))
+
     with OrmSession(engine) as db:
         keys = list(db.scalars(select(UserKey).where(UserKey.address.is_not(None))))
         taken: dict[int, list[str]] = {}
@@ -241,7 +252,15 @@ def _dedupe_key_addresses(engine: Engine) -> None:
                 seen.add(mark)
                 continue
             try:
-                address = provisioning.next_address(taken[key.server_id])
+                # Переселяем В ТУ ЖЕ подсеть, где ключ живёт. Дефолтная
+                # 10.8.1.0/24 верна только для исторического awg0: ключ с
+                # другого интерфейса она увела бы в чужую сеть, и туннель
+                # поднялся бы без трафика. Точки входа здесь ещё не заведены
+                # (эта функция идёт до backfill), поэтому подсеть берём из
+                # самого адреса.
+                address = provisioning.next_address(
+                    taken[key.server_id], subnet=_subnet_of(key.address)
+                )
             except Exception as exc:  # свободных адресов не осталось
                 log.error("ключ %s: адрес %s занят, переселить некуда: %s", key.id, key.address, exc)
                 continue
@@ -392,6 +411,113 @@ def _encrypt_key_private_keys(db: OrmSession) -> None:
             "(открытый текст пока оставлен как аварийная копия)",
             changed,
         )
+
+
+def _seed_node_endpoints(db: OrmSession) -> None:
+    """
+    Заводит точку входа awg0 из того, что уже работает на узле.
+
+    Зачем: с фазы 2 пир принадлежит точке входа, а не узлу вообще. Пока у
+    исторического awg0 нет своей строки, ключи на нём остаются с пустым
+    `endpoint_id` — они обслуживаются (это трактуется как «подходит любой
+    интерфейс»), но новую выдачу распределять некуда.
+
+    Набор обфускации импортируется из `Server.awg_template` в НЕстрогом режиме:
+    исторические значения выбирал не наш генератор (на боевом узле там Jc=10),
+    и отвергнуть их значит перестать обслуживать уже подключённых людей. Новые
+    точки входа заводятся генератором и проходят полную проверку.
+
+    Отметка `endpoints_seeded` нужна, чтобы это не превратилось в «создать,
+    если нет»: `backfill` исполняется при каждом старте, и удалённая
+    администратором точка входа возвращалась бы каждым перезапуском панели.
+    """
+    from . import obfuscation as obf
+    from . import provisioning
+    from .models import EndpointKind, EndpointState, NodeEndpoint, Provisioning, Server
+
+    pending = [
+        server
+        for server in db.scalars(
+            select(Server).where(
+                Server.endpoints_seeded.is_(False),
+                Server.provisioning == Provisioning.SSH,
+            )
+        )
+        # Только узлы, где уже ЕСТЬ выданные ключи. Сид описывает то, что
+        # реально работает, а не заводит интерфейс впрок: на свежем узле
+        # никакого awg0 ещё нет, и запись о нём была бы фантомом — панель
+        # селила бы туда людей, а на узле не оказалось бы ни интерфейса, ни
+        # пиров. Новые узлы получают точки входа явной кнопкой в панели.
+        #
+        # И только те, где точек входа ещё нет: заведённую руками мы не
+        # дублируем. Без этой проверки вставка падала бы на уникальном индексе
+        # (server_id, subnet), а падение в backfill — это несостоявшийся старт
+        # панели, то есть недоступный сервис из-за необязательной миграции.
+        if server.keys and not server.endpoints
+    ]
+    if not pending:
+        return
+
+    seeded = 0
+    for server in pending:
+        if not server.awg_template:
+            log.warning(
+                "узел «%s»: нет шаблона конфига, точка входа awg0 не заведена — "
+                "ключи на нём останутся без привязки",
+                server.name,
+            )
+            continue
+        try:
+            values = obf.from_config_text(server.awg_template, strict=False)
+        except obf.InvalidObfuscation as exc:
+            log.warning("узел «%s»: набор обфускации не прочитан (%s)", server.name, exc)
+            continue
+
+        interface = provisioning.interface_params(server.awg_template)
+        _, peer = provisioning.config_sections(server.awg_template)
+        endpoint = NodeEndpoint(
+            server_id=server.id,
+            kind=EndpointKind.AWG,
+            transport="udp",
+            handle=provisioning.INTERFACE,
+            listen_port=server.port,
+            alt_ports=server.alt_ports or "",
+            subnet="10.8.1.0/24",
+            params={
+                **values.as_dict(),
+                "dns": interface.get("DNS", "1.1.1.1, 1.0.0.1"),
+                "mtu": int(interface.get("MTU", "1280") or 1280),
+                "allowed_ips": peer.get("AllowedIPs", "0.0.0.0/0, ::/0"),
+                "keepalive": int(peer.get("PersistentKeepalive", "25") or 25),
+                "server_public_key": peer.get("PublicKey", ""),
+            },
+            priority=0,
+            state=EndpointState.ACTIVE,
+            note="заведена автоматически из исторического конфига узла",
+        )
+        db.add(endpoint)
+        db.flush()
+
+        # Привязываем существующие ключи узла: они все живут на awg0.
+        db.execute(
+            update(UserKey)
+            .where(UserKey.server_id == server.id, UserKey.endpoint_id.is_(None))
+            .values(endpoint_id=endpoint.id)
+        )
+        server.endpoints_seeded = True
+        seeded += 1
+
+    if seeded:
+        try:
+            db.commit()
+        except Exception as exc:  # noqa: BLE001
+            # Старт панели важнее этой миграции: без точек входа сервис
+            # работает по-старому (ключи без привязки обслуживаются как
+            # раньше), а вот не поднявшаяся панель — это недоступный сервис.
+            db.rollback()
+            log.error("миграция точек входа не удалась, работаем без них: %s", exc)
+            return
+        log.info("миграция: заведено точек входа awg0 на узлах: %d", seeded)
 
 
 def _measure_published_releases(db: OrmSession) -> None:

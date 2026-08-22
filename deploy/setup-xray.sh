@@ -21,7 +21,7 @@
 
 set -euo pipefail
 
-XRAY_VERSION="${XRAY_VERSION:-v25.1.30}"
+XRAY_VERSION="${XRAY_VERSION:-v26.3.27}"
 XRAY_DIR="/opt/prosto-xray"
 XRAY_BIN="$XRAY_DIR/xray"
 XRAY_CONFIG="$XRAY_DIR/config.json"
@@ -86,7 +86,10 @@ else
     # сети бинарник, который потом ходит в интернет от нашего имени, обязан
     # быть тем, что мы думаем.
     if [[ -s "$tmp/xray.dgst" ]]; then
-        want="$(grep -iE '^sha256' "$tmp/xray.dgst" | head -1 | awk '{print $NF}')"
+        # Формат издателя: `SHA2-256= <хэш>`. Никаких `|| true` не хватит без
+        # этого — при `set -o pipefail` не нашедший строку grep роняет весь
+        # скрипт, и установка обрывалась молча, на середине.
+        want="$(grep -iE '^SHA2-256' "$tmp/xray.dgst" | head -1 | awk '{print $NF}' || true)"
         have="$(sha256sum "$tmp/xray.zip" | awk '{print $1}')"
         if [[ -n "$want" && "$want" != "$have" ]]; then
             warn "контрольная сумма не сошлась: ждали $want, получили $have"
@@ -97,7 +100,13 @@ else
         warn "издатель не отдал .dgst — сумма не проверена"
     fi
 
-    unzip -o -q "$tmp/xray.zip" -d "$tmp"
+    if command -v unzip >/dev/null; then
+        unzip -o -q "$tmp/xray.zip" -d "$tmp"
+    else
+        # Без unzip на узле: python3 здесь есть всегда — на нём работает панель.
+        warn "unzip не найден, распаковываю python3"
+        python3 -c "import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])" "$tmp/xray.zip" "$tmp"
+    fi
     install -m 0755 -o root -g root "$tmp/xray" "$XRAY_BIN"
     # Геобазы нужны правилам маршрутизации: без них конфиг с geoip: не
     # загрузится и демон не поднимется вовсе.

@@ -82,11 +82,20 @@ def generate_reality_keypair(server: Server) -> tuple[str, str]:
     out = provisioning.run_over_ssh(server, f"{XRAY_BIN} x25519")
     private = public = ""
     for line in out.splitlines():
-        low = line.lower()
-        value = line.split(":", 1)[1].strip() if ":" in line else ""
-        if low.startswith("private"):
+        if ":" not in line:
+            continue
+        label, _, value = line.partition(":")
+        # Подпись менялась между версиями: раньше «Private key:»/«Public key:»,
+        # теперь «PrivateKey:»/«Password (PublicKey):». Ищем по содержанию, а
+        # не по началу строки — иначе public молча остаётся пустым, и точка
+        # входа заводится с ключом, которого клиент не сможет проверить.
+        flat = label.lower().replace(" ", "").replace("_", "")
+        value = value.strip()
+        if not value:
+            continue
+        if "privatekey" in flat:
             private = value
-        elif low.startswith("public"):
+        elif "publickey" in flat:
             public = value
     if not private or not public:
         raise PanelError(f"xray не вернул пару ключей Reality: {out!r}")

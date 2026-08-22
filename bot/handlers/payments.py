@@ -1,5 +1,7 @@
 """Оплата: подтверждение счёта и продление подписки в панели."""
 
+import asyncio
+
 from aiogram import F, Router
 from aiogram.types import Message, PreCheckoutQuery
 
@@ -18,6 +20,10 @@ router = Router()
 
 METHODS = {"stars": "Telegram Stars", "card": "Карта в боте"}
 
+# Сколько ждём панель, отвечая на pre_checkout. У Telegram на этот ответ
+# десять секунд; берём с запасом, чтобы успеть отправить сам ответ.
+PRE_CHECKOUT_BUDGET = 6
+
 
 @router.pre_checkout_query()
 async def pre_checkout(query: PreCheckoutQuery) -> None:
@@ -28,11 +34,14 @@ async def pre_checkout(query: PreCheckoutQuery) -> None:
     в «оплатил и не получил». Поэтому здесь проверяется всё, что можно
     проверить заранее: жив ли тариф, знаем ли кому продлевать и та ли сумма.
     """
-    code = query.invoice_payload.split(":", maxsplit=1)[0]
+    code, _, paid_with = query.invoice_payload.partition(":")
 
     try:
-        plan = await panel.plan_by_code(code)
-    except panel.PanelError:
+        # Ответить Telegram нужно за десять секунд, иначе он сам покажет
+        # человеку сбой оплаты. Запрос к панели ждёт своих двадцати пяти, и
+        # без этой рамки медленная панель молча съедала бы всё окно.
+        plan = await asyncio.wait_for(panel.plan_by_code(code), timeout=PRE_CHECKOUT_BUDGET)
+    except (panel.PanelError, asyncio.TimeoutError):
         # Панель молчит — деньги не берём: продлить всё равно не сможем.
         await query.answer(ok=False, error_message="Сервис недоступен, попробуйте позже")
         return
@@ -57,13 +66,20 @@ async def pre_checkout(query: PreCheckoutQuery) -> None:
     # Счёт живёт в переписке сколько угодно, а цена тарифа может смениться.
     # Оплатить вчерашний счёт по вчерашней цене нельзя: продлевать будем по
     # сегодняшней, и расхождение осело бы в кассе.
-    if query.total_amount != plan.stars:
+    #
+    # Сверяем в той же единице, в какой выставляли: звёздный счёт — в
+    # звёздах, счёт картой в боте — в копейках. Одна мерка на оба сломала бы
+    # оплату картой, у которой сумма на два порядка другая.
+    expected = plan.price_kopecks if paid_with == "card" else plan.stars
+
+    if query.total_amount != expected:
         logger.warning(
-            "устаревший счёт: user=%s тариф=%s в счёте %s★, сейчас %s★",
+            "устаревший счёт: user=%s тариф=%s способ=%s в счёте %s, сейчас %s",
             user_id,
             code,
+            paid_with or "?",
             query.total_amount,
-            plan.stars,
+            expected,
         )
         await query.answer(
             ok=False,

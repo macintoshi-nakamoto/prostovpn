@@ -17,7 +17,7 @@ from aiogram.types import BotCommand, ErrorEvent
 
 from config.settings import BOT_DESCRIPTION, BOT_SHORT_DESCRIPTION, config
 from database.db import init as init_db
-from handlers import admin, auth, autorenew, cabinet, payments, plans, start, support
+from handlers import admin, auth, autorenew, cabinet, friends, payments, plans, start, support
 from utils import panel
 from utils.logger import logger
 
@@ -72,6 +72,7 @@ def build_dispatcher() -> Dispatcher:
         auth.router,
         cabinet.router,
         autorenew.router,
+        friends.router,
         plans.router,
         payments.router,
         support.router,

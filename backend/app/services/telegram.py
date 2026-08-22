@@ -92,7 +92,7 @@ def renewed_text(login: str, expires_at: str, site: str, ios: bool = False) -> s
         f"Логин прежний: <code>{login}</code>. Пароль не менялся — "
         "приложение продолжит работать само."
         + ("\nКлюч для AmneziaVPN тоже прежний." if ios else "")
-        + f"\n\nЛичный кабинет: {site}/account.html"
+        + f"\n\nЛичный кабинет: {site}/account"
     )
 
 
@@ -112,6 +112,21 @@ def recurring_failed_text(plan_name: str, price_label: str, expires_at: str, sit
         f"Не получилось списать оплату за продление — «{plan_name}», {price_label}.\n\n"
         f"Доступ действует до {expires_at}. Чтобы он не прервался, "
         f"продлите подписку вручную: {site}/account"
+    )
+
+
+def referral_join_text(days: int, expires_at: str, site: str) -> str:
+    return (
+        f"По вашей ссылке пришёл друг — плюс {days} дн. доступа.\n\n"
+        f"Теперь подписка действует до {expires_at}.\n"
+        "Когда он оплатит подписку, добавим ещё дней."
+    )
+
+
+def referral_purchase_text(days: int, expires_at: str, site: str) -> str:
+    return (
+        f"Ваш друг оплатил подписку — плюс {days} дн. доступа.\n\n"
+        f"Теперь подписка действует до {expires_at}. Спасибо!"
     )
 
 

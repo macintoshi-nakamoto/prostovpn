@@ -58,8 +58,20 @@ export function App() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset" element={<Reset />} />
+        {/* Кабинет — три раздела со своими адресами: /account (обзор),
+            /account/subscription, /account/guide. Общий компонент один:
+            шапка, загрузка данных и опрос статуса у них общие, а меняется
+            только содержимое вкладки. */}
         <Route
           path="/account"
+          element={
+            <Private>
+              <Account />
+            </Private>
+          }
+        />
+        <Route
+          path="/account/:section"
           element={
             <Private>
               <Account />

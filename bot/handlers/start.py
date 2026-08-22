@@ -1,10 +1,11 @@
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from database import models
 from handlers.common import show_gate, show_home, show_screen, show_start
+from handlers.friends import inviter_from_payload, remember_invite
 from keyboards.menus import about_menu, docs_menu
 from utils import assets, panel, screens, texts
 
@@ -13,14 +14,24 @@ router = Router()
 
 
 @router.message(CommandStart())
-async def start_command(message: Message, state: FSMContext) -> None:
+async def start_command(message: Message, command: CommandObject, state: FSMContext) -> None:
     await state.clear()
+
+    # «Новый» — тот, кто пишет боту впервые: у него ещё нет строки в базе.
+    # Проверяем ДО upsert_user, иначе новыми не будет никто.
+    known = await models.knows_user(message.from_user.id)
 
     await models.upsert_user(
         message.from_user.id,
         message.from_user.username,
         message.from_user.first_name,
     )
+
+    inviter_id = inviter_from_payload(command.args)
+    # Приглашение засчитываем только новым: иначе давний клиент, перешедший
+    # по ссылке знакомого, дарил бы дни за самого себя.
+    if inviter_id and not known:
+        await remember_invite(message, inviter_id)
 
     await show_home(message, message.from_user.id)
 

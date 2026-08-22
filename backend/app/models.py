@@ -1180,6 +1180,48 @@ class RecurringSub(Base):
         )
 
 
+class Referral(Base):
+    """
+    Приглашение: кто кого привёл и что за это начислено.
+
+    Хранится в панели, а не в боте, по одной причине: бонус — это дни
+    доступа и факт покупки, а и то и другое знает только панель. Бот здесь
+    витрина: он знает, какой Telegram-аккаунт какой учётке принадлежит, и
+    приносит эту связь сюда.
+
+    Ключ — Telegram приглашённого: ссылка ведёт в бота, и в момент перехода
+    учётки у человека может ещё не быть вовсе. Уникальность по нему же
+    закрывает накрутку «перезашёл по ссылке ещё раз»: второй раз того же
+    человека привести нельзя, даже другим пригласителем.
+    """
+
+    __tablename__ = "referrals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    inviter_telegram_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    inviter_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None
+    )
+
+    invited_telegram_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    invited_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None
+    )
+
+    # Что уже начислено. Ноль и None — бонус ещё ждёт своего часа: у
+    # пригласившего может не быть учётки в момент перехода по ссылке.
+    join_bonus_days: Mapped[int] = mapped_column(Integer, default=0)
+    join_bonus_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    purchase_bonus_days: Mapped[int] = mapped_column(Integer, default=0)
+    purchase_bonus_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    inviter: Mapped["User | None"] = relationship(foreign_keys=[inviter_user_id])
+    invited: Mapped["User | None"] = relationship(foreign_keys=[invited_user_id])
+
+
 class DeliveryJob(Base):
     """
     Задание на доставку учётки: письмо или сообщение в Telegram.

@@ -43,6 +43,14 @@ async def _connect() -> AsyncIterator[aiosqlite.Connection]:
 # --------------------------------------------------------------------------
 
 
+async def knows_user(user_id: int) -> bool:
+    """Писал ли человек боту раньше. Нужно для приглашений: дни дают за новых."""
+    async with _connect() as db:
+        cursor = await db.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,))
+
+        return await cursor.fetchone() is not None
+
+
 async def upsert_user(user_id: int, username: str | None, first_name: str | None) -> None:
     stamp = timeutils.now_str()
 

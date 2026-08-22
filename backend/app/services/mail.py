@@ -114,7 +114,7 @@ def credentials_body(login: str, password: str, expires_at: str, ios: bool = Fal
 
 {_links()}
 {_ios_text(base) if ios else ""}
-Пароль можно сменить в личном кабинете: {base}/account.html
+Пароль можно сменить в личном кабинете: {base}/account
 
 {_support_line()}
 Если письмо пришло вам по ошибке — просто удалите его.
@@ -134,7 +134,7 @@ def credentials_body(login: str, password: str, expires_at: str, ios: bool = Fal
     {"<br>".join(f'<a href="{base}{path}" style="color:#ff6a1f;text-decoration:none">{title}</a>' for title, path in _DOWNLOADS)}
   </p>
   {_ios_html(base) if ios else ""}
-  <p style="font-size:13px;color:#8b8b93;margin:0">Пароль можно сменить в <a href="{base}/account.html" style="color:#8b8b93">личном кабинете</a>.</p>
+  <p style="font-size:13px;color:#8b8b93;margin:0">Пароль можно сменить в <a href="{base}/account" style="color:#8b8b93">личном кабинете</a>.</p>
   {_support_html()}
 </div></body></html>"""
     return text, html
@@ -156,7 +156,7 @@ def renewed_body(login: str, expires_at: str, ios: bool = False) -> tuple[str, s
 Логин прежний: {login}. Пароль тоже прежний — менять ничего не нужно,
 приложение продолжит работать само.
 {ios_line}
-Личный кабинет: {base}/account.html
+Личный кабинет: {base}/account
 
 {_support_line()}"""
     html = f"""<!doctype html>
@@ -164,7 +164,7 @@ def renewed_body(login: str, expires_at: str, ios: bool = False) -> tuple[str, s
 <div style="max-width:520px;margin:0 auto">
   <p style="font-size:15px;line-height:1.6;margin:0 0 20px">Подписка продлена до <b style="color:#ff6a1f">{expires_at}</b>.</p>
   <p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">Логин прежний: <span style="font-family:ui-monospace,monospace">{login}</span>. Пароль тоже прежний — менять ничего не нужно, приложение продолжит работать само.{" Ключ для AmneziaVPN на iPhone тоже прежний." if ios else ""}</p>
-  <p style="font-size:13px;color:#8b8b93;margin:0"><a href="{base}/account.html" style="color:#8b8b93">Личный кабинет</a></p>
+  <p style="font-size:13px;color:#8b8b93;margin:0"><a href="{base}/account" style="color:#8b8b93">Личный кабинет</a></p>
   {_support_html()}
 </div></body></html>"""
     return text, html

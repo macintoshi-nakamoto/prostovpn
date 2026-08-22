@@ -302,13 +302,29 @@ def paid_text(plan: Plan, account: Account | None) -> str:
 
 
 def about_text() -> str:
-    # ВРЕМЕННО: кодовое слово для согласования с платёжным провайдером.
-    # Убрать после подтверждения.
     return (
         f'{tg("brand")} <b>{config.brand}</b>\n\n'
         "Один аккаунт на все устройства.\n"
-        "Логин и пароль работают на сайте, в приложении и здесь.\n\n"
-        "<code>verplatega</code>"
+        "Логин и пароль работают на сайте, в приложении и здесь."
+    )
+
+
+def friends_text(stats, invite_url: str) -> str:
+    """Тот же экран простым текстом — если блоки не собрались."""
+    waiting = (
+        "\nДни начислим, как только вы войдёте в аккаунт в этом боте."
+        if stats.pending
+        else ""
+    )
+
+    return (
+        f'{tg("friends")} <b>Друзья</b>\n\n'
+        f"Приглашено: <b>{stats.invited}</b>\n"
+        f"Из них оплатили: <b>{stats.purchased}</b>\n"
+        f"Подарено дней: <b>{stats.days}</b>\n\n"
+        f'{tg("gift")} +{stats.join_days} дн. за друга по вашей ссылке '
+        f"и ещё +{stats.purchase_days} дн., когда он оплатит подписку.\n\n"
+        f"<code>{escape(invite_url)}</code>{waiting}"
     )
 
 

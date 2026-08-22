@@ -154,6 +154,9 @@ async def register_confirm(message: Message, state: FSMContext) -> None:
         return
 
     await models.save_session(message.from_user.id, session.login, session.token, session.expires_at)
+    # Панель узнаёт, чей это Telegram: по этой связи начисляются бонусы за
+    # приглашения — и те, что ждали появления учётки.
+    await panel.referral_link_account(message.from_user.id, session.login)
     await state.clear()
 
     await message.answer(
@@ -241,6 +244,9 @@ async def login_password(message: Message, state: FSMContext) -> None:
         return
 
     await models.save_session(message.from_user.id, session.login, session.token, session.expires_at)
+    # Панель узнаёт, чей это Telegram: по этой связи начисляются бонусы за
+    # приглашения — и те, что ждали появления учётки.
+    await panel.referral_link_account(message.from_user.id, session.login)
     _failures.pop(message.from_user.id, None)
     await state.clear()
 

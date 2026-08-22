@@ -1008,7 +1008,7 @@ def test_app_sees_days_left_and_renew_link_when_expiring(client):
     s = body["subscription"]
     assert s["days_left"] == 2
     assert s["expires_soon"] is True
-    assert s["renew_url"].endswith("/account.html")
+    assert s["renew_url"].endswith("/account")
 
 
 def test_panel_status_follows_vpn_handshake(client, auth):

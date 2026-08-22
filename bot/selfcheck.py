@@ -66,6 +66,14 @@ EMPTY_ACCOUNT = panel.Account(
     payments=[],
 )
 
+FAKE_REFERRALS = panel.Referrals(
+    invited=3, purchased=1, days=11, pending=0, join_days=2, purchase_days=5
+)
+
+FAKE_REFERRALS_PENDING = panel.Referrals(
+    invited=1, purchased=0, days=0, pending=1, join_days=2, purchase_days=5
+)
+
 FAKE_APPS = [
     panel.Download(platform="windows", version="1.0.27", url="https://prostovpn.cc/a.msi"),
     panel.Download(platform="android", version="1.1.2", url="https://prostovpn.cc/a.apk"),
@@ -75,6 +83,7 @@ FAKE_APPS = [
 # Цвет разрешён только этим кнопкам — остальные серые.
 COLORED = (
     "Тарифы",
+    "Поделиться",
     "Продлить",
     "Оформить",
     "Оплатить",
@@ -133,6 +142,7 @@ def check_keyboards() -> None:
         "plans": menus.plans_menu([FAKE_PLAN], method_by_code("stars")),
         "plans_sbp": menus.plans_menu([FAKE_PLAN], method_by_code("sbp")),
         "pay_link": menus.pay_link_menu("https://pay.example/invoice"),
+        "friends": menus.friends_menu("https://t.me/prostovpnn_bot?start=ref1"),
         "autorenew_offer": menus.autorenew_menu(None, [FAKE_PLAN]),
         "autorenew_pending": menus.autorenew_menu(FAKE_REC_PENDING, []),
         "autorenew_active": menus.autorenew_menu(FAKE_REC_ACTIVE, []),
@@ -246,6 +256,46 @@ def check_keyboards() -> None:
     print(f"клавиатуры: {len(boards)} экранов, цветных кнопок {colored}, остальные серые")
 
 
+def check_referrals() -> None:
+    """Экран приглашений: ссылка на месте, кнопки ведут куда надо."""
+    from handlers.friends import inviter_from_payload, invite_url
+
+    url = invite_url(USER_ID)
+
+    assert url.endswith(f"start=ref{USER_ID}"), url
+    assert inviter_from_payload(f"ref{USER_ID}") == USER_ID
+    assert inviter_from_payload("ref") is None
+    assert inviter_from_payload("мусор") is None
+    assert inviter_from_payload(None) is None
+
+    blocks = screens.friends(None, FAKE_REFERRALS, url)
+    dumped = json.dumps(blocks, ensure_ascii=False)
+
+    assert url in dumped, "в экране приглашений нет самой ссылки"
+    assert "custom_emoji" in dumped, "в экране приглашений нет премиум-эмодзи"
+
+    board = menus.friends_menu(url)
+    urls = [b.url for row in board.inline_keyboard for b in row if b.url]
+    copies = [b.copy_text.text for row in board.inline_keyboard for b in row if b.copy_text]
+
+    assert any("t.me/share/url" in link for link in urls), "нет кнопки «Поделиться»"
+    assert copies == [url], "кнопка копирования должна отдавать ту же ссылку"
+
+    print(f"приглашения: ссылка {url}, кнопки и экран на месте")
+
+
+def check_emoji() -> None:
+    """Слоты эмодзи: у каждого есть и премиум-идентификатор, и запасной символ."""
+    from keyboards.ui import EMOJI_FALLBACK, EMOJI_IDS
+
+    assert set(EMOJI_IDS) == set(EMOJI_FALLBACK), "слоты премиум и запасных эмодзи разошлись"
+
+    for name, value in EMOJI_IDS.items():
+        assert value.isdigit(), f"{name}: идентификатор эмодзи не число"
+
+    print(f"эмодзи: {len(EMOJI_IDS)} слотов, у каждого есть запасной символ")
+
+
 def check_texts() -> None:
     ticket = models.Ticket(
         id=1,
@@ -270,6 +320,8 @@ def check_texts() -> None:
         texts.plans_text(method_by_code("stars"), [FAKE_PLAN]),
         texts.plans_text(method_by_code("sbp"), [FAKE_PLAN]),
         texts.invoice_text(FAKE_PLAN),
+        texts.friends_text(FAKE_REFERRALS, "https://t.me/prostovpnn_bot?start=ref1"),
+        texts.friends_text(FAKE_REFERRALS_PENDING, "https://t.me/prostovpnn_bot?start=ref1"),
         texts.autorenew_text(None, [FAKE_PLAN]),
         texts.autorenew_text(FAKE_REC_PENDING, []),
         texts.autorenew_text(FAKE_REC_ACTIVE, []),
@@ -377,6 +429,8 @@ def check_assets() -> None:
 
 async def main() -> None:
     check_keyboards()
+    check_emoji()
+    check_referrals()
     check_assets()
     check_texts()
     await check_storage()

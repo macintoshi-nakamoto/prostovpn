@@ -14,6 +14,8 @@ from typing import Any
 from aiogram.methods import TelegramMethod
 from aiogram.types import InlineKeyboardMarkup, Message
 
+from keyboards.ui import EMOJI_FALLBACK, EMOJI_IDS, custom_emoji_enabled
+
 
 class SendRichMessage(TelegramMethod[Message]):
     """Метод появился в Bot API 10.1, в aiogram его пока нет."""
@@ -105,8 +107,38 @@ def centered(text: Any) -> dict:
     return {"type": "table", "cells": [[{"text": text, "align": "center"}]]}
 
 
-def title(text: str) -> dict:
-    """Заголовок раздела: слева, жирным, заглавными."""
+def emoji(name: str) -> Any:
+    """
+    Премиум-эмодзи из нашего набора внутри текста блока.
+
+    Кладётся в массив `text` рядом с остальными кусками. Если премиум-эмодзи
+    отключены (Telegram их не пропустил), возвращается обычный символ той же
+    пары — строка в массиве допустима, и экран не разваливается.
+    """
+    symbol = EMOJI_FALLBACK[name]
+
+    if not custom_emoji_enabled():
+        return symbol
+
+    return {
+        "type": "custom_emoji",
+        "custom_emoji_id": EMOJI_IDS[name],
+        # Именно alternative_text: под этим именем API ждёт запасной символ.
+        "alternative_text": symbol,
+    }
+
+
+def title(text: str, icon: str | None = None) -> dict:
+    """
+    Заголовок раздела: слева, жирным, заглавными.
+
+    Значок перед заголовком — единственное украшение экрана, и он же его
+    опознавательный знак: человек узнаёт раздел раньше, чем прочитает
+    строку. Два пробела после значка — иначе анимация липнет к букве.
+    """
+    if icon:
+        return paragraph([emoji(icon), bold(f"  {text.upper()}")])
+
     return paragraph(bold(text.upper()))
 
 

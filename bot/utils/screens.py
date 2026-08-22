@@ -23,6 +23,7 @@ def start(file_id: str | None) -> list[dict]:
     """Первый экран: заставка, главная мысль и три пункта."""
     return rich.screen(
         file_id,
+        rich.title(config.brand, "brand"),
         rich.paragraph(rich.bold(texts.START_LEAD)),
         rich.bullets(*texts.START_POINTS),
     )
@@ -30,7 +31,7 @@ def start(file_id: str | None) -> list[dict]:
 
 def gate(file_id: str | None, login: str | None) -> list[dict]:
     blocks = [
-        rich.title("Личный кабинет"),
+        rich.title("Личный кабинет", "profile"),
         rich.paragraph("Логин и пароль те же, что на сайте и в приложении."),
     ]
 
@@ -41,10 +42,14 @@ def gate(file_id: str | None, login: str | None) -> list[dict]:
 
 
 def main(file_id: str | None, account: Account) -> list[dict]:
+    # Значок перед статусом читается раньше строки: зелёная галка — всё
+    # хорошо, «ой» — подписки нет и нужно что-то сделать.
+    mark = "check" if account.active else "warn"
+
     return rich.screen(
         file_id,
-        rich.title(config.brand),
-        rich.paragraph(rich.bold(_status(account))),
+        rich.title(config.brand, "brand"),
+        rich.paragraph([rich.emoji(mark), rich.bold(f"  {_status(account)}")]),
     )
 
 
@@ -69,13 +74,13 @@ def cabinet(file_id: str | None, account: Account) -> list[dict]:
         if account.device_limit:
             rows.append(("Устройства", f"{account.devices} из {account.device_limit}"))
 
-        return rich.screen(file_id, rich.title("Личный кабинет"), rich.facts(*rows))
+        return rich.screen(file_id, rich.title("Личный кабинет", "profile"), rich.facts(*rows))
 
     return rich.screen(
         file_id,
-        rich.title("Личный кабинет"),
+        rich.title("Личный кабинет", "profile"),
         rich.facts(*rows),
-        rich.paragraph(rich.bold("Подписка не активна")),
+        rich.paragraph([rich.emoji("warn"), rich.bold("  Подписка не активна")]),
         rich.paragraph("Выберите тариф - доступ включится сразу после оплаты."),
     )
 
@@ -83,7 +88,7 @@ def cabinet(file_id: str | None, account: Account) -> list[dict]:
 def methods(file_id: str | None) -> list[dict]:
     return rich.screen(
         file_id,
-        rich.title("Тарифы и оплата"),
+        rich.title("Тарифы и оплата", "wallet"),
         rich.paragraph("Выберите способ оплаты - дальше покажу тарифы."),
         rich.paragraph(
             rich.italic(
@@ -98,7 +103,7 @@ def docs(file_id: str | None) -> list[dict]:
     """Правовые документы. Сами тексты — на сайте, здесь только кнопки."""
     return rich.screen(
         file_id,
-        rich.title("Документы"),
+        rich.title("Документы", "link"),
         rich.bullets(
             "Пользовательское соглашение",
             "Политика конфиденциальности",
@@ -114,7 +119,7 @@ def plans(file_id: str | None, method: PayMethod, available: list[Plan]) -> list
     # Не таблицей: колонок под все условия нужно пять, и на телефоне они
     # схлопываются в нечитаемое. Пара строк на тариф — название с ценой
     # жирным, условия под ним — читается и в узком окне.
-    blocks = [rich.title(f"Тарифы · {method.title}")]
+    blocks = [rich.title(f"Тарифы · {method.title}", "calendar")]
 
     for plan in available:
         blocks.append(
@@ -143,7 +148,7 @@ def invoice(file_id: str | None, plan: Plan) -> list[dict]:
     """Счёт на оплату по ссылке. Кнопка «Оплатить» - в клавиатуре под экраном."""
     return rich.screen(
         file_id,
-        rich.title("Счёт на оплату"),
+        rich.title("Счёт на оплату", "wallet"),
         rich.facts(
             ("Тариф", plan.title),
             ("Сумма", f"{plan.rub} ₽"),
@@ -161,7 +166,7 @@ def autorenew(file_id: str | None, rec, options: list[Plan]) -> list[dict]:
     """Автопродление: своё состояние - свой экран, кнопки в menus.autorenew_menu."""
     if rec is None or not rec.live:
         blocks = [
-            rich.title("Автопродление"),
+            rich.title("Автопродление", "calendar"),
             rich.paragraph(
                 "Подключите автосписание - доступ будет продлеваться сам, "
                 "без напоминаний. Отключается в один клик."
@@ -179,7 +184,7 @@ def autorenew(file_id: str | None, rec, options: list[Plan]) -> list[dict]:
     if rec.status == "pending":
         return rich.screen(
             file_id,
-            rich.title("Автопродление"),
+            rich.title("Автопродление", "calendar"),
             rich.facts(("Тариф", title), ("Сумма", f"{rec.rub} ₽ {rec.interval_label}")),
             rich.paragraph(
                 "Осталось привязать счёт: нажмите «Привязать счёт» и подтвердите "
@@ -191,7 +196,7 @@ def autorenew(file_id: str | None, rec, options: list[Plan]) -> list[dict]:
     if rec.status == "past_due":
         return rich.screen(
             file_id,
-            rich.title("Автопродление"),
+            rich.title("Автопродление", "calendar"),
             rich.paragraph(rich.bold("Последнее списание не прошло.")),
             rich.paragraph(
                 "Продлите подписку вручную в «Тарифы и оплата» - или отключите "
@@ -210,7 +215,7 @@ def autorenew(file_id: str | None, rec, options: list[Plan]) -> list[dict]:
 
     return rich.screen(
         file_id,
-        rich.title("Автопродление"),
+        rich.title("Автопродление", "calendar"),
         rich.facts(*rows),
         rich.paragraph(rich.italic("Каждое продление подтверждаем сообщением сюда.")),
     )
@@ -225,12 +230,12 @@ def paid(file_id: str | None, plan: Plan, account: Account | None) -> list[dict]
     if account and account.expires_at:
         rows.append(("Действует до", timeutils.human_date(account.expires_at)))
 
-    return rich.screen(file_id, rich.title("Оплачено"), rich.facts(*rows))
+    return rich.screen(file_id, rich.title("Оплачено", "check"), rich.facts(*rows))
 
 
 def about(file_id: str | None, apps: list[Download]) -> list[dict]:
     blocks = [
-        rich.title(config.brand),
+        rich.title(config.brand, "brand"),
         rich.bullets(
             "Один аккаунт на все устройства",
             "Логин и пароль работают на сайте, в приложении и здесь",
@@ -245,9 +250,43 @@ def about(file_id: str | None, apps: list[Download]) -> list[dict]:
             )
         )
 
-    # ВРЕМЕННО: кодовое слово для согласования с платёжным провайдером.
-    # Убрать после подтверждения.
-    blocks.append(rich.facts(("Код проверки", rich.code("verplatega"))))
+    return rich.screen(file_id, *blocks)
+
+
+def friends(file_id: str | None, stats, invite_url: str) -> list[dict]:
+    """
+    Экран приглашений: сколько дней уже подарено и за что дарят дальше.
+
+    Числа сверху, правила снизу: пришедшему сюда во второй раз интересно
+    «сколько мне капнуло», а не «как это работает».
+    """
+    rows: list[tuple[str, object]] = [
+        ("Приглашено", str(stats.invited)),
+        ("Из них оплатили", str(stats.purchased)),
+        ("Подарено дней", str(stats.days)),
+    ]
+
+    blocks = [
+        rich.title("Друзья", "friends"),
+        rich.facts(*rows),
+        rich.paragraph(
+            [
+                rich.emoji("gift"),
+                rich.bold(f"  +{stats.join_days} дн."),
+                f" за друга, который перешёл по вашей ссылке, и ещё +{stats.purchase_days} дн., "
+                "когда он оплатит подписку.",
+            ]
+        ),
+        rich.paragraph(rich.code(invite_url)),
+    ]
+
+    if stats.pending:
+        # Человек ещё не входил в аккаунт — дни ждут его, а не потерялись.
+        blocks.append(
+            rich.paragraph(
+                rich.italic("Дни начислим, как только вы войдёте в аккаунт в этом боте.")
+            )
+        )
 
     return rich.screen(file_id, *blocks)
 
@@ -255,7 +294,7 @@ def about(file_id: str | None, apps: list[Download]) -> list[dict]:
 def support(file_id: str | None) -> list[dict]:
     return rich.screen(
         file_id,
-        rich.title("Поддержка"),
+        rich.title("Поддержка", "support"),
         rich.paragraph("Выберите проблему или напишите свою."),
         rich.facts(("Почта поддержки", rich.code(texts.SUPPORT_EMAIL))),
     )
@@ -266,7 +305,7 @@ def topic(file_id: str | None, item: SupportTopic) -> list[dict]:
 
     return rich.screen(
         file_id,
-        rich.title(item.title),
+        rich.title(item.title, "support"),
         *[rich.paragraph(line) for line in lines],
     )
 
@@ -275,7 +314,7 @@ def history(file_id: str | None, payments: list[Payment]) -> list[dict]:
     if not payments:
         return rich.screen(
             file_id,
-            rich.title("Платежи"),
+            rich.title("Платежи", "history"),
             rich.paragraph("Платежей пока нет."),
         )
 
@@ -287,18 +326,18 @@ def history(file_id: str | None, payments: list[Payment]) -> list[dict]:
         for payment in payments[:10]
     ]
 
-    return rich.screen(file_id, rich.title("Платежи"), rich.table(("Дата", "Сумма"), rows))
+    return rich.screen(file_id, rich.title("Платежи", "history"), rich.table(("Дата", "Сумма"), rows))
 
 
 def tickets(file_id: str | None, items: list[Ticket]) -> list[dict]:
     if not items:
         return rich.screen(
             file_id,
-            rich.title("Обращения"),
+            rich.title("Обращения", "support"),
             rich.paragraph("Обращений пока нет."),
         )
 
-    blocks = [rich.title("Обращения")]
+    blocks = [rich.title("Обращения", "support")]
 
     for ticket in items:
         status = "отвечено" if ticket.status == "answered" else "в работе"

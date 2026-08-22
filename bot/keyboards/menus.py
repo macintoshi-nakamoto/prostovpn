@@ -1,9 +1,14 @@
+from urllib.parse import quote
+
 from aiogram.types import InlineKeyboardMarkup
 
 from config.settings import SUPPORT_TOPICS, PayMethod, config, payment_methods
 from keyboards.ui import DANGER, DEFAULT, SUCCESS, make_btn
 from utils.panel import Download, Plan
 
+
+# Подпись к пересылке ссылки: её увидит тот, кого зовут.
+INVITE_PITCH = "Пользуюсь Prosto VPN — заходи, тут дают пробный период"
 
 PLATFORM_TITLES = {
     "windows": "Windows",
@@ -56,6 +61,9 @@ def main_menu() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [make_btn("Личный кабинет", callback_data="cabinet", emoji="profile")],
             [make_btn("Тарифы и оплата", callback_data="plans", emoji="wallet", style=SUCCESS)],
+            # Приглашения сразу под оплатой: это второй способ получить дни,
+            # и человеку он интересен ровно в тот момент, когда он смотрит на цену.
+            [make_btn("Пригласить друга", callback_data="friends", emoji="friends")],
             [make_btn("Поддержка", callback_data="support", emoji="support")],
             [make_btn("Наш канал", url=config.channel_url, emoji="channel")],
             # Инструкция сразу под каналом: до неё чаще всего и идут — из
@@ -185,6 +193,25 @@ def autorenew_menu(rec, options: list[Plan]) -> InlineKeyboardMarkup:
     rows.append([make_btn("Назад", callback_data="cabinet", emoji="back", style=DANGER)])
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def friends_menu(invite_url: str) -> InlineKeyboardMarkup:
+    """
+    Экран приглашений: поделиться, скопировать, вернуться.
+
+    Кнопка «Поделиться» — не ссылка на бота, а готовый диалог пересылки:
+    Telegram сам предложит выбрать, кому отправить. Копирование рядом —
+    для тех, кто кидает ссылку не в Telegram.
+    """
+    share = f"https://t.me/share/url?url={quote(invite_url, safe='')}&text={quote(INVITE_PITCH, safe='')}"
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [make_btn("Поделиться ссылкой", url=share, emoji="friends", style=SUCCESS)],
+            [make_btn("Скопировать ссылку", copy_text=invite_url, emoji="link")],
+            [make_btn("Меню", callback_data="home", emoji="back", style=DANGER)],
+        ]
+    )
 
 
 def support_menu() -> InlineKeyboardMarkup:

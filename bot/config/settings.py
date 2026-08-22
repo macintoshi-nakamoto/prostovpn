@@ -105,6 +105,9 @@ class Config:
     # Сколько звёзд просить за рубль цены тарифа: 1.0 — звезда равна рублю.
     stars_rate: float = 1.0
 
+    # Имя бота — для реферальных ссылок вида t.me/<bot>?start=ref123.
+    bot_username: str = "prostovpnn_bot"
+
     site_url: str = "https://prostovpn.cc"
     channel_url: str = "https://t.me/myprostovpn"
     # Инструкция по установке на сайте. Отдельной настройкой: ссылку
@@ -150,6 +153,7 @@ def load_config() -> Config:
         provider_token=os.getenv("PROVIDER_TOKEN", "").strip(),
         currency=os.getenv("CURRENCY", "RUB").strip() or "RUB",
         stars_rate=_float("STARS_RATE", 1.0),
+        bot_username=os.getenv("BOT_USERNAME", "prostovpnn_bot").strip().lstrip("@"),
         site_url=os.getenv("SITE_URL", "https://prostovpn.cc").strip(),
         channel_url=os.getenv("CHANNEL_URL", "https://t.me/myprostovpn").strip(),
         guide_url=os.getenv("GUIDE_URL", "https://prostovpn.cc/guide").strip(),

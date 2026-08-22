@@ -39,7 +39,7 @@ const DOC_LINKS = ["/privacy", "/terms", "/faq", "/contacts"];
  * до кабинета не пустит Private из App.jsx, отправит на вход и после него
  * вернёт ровно сюда, вместе с выбранным тарифом в запросе.
  */
-const PLAN_TAB = "/account?tab=plan";
+const PLAN_TAB = "/account/subscription";
 
 /** «30 дней» → «1 месяц», «365 дней» → «1 год»: срок словами, а не в днях. */
 function termLabel(days, t) {

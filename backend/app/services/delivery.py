@@ -150,6 +150,10 @@ def _send(db: OrmSession, job: DeliveryJob) -> None:
         elif job.template == "recurring_off":
             name, _price, _interval, _next = _recurring_context(db, user)
             body = telegram.recurring_off_text(name, expires, site)
+        elif job.template == "referral_join":
+            body = telegram.referral_join_text(_bonus_days(job), expires, site)
+        elif job.template == "referral_purchase":
+            body = telegram.referral_purchase_text(_bonus_days(job), expires, site)
         else:
             body = telegram.renewed_text(user.login, expires, site, ios=ios)
         telegram.send(job.target, body)
@@ -310,6 +314,14 @@ METHODS = {
 
 def _method_label(method: str | None) -> str:
     return METHODS.get((method or "").lower(), method or "—")
+
+
+def _bonus_days(job: DeliveryJob) -> int:
+    """Сколько дней подарено — число лежит в payload задания."""
+    try:
+        return int(job.payload or 0)
+    except ValueError:
+        return 0
 
 
 def _recurring_context(db: OrmSession, user: User) -> tuple[str, str, str, str]:

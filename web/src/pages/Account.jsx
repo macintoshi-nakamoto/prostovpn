@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
 import { useDismiss } from "../lib/hooks";
@@ -14,12 +14,30 @@ import "./account.css";
 // Порядок вкладок — здесь, подписи к ним — в словаре.
 const TABS = ["account", "plan", "setup"];
 
+/*
+Раздел кабинета — это адрес, а не состояние.
+
+Каждая вкладка живёт по своему пути: /account, /account/subscription,
+/account/guide. Так на раздел можно дать ссылку, вернуться «назад» в
+браузере и увидеть в истории, где человек был. Внутренние имена вкладок
+короче адресов, поэтому карта пути и обратная к ней — здесь.
+*/
+const SECTION_BY_TAB = { account: "", plan: "subscription", setup: "guide" };
+const TAB_BY_SECTION = { subscription: "plan", guide: "setup" };
+
+/** Адрес раздела: /account для обзора, /account/<section> для остальных. */
+function sectionPath(tab, search = "") {
+  const section = SECTION_BY_TAB[tab] || "";
+  return `/account${section ? `/${section}` : ""}${search}`;
+}
+
 export function Account() {
   const { t, raw } = useI18n();
   const { signOut } = useSession();
   const navigate = useNavigate();
+  const { section } = useParams();
   /*
-  Вкладка и выбранный тариф приходят в адресе.
+  Раздел, выбранный тариф и возврат с оплаты приходят в адресе.
 
   С лендинга сюда ведут кнопки «Выбрать» на карточках тарифов и «App Store»
   из подвала: человек уже сказал, за чем пришёл, и открывать ему общую
@@ -31,13 +49,41 @@ export function Account() {
   // только одно: прошла ли оплата. Открываем сразу вкладку тарифа.
   const returnOrder = params.get("order") || "";
   const payFailed = params.get("failed") === "1";
+  const legacyTab = params.get("tab");
   const wantedTab = returnOrder
     ? "plan"
-    : TABS.includes(params.get("tab"))
-      ? params.get("tab")
-      : "account";
+    : TAB_BY_SECTION[section] || (TABS.includes(legacyTab) ? legacyTab : "account");
   const wantedPlan = params.get("plan") || "";
   const [tab, setTab] = useState(wantedTab);
+
+  /*
+  Приводим адрес к каноническому виду.
+
+  Три случая ведут сюда: старая ссылка с ?tab= (её раздают письма, бот и
+  закладки), возврат с оплаты по ?order=, и несуществующий раздел вроде
+  /account/чтотоне. Во всех заменяем запись в истории, а не добавляем: в
+  «назад» человек должен уходить туда, откуда пришёл, а не на адрес, с
+  которого его только что перебросили.
+  */
+  useEffect(() => {
+    const known = section === undefined || TAB_BY_SECTION[section] !== undefined;
+    const canonical = SECTION_BY_TAB[wantedTab] || "";
+    const current = section || "";
+    if (known && current === canonical && !legacyTab) return;
+
+    const keep = new URLSearchParams(params);
+    keep.delete("tab");
+    const search = keep.toString();
+    navigate(sectionPath(wantedTab, search ? `?${search}` : ""), { replace: true });
+    // params меняется объектом на каждый рендер — следим за строкой.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, wantedTab, legacyTab, params.toString(), navigate]);
+
+  // Адрес — источник истины: переход «назад» в браузере обязан менять
+  // раздел, а не только строку в адресной строке.
+  useEffect(() => {
+    setTab(wantedTab);
+  }, [wantedTab]);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -120,7 +166,7 @@ export function Account() {
               <button
                 key={id}
                 className={tab === id ? "active" : ""}
-                onClick={() => setTab(id)}
+                onClick={() => navigate(sectionPath(id))}
               >
                 {t(`account.tabs.${id}`)}
               </button>
@@ -174,8 +220,8 @@ export function Account() {
         {data && tab === "account" && (
           <AccountTab
             data={data}
-            onManage={() => setTab("plan")}
-            onSetup={() => setTab("setup")}
+            onManage={() => navigate(sectionPath("plan"))}
+            onSetup={() => navigate(sectionPath("setup"))}
             onPassword={() => setPwOpen(true)}
             onChanged={load}
             onApply={apply}

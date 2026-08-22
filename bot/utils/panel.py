@@ -474,6 +474,78 @@ async def extend(user_login: str, plan: Plan, method: str) -> None:
 
 
 # --------------------------------------------------------------------------
+# Приглашения
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Referrals:
+    """Сводка приглашений глазами бота."""
+
+    invited: int = 0
+    purchased: int = 0
+    days: int = 0
+    # Сколько приглашений ждут учётки пригласившего: дни начислим, как
+    # только он войдёт в аккаунт.
+    pending: int = 0
+    join_days: int = 2
+    purchase_days: int = 5
+
+
+def _referrals(body: dict) -> Referrals:
+    return Referrals(
+        invited=body.get("invited", 0),
+        purchased=body.get("purchased", 0),
+        days=body.get("days", 0),
+        pending=body.get("pending", 0),
+        join_days=body.get("join_days", 2),
+        purchase_days=body.get("purchase_days", 5),
+    )
+
+
+async def referral_stats(telegram_id: int) -> Referrals:
+    body = await _admin_request("GET", f"{ADMIN}/referrals/stats/{telegram_id}")
+
+    return _referrals(body)
+
+
+async def referral_invite(
+    inviter_telegram_id: int,
+    invited_telegram_id: int,
+    invited_login: str | None = None,
+) -> Referrals:
+    """Переход по ссылке. PanelError со статусом 400 — отказ по правилам."""
+    body = await _admin_request(
+        "POST",
+        f"{ADMIN}/referrals/invite",
+        payload={
+            "inviter_telegram_id": inviter_telegram_id,
+            "invited_telegram_id": invited_telegram_id,
+            "invited_login": invited_login,
+        },
+    )
+
+    return _referrals(body)
+
+
+async def referral_link_account(telegram_id: int, user_login: str) -> None:
+    """
+    Связывает Telegram с учёткой: панель сама догонит невыданные бонусы.
+
+    Ошибки глотаем: связь — служебное действие, и падать из-за неё на входе
+    в аккаунт нельзя. Не получилось сейчас — получится при следующем входе.
+    """
+    try:
+        await _admin_request(
+            "POST",
+            f"{ADMIN}/referrals/link",
+            payload={"telegram_id": telegram_id, "login": user_login},
+        )
+    except PanelError as error:
+        logger.info("связка telegram↔учётка не прошла: %s", error)
+
+
+# --------------------------------------------------------------------------
 # Оплата по ссылке и автопродление (Platega)
 # --------------------------------------------------------------------------
 

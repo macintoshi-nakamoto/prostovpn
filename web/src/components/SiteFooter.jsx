@@ -76,9 +76,6 @@ export function SiteFooter() {
 
         <div className="sf-bottom">
           <span>© {new Date().getFullYear()} Prosto VPN</span>
-          {/* ВРЕМЕННО: кодовое слово для согласования с платёжным
-              провайдером. Убрать после подтверждения. */}
-          <span>verplatega</span>
           <div>
             <Link to="/terms">{t("footer.terms")}</Link>
             <Link to="/privacy">{t("footer.privacy")}</Link>

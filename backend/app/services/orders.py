@@ -465,6 +465,12 @@ def fulfil(db: OrmSession, order: Order, manual_by: int | None = None) -> Fulfil
 
     _ensure_keys_safely(db, user)
 
+    # Подарок пригласившему — после выдачи и отдельной транзакцией: доступ,
+    # за который заплатили, не должен зависеть от бонусной арифметики.
+    from .referrals import credit_purchase
+
+    credit_purchase(db, user)
+
     return Fulfilment(order, user, password, is_renewal, subscription.expires_at)
 
 

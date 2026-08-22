@@ -188,6 +188,92 @@ def collapse_corrupted_queues(db: OrmSession) -> list[dict[str, object]]:
     return fixed
 
 
+def add_bonus_days(
+    db: OrmSession,
+    user: User,
+    days: int,
+    reason: str,
+    commit: bool = True,
+) -> dt.datetime:
+    """
+    Дарит дни доступа, не трогая деньги.
+
+    Отдельно от `grant_subscription` намеренно: та про оплаченный период —
+    у неё цена, тариф и место в очереди. Подарок за приглашённого друга не
+    оплачен никем, поэтому он не заводит платёж, не меняет цену подписки и
+    не попадает в ожидаемую выручку — иначе бесплатные дни однажды
+    посчитались бы доходом.
+
+    Дни приклеиваются к самому дальнему живому периоду: человек с оплаченным
+    годом получает год и два дня, а не второй период, спорящий с первым за
+    право быть действующим. Доступа нет вовсе — заводим отдельный период по
+    последнему известному тарифу, чтобы у него были понятные лимиты.
+
+    Возвращает новую дату конца доступа.
+    """
+    if days <= 0:
+        raise PanelError("подарить можно только положительное число дней")
+
+    now = utcnow()
+    live = list(
+        db.scalars(
+            select(Subscription)
+            .where(
+                Subscription.user_id == user.id,
+                Subscription.is_cancelled.is_(False),
+                Subscription.expires_at > now,
+            )
+            .order_by(Subscription.expires_at)
+        )
+    )
+    tail = live[-1] if live else None
+
+    if tail is not None:
+        tail.expires_at += dt.timedelta(days=days)
+        ends_at = tail.expires_at
+    else:
+        # Тариф берём последний известный: по нему считаются устройства и
+        # трафик. Не нашли ни одного — пробный, он есть всегда.
+        last = db.scalar(
+            select(Subscription)
+            .where(Subscription.user_id == user.id)
+            .order_by(Subscription.expires_at.desc())
+            .limit(1)
+        )
+        code = last.plan if last else settings().signup_plan_code
+        plan_ref = db.scalar(select(Plan).where(Plan.code == code))
+        bonus = Subscription(
+            user_id=user.id,
+            plan=plan_ref.code if plan_ref else code,
+            plan_id=plan_ref.id if plan_ref else None,
+            price=Decimal(0),
+            currency=plan_ref.currency if plan_ref else settings().currency,
+            period_days=days,
+            # Продления от подарка не ждём: в календаре прибыли ему не место.
+            auto_renew=False,
+            starts_at=now,
+            expires_at=now + dt.timedelta(days=days),
+        )
+        db.add(bonus)
+        ends_at = bonus.expires_at
+
+    from ..models import AuditLog
+
+    db.add(
+        AuditLog(
+            action="user.bonus_days",
+            target=user.public_id,
+            detail=f"+{days} дн., {reason}",
+        )
+    )
+
+    if commit:
+        db.commit()
+    else:
+        db.flush()
+    return ends_at
+
+
 # --- платежи -----------------------------------------------------------------
 
 

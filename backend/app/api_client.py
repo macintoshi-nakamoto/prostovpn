@@ -211,7 +211,7 @@ def _renew_url() -> str:
     платёжную форму потребовала бы заводить заказ до того, как человек
     вообще решил платить.
     """
-    return f"{settings().site_url.rstrip('/')}/account.html"
+    return f"{settings().site_url.rstrip('/')}/account"
 
 
 def _provision_missing_keys(user_id: int, device_id: str) -> None:

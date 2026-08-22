@@ -593,7 +593,7 @@ def refund(db: OrmSession, order: Order, reason: str = "возврат плат�
     if order.subscription_id:
         subscription = db.get(Subscription, order.subscription_id)
         if subscription is not None:
-            subscription.is_cancelled = True
+            _shrink_subscription_after_refund(db, order, subscription)
 
     _register_refund(db, order, reason)
 
@@ -606,6 +606,40 @@ def refund(db: OrmSession, order: Order, reason: str = "возврат плат�
 
     db.add(AuditLog(action="order.refund", target=order.id, detail=reason))
     db.commit()
+
+
+def _shrink_subscription_after_refund(db: OrmSession, order: Order, subscription: Subscription) -> None:
+    """
+    Что снять с подписки — зависит от того, одна ли на ней оплата.
+
+    Продление того же тарифа не создаёт новой строки, а удлиняет прежнюю,
+    поэтому на одну строку Subscription может ссылаться несколько заказов.
+    Отменить её целиком за возврат одного из них — забрать у человека
+    оплаченные и не оспоренные дни остальных: ровно то, чего возврат делать
+    не обещает. Возвращены деньги одного заказа — снимаем ровно его дни.
+    """
+    others = (
+        db.scalars(
+            select(Order.id)
+            .where(
+                Order.subscription_id == subscription.id,
+                Order.id != order.id,
+                Order.status == OrderStatus.PAID.value,
+            )
+            .limit(1)
+        ).first()
+        is not None
+    )
+    if not others:
+        subscription.is_cancelled = True
+        return
+
+    plan = db.scalar(select(Plan).where(Plan.code == order.plan_code))
+    days = plan.period_days if plan else subscription.period_days
+    subscription.expires_at -= dt.timedelta(days=days)
+    if subscription.expires_at <= subscription.starts_at:
+        # Срезали до нуля и дальше: оплаченного не осталось, строка гаснет.
+        subscription.is_cancelled = True
 
 
 def _register_refund(db: OrmSession, order: Order, reason: str) -> None:

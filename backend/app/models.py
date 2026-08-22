@@ -34,6 +34,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text as sa_text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -846,6 +847,19 @@ class Payment(Base):
     """
 
     __tablename__ = "payments"
+    __table_args__ = (
+        # Один заказ — один положительный платёж: гонка «вебхук + ручная
+        # выдача» упирается в индекс, а не пишет деньги дважды. Только для
+        # положительных сумм: сторно возврата пишется второй строкой с
+        # минусом по тому же заказу — ему индекс мешать не должен.
+        Index(
+            "uq_payment_order_positive",
+            "order_id",
+            unique=True,
+            sqlite_where=sa_text("order_id IS NOT NULL AND amount > 0"),
+            postgresql_where=sa_text("order_id IS NOT NULL AND amount > 0"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int | None] = mapped_column(

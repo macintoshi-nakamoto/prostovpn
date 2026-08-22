@@ -18,13 +18,14 @@ from __future__ import annotations
 import datetime as dt
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 
 from ..config import settings
 from ..models import (
     AuditLog,
+    BillingEvent,
     DeliveryJob,
     Order,
     OrderStatus,
@@ -83,12 +84,13 @@ def get_live(db: OrmSession, user: User) -> RecurringSub | None:
         .where(RecurringSub.user_id == user.id)
         .order_by(RecurringSub.id.desc())
     )
+    # Перебираем все строки, а не только последнюю: брошенную привязку можно
+    # завершить по старой ссылке уже ПОСЛЕ того, как оформлена новая, — и
+    # тогда живой окажется не самая свежая строка. Не найди мы её здесь,
+    # подписка списывала бы деньги, будучи невидимой и неотключаемой.
     for row in rows:
         if row.is_live:
             return row
-        # Живее последней записи ничего нет: если она мертва, дальше только
-        # более старые мёртвые.
-        return None
     return None
 
 
@@ -125,6 +127,14 @@ def create(db: OrmSession, user: User, plan_code: str, origin: str = "site") -> 
         ):
             return current
         # Другой тариф или протухшая ссылка: старую закрываем, заводим новую.
+        # Закрываем и у провайдера: по брошенной ссылке из истории браузера
+        # привязку можно завершить и через час — и жила бы подписка-сирота,
+        # списывающая деньги мимо витрин. Отказ провайдера не рвёт оформление
+        # новой: неактивированная привязка умрёт по своему таймеру.
+        try:
+            platega.api_request("POST", f"/subscription/{current.external_id}/cancel")
+        except PaymentError as exc:
+            log.warning("брошенную подписку %s не удалось отменить: %s", current.external_id, exc)
         current.status = RecurringStatus.FAILED.value
         current.last_charge_error = "привязка не завершена, оформлена новая"
         db.commit()
@@ -464,6 +474,86 @@ def _confirm_charge(
         fulfilment.expires_at.date(),
     )
     return billing_webhook.WebhookResult(OK, order_id=order.id)
+
+
+def retry_stuck(db: OrmSession, limit: int = 25) -> int:
+    """
+    Повторяет события подписок, обработка которых сорвалась.
+
+    Провайдер повтора не пришлёт: событие уже застолблено, и вторая доставка
+    уходит дубликатом. Значит, упавшее списание вылечит только обходчик.
+    Повторять безопасно: выдача по списанию идемпотентна уникальностью
+    (provider, provider_payment_id) на заказах, а смены статусов подписки
+    идемпотентны сами по себе. Не повторяются расхождения суммы — по ним
+    решает администратор.
+    """
+    deadline = utcnow() - dt.timedelta(minutes=billing_webhook.RETRY_AFTER_MINUTES)
+    stale = utcnow() - dt.timedelta(minutes=billing_webhook.RETRYING_STALE_MINUTES)
+    rows = list(
+        db.scalars(
+            select(BillingEvent)
+            .where(
+                BillingEvent.provider == PROVIDER,
+                BillingEvent.kind.like("sub.%"),
+                or_(
+                    and_(BillingEvent.result.is_(None), BillingEvent.received_at < deadline),
+                    and_(
+                        BillingEvent.result == billing_webhook.ERROR,
+                        BillingEvent.received_at < deadline,
+                    ),
+                    and_(
+                        BillingEvent.result == billing_webhook.RETRYING,
+                        BillingEvent.received_at < stale,
+                    ),
+                ),
+            )
+            .order_by(BillingEvent.received_at)
+            .limit(limit)
+        )
+    )
+
+    healed = 0
+    for row in rows:
+        event = _restore_sub_event(row)
+        if event is None:
+            log.error("событие подписки %s не восстановить", row.event_id)
+            billing_webhook.mark_event(db, row.event_id, ERROR, "не восстановить")
+            continue
+        if not billing_webhook.claim_for_retry(db, row):
+            continue
+
+        status_name = str(event.raw.get("status") or "")
+        sub_external = str(event.raw.get("subscriptionid") or event.raw.get("id") or "")
+        try:
+            result = _process(db, event, status_name, sub_external)
+        except Exception as exc:  # pragma: no cover - следующая попытка через цикл
+            db.rollback()
+            log.exception("повтор события подписки %s не удался", row.event_id)
+            billing_webhook.mark_event(db, row.event_id, ERROR, str(exc)[:500])
+            continue
+        billing_webhook.mark_event(db, row.event_id, result.result, result.detail)
+        if result.result == OK:
+            healed += 1
+            log.info("событие подписки %s доработано повторной попыткой", row.event_id)
+    return healed
+
+
+def _restore_sub_event(row: BillingEvent) -> WebhookEvent | None:
+    """Событие из журнала — чтобы повторить его тем же путём, что и живое."""
+    payload = dict(row.payload or {})
+    checked = payload.pop(billing_webhook.CHECKED_KEY, None)
+    if not isinstance(checked, dict) or not str(payload.get("status") or ""):
+        return None
+    return WebhookEvent(
+        event_id=row.event_id,
+        kind=row.kind or "sub.charge",
+        provider=PROVIDER,
+        order_id=None,
+        payment_id=checked.get("payment_id"),
+        amount_kopecks=checked.get("amount_kopecks"),
+        currency=checked.get("currency") or "RUB",
+        raw=payload,
+    )
 
 
 def _fetch_transaction(transaction_id: str | None) -> dict | None:

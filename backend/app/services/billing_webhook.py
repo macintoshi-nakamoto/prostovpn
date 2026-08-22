@@ -34,7 +34,7 @@ import datetime as dt
 import logging
 from dataclasses import dataclass
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update as sa_update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 
@@ -70,6 +70,9 @@ CHECKED_KEY = "_event"
 # Заведомо больше самой долгой обработки: событие «в работе прямо сейчас»
 # подхватывать нельзя.
 RETRY_AFTER_MINUTES = 10
+# Повтор, застрявший в RETRYING, — процесс убили посреди работы. Порог
+# больше обычного: живому повтору нужно время дообработаться.
+RETRYING_STALE_MINUTES = 30
 
 
 @dataclass(slots=True)
@@ -178,6 +181,26 @@ def _order_exists(db: OrmSession, order_id: str | None) -> bool:
     return bool(order_id) and db.get(Order, order_id) is not None
 
 
+def _claim_for_retry(db: OrmSession, row: BillingEvent) -> bool:
+    """
+    Атомно переводит событие в RETRYING. False — забрал другой воркер.
+
+    UPDATE со сверкой прежнего результата, а не присваивание в объекте:
+    присваивание после общего SELECT выигрывают оба воркера сразу, и оба
+    идут обрабатывать одно событие.
+    """
+    condition = (
+        BillingEvent.result.is_(None) if row.result is None else BillingEvent.result == row.result
+    )
+    claimed = db.execute(
+        sa_update(BillingEvent)
+        .where(BillingEvent.event_id == row.event_id, condition)
+        .values(result=RETRYING)
+    ).rowcount
+    db.commit()
+    return bool(claimed)
+
+
 # Те же рубежи нужны событиям подписок (services/recurring.py): застолбить
 # вставкой и дописать итог. Публичные имена, чтобы не звать приватное чужое.
 def claim_event(db: OrmSession, event: WebhookEvent) -> bool:
@@ -186,6 +209,10 @@ def claim_event(db: OrmSession, event: WebhookEvent) -> bool:
 
 def mark_event(db: OrmSession, event_id: str, result: str, detail: str | None = None) -> None:
     _mark(db, event_id, result, detail)
+
+
+def claim_for_retry(db: OrmSession, row: BillingEvent) -> bool:
+    return _claim_for_retry(db, row)
 
 
 def _mark(db: OrmSession, event_id: str, result: str, detail: str | None = None) -> None:
@@ -300,6 +327,13 @@ def _process(db: OrmSession, event: WebhookEvent) -> WebhookResult:
         # шлёт и `succeeded`, и `waiting_for_capture` с разными id событий.
         return WebhookResult(DUPLICATE, order_id=order.id, detail="заказ уже оплачен")
 
+    if order.status == OrderStatus.REFUNDED.value:
+        # По заказу уже был возврат. Выдавать по нему нельзя, каким бы путём
+        # ни пришло подтверждение — опоздавшим вебхуком или обходчиком
+        # застрявших: деньги вернулись клиенту, и «оплачено» это не отменяет.
+        # Ручная выдача в панели отвергает такой заказ по той же причине.
+        return WebhookResult(IGNORED, order_id=order.id, detail="по заказу был возврат")
+
     # --- рубеж 3: сверка суммы ------------------------------------------------
     if event.amount_kopecks is None:
         # Суммы нет и получить её не удалось. Выдавать по такому событию
@@ -364,16 +398,29 @@ def retry_stuck(db: OrmSession, limit: int = 25) -> int:
     возвраты, отмены и сверку суммы, а `fulfil` выдал бы доступ по любому
     событию, какое ему принесли.
     """
+    # Порог возраста для всех веток, включая READY: отметка «рубежи пройдены»
+    # ставится за мгновение до выдачи, и свежая строка почти наверняка
+    # обрабатывается прямо сейчас — обходчику там делать нечего.
     deadline = utcnow() - dt.timedelta(minutes=RETRY_AFTER_MINUTES)
+    # Застрявший RETRYING — процесс убили посреди повтора. Порог больше:
+    # живому повтору надо успеть дообработаться.
+    retrying_deadline = utcnow() - dt.timedelta(minutes=RETRYING_STALE_MINUTES)
     rows = list(
         db.scalars(
             select(BillingEvent)
             .where(
                 or_(
-                    BillingEvent.result.in_((READY, ERROR_AFTER_CHECKS)),
+                    and_(
+                        BillingEvent.result.in_((READY, ERROR_AFTER_CHECKS)),
+                        BillingEvent.received_at < deadline,
+                    ),
                     and_(
                         BillingEvent.result.is_(None),
                         BillingEvent.received_at < deadline,
+                    ),
+                    and_(
+                        BillingEvent.result == RETRYING,
+                        BillingEvent.received_at < retrying_deadline,
                     ),
                 ),
                 # События подписок (sub.status, sub.charge) живут по своим
@@ -397,10 +444,11 @@ def retry_stuck(db: OrmSession, limit: int = 25) -> int:
             db.commit()
             continue
 
-        # Своим коммитом убираем строку из выборки: соседний тик обходчика
-        # не должен взять её второй раз и выдать вторую подписку.
-        row.result = RETRYING
-        db.commit()
+        # Захват сравнением-с-обменом: строку из выборки забирает ровно один
+        # обходчик. Два воркера, взявшие один список, не должны выдать по
+        # событию дважды — проигравший увидит rowcount 0 и пройдёт мимо.
+        if not _claim_for_retry(db, row):
+            continue
         try:
             result = _process(db, event)
         except Exception as exc:  # pragma: no cover - следующая попытка через цикл

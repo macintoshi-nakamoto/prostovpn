@@ -111,6 +111,9 @@ def _delivery_once(tick: int) -> None:
     with SessionLocal() as db:
         services.delivery.run_once(db)
         services.billing_webhook.retry_stuck(db)
+        # События подписок живут по своим правилам — у них свой обходчик:
+        # провайдер повтор не пришлёт, упавшее списание лечится только так.
+        services.recurring.retry_stuck(db)
         # Напоминания о скором конце подписки. Дёшево: выборка по
         # индексированному expires_at, и почти всегда пустая.
         services.delivery.queue_expiry_reminders(db)

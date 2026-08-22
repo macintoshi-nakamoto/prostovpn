@@ -884,6 +884,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
       return undefined;
     }
     let alive = true;
+    let timer = 0;
     let tries = 0;
     setNotice(t("account.payReturnChecking"));
     const tick = async () => {
@@ -904,7 +905,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
         // Сеть мигнула — следующая попытка скажет точнее.
       }
       if (alive && tries < 20) {
-        setTimeout(tick, 3000);
+        timer = setTimeout(tick, 3000);
       } else if (alive) {
         setNotice(t("account.payReturnPending"));
       }
@@ -912,6 +913,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
     tick();
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [returnOrder, payFailed]);
@@ -1214,12 +1216,19 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
     if (!open) return undefined;
     setNote("");
     load();
+    return undefined;
+  }, [open, load]);
+
+  // Слушатель Escape отдельно: ему нужен текущий busy, а перезапуск
+  // эффекта с load() стирал бы сообщение об ошибке при каждой смене busy.
+  useEffect(() => {
+    if (!open) return undefined;
     const onKey = (e) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape" && !busy) setOpen(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [open, load]);
+  }, [open, busy]);
 
   /*
   Пока подписка ждёт привязки счёта, окно опрашивает статус: человек
@@ -1315,7 +1324,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
             <button
               className="pay-close"
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => (busy ? null : setOpen(false))}
               aria-label={t("account.recClose")}
             >
               ✕

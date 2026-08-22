@@ -90,6 +90,9 @@ deploy/data/macos/pf/amn.400.allowPIA.conf
 # Built application files
 *.apk
 *.aar
+# ...кроме туннельного: без него Android не собирается ни у кого,
+# и он давно теряется — держим его в дереве осознанно.
+!android/app/libs/awg-tunnel.aar
 *.ap_
 *.aab
 

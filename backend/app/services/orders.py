@@ -56,6 +56,7 @@ def _reusable_order(
     origin: str,
     user_id: int | None = None,
     email: str | None = None,
+    quantity: int = 1,
 ) -> Order | None:
     """
     Неоплаченный заказ с ещё живой платёжной ссылкой — или None.
@@ -73,7 +74,8 @@ def _reusable_order(
             Order.provider == provider,
             Order.plan_code == plan.code,
             Order.origin == origin,
-            Order.amount_kopecks == plan.price_kopecks,
+            Order.amount_kopecks == plan.price_kopecks * quantity,
+            Order.quantity == quantity,
             Order.currency == plan.currency,
             Order.redirect_url.is_not(None),
         )
@@ -156,6 +158,25 @@ def platform_from_user_agent(user_agent: str | None) -> str | None:
     return None
 
 
+# Сколько раз можно взять тариф одним заказом. Ограничение для посуточного:
+# больше трёх месяцев подряд по дневной цене брать незачем — длинные тарифы
+# дешевле, и такое число почти всегда опечатка.
+MAX_QUANTITY = 90
+
+
+def _clamp_quantity(plan: Plan, quantity: int) -> int:
+    """Количество, с которым можно считать сумму. Чужому тарифу — всегда 1."""
+    if plan.period_days > 1:
+        # Пачками продаётся только посуточный: у остальных срок и так в тарифе.
+        return 1
+    value = int(quantity or 1)
+    if value < 1:
+        raise OrderError("укажите, на сколько дней покупаете")
+    if value > MAX_QUANTITY:
+        raise OrderError(f"за раз можно купить не больше {MAX_QUANTITY} дней")
+    return value
+
+
 def create_order(
     db: OrmSession,
     plan_code: str,
@@ -164,6 +185,7 @@ def create_order(
     ip: str | None = None,
     provider_name: str | None = None,
     platform: str | None = None,
+    quantity: int = 1,
 ) -> Order:
     """
     Заводит заказ и регистрирует платёж у провайдера.
@@ -183,8 +205,9 @@ def create_order(
     if plan.price_kopecks <= 0:
         raise OrderError("этот тариф не продаётся через сайт")
 
+    count = _clamp_quantity(plan, quantity)
     name = provider_name or payments.active_name()
-    existing = _reusable_order(db, plan, name, origin="site", email=address)
+    existing = _reusable_order(db, plan, name, origin="site", email=address, quantity=count)
     if existing is not None:
         return existing
 
@@ -192,7 +215,8 @@ def create_order(
         plan_code=plan.code,
         email=address,
         telegram_id=telegram_id,
-        amount_kopecks=plan.price_kopecks,
+        quantity=count,
+        amount_kopecks=plan.price_kopecks * count,
         currency=plan.currency,
         status=OrderStatus.PENDING.value,
         provider=name,
@@ -214,6 +238,7 @@ def create_order_for_user(
     ip: str | None = None,
     provider_name: str | None = None,
     platform: str | None = None,
+    quantity: int = 1,
 ) -> Order:
     """
     Заказ для уже известной учётки: продление из кабинета или из бота.
@@ -229,8 +254,9 @@ def create_order_for_user(
     if plan.price_kopecks <= 0:
         raise OrderError("этот тариф не продаётся")
 
+    count = _clamp_quantity(plan, quantity)
     name = provider_name or payments.active_name()
-    existing = _reusable_order(db, plan, name, origin=origin, user_id=user.id)
+    existing = _reusable_order(db, plan, name, origin=origin, user_id=user.id, quantity=count)
     if existing is not None:
         return existing
 
@@ -238,7 +264,8 @@ def create_order_for_user(
         plan_code=plan.code,
         email=user.email_plain or "",
         telegram_id=user.telegram_id,
-        amount_kopecks=plan.price_kopecks,
+        quantity=count,
+        amount_kopecks=plan.price_kopecks * count,
         currency=plan.currency,
         status=OrderStatus.PENDING.value,
         provider=name,
@@ -403,7 +430,7 @@ def fulfil(db: OrmSession, order: Order, manual_by: int | None = None) -> Fulfil
     subscription = grant_subscription(
         db,
         user,
-        days=plan.period_days,
+        days=plan.period_days * max(1, order.quantity or 1),
         plan=plan,
         price=float(Decimal(order.amount_kopecks) / 100),
         commit=False,
@@ -630,7 +657,7 @@ def _shrink_subscription_after_refund(db: OrmSession, order: Order, subscription
     не обещает. Возвращены деньги одного заказа — снимаем ровно его дни.
     """
     plan = db.scalar(select(Plan).where(Plan.code == order.plan_code))
-    days = plan.period_days if plan else subscription.period_days
+    days = (plan.period_days if plan else subscription.period_days) * max(1, order.quantity or 1)
     # Вычитаем ровно дни возвращённого заказа — и когда на строке висят
     # другие оплаты, и когда она одна. К этой же строке приклеены дни,
     # подаренные за приглашения: сжигать их за чужой возврат нельзя, они

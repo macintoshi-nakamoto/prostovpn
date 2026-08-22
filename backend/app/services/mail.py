@@ -170,6 +170,28 @@ def renewed_body(login: str, expires_at: str, ios: bool = False) -> tuple[str, s
     return text, html
 
 
+def days_received_body(days: int, sender: str, expires_at: str) -> tuple[str, str]:
+    """Кто-то передал вам свои дни."""
+    base = settings().site_url.rstrip("/")
+    text = f"""Здравствуйте!
+
+Вам передали {days} дн. доступа — от аккаунта {sender}.
+Подписка теперь действует до {expires_at}.
+
+Личный кабинет: {base}/account
+
+{_support_line()}"""
+    html = f"""<!doctype html>
+<html lang="ru"><body style="margin:0;padding:32px 16px;background:#0b0b0c;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#e9e9ea">
+<div style="max-width:520px;margin:0 auto">
+  <p style="font-size:15px;line-height:1.6;margin:0 0 20px">Вам передали <b style="color:#ff6a1f">{days} дн.</b> доступа — от аккаунта {sender}.</p>
+  <p style="font-size:14px;line-height:1.6;color:#a8a8b0;margin:0 0 24px">Подписка теперь действует до <b style="color:#ff6a1f">{expires_at}</b>.</p>
+  <p style="font-size:13px;color:#8b8b93;margin:0"><a href="{base}/account" style="color:#8b8b93">Личный кабинет</a></p>
+  {_support_html()}
+</div></body></html>"""
+    return text, html
+
+
 def recurring_on_body(
     plan_name: str, price_label: str, interval_label: str, next_charge: str
 ) -> tuple[str, str]:

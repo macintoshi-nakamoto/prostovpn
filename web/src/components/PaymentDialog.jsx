@@ -16,7 +16,18 @@ import "./payment-dialog.css";
  * видеокарте, окно открывается плавно даже на слабом телефоне. Тем, кто
  * просил в системе меньше движения, окно появляется без него совсем.
  */
-export function PaymentDialog({ open, plan, busy = false, invoice = null, onSbp, onNewInvoice, onClose }) {
+export function PaymentDialog({
+  open,
+  plan,
+  quantity = 1,
+  busy = false,
+  invoice = null,
+  autoRenew = true,
+  onAutoRenew,
+  onSbp,
+  onNewInvoice,
+  onClose,
+}) {
   const { t, f } = useI18n();
 
   useEffect(() => {
@@ -30,8 +41,10 @@ export function PaymentDialog({ open, plan, busy = false, invoice = null, onSbp,
 
   if (!open || !plan) return null;
 
-  const price = f.moneyFromKopecks(plan.price_kopecks, plan.currency);
-  const term = f.days(plan.duration_days);
+  // Посуточный берут пачкой дней: и цена, и срок в шапке — за выбранное
+  // количество, иначе окно оплаты показывало бы одно, а списалось бы другое.
+  const price = f.moneyFromKopecks(plan.price_kopecks * quantity, plan.currency);
+  const term = f.days(plan.duration_days * quantity);
 
   return (
     <div className="pay-overlay" onMouseDown={onClose}>
@@ -99,6 +112,20 @@ export function PaymentDialog({ open, plan, busy = false, invoice = null, onSbp,
             <span className="pay-method-soon">{t("pay.soon")}</span>
           </button>
         </div>
+
+        {/* Автопродление — по умолчанию включено: подписку берут, чтобы она
+            не обрывалась. Галочка на виду, снимается тем же кликом. */}
+        <label className="pay-auto">
+          <input
+            type="checkbox"
+            checked={autoRenew}
+            onChange={(e) => onAutoRenew && onAutoRenew(e.target.checked)}
+          />
+          <span>
+            <b>{t("pay.autoTitle")}</b>
+            <span className="pay-auto-sub">{t("pay.autoSub")}</span>
+          </span>
+        </label>
 
         <p className="pay-note">{t("pay.note")}</p>
           </>

@@ -483,6 +483,78 @@ async def extend(user_login: str, plan: Plan, method: str) -> None:
 
 
 # --------------------------------------------------------------------------
+# Перевод дней
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Transfer:
+    """Строка истории переводов."""
+
+    days: int
+    # sent | received
+    direction: str
+    counterpart: str
+    created_at: dt.datetime | None
+
+
+async def transfer_days(user_login: str, recipient: str, days: int) -> Transfer:
+    """
+    Передаёт дни другому человеку от имени этой учётки.
+
+    Через админский API: у бота нет пользовательского токена собеседника в
+    момент действия, зато есть его логин — а проверки (хватает ли дней, есть
+    ли получатель) всё равно делает панель.
+    """
+    user_id = await find_user_id(user_login)
+
+    if user_id is None:
+        raise PanelError(f"учётка «{user_login}» не найдена")
+
+    body = await _admin_request(
+        "POST",
+        f"{ADMIN}/transfers",
+        payload={
+            "fromUserId": user_id,
+            "recipient": recipient,
+            "days": days,
+            "note": "перевод из Telegram",
+        },
+    )
+
+    return Transfer(
+        days=body["days"],
+        direction="sent",
+        counterpart=body["toPublicId"],
+        created_at=_parse_time(body.get("createdAt")),
+    )
+
+
+async def transfers(user_login: str, limit: int = 10) -> list[Transfer]:
+    """История переводов учётки — и отданные, и полученные."""
+    user_id = await find_user_id(user_login)
+
+    if user_id is None:
+        return []
+
+    rows = await _admin_request("GET", f"{ADMIN}/transfers?user_id={user_id}&limit={limit}")
+    result = []
+
+    for row in rows:
+        outgoing = row["fromId"] == user_id
+        result.append(
+            Transfer(
+                days=row["days"],
+                direction="sent" if outgoing else "received",
+                counterpart=row["toPublicId"] if outgoing else row["fromPublicId"],
+                created_at=_parse_time(row.get("createdAt")),
+            )
+        )
+
+    return result
+
+
+# --------------------------------------------------------------------------
 # Приглашения
 # --------------------------------------------------------------------------
 
@@ -612,7 +684,7 @@ def _recurring(body: dict) -> Recurring:
     )
 
 
-async def payment_link(user_login: str, plan: Plan) -> PaymentLink:
+async def payment_link(user_login: str, plan: Plan, quantity: int = 1) -> PaymentLink:
     """Счёт на разовую оплату: панель регистрирует заказ у провайдера.
 
     Дальше бот только показывает кнопку со ссылкой - оплату подтверждает
@@ -621,7 +693,7 @@ async def payment_link(user_login: str, plan: Plan) -> PaymentLink:
     body = await _admin_request(
         "POST",
         f"{ADMIN}/orders/for-user",
-        payload={"login": user_login, "plan_code": plan.code},
+        payload={"login": user_login, "plan_code": plan.code, "quantity": quantity},
     )
 
     url = body.get("redirect_url")

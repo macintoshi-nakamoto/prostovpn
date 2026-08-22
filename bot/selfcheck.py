@@ -74,6 +74,21 @@ FAKE_REFERRALS_PENDING = panel.Referrals(
     invited=1, purchased=0, days=0, pending=1, join_days=2, purchase_days=5
 )
 
+FAKE_DAILY = panel.Plan(
+    code="daily",
+    title="Посуточный",
+    duration_days=1,
+    price_kopecks=1000,
+    currency="RUB",
+    device_limit=5,
+    traffic_limit_bytes=None,
+    purchasable=True,
+)
+
+FAKE_TRANSFER = panel.Transfer(
+    days=7, direction="sent", counterpart="PV-1234-ABCD", created_at=NOW
+)
+
 FAKE_APPS = [
     panel.Download(platform="windows", version="1.0.27", url="https://prostovpn.cc/a.msi"),
     panel.Download(platform="android", version="1.1.2", url="https://prostovpn.cc/a.apk"),
@@ -96,37 +111,6 @@ COLORED = (
     "Выйти",
 )
 
-FAKE_REC_ACTIVE = panel.Recurring(
-    status="active",
-    plan_code="basic",
-    plan_title="Базовый",
-    amount_kopecks=19900,
-    currency="RUB",
-    interval="month",
-    next_charge_at=NOW + dt.timedelta(days=30),
-)
-
-FAKE_REC_PENDING = panel.Recurring(
-    status="pending",
-    plan_code="basic",
-    plan_title="Базовый",
-    amount_kopecks=19900,
-    currency="RUB",
-    interval="month",
-    redirect_url="https://pay.example/sub",
-)
-
-FAKE_REC_PAST_DUE = panel.Recurring(
-    status="past_due",
-    plan_code="basic",
-    plan_title="Базовый",
-    amount_kopecks=19900,
-    currency="RUB",
-    interval="month",
-    last_charge_error="списание не прошло",
-)
-
-
 def check_keyboards() -> None:
     boards = {
         "start": menus.start_menu(),
@@ -143,10 +127,6 @@ def check_keyboards() -> None:
         "plans_sbp": menus.plans_menu([FAKE_PLAN], method_by_code("sbp")),
         "pay_link": menus.pay_link_menu("https://pay.example/invoice"),
         "friends": menus.friends_menu("https://t.me/prostovpnn_bot?start=ref1"),
-        "autorenew_offer": menus.autorenew_menu(None, [FAKE_PLAN]),
-        "autorenew_pending": menus.autorenew_menu(FAKE_REC_PENDING, []),
-        "autorenew_active": menus.autorenew_menu(FAKE_REC_ACTIVE, []),
-        "autorenew_past_due": menus.autorenew_menu(FAKE_REC_PAST_DUE, []),
         "support": menus.support_menu(),
         "topic": menus.topic_menu(SUPPORT_TOPICS[0].code),
         "about": menus.about_menu(True, FAKE_APPS),
@@ -233,8 +213,13 @@ def check_keyboards() -> None:
     # везде одно и серое — случайный клик не должен отменять подписку.
     cabinet_labels = [b.text for row in cabinet_rows for b in row]
 
-    assert any("Автопродление" in label for label in cabinet_labels), (
-        "в кабинете нет кнопки автопродления"
+    # Автопродление живёт только в кабинете на сайте: в боте его нет
+    # намеренно — там рядом ни способа оплаты, ни страницы отмены.
+    assert not any("Автопродление" in label for label in cabinet_labels), (
+        "автопродление вернулось в бота"
+    )
+    assert any("Передать дни" in label for label in cabinet_labels), (
+        "в кабинете нет кнопки перевода дней"
     )
 
     pay_buttons = [b for row in boards["pay_link"].inline_keyboard for b in row]
@@ -243,23 +228,18 @@ def check_keyboards() -> None:
         "на экране счёта нет кнопки-ссылки «Оплатить»"
     )
 
-    pending_buttons = [b for row in boards["autorenew_pending"].inline_keyboard for b in row]
-
-    assert any(b.url and "Привязать" in b.text for b in pending_buttons), (
-        "на экране оформления нет ссылки на привязку счёта"
-    )
-
-    for name in ("autorenew_pending", "autorenew_active", "autorenew_past_due"):
-        off_buttons = [
-            b
-            for row in boards[name].inline_keyboard
+    # Два одинаковых значка в одном сообщении читаются как ошибка вёрстки:
+    # человек считает такие кнопки одной группой и ищет несуществующую связь.
+    for name, board in boards.items():
+        icons = [
+            json.loads(b.model_dump_json(exclude_none=True)).get("icon_custom_emoji_id")
+            for row in board.inline_keyboard
             for b in row
-            if b.callback_data == "rec:off"
         ]
+        icons = [icon for icon in icons if icon]
+        assert len(icons) == len(set(icons)), f"{name}: значки повторяются в одном сообщении"
 
-        assert len(off_buttons) == 1, f"{name}: отключение должно быть одной кнопкой"
-
-    print(f"клавиатуры: {len(boards)} экранов, цветных кнопок {colored}, остальные серые")
+    print(f"клавиатуры: {len(boards)} экранов, цветных кнопок {colored}, значки не повторяются")
 
 
 def check_referrals() -> None:
@@ -295,6 +275,24 @@ def check_referrals() -> None:
     assert copies == [url], "кнопка копирования должна отдавать ту же ссылку"
 
     print(f"приглашения: ссылка {url}, кнопки и экран на месте")
+
+
+def check_transfer_and_daily() -> None:
+    """Перевод дней и посуточный тариф: экраны собираются, цена считается."""
+    blocks = screens.transfer(None, FAKE_ACCOUNT, [FAKE_TRANSFER])
+    dumped = json.dumps(blocks, ensure_ascii=False)
+
+    assert "PV-1234-ABCD" in dumped, "в истории перевода нет получателя"
+    assert "custom_emoji" in dumped, "на экране перевода нет премиум-эмодзи"
+
+    # Семь дней посуточного — семьдесят рублей, и то же самое в тексте.
+    seven = json.dumps(screens.invoice(None, FAKE_DAILY, quantity=7), ensure_ascii=False)
+
+    assert "70 ₽" in seven, f"посуточный посчитан неверно: {seven}"
+    assert "70 ₽" in texts.invoice_text(FAKE_DAILY, quantity=7)
+    assert "10 ₽" in texts.invoice_text(FAKE_DAILY, quantity=1)
+
+    print("перевод дней и посуточный тариф: экраны и цены на месте")
 
 
 def check_emoji() -> None:
@@ -344,11 +342,16 @@ def check_texts() -> None:
         texts.plans_text(method_by_code("sbp"), [FAKE_PLAN]),
         texts.invoice_text(FAKE_PLAN),
         texts.friends_text(FAKE_REFERRALS, "https://t.me/prostovpnn_bot?start=ref1"),
+        texts.transfer_text(FAKE_ACCOUNT, []),
+        texts.transfer_text(FAKE_ACCOUNT, [FAKE_TRANSFER]),
+        texts.transfer_who_error(),
+        texts.transfer_days_prompt("friend_01"),
+        texts.transfer_days_error(),
+        texts.transfer_done(FAKE_TRANSFER),
+        texts.daily_prompt(FAKE_DAILY),
+        texts.daily_error(),
+        texts.invoice_text(FAKE_DAILY, quantity=7),
         texts.friends_text(FAKE_REFERRALS_PENDING, "https://t.me/prostovpnn_bot?start=ref1"),
-        texts.autorenew_text(None, [FAKE_PLAN]),
-        texts.autorenew_text(FAKE_REC_PENDING, []),
-        texts.autorenew_text(FAKE_REC_ACTIVE, []),
-        texts.autorenew_text(FAKE_REC_PAST_DUE, []),
         texts.paid_text(FAKE_PLAN, FAKE_ACCOUNT),
         texts.paid_text(FAKE_PLAN, None),
         texts.about_text(),
@@ -454,6 +457,7 @@ async def main() -> None:
     check_keyboards()
     check_emoji()
     check_referrals()
+    check_transfer_and_daily()
     check_assets()
     check_texts()
     await check_storage()

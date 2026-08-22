@@ -121,6 +121,8 @@ def list_plans(db: OrmSession = Depends(get_db)) -> list[PlanOut]:
 class OrderIn(BaseModel):
     plan_code: str = Field(min_length=1, max_length=32)
     email: str = Field(min_length=5, max_length=255, pattern=EMAIL_PATTERN)
+    # Сколько раз берём тариф: для посуточного это и есть число дней.
+    quantity: int = 1
     # Telegram здесь не принимается намеренно. Запрос никем не подписан, а
     # идентификатор из него попадал бы на учётку: чужой номер увёл бы туда
     # доступы, уведомления и реферальные бонусы. Свой Telegram человек
@@ -189,6 +191,7 @@ def create_order(
             db,
             plan_code=body.plan_code,
             email=str(body.email),
+            quantity=body.quantity,
             ip=ip,
             # Что сказал сайт, а иначе — что видно по браузеру. Определять
             # платформу надо сейчас: к приходу вебхука заголовков уже нет,
@@ -1138,6 +1141,9 @@ def unlink_device(
 
 class RenewIn(BaseModel):
     plan_code: str | None = None
+    # Сколько раз берём тариф. Осмысленно только для посуточного: там это и
+    # есть «на сколько дней». Остальные тарифы количество игнорируют.
+    quantity: int = 1
 
 
 @router.post("/account/renew", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -1171,6 +1177,7 @@ def renew(
             user,
             plan_code=plan_code,
             origin="site",
+            quantity=body.quantity,
             ip=client_ip(request),
             # Продление с iPhone — тот же повод выдать ключ AmneziaVPN, что
             # и первая покупка: приложения там по-прежнему нет.
@@ -1226,6 +1233,85 @@ def tunnel_file_download(db: OrmSession = Depends(get_db)) -> Response:
             "Cache-Control": "no-cache",
         },
     )
+
+
+# --- перевод дней ---------------------------------------------------------------
+
+
+class TransferIn(BaseModel):
+    # Логин, публичный ID или почта — человек называет друга тем, что помнит.
+    recipient: str = Field(min_length=1, max_length=255)
+    days: int = Field(ge=1, le=3650)
+    note: str | None = Field(default=None, max_length=160)
+
+
+class TransferOut(BaseModel):
+    """Строка истории переводов глазами кабинета."""
+
+    id: int
+    days: int
+    # sent | received — с чьей стороны смотрим.
+    direction: str
+    counterpart: str
+    created_at: dt.datetime
+    note: str | None = None
+
+
+def _transfer_out(record, user: User, db: OrmSession) -> TransferOut:
+    outgoing = record.from_user_id == user.id
+    other = db.get(User, record.to_user_id if outgoing else record.from_user_id)
+    return TransferOut(
+        id=record.id,
+        days=record.days,
+        direction="sent" if outgoing else "received",
+        # Показываем публичный идентификатор, а не логин: логин — половина
+        # доступа, и светить чужой в своей истории незачем.
+        counterpart=other.public_id if other else "—",
+        created_at=record.created_at,
+        note=record.note,
+    )
+
+
+@router.get("/account/transfers", response_model=list[TransferOut])
+def transfers_history(
+    who: tuple[User, Session] = Depends(current_user), db: OrmSession = Depends(get_db)
+) -> list[TransferOut]:
+    user, _ = who
+    return [_transfer_out(row, user, db) for row in services.transfers.history(db, user)]
+
+
+@router.post("/account/transfers", response_model=TransferOut, status_code=status.HTTP_201_CREATED)
+def transfer_days(
+    body: TransferIn,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> TransferOut:
+    """
+    Отдать свои дни другому человеку.
+
+    Ограничение частоты — как у заказов: перебор чужих логинов через эту
+    ручку иначе превращается в способ узнать, кто зарегистрирован.
+    """
+    user, _ = who
+    verdict = services.ratelimit.hit(
+        db,
+        f"transfer:{user.id}",
+        limit=settings().order_max_per_hour,
+        window_minutes=60,
+    )
+    if not verdict.allowed:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "слишком много переводов подряд — попробуйте позже",
+        )
+    try:
+        record = services.transfers.transfer(
+            db, user, body.recipient, body.days, origin="site", note=body.note
+        )
+    except services.transfers.TransferError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    return _transfer_out(record, user, db)
 
 
 # --- автопродление ------------------------------------------------------------

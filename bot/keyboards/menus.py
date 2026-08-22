@@ -18,6 +18,32 @@ PLATFORM_TITLES = {
     "linux": "Linux",
 }
 
+# Значок платформы. Два одинаковых значка в одном сообщении читаются как
+# ошибка вёрстки, поэтому у каждой кнопки списка — свой.
+PLATFORM_EMOJI = {
+    "windows": "windows",
+    "android": "android",
+    "macos": "macos",
+    "ios": "ios",
+    "linux": "linux",
+}
+
+# Значки тарифов по кругу: от «на пробу» к «самому выгодному». Список
+# длиннее любой витрины, поэтому соседние кнопки не совпадают.
+PLAN_EMOJI = ("coffee", "calendar", "season", "gift", "best")
+
+# Темы поддержки — по смыслу вопроса, а не одинаковым значком на все.
+TOPIC_EMOJI = {
+    "connect": "unlock",
+    "speed": "rocket",
+    "pay": "wallet",
+    "install": "guide",
+    "account": "key",
+}
+
+# Значок способа оплаты: одинаковых в одном списке быть не должно.
+METHOD_EMOJI = {"sbp": "wallet", "stars": "balance", "crypto": "crypto", "card": "calendar"}
+
 # Правовые документы. Платёжный провайдер требует, чтобы оферта, политика и
 # правила возврата были доступны там же, где идёт оплата. Ведут на сайт: это
 # провайдером допускается, а дублировать текст в боте — заводить вторую
@@ -68,7 +94,7 @@ def main_menu() -> InlineKeyboardMarkup:
             [make_btn("Наш канал", url=config.channel_url, emoji="channel")],
             # Инструкция сразу под каналом: до неё чаще всего и идут — из
             # канала за новостями, отсюда за установкой.
-            [make_btn("Инструкция по установке", url=config.guide_url, emoji="rocket")],
+            [make_btn("Инструкция по установке", url=config.guide_url, emoji="guide")],
             [make_btn("О сервисе", callback_data="about", emoji="rocket")],
             [make_btn("Документы", callback_data="docs", emoji="link")],
             [make_btn("Выйти из аккаунта", callback_data="logout", emoji="cross", style=DANGER)],
@@ -90,14 +116,16 @@ def cabinet_menu(active: bool, ios: bool = False) -> InlineKeyboardMarkup:
             make_btn("Платежи", callback_data="history", emoji="history"),
             make_btn("Пароль", callback_data="password", emoji="key"),
         ],
-        # Рядом с платежами: автопродление - тоже про деньги.
-        [make_btn("Автопродление", callback_data="autorenew", emoji="calendar")],
+        # Перевод дней — тоже про «свои дни», поэтому рядом с платежами.
+        # Автопродления здесь нет намеренно: оно живёт в кабинете на сайте,
+        # где рядом и способ оплаты, и понятная страница отмены.
+        [make_btn("Передать дни другу", callback_data="transfer", emoji="transfer")],
     ]
 
     if ios:
         # Приложения под iPhone нет: человек подключается ключом из
         # AmneziaVPN, и это для него главная кнопка кабинета.
-        rows.append([make_btn("Ключ для iPhone", callback_data="ioskey", emoji="key")])
+        rows.append([make_btn("Ключ для iPhone", callback_data="ioskey", emoji="unlock")])
 
     # Файл нужен тем, кто сидит с iPhone: в наших приложениях список
     # уже внутри. Строка на всю ширину и прямо над поддержкой — сюда и
@@ -116,7 +144,7 @@ def payment_methods_menu() -> InlineKeyboardMarkup:
             make_btn(
                 method.title if method.shows_catalog else f"{method.title} · скоро",
                 callback_data=f"method:{method.code}",
-                emoji="balance" if method.code == "stars" else "wallet",
+                emoji=METHOD_EMOJI.get(method.code, "wallet"),
                 style=SUCCESS if method.ready else DEFAULT,
             )
         ]
@@ -137,10 +165,10 @@ def plans_menu(plans: list[Plan], method: PayMethod) -> InlineKeyboardMarkup:
             make_btn(
                 f"{plan.title} · {price(plan, method)}",
                 callback_data=f"buy:{method.code}:{plan.code}",
-                emoji="calendar",
+                emoji=PLAN_EMOJI[index % len(PLAN_EMOJI)],
             )
         ]
-        for plan in plans
+        for index, plan in enumerate(plans)
     ]
 
     rows.append([make_btn("Назад", callback_data="plans", emoji="back", style=DANGER)])
@@ -161,38 +189,6 @@ def pay_link_menu(url: str) -> InlineKeyboardMarkup:
             [make_btn("Меню", callback_data="home", emoji="back", style=DANGER)],
         ]
     )
-
-
-def autorenew_menu(rec, options: list[Plan]) -> InlineKeyboardMarkup:
-    """
-    Автопродление. Кнопки зависят от состояния: не подключено - выбор
-    тарифа, ждёт привязки - ссылка и отмена, работает - только отключение.
-    Отключение намеренно серое и одно: случайно не нажмёшь.
-    """
-    rows: list[list] = []
-
-    if rec is None or not rec.live:
-        rows = [
-            [
-                make_btn(
-                    f"{plan.title} · {plan.rub} ₽ {'в год' if plan.duration_days >= 365 else 'в месяц'}",
-                    callback_data=f"rec:on:{plan.code}",
-                    emoji="calendar",
-                )
-            ]
-            for plan in options
-        ]
-    elif rec.status == "pending":
-        if rec.redirect_url:
-            rows.append([make_btn("Привязать счёт", url=rec.redirect_url, emoji="wallet")])
-
-        rows.append([make_btn("Отменить оформление", callback_data="rec:off", emoji="cross")])
-    else:
-        rows.append([make_btn("Отключить автопродление", callback_data="rec:off", emoji="cross")])
-
-    rows.append([make_btn("Назад", callback_data="cabinet", emoji="back", style=DANGER)])
-
-    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def friends_menu(invite_url: str) -> InlineKeyboardMarkup:
@@ -216,17 +212,21 @@ def friends_menu(invite_url: str) -> InlineKeyboardMarkup:
 
 def support_menu() -> InlineKeyboardMarkup:
     rows = [
-        [make_btn(topic.title, callback_data=f"faq:{topic.code}", emoji="support")]
+        [
+            make_btn(
+                topic.title,
+                callback_data=f"faq:{topic.code}",
+                emoji=TOPIC_EMOJI.get(topic.code, "support"),
+            )
+        ]
         for topic in SUPPORT_TOPICS
     ]
 
-    rows.append(
-        [make_btn("Написать свою проблему", callback_data="ticket:other", emoji="channel")]
-    )
+    rows.append([make_btn("Написать свою проблему", callback_data="ticket:other", emoji="ask")])
 
     rows.append(
         [
-            make_btn("Обращения", callback_data="tickets", emoji="history"),
+            make_btn("Обращения", callback_data="tickets", emoji="ticket"),
             make_btn("Меню", callback_data="home", emoji="back", style=DANGER),
         ]
     )
@@ -252,7 +252,7 @@ def about_menu(authorized: bool, apps: list[Download]) -> InlineKeyboardMarkup:
             make_btn(
                 PLATFORM_TITLES.get(app.platform, app.platform.title()),
                 url=app.url,
-                emoji="rocket",
+                emoji=PLATFORM_EMOJI.get(app.platform, "rocket"),
             )
         )
 
@@ -264,7 +264,7 @@ def about_menu(authorized: bool, apps: list[Download]) -> InlineKeyboardMarkup:
         rows.append(row)
 
     rows.append([make_btn("Документы", callback_data="docs", emoji="link")])
-    rows.append([make_btn("Сайт", url=config.site_url, emoji="link")])
+    rows.append([make_btn("Сайт", url=config.site_url, emoji="brand")])
     rows.append(
         [
             make_btn(

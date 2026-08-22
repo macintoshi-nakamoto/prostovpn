@@ -63,6 +63,17 @@ export const ordersApi = {
   events: (params) => http.get(`${BASE}/billing-events`, params),
 };
 
+export const transfersApi = {
+  // Переводы дней: все или по одному человеку — обе стороны сразу.
+  list: (params, signal) => http.get(`${BASE}/transfers`, params, signal),
+  create: (payload) => http.post(`${BASE}/transfers`, payload),
+};
+
+export const referralsApi = {
+  top: (params) => http.get(`${BASE}/referrals/top`, params),
+  bonus: (userId, payload) => http.post(`${BASE}/referrals/bonus/${userId}`, payload),
+};
+
 export const auditApi = {
   list: (params, signal) => http.get(`${BASE}/audit`, params, signal),
   actions: () => http.get(`${BASE}/audit/actions`),

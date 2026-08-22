@@ -174,11 +174,21 @@ export const api = {
   enableIosKey: (slot) =>
     request(`/api/v1/account/ios/keys/${slot}/enable`, { method: "POST", auth: true }),
 
-  renew: (planCode) =>
+  renew: (planCode, quantity = 1) =>
     request("/api/v1/account/renew", {
       method: "POST",
       auth: true,
-      body: { plan_code: planCode || null },
+      body: { plan_code: planCode || null, quantity },
+    }),
+
+  // Перевод дней другу: своя история и само действие.
+  transfers: () => request("/api/v1/account/transfers", { auth: true }),
+
+  transferDays: (recipient, days, note) =>
+    request("/api/v1/account/transfers", {
+      method: "POST",
+      auth: true,
+      body: { recipient, days, note: note || null },
     }),
 
   // Сброс пароля. Ответ на «забыли пароль» всегда одинаковый — сервер

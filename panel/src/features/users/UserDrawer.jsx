@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { usersApi } from "../../lib/api";
+import { transfersApi, usersApi } from "../../lib/api";
 import { useAsync } from "../../lib/hooks";
 import {
   ago,
@@ -35,6 +35,7 @@ import { UserControls } from "./UserControls";
 const TABS = [
   { id: "overview", label: "Обзор" },
   { id: "payments", label: "Оплаты" },
+  { id: "transfers", label: "Дни" },
   { id: "orders", label: "Заказы" },
   { id: "sessions", label: "Устройства" },
   { id: "ios", label: "iPhone" },
@@ -209,6 +210,7 @@ export function UserDrawer({ userId, plans, onClose, onChanged }) {
           <div className="gd-pane">
             {tab === "overview" && <Overview user={user} />}
             {tab === "payments" && <Payments user={user} />}
+            {tab === "transfers" && <Transfers user={user} />}
             {tab === "orders" && <Orders user={user} />}
             {tab === "sessions" && <Sessions user={user} onChanged={applyResult} />}
             {tab === "ios" && <IosKeys user={user} onChanged={applyResult} />}
@@ -503,6 +505,61 @@ function IosKeys({ user, onChanged }) {
     </Card>
   );
 }
+
+/*
+Переводы дней этого клиента.
+
+Раздел открывают с одним вопросом: «куда делись дни» или «почему их
+больше». Поэтому строка отвечает сразу: сколько, кому или от кого, откуда
+пришёл перевод и когда.
+*/
+function Transfers({ user }) {
+  const [rows, setRows] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    transfersApi
+      .list({ userId: user.id })
+      .then((data) => alive && setRows(data))
+      .catch(() => alive && setRows([]));
+    return () => {
+      alive = false;
+    };
+  }, [user.id]);
+
+  if (rows === null) return <Loading />;
+  if (!rows.length) return <Empty>Переводов дней не было</Empty>;
+
+  return (
+    <Card pad>
+      <Section title="Переводы дней" sub={`Всего ${rows.length}`}>
+        <div className="gd-rows">
+          {rows.map((row) => {
+            const outgoing = row.fromId === user.id;
+            return (
+              <div key={row.id} className="gd-r">
+                <div style={{ minWidth: 0 }}>
+                  <div className="amt" style={{ color: outgoing ? "var(--gd-dim)" : "var(--gd-gold)" }}>
+                    {outgoing ? "−" : "+"}
+                    {row.days} дн.
+                  </div>
+                  <div className="gd-cellsub">
+                    {outgoing ? `Кому: ${row.toLogin}` : `От: ${row.fromLogin}`}
+                    {row.origin ? ` · ${ORIGIN_LABELS[row.origin] || row.origin}` : ""}
+                  </div>
+                </div>
+                <div className="r">{dateTime(row.createdAt)}</div>
+              </div>
+            );
+          })}
+        </div>
+      </Section>
+    </Card>
+  );
+}
+
+// Откуда пришёл перевод — человеческим словом.
+const ORIGIN_LABELS = { site: "сайт", bot: "бот", panel: "панель" };
 
 function Orders({ user }) {
   const orders = user.orders || [];

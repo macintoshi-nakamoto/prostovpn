@@ -1061,3 +1061,129 @@
   align-items: flex-start;
   gap: 12px;
 }
+
+/* --- посуточный тариф и перевод дней ---------------------------------------- */
+
+/* Счётчик дней: две кнопки и поле — та же высота, что у кнопки тарифа. */
+.ac-daily {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 2px;
+}
+.ac-daily-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+.ac-daily-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-dark);
+}
+.ac-daily-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ac-daily-input {
+  width: 56px;
+  height: 36px;
+  text-align: center;
+  border-radius: 10px;
+  border: 1px solid var(--line-2);
+  background: var(--bg-field);
+  color: inherit;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ac-tr-form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.ac-tr-input,
+.ac-tr-days {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line-2);
+  background: var(--bg-field);
+  color: inherit;
+  font-size: 15px;
+}
+.ac-tr-input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.ac-tr-days {
+  width: 84px;
+  text-align: center;
+}
+.ac-tr-btn {
+  flex: none;
+  height: 44px;
+  padding: 0 22px;
+}
+.ac-tr-warn {
+  margin-top: 10px;
+  font-size: 13.5px;
+  color: var(--accent-dark);
+}
+.ac-tr-list {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+}
+.ac-tr-row {
+  display: grid;
+  grid-template-columns: 96px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line-2);
+  font-size: 15px;
+}
+.ac-tr-row:last-child {
+  border-bottom: none;
+}
+/* Ушедшие и пришедшие дни различаются цветом, а не только знаком: строку
+   истории читают взглядом, не вчитываясь. */
+.ac-tr-out {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.ac-tr-in {
+  color: var(--accent-dark);
+  font-weight: 600;
+}
+.ac-tr-who {
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-tr-when {
+  color: var(--text-dim);
+  font-size: 13.5px;
+}
+
+@media (max-width: 560px) {
+  .ac-tr-btn {
+    width: 100%;
+  }
+  .ac-tr-row {
+    grid-template-columns: 80px 1fr;
+  }
+  .ac-tr-when {
+    grid-column: 2;
+    text-align: right;
+  }
+}

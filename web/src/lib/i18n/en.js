@@ -116,9 +116,9 @@ export const en = {
       unlimitedShort: "unlimited traffic",
       traffic: "{size} of traffic",
       fine:
-        "Devices are counted as simultaneous sign-ins: signing in on one too many drops the " +
-        "oldest session rather than refusing you. When the included traffic runs out, access " +
-        "closes until you renew — the app warns you in advance, once less than 5 GB is left.",
+        "Traffic is unlimited on every plan: no speed throttling, no volume counting. " +
+        "Devices are counted as simultaneous sign-ins — signing in on one too many drops " +
+        "the oldest session rather than refusing you.",
     },
 
     shield: {
@@ -576,6 +576,23 @@ export const en = {
     recCancelBusy: "Turning off…",
     recCancelled: "Auto-renewal is off. Your paid days remain.",
     recFailed: "Something went wrong — try again.",
+    dailyFor: "for {days}",
+    dailyLabel: "How many days",
+    dailyLess: "One day less",
+    dailyMore: "One day more",
+
+    trTitle: "Send days to a friend",
+    trHint: "Give away some of your days — you have {left} right now. They leave immediately and only your friend can send them back.",
+    trWho: "Friend's login or ID",
+    trDays: "Days",
+    trSend: "Send",
+    trBusy: "Sending…",
+    trSent: "Done: {days} went to your friend.",
+    trFailed: "Couldn't send the days",
+    trTooMany: "You don't have that many days.",
+    trTo: "To: {who}",
+    trFrom: "From: {who}",
+
     recLineOff: "Turn on auto-renewal",
     recLinePending: "Auto-renewal: waiting for the account link",
     recLineOn: "Auto-renewal: {price} {interval}",
@@ -597,6 +614,8 @@ export const en = {
     sbp: "SBP",
     sbpSub: "Pay from your banking app",
     sbpBusy: "Creating the invoice…",
+    autoTitle: "Renew automatically",
+    autoSub: "We'll set it up after the payment. Turn it off any time.",
     invWaiting: "Waiting for the payment…",
     invWaitingSub:
       "The payment page opened in a new tab. Access activates on its own as soon as the bank confirms.",

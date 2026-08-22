@@ -1,14 +1,18 @@
 """Оплата: сначала способ, потом тариф. Витрина — та же, что на сайте."""
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, LabeledPrice
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, LabeledPrice, Message
 
 from config.settings import config, method_by_code
 from database import models
 from handlers.common import show_error, show_screen
-from keyboards.menus import pay_link_menu, payment_methods_menu, plans_menu
+from database import models
+from keyboards.menus import cancel_menu, pay_link_menu, payment_methods_menu, plans_menu
 from middlewares.auth import AuthMiddleware
+from states.forms import BuyDaily
 from utils import assets, panel, screens, texts
+from utils.render import show
 from utils.timeutils import plural_days
 
 
@@ -63,7 +67,7 @@ async def plans(callback: CallbackQuery) -> None:
 
 
 @router.callback_query(F.data.startswith("buy:"))
-async def buy(callback: CallbackQuery) -> None:
+async def buy(callback: CallbackQuery, state: FSMContext) -> None:
     _, method_code, plan_code = callback.data.split(":", maxsplit=2)
     method = method_by_code(method_code)
 
@@ -94,6 +98,14 @@ async def buy(callback: CallbackQuery) -> None:
 
     if not plan:
         await callback.answer("Тариф больше недоступен", show_alert=True)
+        return
+
+    # Посуточный берут пачкой дней: сначала спрашиваем сколько, потом счёт.
+    if plan.duration_days == 1 and method.code == "sbp":
+        await state.set_state(BuyDaily.days)
+        await state.update_data(plan=plan.code)
+        await callback.message.answer(texts.daily_prompt(plan))
+        await callback.answer()
         return
 
     if method.code == "sbp":
@@ -147,3 +159,43 @@ async def buy(callback: CallbackQuery) -> None:
         )
 
     await callback.answer()
+
+
+@router.message(BuyDaily.days)
+async def daily_days(message: Message, state: FSMContext) -> None:
+    """Сколько дней берём на посуточном тарифе."""
+    raw = (message.text or "").strip()
+
+    # Только ASCII-цифры: «7²» проходит isdigit, но числом не становится.
+    if not (raw.isascii() and raw.isdigit()) or not 1 <= int(raw) <= 90:
+        await show(message, lambda: (texts.daily_error(), cancel_menu("plans")))
+        return
+
+    data = await state.get_data()
+    session = await models.get_session(message.from_user.id)
+    login = session.panel_login if session else await models.last_login(message.from_user.id)
+
+    if not login:
+        await state.clear()
+        await show(message, lambda: (texts.daily_error(), cancel_menu("plans")))
+        return
+
+    try:
+        plan = await panel.plan_by_code(data.get("plan", ""))
+
+        if plan is None:
+            raise panel.PanelError("тариф больше недоступен")
+
+        link = await panel.payment_link(login, plan, quantity=int(raw))
+    except panel.PanelError as error:
+        await show(message, lambda: (texts.panel_error(error), cancel_menu("plans")))
+        return
+
+    await state.clear()
+    await show_screen(
+        message,
+        lambda file_id: screens.invoice(file_id, plan, quantity=int(raw)),
+        pay_link_menu(link.url),
+        text=texts.invoice_text(plan, quantity=int(raw)),
+        animation=assets.PLANS,
+    )

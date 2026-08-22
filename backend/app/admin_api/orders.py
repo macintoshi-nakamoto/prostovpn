@@ -265,6 +265,8 @@ def list_events(
 class BotOrderIn(BaseModel):
     login: str
     plan_code: str
+    # Сколько раз берём тариф: для посуточного это и есть число дней.
+    quantity: int = 1
 
 
 class BotOrderOut(BaseModel):
@@ -292,7 +294,9 @@ def create_for_user(
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"учётка «{body.login}» не найдена")
 
     try:
-        order = services.create_order_for_user(db, user, plan_code=body.plan_code, origin="bot")
+        order = services.create_order_for_user(
+            db, user, plan_code=body.plan_code, origin="bot", quantity=body.quantity
+        )
     except services.OrderError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 

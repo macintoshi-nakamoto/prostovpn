@@ -142,6 +142,9 @@ def _send(db: OrmSession, job: DeliveryJob) -> None:
         elif job.template == "recurring_off":
             name, _price, _interval, _next = _recurring_context(db, user)
             text, html = mail.recurring_off_body(name, expires)
+        elif job.template == "days_received":
+            days, sender = _gift_context(job)
+            text, html = mail.days_received_body(days, sender, expires)
         else:
             text, html = mail.renewed_body(user.login, expires, ios=ios)
         mail.send(job.target, settings().mail_subject, text, html)
@@ -159,6 +162,9 @@ def _send(db: OrmSession, job: DeliveryJob) -> None:
         elif job.template == "recurring_off":
             name, _price, _interval, _next = _recurring_context(db, user)
             body = telegram.recurring_off_text(name, expires, site)
+        elif job.template == "days_received":
+            days, sender = _gift_context(job)
+            body = telegram.days_received_text(days, sender, expires, site)
         elif job.template == "referral_join":
             body = telegram.referral_join_text(_bonus_days(job), expires, site)
         elif job.template == "referral_purchase":
@@ -323,6 +329,17 @@ METHODS = {
 
 def _method_label(method: str | None) -> str:
     return METHODS.get((method or "").lower(), method or "—")
+
+
+def _gift_context(job: DeliveryJob) -> tuple[int, str]:
+    """Сколько дней и от кого — payload перевода: «7:PV-1234-ABCD»."""
+    raw = (job.payload or "").split(":", maxsplit=1)
+    try:
+        days = int(raw[0])
+    except (ValueError, IndexError):
+        days = 0
+    sender = raw[1] if len(raw) > 1 else "другого аккаунта"
+    return days, sender
 
 
 def _bonus_days(job: DeliveryJob) -> int:

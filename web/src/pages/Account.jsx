@@ -25,6 +25,42 @@ const TABS = ["account", "plan", "setup"];
 const SECTION_BY_TAB = { account: "", plan: "subscription", setup: "guide" };
 const TAB_BY_SECTION = { subscription: "plan", guide: "setup" };
 
+/*
+Счёт на оплату между перезагрузками.
+
+Ключ один на браузер: одновременно у человека может быть только один живой
+счёт — панель сама возвращает прежний, пока его ссылка жива. Счёт старше
+получаса выбрасываем: столько живёт ссылка у провайдера, дальше окно
+ожидания врало бы.
+*/
+const INVOICE_KEY = "prosto_invoice";
+const INVOICE_TTL_MS = 30 * 60 * 1000;
+
+function readInvoice() {
+  try {
+    const raw = localStorage.getItem(INVOICE_KEY);
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    if (!value || !value.orderId || !value.savedAt) return null;
+    if (Date.now() - value.savedAt > INVOICE_TTL_MS) {
+      localStorage.removeItem(INVOICE_KEY);
+      return null;
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function writeInvoice(value) {
+  try {
+    if (!value) localStorage.removeItem(INVOICE_KEY);
+    else localStorage.setItem(INVOICE_KEY, JSON.stringify({ ...value, savedAt: Date.now() }));
+  } catch {
+    /* приватный режим — окно проживёт до перезагрузки, и ладно */
+  }
+}
+
 /** Адрес раздела: /account для обзора, /account/<section> для остальных. */
 function sectionPath(tab, search = "") {
   const section = SECTION_BY_TAB[tab] || "";
@@ -919,14 +955,48 @@ function DeviceRow({ device, onChanged, onApply }) {
   );
 }
 
+/*
+Посуточный тариф — тот, у которого срок ровно день: его берут пачкой, а
+не «одним периодом». Отличаем по сроку, а не по коду: коды заводит
+администратор, и завтра посуточный может называться иначе.
+*/
+function isDaily(plan) {
+  return Boolean(plan) && plan.duration_days === 1;
+}
+
 function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   const { t, f } = useI18n();
   const [plans, setPlans] = useState(null);
   const [paying, setPaying] = useState(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  // Выставленный счёт: { planCode, orderId, url, status: pending|paid|failed }.
-  const [invoice, setInvoice] = useState(null);
+  // Сколько дней берут на посуточном тарифе. Семь — неделя: самый частый
+  // ответ на «нужно ненадолго», и его же проще всего поправить стрелками.
+  const [dailyDays, setDailyDays] = useState(7);
+  /*
+  Продлевать ли автоматически. По умолчанию — да: человек, купивший
+  подписку, обычно хочет, чтобы она не обрывалась. Галочка на виду, снять
+  её можно тем же кликом, а само подключение происходит уже ПОСЛЕ оплаты:
+  привязка счёта — отдельный шаг у провайдера, и делать её до того, как
+  доступ открыт, значит просить деньги дважды.
+  */
+  const [autoRenew, setAutoRenew] = useState(true);
+  /*
+  Выставленный счёт: { planCode, orderId, url, quantity, status }.
+
+  Живёт в localStorage, а не только в состоянии страницы: человек уходит
+  платить в соседнюю вкладку, возвращается — и обновляет эту. Без хранения
+  окно ожидания пропадало бы вместе с самим ожиданием, а счёт при этом
+  оставался бы неоплаченным и живым.
+  */
+  const [invoice, setInvoiceState] = useState(() => readInvoice());
+  const setInvoice = useCallback((next) => {
+    setInvoiceState((prev) => {
+      const value = typeof next === "function" ? next(prev) : next;
+      writeInvoice(value);
+      return value;
+    });
+  }, []);
 
   /*
   Возврат с платёжной формы. Сам по себе он ничего не подтверждает — оплату
@@ -1014,6 +1084,20 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   });
 
   /*
+  Вернулись на страницу с живым счётом — открываем окно ожидания снова.
+
+  Человек оставил вкладку с оплатой, обновил кабинет и ждёт, что увидит то
+  же, что видел до этого. Тариф счёта берём из витрины: она уже загружена
+  или вот-вот подгрузится.
+  */
+  useEffect(() => {
+    if (!invoice || paying || !plans) return;
+    const plan = plans.find((p) => p.code === invoice.planCode);
+    if (plan) setPaying(plan);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice && invoice.orderId, plans]);
+
+  /*
   Оплата СБП: страница оплаты уходит в соседнюю вкладку, а окно способов
   превращается в состояние счёта и ждёт вебхук. Окно открывается синхронно,
   в жесте клика, — после await блокировщики всплывающих окон его уже не
@@ -1024,11 +1108,12 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
   */
   const paySbp = async () => {
     if (!paying || busy) return;
+    const days = isDaily(paying) ? dailyDays : 1;
     const win = window.open("about:blank", "_blank");
     setBusy(true);
     setNotice("");
     try {
-      const order = await api.renew(paying.code);
+      const order = await api.renew(paying.code, days);
       if (order && order.redirect_url) {
         if (win) {
           try {
@@ -1043,6 +1128,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
           planCode: paying.code,
           orderId: order.id,
           url: order.redirect_url,
+          quantity: days,
           status: "pending",
         });
         return;
@@ -1083,6 +1169,17 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
         if (status.status === "paid") {
           finish("paid");
           onChanged();
+          // Обещали продлевать само — уводим на привязку счёта сразу после
+          // оплаты. Провайдер может не поддерживать подписки: тогда ответ
+          // будет отказом, и мы просто ничего не делаем.
+          if (autoRenew && invoice.planCode) {
+            api
+              .recurringCreate(invoice.planCode)
+              .then((fresh) => {
+                if (fresh && fresh.redirect_url) window.open(fresh.redirect_url, "_blank");
+              })
+              .catch(() => {});
+          }
           return;
         }
         if (status.status === "failed" || status.status === "expired") {
@@ -1165,9 +1262,51 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
                   {mine && <span className="ac-plan-tag">{t("account.planCurrent")}</span>}
                   <span className="ac-plan-name">{plan.title}</span>
                   <span className="ac-plan-cost">
-                    {f.moneyFromKopecks(plan.price_kopecks, plan.currency)}
+                    {f.moneyFromKopecks(
+                      plan.price_kopecks * (isDaily(plan) ? dailyDays : 1),
+                      plan.currency,
+                    )}
                   </span>
-                  <span className="ac-plan-term-l">{f.days(plan.duration_days)}</span>
+                  <span className="ac-plan-term-l">
+                    {isDaily(plan)
+                      ? t("account.dailyFor", { days: f.days(dailyDays) })
+                      : f.days(plan.duration_days)}
+                  </span>
+                  {/* Счётчик дней — только у посуточного: у остальных срок
+                      задан тарифом, и выбирать там нечего. */}
+                  {isDaily(plan) && (
+                    <div className="ac-daily">
+                      <button
+                        type="button"
+                        className="ac-daily-btn"
+                        aria-label={t("account.dailyLess")}
+                        disabled={dailyDays <= 1}
+                        onClick={() => setDailyDays((n) => Math.max(1, n - 1))}
+                      >
+                        −
+                      </button>
+                      <input
+                        className="ac-daily-input"
+                        inputMode="numeric"
+                        value={dailyDays}
+                        aria-label={t("account.dailyLabel")}
+                        onChange={(e) => {
+                          const digits = e.target.value.replace(/\D/g, "").slice(0, 2);
+                          setDailyDays(digits ? Math.min(90, Number(digits)) : "");
+                        }}
+                        onBlur={() => setDailyDays((n) => (n >= 1 ? n : 1))}
+                      />
+                      <button
+                        type="button"
+                        className="ac-daily-btn"
+                        aria-label={t("account.dailyMore")}
+                        disabled={dailyDays >= 90}
+                        onClick={() => setDailyDays((n) => Math.min(90, (Number(n) || 0) + 1))}
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
                   <ul className="ac-plan-limits">
                     <li>
                       {plan.traffic_limit_bytes == null
@@ -1187,6 +1326,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
                       }
                       setPaying(plan);
                     }}
+                    disabled={isDaily(plan) && !(Number(dailyDays) >= 1)}
                   >
                     {!paid
                       ? t("account.planBuy")
@@ -1204,8 +1344,11 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
       <PaymentDialog
         open={Boolean(paying)}
         plan={paying}
+        quantity={isDaily(paying) ? Number(dailyDays) || 1 : 1}
         busy={busy}
         invoice={paying && invoice && invoice.planCode === paying.code ? invoice : null}
+        autoRenew={autoRenew}
+        onAutoRenew={setAutoRenew}
         onSbp={paySbp}
         onNewInvoice={() => setInvoice(null)}
         onClose={() => (busy ? null : setPaying(null))}
@@ -1233,7 +1376,113 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
         )}
       </div>
 
+      <TransferCard data={data} onChanged={onChanged} />
+
       <RecurringControl onChanged={onChanged} />
+    </div>
+  );
+}
+
+/*
+Перевод дней другу.
+
+Дни уже оплачены — это не покупка и не подарок от сервиса, а передача
+своего. Поэтому блок стоит рядом с историей платежей и выглядит спокойно:
+поле, счётчик и одна кнопка. Историю показываем тут же — по ней человек
+проверяет, дошло ли.
+*/
+function TransferCard({ data, onChanged }) {
+  const { t, f } = useI18n();
+  const [recipient, setRecipient] = useState("");
+  const [days, setDays] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [history, setHistory] = useState([]);
+
+  const load = useCallback(async () => {
+    try {
+      setHistory(await api.transfers());
+    } catch {
+      setHistory([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const left = data.days_left || 0;
+  const amount = Number(days) || 0;
+  const ready = recipient.trim().length > 0 && amount >= 1 && amount <= left;
+
+  const send = async () => {
+    if (!ready || busy) return;
+    setBusy(true);
+    setNote("");
+    try {
+      await api.transferDays(recipient.trim(), amount);
+      setNote(t("account.trSent", { days: f.days(amount) }));
+      setRecipient("");
+      setDays(1);
+      onChanged();
+      load();
+    } catch (err) {
+      setNote(err instanceof ApiError ? err.message : t("account.trFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="ac-card ac-transfer">
+      <h2>{t("account.trTitle")}</h2>
+      <p className="ac-empty">{t("account.trHint", { left: f.days(left) })}</p>
+
+      <div className="ac-tr-form">
+        <input
+          className="ac-tr-input"
+          placeholder={t("account.trWho")}
+          aria-label={t("account.trWho")}
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
+        />
+        <input
+          className="ac-tr-days"
+          inputMode="numeric"
+          aria-label={t("account.trDays")}
+          value={days}
+          onChange={(e) => {
+            const digits = e.target.value.replace(/\D/g, "").slice(0, 4);
+            setDays(digits ? Number(digits) : "");
+          }}
+          onBlur={() => setDays((n) => (Number(n) >= 1 ? Number(n) : 1))}
+        />
+        <button className="btn btn-outline ac-tr-btn" disabled={!ready || busy} onClick={send}>
+          {busy ? t("account.trBusy") : t("account.trSend")}
+        </button>
+      </div>
+
+      {amount > left && left > 0 && <p className="ac-tr-warn">{t("account.trTooMany")}</p>}
+      {note && <p className="ac-rec-note">{note}</p>}
+
+      {history.length > 0 && (
+        <div className="ac-tr-list">
+          {history.map((row) => (
+            <div className="ac-tr-row" key={row.id}>
+              <span className={row.direction === "sent" ? "ac-tr-out" : "ac-tr-in"}>
+                {row.direction === "sent" ? "−" : "+"}
+                {f.days(row.days)}
+              </span>
+              <span className="ac-tr-who">
+                {t(row.direction === "sent" ? "account.trTo" : "account.trFrom", {
+                  who: row.counterpart,
+                })}
+              </span>
+              <span className="ac-tr-when">{f.shortDate(row.created_at)}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -228,63 +228,86 @@ def plans_text(method: PayMethod, plans: list[Plan]) -> str:
     return "\n".join(lines)
 
 
-def invoice_text(plan: Plan) -> str:
+def daily_prompt(plan: Plan) -> str:
+    return (
+        f'{tg("coffee")} <b>{escape(plan.title)}</b>\n\n'
+        f"{plan.rub} ₽ за день. Сколько дней берёте?\n"
+        "Пришлите число от 1 до 90 — например, 7."
+    )
+
+
+def daily_error() -> str:
+    return (
+        f'{tg("warn")} <b>Нужно число</b>\n\n'
+        "Сколько дней покупаем? Пришлите число от 1 до 90."
+    )
+
+
+def invoice_text(plan: Plan, quantity: int = 1) -> str:
     """Счёт на оплату по ссылке: что, почём и что будет дальше."""
+    terms = plan_terms(plan) if quantity == 1 else timeutils.plural_days(
+        plan.duration_days * quantity
+    )
+
     return (
         f'{tg("wallet")} <b>Счёт на оплату</b>\n\n'
-        f"<b>{escape(plan.title)}</b> - {plan.rub} ₽ · {escape(plan_terms(plan))}\n\n"
+        f"<b>{escape(plan.title)}</b> - {plan.rub * quantity} ₽ · {escape(terms)}\n\n"
         "Нажмите «Оплатить» и завершите платёж на открывшейся странице. "
         "Ссылка действует 15 минут.\n\n"
         "Доступ включится сам, подтверждение придёт сюда."
     )
 
 
-def autorenew_text(rec, options: list[Plan]) -> str:
-    """Автопродление. Что происходит - зависит от статуса подписки."""
-    head = f'{tg("calendar")} <b>Автопродление</b>\n\n'
+def transfer_text(account: Account, history: list) -> str:
+    lines = [
+        f'{tg("transfer")} <b>Передать дни</b>',
+        "",
+        f"У вас есть {timeutils.plural_days(account.days_left or 0)}.",
+        "",
+        "Напишите логин или ID друга — дальше спрошу, сколько дней передать.",
+        "Дни уйдут сразу, вернуть их сможет только он.",
+    ]
 
-    if rec is None or not rec.live:
-        lines = [
-            "Подключите автосписание - доступ будет продлеваться сам, "
-            "без напоминаний. Отключается в один клик.",
-            "",
-        ]
+    if history:
+        lines.append("")
+        for row in history[:5]:
+            mark = "Отдано" if row.direction == "sent" else "Получено"
+            lines.append(f"{mark}: {row.days} дн. · {escape(row.counterpart)}")
 
-        for plan in options:
-            word = "в год" if plan.duration_days >= 365 else "в месяц"
-            lines.append(f"<b>{escape(plan.title)}</b> - {plan.rub} ₽ {word}")
+    return "\n".join(lines)
 
-        return head + "\n".join(lines)
 
-    title = escape(rec.plan_title or rec.plan_code or "Подписка")
-
-    if rec.status == "pending":
-        return (
-            head
-            + f"{title} - {rec.rub} ₽ {rec.interval_label}.\n\n"
-            "Осталось привязать счёт: нажмите «Привязать счёт» и подтвердите "
-            "на странице оплаты. Денег на этом шаге не списывается."
-        )
-
-    if rec.status == "past_due":
-        return (
-            head
-            + f'{tg("warn")} Последнее списание не прошло.\n\n'
-            "Продлите подписку вручную в «Тарифы и оплата» - или отключите "
-            "автопродление."
-        )
-
-    when = (
-        f"\nСледующее списание - {timeutils.human_date(rec.next_charge_at)}."
-        if rec.next_charge_at
-        else ""
+def transfer_who_error() -> str:
+    return (
+        f'{tg("warn")} <b>Не понял, кому</b>\n\n'
+        "Пришлите логин друга или его ID вида <code>PV-XXXX-XXXX</code>."
     )
 
+
+def transfer_days_prompt(recipient: str) -> str:
     return (
-        head
-        + f'{tg("check")} Работает.\n\n'
-        f"{title} - {rec.rub} ₽ {rec.interval_label}.{when}\n\n"
-        "Каждое продление подтверждаем сообщением сюда."
+        f'{tg("transfer")} <b>Сколько дней передать</b>\n\n'
+        f"Получатель: <code>{escape(recipient)}</code>\n\n"
+        "Пришлите число — например, 7."
+    )
+
+
+def transfer_days_error() -> str:
+    return (
+        f'{tg("warn")} <b>Нужно число</b>\n\n'
+        "Сколько дней передать? Пришлите число, например 3."
+    )
+
+
+def transfer_failed(error: PanelError) -> str:
+    return f'{tg("warn")} <b>Не передали</b>\n\n{escape(str(error))}'
+
+
+def transfer_done(record) -> str:
+    return (
+        f'{tg("check")} <b>Готово</b>\n\n'
+        f"{timeutils.plural_days(record.days)} ушли аккаунту "
+        f"<code>{escape(record.counterpart)}</code>."
     )
 
 
@@ -366,7 +389,7 @@ def tickets_text(tickets: list[Ticket]) -> str:
     lines = [f'{tg("history")} <b>Обращения</b>', ""]
 
     for ticket in tickets:
-        status = "отвечено" if ticket.status == "answered" else "в работе"
+        status = "Отвечено" if ticket.status == "answered" else "В работе"
         lines.append(
             f"<b>№{ticket.id}</b> · {timeutils.human_date(ticket.created_at)} · {status}"
         )

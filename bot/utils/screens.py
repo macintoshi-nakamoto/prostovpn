@@ -144,15 +144,15 @@ def plans(file_id: str | None, method: PayMethod, available: list[Plan]) -> list
     return rich.screen(file_id, *blocks)
 
 
-def invoice(file_id: str | None, plan: Plan) -> list[dict]:
+def invoice(file_id: str | None, plan: Plan, quantity: int = 1) -> list[dict]:
     """Счёт на оплату по ссылке. Кнопка «Оплатить» - в клавиатуре под экраном."""
     return rich.screen(
         file_id,
         rich.title("Счёт на оплату", "wallet"),
         rich.facts(
             ("Тариф", plan.title),
-            ("Сумма", f"{plan.rub} ₽"),
-            ("Срок", timeutils.plural_days(plan.duration_days)),
+            ("Сумма", f"{plan.rub * quantity} ₽"),
+            ("Срок", timeutils.plural_days(plan.duration_days * quantity)),
         ),
         rich.paragraph(
             "Нажмите «Оплатить» и завершите платёж на открывшейся странице. "
@@ -162,63 +162,30 @@ def invoice(file_id: str | None, plan: Plan) -> list[dict]:
     )
 
 
-def autorenew(file_id: str | None, rec, options: list[Plan]) -> list[dict]:
-    """Автопродление: своё состояние - свой экран, кнопки в menus.autorenew_menu."""
-    if rec is None or not rec.live:
-        blocks = [
-            rich.title("Автопродление", "calendar"),
-            rich.paragraph(
-                "Подключите автосписание - доступ будет продлеваться сам, "
-                "без напоминаний. Отключается в один клик."
-            ),
-        ]
+def transfer(file_id: str | None, account: Account, history: list) -> list[dict]:
+    """
+    Экран перевода дней: сколько есть, что будет дальше и куда уже уходило.
 
-        for plan in options:
-            word = "в год" if plan.duration_days >= 365 else "в месяц"
-            blocks.append(rich.paragraph(rich.bold(f"{plan.title} - {plan.rub} ₽ {word}")))
-
-        return rich.screen(file_id, *blocks)
-
-    title = rec.plan_title or rec.plan_code or "Подписка"
-
-    if rec.status == "pending":
-        return rich.screen(
-            file_id,
-            rich.title("Автопродление", "calendar"),
-            rich.facts(("Тариф", title), ("Сумма", f"{rec.rub} ₽ {rec.interval_label}")),
-            rich.paragraph(
-                "Осталось привязать счёт: нажмите «Привязать счёт» и подтвердите "
-                "на странице оплаты."
-            ),
-            rich.paragraph(rich.italic("Денег на этом шаге не списывается.")),
-        )
-
-    if rec.status == "past_due":
-        return rich.screen(
-            file_id,
-            rich.title("Автопродление", "calendar"),
-            rich.paragraph(rich.bold("Последнее списание не прошло.")),
-            rich.paragraph(
-                "Продлите подписку вручную в «Тарифы и оплата» - или отключите "
-                "автопродление."
-            ),
-        )
-
-    rows: list[tuple[str, object]] = [
-        ("Статус", "работает"),
-        ("Тариф", title),
-        ("Сумма", f"{rec.rub} ₽ {rec.interval_label}"),
+    Сначала свой остаток — от него человек и считает, сколько не жалко.
+    """
+    blocks = [
+        rich.title("Передать дни", "transfer"),
+        rich.facts(("У вас есть", timeutils.plural_days(account.days_left or 0))),
+        rich.paragraph("Напишите логин или ID друга — дальше спрошу, сколько дней передать."),
+        rich.paragraph(rich.italic("Дни уйдут сразу, вернуть их сможет только он.")),
     ]
 
-    if rec.next_charge_at:
-        rows.append(("Следующее списание", timeutils.human_date(rec.next_charge_at)))
+    if history:
+        rows = [
+            (
+                ("Отдано" if row.direction == "sent" else "Получено"),
+                f"{row.days} дн. · {row.counterpart}",
+            )
+            for row in history[:5]
+        ]
+        blocks.append(rich.facts(*rows))
 
-    return rich.screen(
-        file_id,
-        rich.title("Автопродление", "calendar"),
-        rich.facts(*rows),
-        rich.paragraph(rich.italic("Каждое продление подтверждаем сообщением сюда.")),
-    )
+    return rich.screen(file_id, *blocks)
 
 
 def paid(file_id: str | None, plan: Plan, account: Account | None) -> list[dict]:
@@ -340,7 +307,7 @@ def tickets(file_id: str | None, items: list[Ticket]) -> list[dict]:
     blocks = [rich.title("Обращения", "support")]
 
     for ticket in items:
-        status = "отвечено" if ticket.status == "answered" else "в работе"
+        status = "Отвечено" if ticket.status == "answered" else "В работе"
 
         blocks.append(
             rich.facts(

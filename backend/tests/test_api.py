@@ -157,7 +157,17 @@ def test_personal_unlimited_beats_the_plan_limit(client, auth):
         "/api/admin/users", json={"name": "Личный безлимит", "planCode": "basic"}, headers=auth
     ).json()["user"]["id"]
 
-    # На тарифе basic лимит есть — он и показывается, пока личного нет.
+    # Тарифы в наборе безлимитные, поэтому лимит на тариф ставим сами: он
+    # и есть предмет проверки — личный безлимит обязан его перебить.
+    from app.db import SessionLocal
+    from app.models import Plan
+    from sqlalchemy import select
+
+    with SessionLocal() as db:
+        plan = db.scalar(select(Plan).where(Plan.code == "basic"))
+        plan.traffic_limit_bytes = 250 * GB
+        db.commit()
+
     plan_limited = client.get(f"/api/admin/users/{uid}", headers=auth).json()
     assert plan_limited["trafficLimitBytes"] == 250 * GB
 

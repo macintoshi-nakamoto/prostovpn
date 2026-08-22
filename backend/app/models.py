@@ -1042,6 +1042,11 @@ class Order(Base):
     # уже нет, а решать надо тогда.
     platform: Mapped[str | None] = mapped_column(String(16), default=None)
 
+    # Сколько раз взят тариф. Единица у всех обычных тарифов; посуточный
+    # покупают пачкой — «десять дней» это quantity=10 при period_days=1.
+    # Сумма и срок считаются от него один раз, при создании заказа.
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+
     # Сумма фиксируется в момент создания заказа и потом не пересчитывается:
     # человек согласился на конкретную цену, а тариф в панели могут поменять
     # между открытием формы и приходом вебхука.
@@ -1232,6 +1237,34 @@ class Referral(Base):
 
     inviter: Mapped["User | None"] = relationship(foreign_keys=[inviter_user_id])
     invited: Mapped["User | None"] = relationship(foreign_keys=[invited_user_id])
+
+
+class DayTransfer(Base):
+    """
+    Перевод дней доступа другому человеку.
+
+    Отдельная таблица, а не пара записей в журнале: перевод — это событие с
+    двумя сторонами, и обе должны видеть его в своей истории одинаково. По
+    ней же считается, кто кому и сколько отдал, когда в поддержку приходят с
+    вопросом «куда делись дни».
+    """
+
+    __tablename__ = "day_transfers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    from_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    to_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    days: Mapped[int] = mapped_column(Integer)
+    # Откуда пришёл перевод: site | bot | panel. Видно, где человек им
+    # пользуется, и по чьей воле дни ушли — своей или администратора.
+    origin: Mapped[str] = mapped_column(String(16), default="site")
+    note: Mapped[str | None] = mapped_column(String(160), default=None)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    sender: Mapped[User] = relationship(foreign_keys=[from_user_id])
+    recipient: Mapped[User] = relationship(foreign_keys=[to_user_id])
 
 
 class DeliveryJob(Base):

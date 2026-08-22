@@ -19,3 +19,16 @@ class ChangePassword(StatesGroup):
 
 class Support(StatesGroup):
     message = State()
+
+
+class Transfer(StatesGroup):
+    """Передача дней другу: сначала кому, потом сколько."""
+
+    recipient = State()
+    days = State()
+
+
+class BuyDaily(StatesGroup):
+    """Посуточный тариф: спрашиваем, на сколько дней."""
+
+    days = State()

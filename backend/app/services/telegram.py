@@ -124,6 +124,13 @@ def recurring_failed_text(plan_name: str, price_label: str, expires_at: str, sit
     )
 
 
+def days_received_text(days: int, sender: str, expires_at: str, site: str) -> str:
+    return (
+        f"Вам передали {days} дн. доступа — от аккаунта {sender}.\n\n"
+        f"Теперь подписка действует до {expires_at}."
+    )
+
+
 def referral_join_text(days: int, expires_at: str, site: str) -> str:
     return (
         f"По вашей ссылке пришёл друг — плюс {days} дн. доступа.\n\n"

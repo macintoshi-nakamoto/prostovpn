@@ -28,6 +28,13 @@ final class AppState: ObservableObject {
     @Published private(set) var account: PanelAccount?
     @Published private(set) var helperReady = false
 
+    /// Почему не встал интерфейс на последней попытке.
+    ///
+    /// Отдельно от `errorMessage`: перебор кандидатов молчит до тех пор, пока
+    /// не кончатся все варианты, и промежуточную причину показывать нельзя —
+    /// но когда показывать придётся, она должна быть настоящей, а не общей.
+    private var lastBringUpError: String?
+
     /// Почему список стран пуст. Текст пишет панель — здесь его только
     /// показывают: пустой экран без объяснения человек читает как поломку.
     @Published private(set) var notice: String = ""
@@ -79,6 +86,24 @@ final class AppState: ObservableObject {
     var killSwitch: Bool {
         get { defaults.bool(forKey: Keys.killSwitch) }
         set { defaults.set(newValue, forKey: Keys.killSwitch) }
+    }
+
+    /// Возвращаться самому после обрыва.
+    ///
+    /// По умолчанию включено, и это не произвол: обрыв туннеля — почти всегда
+    /// моргнувшая сеть, а не решение человека остаться без VPN. Пока этого не
+    /// было, каждый выход из метро заканчивался незащищённым трафиком до тех
+    /// пор, пока человек сам не заметит и не нажмёт кнопку.
+    ///
+    /// `object(forKey:) == nil` отличает «не задано» от «выключено»: `bool(_:)`
+    /// вернул бы false в обоих случаях, и настройка молча оказалась бы
+    /// выключенной у всех.
+    var autoReconnect: Bool {
+        get {
+            guard defaults.object(forKey: Keys.autoReconnect) != nil else { return true }
+            return defaults.bool(forKey: Keys.autoReconnect)
+        }
+        set { defaults.set(newValue, forKey: Keys.autoReconnect) }
     }
 
     /// Раздельное туннелирование: сети из активного списка идут мимо VPN.
@@ -137,6 +162,7 @@ final class AppState: ObservableObject {
         static let killSwitch = "prosto.killSwitch"
         static let bypass = "prosto.bypassRussianServices"
         static let autoConnect = "prosto.autoconnect"
+        static let autoReconnect = "prosto.autoReconnect"
         static let panel = "prosto.panel"
         static let token = "panel.token"
         static let servers = "panel.servers"
@@ -489,7 +515,69 @@ final class AppState: ObservableObject {
 
         phase = .connecting
 
-        let config = server.config
+        // Кандидаты: сначала тот порт, что уже работал у этого человека, потом
+        // из конфига, потом запасные. Раньше здесь была ровно одна попытка на
+        // одном порту — и там, где 51820 режут, приложение честно показывало
+        // ошибку вместо того, чтобы попробовать 443.
+        let candidates = Candidates.order(
+            config: server.config,
+            remembered: rememberedPort(for: server.id),
+            alternatives: server.alt_ports
+        )
+        let plan = candidates.isEmpty ? [Candidate(host: server.host, port: 0)] : candidates
+
+        for (index, candidate) in plan.enumerated() {
+            guard phase == .connecting else { return }
+
+            let config = candidate.port > 0
+                ? Candidates.with(config: server.config, port: candidate.port)
+                : server.config
+
+            if await bringUp(config: config) == false {
+                // Не поднялся сам интерфейс — следующий кандидат тут не
+                // поможет: дело не в порте. Выходим с честной ошибкой.
+                phase = .off
+                errorMessage = lastBringUpError ?? t.errTunnelFailed
+                return
+            }
+
+            // Поднятый интерфейс — ещё не связь. Ждём рукопожатия: без него
+            // весь трафик уходит в туннель, который никуда не ведёт.
+            //
+            // Бюджет короткий и тем короче, чем дальше кандидат: на первом
+            // ждём как раньше, на остальных столько, сколько нужно живому
+            // рукопожатию, а не мёртвому порту.
+            let budget = index == 0 ? 20 : 8
+            let handshake = await waitForHandshake(seconds: budget)
+            guard phase == .connecting else { return }
+
+            if handshake {
+                if candidate.port > 0 { rememberPort(candidate.port, for: server.id) }
+                phase = .on
+                startTimer(from: Date())
+                startWatchdog()
+                startHeartbeat()
+                Notifier.shared.notify(
+                    .connected,
+                    title: t.notifConnectedTitle,
+                    body: connectionSummary(server)
+                )
+                return
+            }
+
+            // Этот кандидат молчит — снимаем туннель и пробуем следующего.
+            // Человеку ничего не показываем: ошибка уместна, только когда
+            // кончились все варианты.
+            await sendDown()
+        }
+
+        guard phase == .connecting else { return }
+        phase = .off
+        errorMessage = t.errNoHandshake
+    }
+
+    /// Поднимает туннель на этом конфиге. `false` — интерфейс не встал.
+    private func bringUp(config: String) async -> Bool {
         let dns = useVPNDNS
         let kill = killSwitch
         let bypass = splitTunnel ? tunnelFiles.activeNetworks() : []
@@ -510,33 +598,27 @@ final class AppState: ObservableObject {
         }.value
 
         if case .failure(let error) = outcome {
-            phase = .off
-            errorMessage = (error as? HelperClient.Unavailable) != nil
+            lastBringUpError = (error as? HelperClient.Unavailable) != nil
                 ? error.localizedDescription
-                : t.errTunnelFailed
-            return
+                : nil
+            return false
         }
+        lastBringUpError = nil
+        return true
+    }
 
-        // Поднятый интерфейс — ещё не связь. Ждём рукопожатия: без него весь
-        // трафик уходит в туннель, который никуда не ведёт.
-        let handshake = await waitForHandshake(seconds: 20)
-        guard phase == .connecting else { return }
+    /// Порт, который сработал у этого узла в прошлый раз.
+    ///
+    /// В настройках, а не в памяти процесса: человек в сети, где проходит
+    /// только 443, не должен каждый запуск приложения заново терять полминуты
+    /// на канонический порт.
+    private func rememberedPort(for serverID: Int) -> Int? {
+        let value = UserDefaults.standard.integer(forKey: "prosto.port.\(serverID)")
+        return value > 0 ? value : nil
+    }
 
-        if handshake {
-            phase = .on
-            startTimer(from: Date())
-            startWatchdog()
-            startHeartbeat()
-            Notifier.shared.notify(
-                .connected,
-                title: t.notifConnectedTitle,
-                body: connectionSummary(server)
-            )
-        } else {
-            await sendDown()
-            phase = .off
-            errorMessage = t.errNoHandshake
-        }
+    private func rememberPort(_ port: Int, for serverID: Int) {
+        UserDefaults.standard.set(port, forKey: "prosto.port.\(serverID)")
     }
 
     /// «Нидерланды · Амстердам» — то, что человек выбирал на экране.
@@ -595,10 +677,22 @@ final class AppState: ObservableObject {
                 guard let status else { continue }
                 if !status.up {
                     self.stopTimer()
-                    self.phase = .off
-                    self.errorMessage = self.t.errTunnelDropped
                     self.heartbeat?.cancel()
                     self.heartbeat = nil
+
+                    // Обрыв — не повод сдаваться молча. Раньше здесь всё
+                    // заканчивалось надписью «соединение прервалось», и человек
+                    // должен был сам нажать «подключить»: приложение видело
+                    // обрыв и ничего с ним не делало.
+                    //
+                    // Теперь пробуем вернуться сами, и ошибку показываем только
+                    // когда не вышло. Пауза растёт: сеть после метро или
+                    // пробуждения возвращается не мгновенно, а долбить её
+                    // каждую секунду — это разряженная батарея и ничего больше.
+                    self.phase = .off
+                    if await self.reconnectAfterDrop() { return }
+
+                    self.errorMessage = self.t.errTunnelDropped
                     // Окно может быть закрыто: единственный способ сказать
                     // человеку, что трафик снова идёт мимо VPN.
                     Notifier.shared.notify(
@@ -610,6 +704,31 @@ final class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Сколько раз пробуем вернуться после обрыва и с какими паузами.
+    ///
+    /// Паузы растут: сеть после метро, лифта или пробуждения возвращается не
+    /// мгновенно. Пять попыток за минуту с небольшим — это дольше, чем длится
+    /// обычный провал связи, и заметно меньше, чем терпение человека, который
+    /// смотрит на «отключено».
+    private static let reconnectDelays: [UInt64] = [1, 3, 8, 15, 30]
+
+    /// Пробует вернуть туннель после обрыва. `true` — получилось.
+    ///
+    /// Человеку в это время ничего не показывается: обрыв, который починился
+    /// сам за несколько секунд, — не событие, а сообщение о нём только пугает.
+    private func reconnectAfterDrop() async -> Bool {
+        guard autoReconnect else { return false }
+        for delay in Self.reconnectDelays {
+            try? await Task.sleep(nanoseconds: delay * 1_000_000_000)
+            // Человек мог сам нажать «подключить» или выйти — тогда наша
+            // попытка только помешает.
+            guard phase == .off, !Task.isCancelled else { return true }
+            await connect()
+            if phase == .on { return true }
+        }
+        return false
     }
 
     /// Отметка в панели, пока подключены: из неё видно, кто сейчас онлайн.

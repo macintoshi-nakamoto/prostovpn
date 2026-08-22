@@ -513,6 +513,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         private set
 
     fun selectServer(index: Int) {
+        val wasConnected = phase == Phase.ON || phase == Phase.CONNECTING
         // Переключение страны меняет и конфиг, который уйдёт в туннель.
         panelServers.getOrNull(index)?.let {
             server = it
@@ -520,6 +521,30 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
         selectedServerIndex = index
         prefs.edit().putInt("selectedServer", index).apply()
+
+        // Выбор страны при живом туннеле обязан переподключить.
+        //
+        // Раньше выбор менял только запись в настройках: надзор за туннелем
+        // держит СВОЙ конфиг и продолжал поднимать прежнюю страну. Человек
+        // выбирал Германию, экран показывал Германию, а трафик шёл через
+        // Нидерланды — и заметить это со стороны приложения было нечем.
+        if (wasConnected) {
+            viewModelScope.launch {
+                disconnect()
+                // Ждём, пока интерфейс действительно снят: поднять второй
+                // поверх первого нельзя, VpnService держит ровно один.
+                awaitOff()
+                if (phase == Phase.OFF) toggleConnection()
+            }
+        }
+    }
+
+    /** Ждёт, пока туннель реально снят. Дольше нескольких секунд не держим. */
+    private suspend fun awaitOff() {
+        repeat(40) {
+            if (phase == Phase.OFF) return
+            kotlinx.coroutines.delay(150)
+        }
     }
 
     fun displayServers(): List<DisplayServer> {

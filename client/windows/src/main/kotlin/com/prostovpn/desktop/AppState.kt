@@ -31,6 +31,18 @@ data class ServerInfo(
     val cityEn: String? = null,
     val countryCode: String? = null,
     val config: String? = null,
+    /**
+     * Запасные порты того же узла.
+     *
+     * Канонический 51820 у заметной части операторов просто не проходит: его
+     * режут как известный порт WireGuard, и человек видит вечное
+     * «подключение» на исправном приложении и исправном сервере. Панель
+     * присылает список того, что узел реально слушает.
+     *
+     * Поле давно есть в ответе панели, но этот клиент его не читал вовсе —
+     * то есть перебирать ему было нечего.
+     */
+    val altPorts: List<Int> = emptyList(),
 ) {
     fun countryFor(lang: String): String? =
         if (lang == "en") countryEn ?: country else country ?: countryEn
@@ -181,6 +193,22 @@ class AppState(private val scope: CoroutineScope) {
         private set
     var autoConnect by mutableStateOf(prefs.getBoolean("autoConnect", false))
         private set
+
+    /**
+     * Возвращаться самому после обрыва.
+     *
+     * По умолчанию включено, и это не произвол: обрыв туннеля — почти всегда
+     * моргнувшая сеть, а не решение человека остаться без VPN. Пока этого не
+     * было, каждый выход ноутбука из сна заканчивался незащищённым трафиком до
+     * тех пор, пока человек сам не заметит и не нажмёт кнопку.
+     */
+    var autoReconnect by mutableStateOf(prefs.getBoolean("autoReconnect", true))
+        private set
+
+    fun changeAutoReconnect(enabled: Boolean) {
+        autoReconnect = enabled
+        prefs.putBoolean("autoReconnect", enabled)
+    }
     var logging by mutableStateOf(prefs.getBoolean("logging", true))
         private set
 
@@ -930,6 +958,20 @@ class AppState(private val scope: CoroutineScope) {
         }
     }
 
+    /**
+     * Порт, который сработал у выбранного узла в прошлый раз.
+     *
+     * В настройках, а не в памяти: человек в сети, где проходит только 443, не
+     * должен каждый запуск приложения заново терять полминуты на канонический
+     * порт. Ключ по стране узла — идентификатора панель не присылает.
+     */
+    private fun rememberedPort(): Int =
+        prefs.getInt("port." + (server?.country ?: "default"), 0)
+
+    private fun rememberPort(port: Int) {
+        prefs.putInt("port." + (server?.country ?: "default"), port)
+    }
+
     private fun startConnect() {
         val config = server?.config
         connectionError = null
@@ -948,23 +990,64 @@ class AppState(private val scope: CoroutineScope) {
 
         phase = Phase.CONNECTING
         connectJob = scope.launch {
-            val prepared = withContext(Dispatchers.Default) {
-                // Приводим к тому, что принимает туннель Windows: мобильные
-                // ключи он отвергает целиком, без Address не будет маршрутов.
-                WgConfig.sanitize(buildConfigForConnect(config))
-            }
-            if (prepared == null) {
-                phase = Phase.OFF
-                connectionError = s.errBadConfig
-                return@launch
-            }
-            val result = withContext(Dispatchers.IO) { tunnel.connect(prepared) }
-            when (result) {
-                is WindowsTunnel.Result.Success -> {
+            // Кандидаты: сначала порт, который уже работал у этого человека,
+            // потом из конфига, потом запасные. Раньше здесь была ровно одна
+            // попытка на одном порту — и там, где 51820 режут, приложение
+            // честно показывало ошибку, ни разу не попробовав 443.
+            val candidates = Endpoints.order(
+                configPort = Endpoints.portOf(config),
+                remembered = rememberedPort(),
+                alternatives = server?.altPorts.orEmpty(),
+            ).ifEmpty { listOf(0) }
+
+            var lastFailure: WindowsTunnel.Result.Failure? = null
+
+            for ((index, port) in candidates.withIndex()) {
+                if (phase != Phase.CONNECTING) return@launch
+
+                val forPort = if (port > 0) Endpoints.withPort(config, port) else config
+                val prepared = withContext(Dispatchers.Default) {
+                    // Приводим к тому, что принимает туннель Windows: мобильные
+                    // ключи он отвергает целиком, без Address не будет маршрутов.
+                    WgConfig.sanitize(buildConfigForConnect(forPort))
+                }
+                if (prepared == null) {
+                    phase = Phase.OFF
+                    connectionError = s.errBadConfig
+                    return@launch
+                }
+
+                val result = withContext(Dispatchers.IO) { tunnel.connect(prepared) }
+                if (result is WindowsTunnel.Result.Success) {
+                    if (port > 0) rememberPort(port)
                     phase = Phase.ON
                     startTimer()
+                    return@launch
                 }
-                is WindowsTunnel.Result.Failure -> {
+
+                val failure = result as WindowsTunnel.Result.Failure
+                lastFailure = failure
+                // Дальше по списку идти есть смысл только когда молчит порт.
+                // Отказ в правах, отсутствие движка или занятый адрес на
+                // другом порту повторятся слово в слово — незачем тратить
+                // минуты человека на заведомо тот же ответ.
+                if (failure.reason != WindowsTunnel.Reason.NoHandshake) break
+                if (index < candidates.lastIndex) {
+                    // Снимаем поднятый интерфейс перед следующей попыткой:
+                    // иначе второй туннель встанет поверх первого.
+                    withContext(Dispatchers.IO) { runCatching { tunnel.disconnect() } }
+                }
+            }
+
+            if (phase != Phase.CONNECTING) return@launch
+            val result = lastFailure
+            if (result == null) {
+                phase = Phase.OFF
+                connectionError = s.errNoHandshake
+                return@launch
+            }
+            run {
+                run {
                     phase = Phase.OFF
                     connectionError = when (result.reason) {
                         WindowsTunnel.Reason.NoBackend -> s.errNoBackend
@@ -1068,14 +1151,49 @@ class AppState(private val scope: CoroutineScope) {
                         // как экран отрапортовал «отключено». DISCONNECTING
                         // честно держит кнопку занятой, ошибку показываем
                         // до него — причина обрыва важнее, чем ход уборки.
-                        connectionError = s.errTunnelDropped
                         timerJob = null
                         disconnect()
+                        // Обрыв — не повод сдаваться молча. Раньше здесь всё
+                        // заканчивалось надписью «соединение прервалось», и
+                        // человек должен был сам нажать «Подключить»:
+                        // приложение видело обрыв и ничего с ним не делало.
+                        //
+                        // Ошибку показываем, только когда вернуться не вышло:
+                        // моргнувшая сеть, которая починилась за несколько
+                        // секунд, — не событие, а сообщение о ней только пугает.
+                        if (!reconnectAfterDrop()) {
+                            connectionError = s.errTunnelDropped
+                        }
                         return@launch
                     }
                 }
             }
         }
+    }
+
+    /**
+     * Пробует вернуть туннель после обрыва. `true` — получилось.
+     *
+     * Паузы растут: сеть после сна ноутбука, смены Wi-Fi или провала связи
+     * возвращается не мгновенно, а долбить её каждую секунду — это разряженная
+     * батарея и ничего больше. Пять попыток за минуту с небольшим: дольше, чем
+     * длится обычный провал, и заметно короче терпения человека, смотрящего на
+     * «отключено».
+     */
+    private suspend fun reconnectAfterDrop(): Boolean {
+        if (!autoReconnect) return false
+        for (delaySeconds in listOf(1L, 3L, 8L, 15L, 30L)) {
+            delay(delaySeconds * 1000)
+            // Человек мог сам нажать «Подключить» или выйти — тогда наша
+            // попытка только помешает.
+            if (phase != Phase.OFF) return true
+            startConnect()
+            // Ждём, пока попытка договорит: startConnect работает в своей
+            // корутине, и без ожидания мы бы тут же запустили следующую.
+            connectJob?.join()
+            if (phase == Phase.ON) return true
+        }
+        return false
     }
 
     fun disconnect() {

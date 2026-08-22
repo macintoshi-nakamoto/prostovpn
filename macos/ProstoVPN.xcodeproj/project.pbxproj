@@ -26,6 +26,7 @@
 		B00000000000000000000011 /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011 /* HelperProtocol.swift */; };
 		B00000000000000000000012 /* WGQuick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* WGQuick.swift */; };
 		B00000000000000000000013 /* BypassRoutes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000016 /* BypassRoutes.swift */; };
+		B00000000000000000000090 /* Candidates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000090 /* Candidates.swift */; };
 		B00000000000000000000014 /* SplitTunnelList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000017 /* SplitTunnelList.swift */; };
 		B0000000000000000000001B /* TunnelFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001B /* TunnelFiles.swift */; };
 		B0000000000000000000001C /* SplitTunnelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001C /* SplitTunnelView.swift */; };
@@ -78,6 +79,7 @@
 		A00000000000000000000011 /* HelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperProtocol.swift; sourceTree = "<group>"; };
 		A00000000000000000000012 /* WGQuick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WGQuick.swift; sourceTree = "<group>"; };
 		A00000000000000000000016 /* BypassRoutes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BypassRoutes.swift; sourceTree = "<group>"; };
+		A00000000000000000000090 /* Candidates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Candidates.swift; sourceTree = "<group>"; };
 		A00000000000000000000017 /* SplitTunnelList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitTunnelList.swift; sourceTree = "<group>"; };
 		A00000000000000000000018 /* ru-split-tunnel.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ru-split-tunnel.json"; sourceTree = "<group>"; };
 		A00000000000000000000019 /* RouteSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteSocket.swift; sourceTree = "<group>"; };
@@ -213,6 +215,7 @@
 				A00000000000000000000011 /* HelperProtocol.swift */,
 				A00000000000000000000012 /* WGQuick.swift */,
 				A00000000000000000000016 /* BypassRoutes.swift */,
+				A00000000000000000000090 /* Candidates.swift */,
 				A00000000000000000000017 /* SplitTunnelList.swift */,
 			);
 			path = Shared;
@@ -388,6 +391,7 @@
 				B00000000000000000000011 /* HelperProtocol.swift in Sources */,
 				B00000000000000000000012 /* WGQuick.swift in Sources */,
 				B00000000000000000000013 /* BypassRoutes.swift in Sources */,
+				B00000000000000000000090 /* Candidates.swift in Sources */,
 				B00000000000000000000014 /* SplitTunnelList.swift in Sources */,
 				B0000000000000000000001B /* TunnelFiles.swift in Sources */,
 				B0000000000000000000001C /* SplitTunnelView.swift in Sources */,

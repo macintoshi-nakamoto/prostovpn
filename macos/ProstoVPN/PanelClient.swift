@@ -30,6 +30,18 @@ struct PanelServer: Codable, Identifiable, Equatable {
     /// страны, ни города, — по нему спрашивается геолокация.
     var host: String = ""
 
+    /// Запасные порты того же узла.
+    ///
+    /// Канонический 51820 у заметной части операторов просто не проходит: его
+    /// режут как известный порт WireGuard, и человек видит вечное
+    /// «подключение» на исправном приложении и исправном сервере. Панель
+    /// присылает список того, что узел реально слушает; гадать клиент не
+    /// должен — иначе будет упорно стучаться туда, где никого нет.
+    ///
+    /// Поле давно есть в ответе панели, но этот клиент его не читал вовсе —
+    /// то есть перебирать ему было нечего.
+    var alt_ports: [Int] = []
+
     init(
         id: Int,
         name: String,
@@ -39,7 +51,8 @@ struct PanelServer: Codable, Identifiable, Equatable {
         city_en: String? = nil,
         country_code: String? = nil,
         config: String,
-        host: String = ""
+        host: String = "",
+        alt_ports: [Int] = []
     ) {
         self.id = id
         self.name = name
@@ -50,6 +63,7 @@ struct PanelServer: Codable, Identifiable, Equatable {
         self.country_code = country_code
         self.config = config
         self.host = host.isEmpty ? (AccessKeyParser.endpointHost(in: config) ?? "") : host
+        self.alt_ports = alt_ports.filter { $0 > 0 && $0 < 65536 }
     }
 
     init(from decoder: Decoder) throws {
@@ -64,7 +78,8 @@ struct PanelServer: Codable, Identifiable, Equatable {
             city_en: try container.decodeIfPresent(String.self, forKey: .city_en),
             country_code: try container.decodeIfPresent(String.self, forKey: .country_code),
             config: config,
-            host: try container.decodeIfPresent(String.self, forKey: .host) ?? ""
+            host: try container.decodeIfPresent(String.self, forKey: .host) ?? "",
+            alt_ports: try container.decodeIfPresent([Int].self, forKey: .alt_ports) ?? []
         )
     }
 

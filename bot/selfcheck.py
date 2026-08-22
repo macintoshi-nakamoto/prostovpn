@@ -17,7 +17,7 @@ from config.settings import SUPPORT_TOPICS, config, method_by_code
 from database import db, models
 from keyboards import menus
 from keyboards.ui import DANGER, DEFAULT, PRIMARY, SUCCESS
-from utils import assets, panel, texts
+from utils import assets, panel, screens, texts
 from utils.security import login_error, password_error
 
 
@@ -166,7 +166,13 @@ def check_keyboards() -> None:
 
                 assert style in ALLOWED_STYLES, f"{name}: стиль {style}"
                 assert payload.get("icon_custom_emoji_id"), f"{name}: нет иконки"
-                assert payload.get("callback_data") or payload.get("url"), name
+                # Кнопка копирования не ведёт никуда: она кладёт текст в
+                # буфер — у неё нет ни callback_data, ни url, и это норма.
+                assert (
+                    payload.get("callback_data")
+                    or payload.get("url")
+                    or payload.get("copy_text")
+                ), name
 
                 if style != DEFAULT:
                     colored += 1

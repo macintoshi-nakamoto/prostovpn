@@ -12,7 +12,7 @@ import (
 	"net"
 	"sort"
 
-	"github.com/amnezia-vpn/amneziawg-go/tun"
+	"github.com/amnezia-vpn/amneziawg-go/v3/tun"
 	"golang.org/x/sys/windows"
 
 	"github.com/prostovpn/prostovpn-tunnel/internal/conf"

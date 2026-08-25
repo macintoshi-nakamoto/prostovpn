@@ -6,11 +6,18 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$HERE/src"
 OUT="$HERE/bin"
 REPO="https://github.com/amnezia-vpn/amneziawg-go.git"
+REF="v3.1.20260814"
 
 if [ ! -d "$SRC" ]; then
     echo "→ исходники движка: клонирую $REPO"
-    git clone --depth 1 "$REPO" "$SRC"
+    git clone "$REPO" "$SRC"
 fi
+
+cd "$SRC"
+git fetch --tags --quiet origin
+git checkout --quiet "$REF"
+echo "→ движок на $REF ($(git rev-parse --short HEAD))"
+cd "$HERE"
 
 mkdir -p "$OUT"
 cd "$SRC"

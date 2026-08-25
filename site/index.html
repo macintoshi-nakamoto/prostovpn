@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prosto — доступ к интернету без ограничений</title>
+    <meta
+      name="description"
+      content="Логин и пароль вместо настроек. Оплатили — получили две строки, ввели в приложении, работает."
+    />
+    <meta name="theme-color" content="#0a0908" />
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="assets/css/site.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="wrap top-in">
+        <a class="brand" href="/"><span class="brand-mark"></span>Prosto</a>
+        <button class="nav-toggle" type="button" aria-expanded="false">Меню</button>
+        <nav class="nav">
+          <a href="#tarify">Тарифы</a>
+          <a href="#kak">Как это работает</a>
+          <a href="download.html">Скачать</a>
+          <a href="account.html">Личный кабинет</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <!-- Первый экран: одна мысль и одна кнопка. -->
+      <section class="wrap screen">
+        <p class="eyebrow" data-reveal>Prosto</p>
+        <h1 data-split>Интернет, который просто работает</h1>
+        <p class="lead" data-reveal style="--delay: 240ms">
+          Никаких настроек, файлов и ключей. Вы получаете
+          <span class="serif accent">логин и пароль</span> — и всё.
+        </p>
+        <div data-reveal style="--delay: 380ms; margin-top: 44px">
+          <a class="btn btn-lg" href="#tarify">Выбрать тариф</a>
+        </div>
+      </section>
+
+      <div class="marquee" aria-hidden="true">
+        <div class="marquee-track">
+          <span class="marquee-item">Нидерланды</span>
+          <span class="marquee-item">Германия</span>
+          <span class="marquee-item">Финляндия</span>
+          <span class="marquee-item">Нидерланды</span>
+          <span class="marquee-item">Германия</span>
+          <span class="marquee-item">Финляндия</span>
+          <span class="marquee-item">Нидерланды</span>
+          <span class="marquee-item">Германия</span>
+          <span class="marquee-item">Финляндия</span>
+          <span class="marquee-item">Нидерланды</span>
+          <span class="marquee-item">Германия</span>
+          <span class="marquee-item">Финляндия</span>
+        </div>
+      </div>
+
+      <!-- Вторая мысль: чем это отличается. -->
+      <section class="wrap screen">
+        <h2 data-split>Две строки вместо инструкции на страницу</h2>
+        <p class="lead" data-reveal style="--delay: 200ms">
+          Обычно всё начинается с файла конфигурации, который надо куда-то импортировать.
+          Здесь этого шага нет. Приложение спрашивает логин и пароль — как почта.
+        </p>
+      </section>
+
+      <!-- Третья мысль: цена. Крупно и без вариантов «от». -->
+      <section class="wrap screen" id="tarify">
+        <p class="eyebrow" data-reveal>Тарифы</p>
+        <h2 data-split>Одна цена, всё включено</h2>
+
+        <div id="plans" class="plans" style="margin-top: 40px" data-reveal>
+          <p class="muted" style="padding: 28px 0">Загружаем тарифы…</p>
+        </div>
+
+        <p class="foot-note" data-reveal>
+          Оплата разовая, подписка не продлевается сама и деньги повторно не списываются.
+          Когда срок закончится, вы решите сами.
+        </p>
+      </section>
+
+      <!-- Четвёртая мысль: как это происходит. -->
+      <section class="wrap screen" id="kak">
+        <h2 data-split>Три шага, и вы в сети</h2>
+        <div class="steps" style="margin-top: 48px">
+          <div class="step" data-reveal>
+            <h3>Оплатить</h3>
+            <p>Выбираете срок, вводите почту, платите. Карта или криптовалюта.</p>
+          </div>
+          <div class="step" data-reveal style="--delay: 120ms">
+            <h3>Получить доступ</h3>
+            <p>Логин и пароль появятся на экране сразу и придут на почту.</p>
+          </div>
+          <div class="step" data-reveal style="--delay: 240ms">
+            <h3>Войти</h3>
+            <p>Скачиваете приложение, вводите две строки, нажимаете «Подключиться».</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Пятая мысль: что мы не делаем. -->
+      <section class="wrap screen">
+        <h2 data-split>Мы не ведём логи вашего трафика</h2>
+        <div class="prose narrow" data-reveal style="--delay: 200ms; margin-top: 24px">
+          <p>
+            Сервис знает три вещи: сколько трафика прошло через ваш доступ, когда вы
+            подключались в последний раз и когда заканчивается подписка. Этого достаточно,
+            чтобы поддерживать серверы и считать лимиты, и недостаточно, чтобы составить
+            картину того, чем вы занимаетесь.
+          </p>
+          <p>
+            Список сайтов, содержимое соединений и история посещений не собираются и не
+            хранятся — их просто негде взять.
+          </p>
+        </div>
+        <div data-reveal style="--delay: 320ms; margin-top: 40px">
+          <a class="link-arrow" href="privacy.html">Политика конфиденциальности <span>→</span></a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap">
+        <div class="foot-in">
+          <div>
+            <a class="brand" href="/"><span class="brand-mark"></span>Prosto</a>
+            <p class="foot-note" style="margin-top: 14px">
+              Доступ к интернету без ограничений. Работает на Windows, Android, iPhone и Mac.
+            </p>
+          </div>
+          <div class="foot-links">
+            <a href="download.html">Скачать</a>
+            <a href="account.html">Личный кабинет</a>
+            <a href="faq.html">Частые вопросы</a>
+            <a href="offer.html">Оферта</a>
+            <a href="privacy.html">Конфиденциальность</a>
+            <a href="contacts.html">Контакты</a>
+          </div>
+        </div>
+        <p class="foot-note">© <span data-year>2026</span> Prosto</p>
+      </div>
+    </footer>
+
+    <script type="module" src="assets/js/plans.js"></script>
+    <script type="module" src="assets/js/site.js"></script>
+  </body>
+</html>

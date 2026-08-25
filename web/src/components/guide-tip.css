@@ -1,0 +1,150 @@
+.gd-tip {
+  position: fixed;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  background: var(--invert-bg);
+  color: var(--invert-fg);
+  box-shadow: var(--shadow-card);
+}
+
+@media (min-width: 721px) {
+  .gd-tip {
+    right: 24px;
+    bottom: 24px;
+    width: 340px;
+    flex-wrap: wrap;
+    padding: 18px 20px;
+    border-radius: 18px;
+    animation: gd-tip-rise 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .gd-tip-go {
+    width: 100%;
+    margin-top: 4px;
+  }
+}
+
+@keyframes gd-tip-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 720px) {
+  .gd-tip {
+    left: 12px;
+    right: 12px;
+    top: calc(env(safe-area-inset-top, 0px) + var(--gd-tip-header, 0px) + 10px);
+    flex-wrap: wrap;
+    padding: 14px 16px;
+    border-radius: 22px;
+    animation: gd-tip-drop 0.34s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  .gd-tip-go {
+    width: 100%;
+    margin-top: 2px;
+  }
+}
+
+@keyframes gd-tip-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gd-tip {
+    animation: none;
+  }
+}
+
+.gd-tip-mark {
+  display: block;
+  flex: 0 0 auto;
+  width: 44px;
+
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.5));
+}
+
+.gd-tip-mark img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.gd-tip-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+
+  min-width: 0;
+  flex: 1 1 160px;
+}
+
+.gd-tip-title {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.gd-tip-text {
+  font-size: 13px;
+  line-height: 1.4;
+  opacity: 0.72;
+}
+
+.gd-tip-go {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s ease;
+}
+
+.gd-tip-go:hover {
+  background: var(--accent-hover);
+}
+
+.gd-tip-x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--invert-fg);
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.16s ease;
+}
+
+.gd-tip-x:hover {
+  opacity: 1;
+}

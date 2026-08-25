@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light dark" />
+<meta name="supported-color-schemes" content="light dark" />
+<title>Подписка закончится через 3 дня — Prosto VPN</title>
+<!--[if mso]>
+<xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml>
+<![endif]-->
+<style>
+  @media only screen and (max-width: 620px) {
+    .px { padding-left: 20px !important; padding-right: 20px !important; }
+    .h1 { font-size: 27px !important; line-height: 33px !important; }
+
+    /*
+      Кнопки в столбик. В ряд их держит таблица с процентными ширинами: на
+      узком экране «Личный кабинет» и «Поддержка» налезают друг на друга и
+      вылезают за край. Ширину задаём через display: block у ячеек —
+      единственный приём, который понимают и Gmail, и почта на iOS.
+    */
+    .btns td { display: block !important; width: 100% !important; }
+    .btns .gap { height: 12px !important; width: auto !important; font-size: 12px !important; }
+
+    /*
+      Колонки «повод — описание» тоже в столбик: три штуки по 120 пикселей
+      требуют 360 плюс отступы, а экран бывает 320.
+    */
+    .stack td {
+      display: block !important;
+      width: 100% !important;
+      padding-left: 20px !important;
+      padding-right: 20px !important;
+    }
+    .stack .icon { padding-bottom: 4px !important; text-align: center !important; }
+
+    /* Пара «название — значение» остаётся в строку, но значению нужен воздух. */
+    .row .val { padding-left: 12px !important; }
+  }
+</style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #14181D;">
+<span style="display: none !important; visibility: hidden; opacity: 0; height: 0; width: 0; overflow: hidden; mso-hide: all; font-size: 1px; line-height: 1px; color: #14181D;">Подписка заканчивается {{ expires_short }} — продлите, чтобы доступ не отключился.</span>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color: #14181D;">
+  <tr>
+    <td align="center" style="padding: 40px 12px 44px 12px;">
+
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; max-width: 600px; background-color: #FFFFFF; border-radius: 20px; overflow: hidden;">
+
+        <!-- Шапка -->
+        <tr>
+          <td bgcolor="#FA4C16" background="{{ img }}/pattern-pixels.png" style="background-color: #FA4C16; background-image: url('{{ img }}/pattern-pixels.png'); background-repeat: repeat; padding: 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
+              <tr>
+                <td class="px" style="padding: 34px 44px 26px 44px;">
+                  <img src="{{ img }}/logo-white.png" width="150" alt="PROSTO VPN" style="display: block; width: 150px; max-width: 150px; height: auto; border: 0;" />
+                </td>
+              </tr>
+              <tr>
+                <td class="px h1" style="padding: 0 44px 12px 44px; font-family: Arial, Helvetica, sans-serif; font-size: 36px; line-height: 42px; mso-line-height-rule: exactly; font-weight: bold; color: #FFFFFF;">
+                  {{ days_left_title }}
+                </td>
+              </tr>
+              <tr>
+                <td class="px" style="padding: 0 44px 36px 44px; font-family: Arial, Helvetica, sans-serif; font-size: 17px; line-height: 25px; mso-line-height-rule: exactly; color: #FFE8DE;">
+                  Подписка заканчивается <strong style="color: #FFFFFF;">{{ expires }}</strong>.
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Часы + срок -->
+        <tr>
+          <td class="px" style="padding: 34px 44px 0 44px;">
+            <table role="presentation" class="stack" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%; background-color: #F6F7F9; border-radius: 16px;">
+              <tr>
+                <td class="icon" width="128" align="center" valign="middle" style="width: 128px; padding: 20px 0 20px 12px;">
+                  <img src="{{ img }}/clock-3d.png" width="92" alt="Часы" style="display: block; width: 92px; height: auto; border: 0;" />
+                </td>
+                <td valign="middle" style="padding: 22px 28px 22px 4px; font-family: Arial, Helvetica, sans-serif; font-size: 17px; line-height: 25px; mso-line-height-rule: exactly; color: #0A0A0A;">
+                  <strong>Доступ отключится {{ expires_at }}</strong><br />
+                  <span style="color: #6B717A; font-size: 15px;">Продлите заранее — подключение не прервётся, ключ и устройства останутся те же.</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Данные подписки -->
+        <tr>
+          <td class="px" style="padding: 14px 44px 0 44px;">
+            <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
+              <tr>
+                <td style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; color: #3C4249;">Логин</td>
+                <td align="right" style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; font-weight: bold; color: #0A0A0A;">{{ login }}</td>
+              </tr>
+              <tr><td colspan="2" style="border-top: 1px solid #E4E7EB; line-height: 1px; font-size: 1px;">&nbsp;</td></tr>
+              <tr>
+                <td style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; color: #3C4249;">Тариф</td>
+                <td align="right" style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; font-weight: bold; color: #0A0A0A;">{{ period }}</td>
+              </tr>
+              <tr><td colspan="2" style="border-top: 1px solid #E4E7EB; line-height: 1px; font-size: 1px;">&nbsp;</td></tr>
+              <tr>
+                <td style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; color: #3C4249;">Продление</td>
+                <td align="right" style="padding: 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 24px; font-weight: bold; color: #FA4C16; white-space: nowrap;">{{ amount }}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Кнопки -->
+        <tr>
+          <td class="px" style="padding: 28px 44px 40px 44px;">
+            <table role="presentation" class="btns" cellpadding="0" cellspacing="0" border="0" width="100%" style="width: 100%;">
+              <tr>
+                <td width="58%" bgcolor="#FA4C16" style="width: 58%; background-color: #FA4C16; border-radius: 12px;">
+                  <a href="{{ account_url }}" style="display: block; text-align: center; padding: 17px 10px; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 20px; font-weight: bold; color: #FFFFFF; text-decoration: none;">Продлить подписку</a>
+                </td>
+                <td class="gap" width="12" style="width: 12px; font-size: 1px; line-height: 1px;">&nbsp;</td>
+                <td bgcolor="#14181D" style="background-color: #14181D; border-radius: 12px;">
+                  <a href="{{ support_url }}" style="display: block; text-align: center; padding: 17px 10px; font-family: Arial, Helvetica, sans-serif; font-size: 16px; line-height: 20px; font-weight: bold; color: #FFFFFF; text-decoration: none;">
+                    <img src="{{ img }}/tg-icon.png" width="20" alt="" style="display: inline-block; width: 20px; height: auto; border: 0; vertical-align: -4px;" />&nbsp;&nbsp;Поддержка
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+      </table>
+
+    </td>
+  </tr>
+</table>
+</body>
+</html>

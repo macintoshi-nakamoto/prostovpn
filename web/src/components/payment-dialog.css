@@ -1,0 +1,283 @@
+.pay-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 12, 0.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 90;
+  animation: pay-fade 0.16s ease-out;
+}
+@keyframes pay-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.pay {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface-2);
+  border-radius: 26px;
+  padding: 28px 26px 22px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  animation: pay-rise 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+}
+@keyframes pay-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.97);
+  }
+}
+
+.pay-close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-dim);
+  padding: 6px;
+  border-radius: 10px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+.pay-close:hover {
+  color: var(--ink);
+  background: var(--bg-field);
+}
+
+.pay-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pay-plan {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.pay-sum {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.pay-term {
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.pay-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pay-method {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  text-align: left;
+  border: 1.5px solid var(--border);
+
+  background: transparent;
+  border-radius: 16px;
+  padding: 14px 16px;
+
+  min-height: 72px;
+  font: inherit;
+  color: var(--ink);
+
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.14s ease, border-color 0.14s ease, background 0.14s ease,
+    color 0.14s ease;
+}
+
+.pay-method:hover:not(:disabled):not([aria-busy="true"]) {
+  transform: translate3d(0, -1px, 0);
+  background: var(--bg-field);
+  border-color: var(--text-faint);
+  color: var(--ink);
+}
+
+.pay-method:active:not(:disabled):not([aria-busy="true"]) {
+  transform: none;
+  transition-duration: 0.06s;
+}
+
+.pay-method:focus-visible,
+.pay-close:focus-visible,
+.pay-inv-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pay-method:disabled,
+.pay-method[aria-busy="true"] {
+  cursor: default;
+  border-color: var(--line);
+
+  color: var(--text-muted);
+}
+.pay-method:disabled .pay-icon,
+.pay-method[aria-busy="true"] .pay-icon {
+  opacity: 0.5;
+}
+
+.pay-icon {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pay-icon img,
+.pay-icon svg {
+  display: block;
+  object-fit: contain;
+}
+.pay-icon-sbp img {
+  width: 34px;
+  height: 34px;
+}
+.pay-icon-crypto img {
+  width: 30px;
+  height: 30px;
+}
+.pay-icon-tg svg {
+  width: 30px;
+  height: 30px;
+}
+
+.pay-method-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.pay-method-name {
+  font-size: 16px;
+  font-weight: 600;
+}
+.pay-method-sub {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+.pay-method-go {
+  flex: none;
+  font-size: 18px;
+  opacity: 0.9;
+}
+
+.pay-note {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+  .pay {
+    padding: 24px 18px 18px;
+  }
+  .pay-sum {
+    font-size: 30px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pay-overlay,
+  .pay {
+    animation: none;
+  }
+  .pay-method:hover:not(:disabled):not([aria-busy="true"]) {
+    transform: none;
+  }
+}
+
+.pay-invoice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  padding: 6px 0 2px;
+}
+.pay-inv-pulse {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin: 10px 0 2px;
+  animation: pay-pulse 1.3s ease-in-out infinite;
+}
+@keyframes pay-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.5);
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pay-inv-pulse {
+    animation: none;
+  }
+}
+.pay-inv-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+.pay-inv-mark.ok {
+  background: var(--accent-tint);
+  color: var(--accent-dark);
+}
+.pay-inv-mark.bad {
+  background: var(--bg-field);
+  color: var(--text-muted);
+}
+.pay-inv-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+.pay-inv-sub {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 330px;
+}
+.pay-inv-btn {
+  margin-top: 6px;
+}
+.pay-inv-hint {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.pay-inv-back {
+  margin-top: 2px;
+  font-size: 13px;
+}

@@ -1,0 +1,50 @@
+# Секреты и база
+backend/.env
+backend/*.db
+# Резервные копии базы: в них пароли клиентов открытым текстом
+backend/*.db.backup*
+backend/*.db.bak
+*.sqlite
+*.sqlite3
+backend/*.db-wal
+backend/*.db-shm
+
+# Окружения и сборки
+backend/.venv/
+backend/.pytest_cache/
+__pycache__/
+*.pyc
+
+panel/node_modules/
+panel/dist/
+
+client/build/
+
+# Портативный тулчейн для сборки клиента
+.toolchain/
+client/windows/build/
+client/android/build/
+
+# Сборки десктопного клиента: артефакты, а не исходники
+client/windows/build/
+client/windows/.gradle/
+
+# Сертификат панели: привязан к конкретной установке и раскрывает её адрес.
+# Кладётся на месте, если панель работает за самоподписанным сертификатом.
+**/panel_cert.pem
+
+# Сборка публичного сайта
+web/node_modules/
+web/dist/
+
+# macOS
+.DS_Store
+
+# Телеграм-бот: секреты, база и видео остаются на сервере.
+# Видео (assets/*.mp4, 82 МБ) намеренно вне репозитория — git хранит бинарники
+# целиком на каждую версию, и такой коммит навсегда утяжеляет клон для всех.
+bot/.env
+bot/venv/
+bot/logs/
+bot/database/database.db
+bot/assets/

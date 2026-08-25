@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CPackWiXPatch>
+    <CPackWiXFragment Id="CM_CP_NexaVPN.NexaVPN_service.exe">
+        <ServiceInstall
+                Id="AmneziaServiceInstall"
+                Name="NexaVPN-service"
+                DisplayName="Nexa VPN Service"
+                Description="Service for Nexa VPN"
+                Start="auto"
+                Type="ownProcess"
+                ErrorControl="normal"
+                Vital="no">
+            <ServiceDependency Id="BFE" />
+            <ServiceDependency Id="nsi" />
+        </ServiceInstall>
+        <ServiceControl
+                Id="AmneziaServiceControl"
+                Name="NexaVPN-service"
+                Start="install"
+                Stop="both"
+                Remove="uninstall"
+                Wait="yes" />
+    </CPackWiXFragment>
+</CPackWiXPatch>

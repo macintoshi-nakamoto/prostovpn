@@ -1,0 +1,583 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B00000000000000000000001 /* ProstoVPNApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000001 /* ProstoVPNApp.swift */; };
+		B00000000000000000000002 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000002 /* Theme.swift */; };
+		B00000000000000000000003 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000003 /* Components.swift */; };
+		B00000000000000000000004 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000004 /* L10n.swift */; };
+		B00000000000000000000005 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000005 /* AppState.swift */; };
+		B00000000000000000000006 /* PanelClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000006 /* PanelClient.swift */; };
+		B00000000000000000000007 /* AccessKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000007 /* AccessKey.swift */; };
+		B00000000000000000000008 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000008 /* Keychain.swift */; };
+		B00000000000000000000009 /* HelperClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000009 /* HelperClient.swift */; };
+		B0000000000000000000000A /* HelperInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000A /* HelperInstaller.swift */; };
+		B0000000000000000000000B /* PowerButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000B /* PowerButton.swift */; };
+		B0000000000000000000000C /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000C /* HomeView.swift */; };
+		B0000000000000000000000D /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000D /* LoginView.swift */; };
+		B0000000000000000000000E /* ServerCurtain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000E /* ServerCurtain.swift */; };
+		B0000000000000000000000F /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000000F /* SettingsView.swift */; };
+		B00000000000000000000010 /* SupportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000010 /* SupportView.swift */; };
+		B00000000000000000000011 /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011 /* HelperProtocol.swift */; };
+		B00000000000000000000012 /* WGQuick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* WGQuick.swift */; };
+		B00000000000000000000013 /* BypassRoutes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000016 /* BypassRoutes.swift */; };
+		B00000000000000000000090 /* Candidates.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000090 /* Candidates.swift */; };
+		B00000000000000000000014 /* SplitTunnelList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000017 /* SplitTunnelList.swift */; };
+		B0000000000000000000001B /* TunnelFiles.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001B /* TunnelFiles.swift */; };
+		B0000000000000000000001C /* SplitTunnelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001C /* SplitTunnelView.swift */; };
+		B0000000000000000000001D /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001D /* DeviceIdentity.swift */; };
+		B0000000000000000000001E /* Notifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001E /* Notifier.swift */; };
+		B0000000000000000000001F /* UpdateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0000000000000000000001F /* UpdateManager.swift */; };
+		B00000000000000000000015 /* ru-split-tunnel.json in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000018 /* ru-split-tunnel.json */; };
+
+		B00000000000000000000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000020 /* Assets.xcassets */; };
+		B00000000000000000000021 /* Manrope-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000021 /* Manrope-Regular.ttf */; };
+		B00000000000000000000022 /* Manrope-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000022 /* Manrope-Medium.ttf */; };
+		B00000000000000000000023 /* Manrope-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000023 /* Manrope-SemiBold.ttf */; };
+		B00000000000000000000024 /* Manrope-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000024 /* Manrope-Bold.ttf */; };
+		B00000000000000000000025 /* Manrope-ExtraBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000025 /* Manrope-ExtraBold.ttf */; };
+		B00000000000000000000026 /* prostovpn-awg in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000026 /* prostovpn-awg */; };
+		B00000000000000000000027 /* install-helper.sh in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000027 /* install-helper.sh */; };
+		B00000000000000000000028 /* com.prostovpn.helper.plist in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000028 /* com.prostovpn.helper.plist */; };
+		B00000000000000000000029 /* uninstall-helper.sh in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000029 /* uninstall-helper.sh */; };
+		B0000000000000000000002A /* com.prostovpn.helper in Embed Helper */ = {isa = PBXBuildFile; fileRef = A0000000000000000000002A /* com.prostovpn.helper */; };
+
+		B00000000000000000000030 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000030 /* main.swift */; };
+		B00000000000000000000031 /* Shell.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000031 /* Shell.swift */; };
+		B00000000000000000000032 /* SystemNetwork.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000032 /* SystemNetwork.swift */; };
+		B00000000000000000000033 /* UAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000033 /* UAPI.swift */; };
+		B00000000000000000000034 /* Tunnel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000034 /* Tunnel.swift */; };
+		B00000000000000000000035 /* HelperProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011 /* HelperProtocol.swift */; };
+		B00000000000000000000036 /* WGQuick.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* WGQuick.swift */; };
+		B00000000000000000000037 /* BypassRoutes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000016 /* BypassRoutes.swift */; };
+		B00000000000000000000038 /* SplitTunnelList.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000017 /* SplitTunnelList.swift */; };
+		B00000000000000000000039 /* RouteSocket.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000019 /* RouteSocket.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A00000000000000000000001 /* ProstoVPNApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProstoVPNApp.swift; sourceTree = "<group>"; };
+		A00000000000000000000002 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		A00000000000000000000003 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		A00000000000000000000004 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
+		A00000000000000000000005 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		A00000000000000000000006 /* PanelClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelClient.swift; sourceTree = "<group>"; };
+		A00000000000000000000007 /* AccessKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccessKey.swift; sourceTree = "<group>"; };
+		A00000000000000000000008 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		A00000000000000000000009 /* HelperClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperClient.swift; sourceTree = "<group>"; };
+		A0000000000000000000000A /* HelperInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperInstaller.swift; sourceTree = "<group>"; };
+		A0000000000000000000000B /* PowerButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerButton.swift; sourceTree = "<group>"; };
+		A0000000000000000000000C /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		A0000000000000000000000D /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		A0000000000000000000000E /* ServerCurtain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerCurtain.swift; sourceTree = "<group>"; };
+		A0000000000000000000000F /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		A00000000000000000000010 /* SupportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportView.swift; sourceTree = "<group>"; };
+		A00000000000000000000011 /* HelperProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HelperProtocol.swift; sourceTree = "<group>"; };
+		A00000000000000000000012 /* WGQuick.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WGQuick.swift; sourceTree = "<group>"; };
+		A00000000000000000000016 /* BypassRoutes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BypassRoutes.swift; sourceTree = "<group>"; };
+		A00000000000000000000090 /* Candidates.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Candidates.swift; sourceTree = "<group>"; };
+		A00000000000000000000017 /* SplitTunnelList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitTunnelList.swift; sourceTree = "<group>"; };
+		A00000000000000000000018 /* ru-split-tunnel.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "ru-split-tunnel.json"; sourceTree = "<group>"; };
+		A00000000000000000000019 /* RouteSocket.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteSocket.swift; sourceTree = "<group>"; };
+		A0000000000000000000001B /* TunnelFiles.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TunnelFiles.swift; sourceTree = "<group>"; };
+		A0000000000000000000001C /* SplitTunnelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplitTunnelView.swift; sourceTree = "<group>"; };
+		A0000000000000000000001D /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
+		A0000000000000000000001E /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
+		A0000000000000000000001F /* UpdateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateManager.swift; sourceTree = "<group>"; };
+		A00000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A00000000000000000000014 /* ProstoVPN.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ProstoVPN.entitlements; sourceTree = "<group>"; };
+		A00000000000000000000015 /* ProstoVPN.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ProstoVPN.app; sourceTree = BUILT_PRODUCTS_DIR; };
+
+		A00000000000000000000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A00000000000000000000021 /* Manrope-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Manrope-Regular.ttf"; sourceTree = "<group>"; };
+		A00000000000000000000022 /* Manrope-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Manrope-Medium.ttf"; sourceTree = "<group>"; };
+		A00000000000000000000023 /* Manrope-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Manrope-SemiBold.ttf"; sourceTree = "<group>"; };
+		A00000000000000000000024 /* Manrope-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Manrope-Bold.ttf"; sourceTree = "<group>"; };
+		A00000000000000000000025 /* Manrope-ExtraBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Manrope-ExtraBold.ttf"; sourceTree = "<group>"; };
+		A00000000000000000000026 /* prostovpn-awg */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; name = "prostovpn-awg"; path = "Engine/bin/prostovpn-awg"; sourceTree = SOURCE_ROOT; };
+		A00000000000000000000027 /* install-helper.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "install-helper.sh"; sourceTree = "<group>"; };
+		A00000000000000000000028 /* com.prostovpn.helper.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = com.prostovpn.helper.plist; sourceTree = "<group>"; };
+		A00000000000000000000029 /* uninstall-helper.sh */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "uninstall-helper.sh"; sourceTree = "<group>"; };
+		A0000000000000000000002A /* com.prostovpn.helper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = com.prostovpn.helper; sourceTree = BUILT_PRODUCTS_DIR; };
+
+		A00000000000000000000030 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		A00000000000000000000031 /* Shell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shell.swift; sourceTree = "<group>"; };
+		A00000000000000000000032 /* SystemNetwork.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemNetwork.swift; sourceTree = "<group>"; };
+		A00000000000000000000033 /* UAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UAPI.swift; sourceTree = "<group>"; };
+		A00000000000000000000034 /* Tunnel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tunnel.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D00000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000005 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		D00000000000000000000007 /* Embed Helper */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 7;
+			files = (
+				B0000000000000000000002A /* com.prostovpn.helper in Embed Helper */,
+			);
+			name = "Embed Helper";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXGroup section */
+		G00000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				G00000000000000000000002 /* ProstoVPN */,
+				G00000000000000000000006 /* Shared */,
+				G00000000000000000000007 /* Helper */,
+				G00000000000000000000008 /* scripts */,
+				G00000000000000000000009 /* Engine */,
+				G00000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		G00000000000000000000002 /* ProstoVPN */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000001 /* ProstoVPNApp.swift */,
+				A00000000000000000000002 /* Theme.swift */,
+				A00000000000000000000003 /* Components.swift */,
+				A00000000000000000000004 /* L10n.swift */,
+				A00000000000000000000005 /* AppState.swift */,
+				A00000000000000000000006 /* PanelClient.swift */,
+				A00000000000000000000007 /* AccessKey.swift */,
+				A00000000000000000000008 /* Keychain.swift */,
+				A0000000000000000000001D /* DeviceIdentity.swift */,
+				A0000000000000000000001E /* Notifier.swift */,
+				A0000000000000000000001F /* UpdateManager.swift */,
+				A00000000000000000000009 /* HelperClient.swift */,
+				A0000000000000000000000A /* HelperInstaller.swift */,
+				A0000000000000000000000B /* PowerButton.swift */,
+				A0000000000000000000000C /* HomeView.swift */,
+				A0000000000000000000000D /* LoginView.swift */,
+				A0000000000000000000000E /* ServerCurtain.swift */,
+				A0000000000000000000000F /* SettingsView.swift */,
+				A00000000000000000000010 /* SupportView.swift */,
+				A0000000000000000000001B /* TunnelFiles.swift */,
+				A0000000000000000000001C /* SplitTunnelView.swift */,
+				A00000000000000000000020 /* Assets.xcassets */,
+				A00000000000000000000018 /* ru-split-tunnel.json */,
+				G00000000000000000000004 /* Fonts */,
+				A00000000000000000000013 /* Info.plist */,
+				A00000000000000000000014 /* ProstoVPN.entitlements */,
+			);
+			path = ProstoVPN;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000015 /* ProstoVPN.app */,
+				A0000000000000000000002A /* com.prostovpn.helper */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000004 /* Fonts */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000021 /* Manrope-Regular.ttf */,
+				A00000000000000000000022 /* Manrope-Medium.ttf */,
+				A00000000000000000000023 /* Manrope-SemiBold.ttf */,
+				A00000000000000000000024 /* Manrope-Bold.ttf */,
+				A00000000000000000000025 /* Manrope-ExtraBold.ttf */,
+			);
+			path = Fonts;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000006 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000011 /* HelperProtocol.swift */,
+				A00000000000000000000012 /* WGQuick.swift */,
+				A00000000000000000000016 /* BypassRoutes.swift */,
+				A00000000000000000000090 /* Candidates.swift */,
+				A00000000000000000000017 /* SplitTunnelList.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000007 /* Helper */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000030 /* main.swift */,
+				A00000000000000000000031 /* Shell.swift */,
+				A00000000000000000000032 /* SystemNetwork.swift */,
+				A00000000000000000000033 /* UAPI.swift */,
+				A00000000000000000000034 /* Tunnel.swift */,
+				A00000000000000000000019 /* RouteSocket.swift */,
+			);
+			path = Helper;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000008 /* scripts */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000027 /* install-helper.sh */,
+				A00000000000000000000029 /* uninstall-helper.sh */,
+				A00000000000000000000028 /* com.prostovpn.helper.plist */,
+			);
+			path = scripts;
+			sourceTree = "<group>";
+		};
+		G00000000000000000000009 /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000026 /* prostovpn-awg */,
+			);
+			name = Engine;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		C00000000000000000000001 /* ProstoVPN */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F00000000000000000000002 /* Build configuration list for PBXNativeTarget "ProstoVPN" */;
+			buildPhases = (
+				D00000000000000000000001 /* Sources */,
+				D00000000000000000000002 /* Frameworks */,
+				D00000000000000000000003 /* Resources */,
+				D00000000000000000000007 /* Embed Helper */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D10000000000000000000001 /* PBXTargetDependency */,
+			);
+			name = ProstoVPN;
+			productName = ProstoVPN;
+			productReference = A00000000000000000000015 /* ProstoVPN.app */;
+			productType = "com.apple.product-type.application";
+		};
+		C00000000000000000000003 /* ProstoVPNHelper */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F00000000000000000000003 /* Build configuration list for PBXNativeTarget "ProstoVPNHelper" */;
+			buildPhases = (
+				D00000000000000000000004 /* Sources */,
+				D00000000000000000000005 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ProstoVPNHelper;
+			productName = ProstoVPNHelper;
+			productReference = A0000000000000000000002A /* com.prostovpn.helper */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		D10000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C00000000000000000000003 /* ProstoVPNHelper */;
+			targetProxy = D20000000000000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		D20000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C00000000000000000000002 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C00000000000000000000003;
+			remoteInfo = ProstoVPNHelper;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXProject section */
+		C00000000000000000000002 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					C00000000000000000000001 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					C00000000000000000000003 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = F00000000000000000000001 /* Build configuration list for PBXProject "ProstoVPN" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = ru;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				ru,
+				en,
+				Base,
+			);
+			mainGroup = G00000000000000000000001;
+			productRefGroup = G00000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				C00000000000000000000001 /* ProstoVPN */,
+				C00000000000000000000003 /* ProstoVPNHelper */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D00000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000020 /* Assets.xcassets in Resources */,
+				B00000000000000000000015 /* ru-split-tunnel.json in Resources */,
+				B00000000000000000000021 /* Manrope-Regular.ttf in Resources */,
+				B00000000000000000000022 /* Manrope-Medium.ttf in Resources */,
+				B00000000000000000000023 /* Manrope-SemiBold.ttf in Resources */,
+				B00000000000000000000024 /* Manrope-Bold.ttf in Resources */,
+				B00000000000000000000025 /* Manrope-ExtraBold.ttf in Resources */,
+				B00000000000000000000026 /* prostovpn-awg in Resources */,
+				B00000000000000000000027 /* install-helper.sh in Resources */,
+				B00000000000000000000029 /* uninstall-helper.sh in Resources */,
+				B00000000000000000000028 /* com.prostovpn.helper.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D00000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000001 /* ProstoVPNApp.swift in Sources */,
+				B00000000000000000000002 /* Theme.swift in Sources */,
+				B00000000000000000000003 /* Components.swift in Sources */,
+				B00000000000000000000004 /* L10n.swift in Sources */,
+				B00000000000000000000005 /* AppState.swift in Sources */,
+				B00000000000000000000006 /* PanelClient.swift in Sources */,
+				B00000000000000000000007 /* AccessKey.swift in Sources */,
+				B00000000000000000000008 /* Keychain.swift in Sources */,
+				B00000000000000000000009 /* HelperClient.swift in Sources */,
+				B0000000000000000000000A /* HelperInstaller.swift in Sources */,
+				B0000000000000000000000B /* PowerButton.swift in Sources */,
+				B0000000000000000000000C /* HomeView.swift in Sources */,
+				B0000000000000000000000D /* LoginView.swift in Sources */,
+				B0000000000000000000000E /* ServerCurtain.swift in Sources */,
+				B0000000000000000000000F /* SettingsView.swift in Sources */,
+				B00000000000000000000010 /* SupportView.swift in Sources */,
+				B00000000000000000000011 /* HelperProtocol.swift in Sources */,
+				B00000000000000000000012 /* WGQuick.swift in Sources */,
+				B00000000000000000000013 /* BypassRoutes.swift in Sources */,
+				B00000000000000000000090 /* Candidates.swift in Sources */,
+				B00000000000000000000014 /* SplitTunnelList.swift in Sources */,
+				B0000000000000000000001B /* TunnelFiles.swift in Sources */,
+				B0000000000000000000001C /* SplitTunnelView.swift in Sources */,
+				B0000000000000000000001D /* DeviceIdentity.swift in Sources */,
+				B0000000000000000000001E /* Notifier.swift in Sources */,
+				B0000000000000000000001F /* UpdateManager.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D00000000000000000000004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000030 /* main.swift in Sources */,
+				B00000000000000000000031 /* Shell.swift in Sources */,
+				B00000000000000000000032 /* SystemNetwork.swift in Sources */,
+				B00000000000000000000033 /* UAPI.swift in Sources */,
+				B00000000000000000000034 /* Tunnel.swift in Sources */,
+				B00000000000000000000035 /* HelperProtocol.swift in Sources */,
+				B00000000000000000000036 /* WGQuick.swift in Sources */,
+				B00000000000000000000037 /* BypassRoutes.swift in Sources */,
+				B00000000000000000000038 /* SplitTunnelList.swift in Sources */,
+				B00000000000000000000039 /* RouteSocket.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		E00000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		E00000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		E00000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ProstoVPN/ProstoVPN.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = Y2AN5B4BQ6;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ProstoVPN/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.prostovpn.mac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		E00000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = ProstoVPN/ProstoVPN.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = Y2AN5B4BQ6;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ProstoVPN/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.prostovpn.mac;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+		E00000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = Y2AN5B4BQ6;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MARKETING_VERSION = 1.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.prostovpn.helper;
+				PRODUCT_NAME = com.prostovpn.helper;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		E00000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = Y2AN5B4BQ6;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				MARKETING_VERSION = 1.0.5;
+				PRODUCT_BUNDLE_IDENTIFIER = com.prostovpn.helper;
+				PRODUCT_NAME = com.prostovpn.helper;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		F00000000000000000000001 /* Build configuration list for PBXProject "ProstoVPN" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000001 /* Debug */,
+				E00000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F00000000000000000000002 /* Build configuration list for PBXNativeTarget "ProstoVPN" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000003 /* Debug */,
+				E00000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F00000000000000000000003 /* Build configuration list for PBXNativeTarget "ProstoVPNHelper" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E00000000000000000000005 /* Debug */,
+				E00000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = C00000000000000000000002 /* Project object */;
+}

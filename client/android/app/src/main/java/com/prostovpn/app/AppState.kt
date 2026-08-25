@@ -1,0 +1,971 @@
+package com.prostovpn.app
+
+import android.app.Application
+import android.util.Base64
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.UUID
+import java.util.zip.Inflater
+
+data class ServerInfo(
+    val host: String,
+    val country: String? = null,
+    val city: String? = null,
+    val countryEn: String? = null,
+    val cityEn: String? = null,
+    val countryCode: String? = null,
+    val config: String? = null,
+
+    val altPorts: List<Int> = emptyList(),
+) {
+    fun countryFor(lang: String): String? =
+        if (lang == "en") countryEn ?: country else country ?: countryEn
+
+    fun cityFor(lang: String): String? =
+        if (lang == "en") cityEn ?: city else city ?: cityEn
+}
+
+data class DemoServer(
+    val flag: String,
+    val nameRu: String,
+    val nameEn: String,
+    val cityRu: String,
+    val cityEn: String,
+    val ping: Int,
+)
+
+data class DisplayServer(
+    val flag: String,
+    val name: String,
+    val sub: String,
+)
+
+data class TunnelFile(
+    val id: String,
+    val name: String,
+    val count: Int,
+    val isDefault: Boolean = false,
+)
+
+enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
+
+private const val ACCOUNT_POLL_MS = 60 * 1000L
+
+class AppState(application: Application) : AndroidViewModel(application) {
+    private val prefs = application.getSharedPreferences("prosto", 0)
+
+    init {
+        migrateToFullTunnel()
+    }
+
+    private fun observeTunnel() {
+        viewModelScope.launch {
+            tunnel.status.collect { status ->
+                if (server?.config.isNullOrBlank()) return@collect
+                when (status) {
+                    TunnelManager.Status.ON -> if (phase != Phase.ON) {
+                        phase = Phase.ON
+                        connectionError = null
+                        startForegroundNotice()
+                        if (timerJob == null) startTimer()
+                    }
+
+                    TunnelManager.Status.RECONNECTING -> if (phase == Phase.ON) {
+                        phase = Phase.CONNECTING
+                        startConnectingNotice()
+                    }
+                    TunnelManager.Status.OFF ->
+                        if (phase == Phase.ON || phase == Phase.CONNECTING) {
+                            phase = Phase.OFF
+                            timerJob?.cancel()
+                            timerJob = null
+                            stopForegroundNotice()
+                            if (connectionError == null) {
+                                connectionError = when (tunnel.lastFailure) {
+                                    TunnelManager.Result.NO_HANDSHAKE -> s.errNoHandshake
+                                    TunnelManager.Result.FAILED -> s.errTunnelFailed
+                                    else -> s.errTunnelDropped
+                                }
+                            }
+                        }
+                    TunnelManager.Status.CONNECTING -> Unit
+                }
+            }
+        }
+    }
+
+    private fun migrateToFullTunnel() {
+        if (prefs.getBoolean("fulltunnel.migrated", false)) return
+        prefs.edit()
+            .putBoolean("split.enabled", false)
+            .putBoolean("fulltunnel.migrated", true)
+            .apply()
+    }
+
+    var phase by mutableStateOf(Phase.OFF)
+        private set
+    var seconds by mutableIntStateOf(0)
+        private set
+
+    var connectionError by mutableStateOf<String?>(null)
+        private set
+
+    fun dismissConnectionError() {
+        connectionError = null
+    }
+    var server by mutableStateOf<ServerInfo?>(null)
+        private set
+
+    var panelToken by mutableStateOf(prefs.getString("panelToken", "").orEmpty())
+        private set
+    var accountName by mutableStateOf(prefs.getString("accountName", "").orEmpty())
+        private set
+    var accountPublicId by mutableStateOf(prefs.getString("accountPublicId", "").orEmpty())
+        private set
+    var subscriptionDaysLeft by mutableIntStateOf(prefs.getInt("daysLeft", 0))
+        private set
+    var trafficUsedBytes by mutableStateOf(prefs.getLong("trafficUsed", 0L))
+        private set
+
+    var trafficLimitBytes by mutableStateOf(prefs.getLong("trafficLimit", -1L))
+        private set
+
+    var trafficLeftBytes by mutableStateOf(prefs.getLong("trafficLeft", -1L))
+        private set
+
+    var trafficLow by mutableStateOf(prefs.getBoolean("trafficLow", false))
+        private set
+
+    var expiresSoon by mutableStateOf(prefs.getBoolean("expiresSoon", false))
+        private set
+
+    var renewUrl by mutableStateOf(prefs.getString("renewUrl", "").orEmpty())
+        private set
+
+    var panelNotice by mutableStateOf("")
+        private set
+
+    var signedOutReason by mutableStateOf("")
+        private set
+
+    fun consumeSignedOutReason(): String = signedOutReason.also { signedOutReason = "" }
+
+    var panelServers by mutableStateOf<List<ServerInfo>>(emptyList())
+        private set
+
+    val updates: UpdateManager by lazy { UpdateManager(getApplication(), viewModelScope) }
+
+    val isLoggedIn get() = panelToken.isNotEmpty() || server != null
+
+    private var connectJob: Job? = null
+    private var timerJob: Job? = null
+
+    var pendingPermissionIntent by mutableStateOf<android.content.Intent?>(null)
+        private set
+    private var pendingConfig: String? = null
+
+    private val tunnel: TunnelManager by lazy {
+        TunnelManager.getInstance(getApplication()).also { manager ->
+
+            manager.onStateChange = { up ->
+                if (!up && phase == Phase.ON) this@AppState.disconnect()
+            }
+        }
+    }
+
+    private fun startForegroundNotice() {
+        VpnForegroundService.setStoppingLabel(s.disconnectingTxt)
+        val where = currentServer?.name?.takeIf { it.isNotEmpty() }
+        val status = if (where != null) "${s.connected} · $where" else s.connected
+        VpnForegroundService.start(getApplication(), status, s.notifDisconnect)
+    }
+
+    private fun startConnectingNotice() {
+        VpnForegroundService.start(getApplication(), s.connectingTxt, s.notifDisconnect)
+    }
+
+    private fun stopForegroundNotice() {
+        VpnForegroundService.stop(getApplication())
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val tunnelDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+    var lang by mutableStateOf(
+        prefs.getString("lang", null)
+            ?: if (java.util.Locale.getDefault().language == "ru") "ru" else "en"
+    )
+        private set
+
+    fun changeLang(value: String) {
+        lang = value
+        prefs.edit().putString("lang", value).apply()
+    }
+
+    val s get() = strings(lang)
+
+    var splitTunnelEnabled by mutableStateOf(prefs.getBoolean("split.enabled", false))
+        private set
+    var autoConnect by mutableStateOf(prefs.getBoolean("autoConnect", false))
+        private set
+
+    private var cachedAllowedIps: String? = null
+    private var autoConnectTried = false
+
+    fun changeSplitTunnel(enabled: Boolean) {
+        if (splitTunnelEnabled == enabled) return
+        splitTunnelEnabled = enabled
+        prefs.edit().putBoolean("split.enabled", enabled).apply()
+        reconnectIfActive()
+    }
+
+    fun changeAutoConnect(enabled: Boolean) {
+        autoConnect = enabled
+        prefs.edit().putBoolean("autoConnect", enabled).apply()
+    }
+
+    private fun reconnectIfActive() {
+        if (phase == Phase.OFF) return
+        disconnect()
+        toggleConnection()
+    }
+
+    val tunnelFiles = mutableStateListOf<TunnelFile>()
+    var activeTunnelFileId by mutableStateOf(prefs.getString("tunnel.active", DEFAULT_FILE_ID) ?: DEFAULT_FILE_ID)
+        private set
+
+    val activeTunnelFile: TunnelFile?
+        get() = tunnelFiles.firstOrNull { it.id == activeTunnelFileId }
+
+    private fun tunnelDir(): File =
+        File(getApplication<Application>().filesDir, "tunneling").apply { mkdirs() }
+
+    private fun loadTunnelFiles() {
+        tunnelFiles.clear()
+        tunnelFiles.add(TunnelFile(DEFAULT_FILE_ID, DEFAULT_FILE_NAME, prefs.getInt("tunnel.defaultCount", 0), isDefault = true))
+        runCatching {
+            val arr = JSONArray(prefs.getString("tunnel.files", "[]") ?: "[]")
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                tunnelFiles.add(
+                    TunnelFile(
+                        id = obj.optString("id"),
+                        name = obj.optString("name"),
+                        count = obj.optInt("count"),
+                    )
+                )
+            }
+        }
+        if (tunnelFiles.none { it.id == activeTunnelFileId }) {
+            activeTunnelFileId = DEFAULT_FILE_ID
+        }
+
+        if (tunnelFiles.first().count == 0) {
+            viewModelScope.launch(Dispatchers.Default) {
+                val count = entryCount(defaultListJson() ?: "", "json")
+                prefs.edit().putInt("tunnel.defaultCount", count).apply()
+                withContext(Dispatchers.Main) {
+                    val index = tunnelFiles.indexOfFirst { it.isDefault }
+                    if (index >= 0) tunnelFiles[index] = tunnelFiles[index].copy(count = count)
+                }
+            }
+        }
+    }
+
+    private fun persistTunnelFiles() {
+        val arr = JSONArray()
+        tunnelFiles.filterNot { it.isDefault }.forEach { file ->
+            arr.put(
+                JSONObject()
+                    .put("id", file.id)
+                    .put("name", file.name)
+                    .put("count", file.count)
+            )
+        }
+        prefs.edit().putString("tunnel.files", arr.toString()).apply()
+    }
+
+    fun selectTunnelFile(file: TunnelFile) {
+        if (activeTunnelFileId == file.id) return
+        activeTunnelFileId = file.id
+        prefs.edit().putString("tunnel.active", file.id).apply()
+        cachedAllowedIps = null
+        if (splitTunnelEnabled) reconnectIfActive()
+    }
+
+    fun addTunnelFile(originalName: String, content: String): Boolean {
+        if (content.isBlank()) return false
+        val extension = originalName.substringAfterLast('.', "")
+        val count = entryCount(content, extension)
+        if (count == 0) return false
+
+        var name = originalName.ifBlank { "list.json" }
+        var attempt = 1
+        while (tunnelFiles.any { it.name == name }) {
+            val base = originalName.substringBeforeLast('.')
+            val ext = if (extension.isEmpty()) "" else ".$extension"
+            name = "${base}_$attempt$ext"
+            attempt++
+        }
+        runCatching { File(tunnelDir(), name).writeText(content) }.getOrElse { return false }
+
+        val file = TunnelFile(UUID.randomUUID().toString(), name, count)
+        tunnelFiles.add(file)
+        persistTunnelFiles()
+        selectTunnelFile(file)
+        return true
+    }
+
+    fun deleteTunnelFile(file: TunnelFile) {
+        if (file.isDefault) return
+        tunnelFiles.removeAll { it.id == file.id }
+        runCatching { File(tunnelDir(), file.name).delete() }
+        persistTunnelFiles()
+        if (activeTunnelFileId == file.id) {
+            selectTunnelFile(tunnelFiles.first())
+        }
+    }
+
+    private fun defaultListJson(): String? = ConnectConfig.defaultListJson(getApplication())
+
+    private fun activeListContent(): String? {
+        val active = activeTunnelFile ?: return defaultListJson()
+        if (active.isDefault) return defaultListJson()
+        return runCatching { File(tunnelDir(), active.name).readText() }.getOrNull()
+            ?: defaultListJson()
+    }
+
+    private fun excludeCidrs(): List<String> {
+        val content = activeListContent() ?: return emptyList()
+        return SplitTunnel.parseCidrList(content)
+    }
+
+    private suspend fun buildConfigForConnect(base: String): String {
+        val withDns = SplitTunnel.ensureMtu(SplitTunnel.ensureDns(base))
+        if (!splitTunnelEnabled) {
+            return SplitTunnel.applyToConfig(withDns, "0.0.0.0/0, ::/0")
+        }
+        val allowed = cachedAllowedIps ?: withContext(Dispatchers.Default) {
+            SplitTunnel.allowedIpsExcept(excludeCidrs())
+        }.also { cachedAllowedIps = it }
+        return SplitTunnel.applyToConfig(withDns, allowed)
+    }
+
+    var selectedServerIndex by mutableIntStateOf(prefs.getInt("selectedServer", 0))
+        private set
+
+    fun selectServer(index: Int) {
+        val wasConnected = phase == Phase.ON || phase == Phase.CONNECTING
+
+        panelServers.getOrNull(index)?.let {
+            server = it
+            persistServer()
+        }
+        selectedServerIndex = index
+        prefs.edit().putInt("selectedServer", index).apply()
+
+        if (wasConnected) {
+            viewModelScope.launch {
+                disconnect()
+
+                awaitOff()
+                if (phase == Phase.OFF) toggleConnection()
+            }
+        }
+    }
+
+    private suspend fun awaitOff() {
+        repeat(40) {
+            if (phase == Phase.OFF) return
+            kotlinx.coroutines.delay(150)
+        }
+    }
+
+    fun displayServers(): List<DisplayServer> {
+        if (panelServers.isNotEmpty()) {
+            return panelServers.map { item ->
+                DisplayServer(
+                    flag = item.countryCode?.takeIf { it.isNotEmpty() }?.let { flagEmoji(it) }.orEmpty(),
+                    name = item.countryFor(lang).orEmpty(),
+                    sub = item.cityFor(lang).orEmpty(),
+                )
+            }
+        }
+        val t = s
+        server?.let { imported ->
+            val flag = imported.countryCode
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { flagEmoji(it) } ?: "🌐"
+            val name = imported.countryFor(lang)?.takeIf { it.isNotEmpty() } ?: imported.host
+
+            val sub = imported.cityFor(lang)?.takeIf { it.isNotEmpty() && it != name }.orEmpty()
+            return listOf(DisplayServer(flag, name, sub))
+        }
+        return demoServers.map { demo ->
+            DisplayServer(
+                flag = demo.flag,
+                name = if (lang == "en") demo.nameEn else demo.nameRu,
+                sub = "${if (lang == "en") demo.cityEn else demo.cityRu} · ${demo.ping} ${t.ms}",
+            )
+        }
+    }
+
+    val currentServer: DisplayServer?
+        get() {
+            val servers = displayServers()
+            if (servers.isEmpty()) return null
+            return servers[selectedServerIndex.coerceAtMost(servers.size - 1)]
+        }
+
+    fun maybeAutoConnect() {
+        if (autoConnectTried) return
+        autoConnectTried = true
+        if (autoConnect && isLoggedIn && phase == Phase.OFF) {
+            toggleConnection()
+        }
+    }
+
+    init {
+        prefs.getString("server.host", null)?.let { host ->
+            server = ServerInfo(
+                host = host,
+                country = prefs.getString("server.country", null),
+                city = prefs.getString("server.city", null),
+                countryEn = prefs.getString("server.countryEn", null),
+                cityEn = prefs.getString("server.cityEn", null),
+                countryCode = prefs.getString("server.countryCode", null),
+                config = prefs.getString("server.config", null),
+                altPorts = (prefs.getString("server.altPorts", "") ?: "")
+                    .split(',').mapNotNull { it.trim().toIntOrNull() },
+            )
+            refreshGeo()
+        }
+        loadTunnelFiles()
+        if (selectedServerIndex >= displayServers().size) {
+            selectServer(0)
+        }
+        restoreRunningTunnel()
+
+        refreshPanelServers()
+        startAccountWatch()
+
+        updates.check()
+    }
+
+    private fun restoreRunningTunnel() {
+        viewModelScope.launch {
+            val config = server?.config
+
+            val up = withContext(tunnelDispatcher) {
+                if (config.isNullOrBlank()) tunnel.isUp
+                else tunnel.adopt(config, server?.altPorts ?: emptyList())
+            }
+            if (up && phase == Phase.OFF) {
+                phase = Phase.ON
+                startForegroundNotice()
+                startTimer()
+            }
+
+            observeTunnel()
+        }
+    }
+
+    fun loginWithKey(key: String): Boolean {
+        val joined = key.filterNot { it.isWhitespace() }
+        val info = KeyParser.extractServer(joined) ?: return false
+        prefs.edit().putString("accessKey", joined).apply()
+        panelServers = emptyList()
+        server = info
+        selectServer(0)
+        persistServer()
+        refreshGeo()
+        return true
+    }
+
+    suspend fun login(login: String, password: String): Result<Unit> {
+        val session = withContext(Dispatchers.IO) {
+            runCatching {
+                PanelApi.login(
+                    login,
+                    password,
+                    BuildConfig.VERSION_NAME,
+                    deviceId = installId(),
+                    deviceName = deviceName(),
+                )
+            }
+        }
+        return session.map { applySession(it) }
+    }
+
+    private fun installId(): String {
+        prefs.getString("installId", null)?.let { return it }
+        val fresh = java.util.UUID.randomUUID().toString()
+        prefs.edit().putString("installId", fresh).apply()
+        return fresh
+    }
+
+    private fun deviceName(): String {
+        val manufacturer = android.os.Build.MANUFACTURER.orEmpty()
+            .replaceFirstChar { it.uppercase() }
+        val model = android.os.Build.MODEL.orEmpty()
+        return listOf(manufacturer, model).filter { it.isNotBlank() }.joinToString(" ")
+    }
+
+    private fun applySession(session: PanelApi.Session) {
+        panelToken = session.token
+        accountName = session.name ?: session.login
+        accountPublicId = session.publicId
+
+        prefs.edit()
+            .putString("panelToken", session.token)
+            .putString("accountName", accountName)
+            .putString("accountPublicId", accountPublicId)
+            .apply()
+
+        applySubscription(session.subscription, session.notice)
+        applyPanelServers(session.servers.map { it.toServerInfo() })
+    }
+
+    private fun applySubscription(subscription: PanelApi.Subscription, notice: String?) {
+        subscriptionDaysLeft = subscription.daysLeft
+        trafficUsedBytes = subscription.trafficUsedBytes
+        trafficLimitBytes = subscription.trafficLimitBytes ?: -1L
+        trafficLeftBytes = subscription.trafficLeftBytes ?: -1L
+        trafficLow = subscription.trafficLow
+        expiresSoon = subscription.expiresSoon
+        renewUrl = subscription.renewUrl.orEmpty()
+
+        panelNotice = notice.orEmpty()
+
+        prefs.edit()
+            .putInt("daysLeft", subscription.daysLeft)
+            .putLong("trafficUsed", subscription.trafficUsedBytes)
+            .putLong("trafficLimit", trafficLimitBytes)
+            .putLong("trafficLeft", trafficLeftBytes)
+            .putBoolean("trafficLow", trafficLow)
+            .putBoolean("expiresSoon", expiresSoon)
+            .putString("renewUrl", renewUrl)
+            .apply()
+    }
+
+    private fun applyPanelServers(list: List<ServerInfo>) {
+        panelServers = list
+        if (list.isEmpty()) {
+            server = null
+            return
+        }
+        if (selectedServerIndex !in list.indices) selectServer(0)
+        server = list[selectedServerIndex.coerceIn(list.indices)]
+        persistServer()
+    }
+
+    fun refreshPanelServers() {
+        val token = panelToken
+        if (token.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = runCatching { PanelApi.servers(token) }
+            withContext(Dispatchers.Main) {
+                result
+                    .onSuccess { reply ->
+
+                        val lostAccess = reply.servers.isEmpty() && panelServers.isNotEmpty()
+                        applySubscription(reply.subscription, reply.notice)
+                        applyPanelServers(reply.servers.map { it.toServerInfo() })
+                        if (lostAccess && (phase == Phase.ON || phase == Phase.CONNECTING)) {
+                            disconnect()
+                        }
+                    }
+                    .onFailure { error ->
+
+                        val status = (error as? PanelApi.PanelException)?.status ?: 0
+                        if (status == 401 || status == 403) {
+                            logout()
+
+                            signedOutReason = s.noticeRemoteSignout
+                        }
+                    }
+            }
+        }
+    }
+
+    private fun startAccountWatch() {
+        viewModelScope.launch {
+            while (true) {
+                delay(ACCOUNT_POLL_MS)
+                if (panelToken.isNotEmpty()) refreshPanelServers()
+            }
+        }
+    }
+
+    fun logout() {
+        disconnect()
+        panelToken.takeIf { it.isNotEmpty() }?.let { token ->
+            viewModelScope.launch(Dispatchers.IO) { PanelApi.logout(token) }
+        }
+        server = null
+        panelServers = emptyList()
+        panelToken = ""
+        accountName = ""
+        accountPublicId = ""
+        subscriptionDaysLeft = 0
+        trafficUsedBytes = 0L
+        trafficLimitBytes = -1L
+        trafficLeftBytes = -1L
+        trafficLow = false
+        expiresSoon = false
+        renewUrl = ""
+        panelNotice = ""
+        selectedServerIndex = 0
+        val language = lang
+        prefs.edit().clear().apply()
+
+        prefs.edit()
+            .putString("lang", language)
+            .putBoolean("fulltunnel.migrated", true)
+            .putBoolean("split.enabled", false)
+            .apply()
+        cachedAllowedIps = null
+
+        splitTunnelEnabled = false
+        autoConnect = false
+        loadTunnelFiles()
+    }
+
+    private fun persistServer() {
+        val current = server ?: return
+        prefs.edit()
+            .putString("server.host", current.host)
+            .putString("server.country", current.country)
+            .putString("server.city", current.city)
+            .putString("server.countryEn", current.countryEn)
+            .putString("server.cityEn", current.cityEn)
+            .putString("server.countryCode", current.countryCode)
+            .putString("server.config", current.config)
+            .putString("server.altPorts", current.altPorts.joinToString(","))
+            .apply()
+    }
+
+    fun toggleConnection() {
+        when (phase) {
+            Phase.CONNECTING, Phase.ON -> disconnect()
+
+            Phase.DISCONNECTING -> Unit
+            Phase.OFF -> {
+                val config = server?.config
+                if (config.isNullOrBlank()) {
+                    startSimulated()
+                    return
+                }
+                val prepareIntent = android.net.VpnService.prepare(getApplication())
+                if (prepareIntent != null) {
+                    pendingConfig = config
+                    pendingPermissionIntent = prepareIntent
+                    return
+                }
+                startTunnel(config)
+            }
+        }
+    }
+
+    fun onVpnPermissionResult(granted: Boolean) {
+        pendingPermissionIntent = null
+        val config = pendingConfig ?: server?.config
+        pendingConfig = null
+        if (granted && !config.isNullOrBlank()) {
+            startTunnel(config)
+            return
+        }
+        if (phase == Phase.OFF) {
+            connectionError = if (granted) s.errTunnelFailed else s.errVpnDenied
+        }
+    }
+
+    private fun startTunnel(config: String) {
+        phase = Phase.CONNECTING
+        connectionError = null
+
+        startConnectingNotice()
+        connectJob = viewModelScope.launch {
+            val prepared = buildConfigForConnect(config)
+
+            val result = tunnel.connect(prepared, server?.altPorts ?: emptyList())
+            when (result) {
+                TunnelManager.Result.CONNECTED -> {
+                    phase = Phase.ON
+                    startForegroundNotice()
+                    startTimer()
+                }
+                TunnelManager.Result.NO_HANDSHAKE -> {
+                    phase = Phase.OFF
+                    connectionError = s.errNoHandshake
+                    stopForegroundNotice()
+                }
+                TunnelManager.Result.FAILED -> {
+                    phase = Phase.OFF
+                    connectionError = s.errTunnelFailed
+                    stopForegroundNotice()
+                }
+            }
+        }
+    }
+
+    private fun startSimulated() {
+        phase = Phase.CONNECTING
+        connectJob = viewModelScope.launch {
+            delay(1600)
+            phase = Phase.ON
+            startTimer()
+        }
+    }
+
+    private fun startTimer() {
+        seconds = 0
+        val startedAt = System.currentTimeMillis()
+        timerJob = viewModelScope.launch {
+            while (true) {
+                delay(500)
+                val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
+                if (elapsed != seconds) seconds = elapsed
+            }
+        }
+    }
+
+    fun disconnect() {
+        connectJob?.cancel()
+        timerJob?.cancel()
+        timerJob = null
+        connectionError = null
+
+        phase = Phase.DISCONNECTING
+
+        connectJob = viewModelScope.launch {
+            runCatching { tunnel.disconnect() }
+
+            stopForegroundNotice()
+            phase = Phase.OFF
+            connectJob = null
+        }
+    }
+
+    val formattedDuration: String
+        get() {
+            val h = seconds / 3600
+            val m = (seconds % 3600) / 60
+            val sec = seconds % 60
+            return if (h > 0) {
+                "%d:%02d:%02d".format(h, m, sec)
+            } else {
+                "%02d:%02d".format(m, sec)
+            }
+        }
+
+    fun refreshGeo() {
+        val host = server?.host?.takeIf { it.isNotEmpty() } ?: return
+        if (server?.country != null && server?.countryEn != null) return
+
+        viewModelScope.launch {
+            val (ru, en) = withContext(Dispatchers.IO) {
+                val ruDeferred = async { fetchGeo(host, "ru") }
+                val enDeferred = async { fetchGeo(host, "en") }
+                ruDeferred.await() to enDeferred.await()
+            }
+            if (ru == null && en == null) return@launch
+
+            val current = server ?: return@launch
+            if (current.host != host) return@launch
+            server = current.copy(
+                country = ru?.optString("country")?.takeIf { it.isNotEmpty() } ?: current.country,
+                city = ru?.optString("city")?.takeIf { it.isNotEmpty() } ?: current.city,
+                countryEn = en?.optString("country")?.takeIf { it.isNotEmpty() } ?: current.countryEn,
+                cityEn = en?.optString("city")?.takeIf { it.isNotEmpty() } ?: current.cityEn,
+                countryCode = (ru ?: en)?.optString("countryCode")?.takeIf { it.isNotEmpty() }
+                    ?: current.countryCode,
+            )
+            persistServer()
+        }
+    }
+
+    private fun fetchGeo(host: String, lang: String): JSONObject? = runCatching {
+        val url = URL("http://ip-api.com/json/$host?fields=status,country,countryCode,city&lang=$lang")
+        val connection = url.openConnection() as HttpURLConnection
+        connection.connectTimeout = 8000
+        connection.readTimeout = 8000
+        val text = connection.inputStream.bufferedReader().use { it.readText() }
+        JSONObject(text).takeIf { it.optString("status") == "success" }
+    }.getOrNull()
+
+    companion object {
+        const val DEFAULT_FILE_ID = "default"
+        const val DEFAULT_FILE_NAME = "ru-split-tunnel.json"
+
+        val demoServers = listOf(
+            DemoServer("🇳🇱", "Нидерланды", "Netherlands", "Амстердам", "Amsterdam", 34),
+            DemoServer("🇸🇪", "Швеция", "Sweden", "Стокгольм", "Stockholm", 41),
+            DemoServer("🇩🇪", "Германия", "Germany", "Франкфурт", "Frankfurt", 48),
+        )
+
+        fun entryCount(content: String, extension: String): Int {
+            if (extension.lowercase() == "json") {
+                runCatching { return JSONArray(content).length() }
+                runCatching { return JSONObject(content).length() }
+            }
+            return content.lineSequence().count { it.isNotBlank() }
+        }
+    }
+}
+
+object KeyParser {
+    fun extractServer(key: String): ServerInfo? {
+        val payload = key.removePrefix("vpn://")
+        val data = decodeBase64Flexible(payload) ?: return null
+        val text = runCatching { String(data, Charsets.UTF_8) }.getOrNull()
+
+        if (text != null && isWgQuick(text)) {
+            return ServerInfo(host = endpointHost(text) ?: "", config = text)
+        }
+
+        decodeQCompressedJson(data)?.let { json -> return fromJson(json) }
+
+        if (text != null) {
+            parseJson(text)?.let { json -> return fromJson(json) }
+        }
+
+        return null
+    }
+
+    private fun fromJson(json: Any): ServerInfo {
+        val config = findConfig(json)
+        val host = findHost(json)
+            ?: config?.let { endpointHost(it) }
+            ?: ""
+        return ServerInfo(host = host, config = config)
+    }
+
+    private fun findConfig(node: Any?): String? {
+        when (node) {
+            is JSONObject -> {
+                node.optString("last_config").takeIf { it.isNotEmpty() }?.let { raw ->
+                    findConfig(parseJson(raw) ?: raw)?.let { return it }
+                }
+                node.optString("config").takeIf { it.isNotEmpty() }?.let { raw ->
+                    findConfig(raw)?.let { return it }
+                }
+                for (key in node.keys()) {
+                    findConfig(node.opt(key))?.let { return it }
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until node.length()) {
+                    findConfig(node.opt(i))?.let { return it }
+                }
+            }
+            is String -> {
+                if (looksLikeJson(node)) {
+                    parseJson(node)?.let { inner -> findConfig(inner)?.let { return it } }
+                } else if (isWgQuick(node)) {
+                    return node
+                }
+                decodeBase64Flexible(node)?.let { bytes ->
+                    val inner = runCatching { String(bytes, Charsets.UTF_8) }.getOrNull()
+                    if (inner != null && inner != node) {
+                        findConfig(inner)?.let { return it }
+                    }
+                }
+            }
+        }
+        return null
+    }
+
+    private fun looksLikeJson(text: String): Boolean {
+        val trimmed = text.trimStart()
+        return trimmed.startsWith("{") || trimmed.startsWith("[\"")
+    }
+
+    private fun isWgQuick(text: String): Boolean =
+        text.contains("[Interface]") &&
+            text.contains("[Peer]") &&
+            text.lineSequence().any { it.trim().equals("[Interface]", ignoreCase = true) }
+
+    private fun decodeBase64Flexible(payload: String): ByteArray? {
+        val normalized = payload.replace('-', '+').replace('_', '/')
+        val padded = normalized + "=".repeat((4 - normalized.length % 4) % 4)
+        return runCatching { Base64.decode(padded, Base64.DEFAULT) }.getOrNull()
+    }
+
+    private fun endpointHost(text: String): String? {
+        for (line in text.lineSequence()) {
+            val trimmed = line.trim()
+            if (!trimmed.lowercase().startsWith("endpoint")) continue
+            val value = trimmed.substringAfter('=', "").trim()
+            if (value.isEmpty()) continue
+
+            return if (value.startsWith("[")) {
+                value.substringAfter('[').substringBefore(']')
+            } else {
+                value.substringBeforeLast(':')
+            }.takeIf { it.isNotEmpty() }
+        }
+        return null
+    }
+
+    private fun decodeQCompressedJson(compressed: ByteArray): Any? {
+        if (compressed.size <= 6) return null
+
+        val expectedSize = compressed.take(4).fold(0) { acc, byte -> (acc shl 8) or (byte.toInt() and 0xFF) }
+        if (expectedSize <= 0 || expectedSize > 10_000_000) return null
+
+        val output = ByteArray(expectedSize)
+        val inflater = Inflater()
+        return runCatching {
+            inflater.setInput(compressed, 4, compressed.size - 4)
+            val size = inflater.inflate(output)
+            if (size <= 0) return null
+            parseJson(String(output, 0, size, Charsets.UTF_8))
+        }.getOrNull().also { inflater.end() }
+    }
+
+    private fun parseJson(text: String): Any? =
+        runCatching { JSONObject(text) }.getOrNull()
+            ?: runCatching { JSONArray(text) }.getOrNull()
+
+    private fun findHost(node: Any?): String? {
+        when (node) {
+            is JSONObject -> {
+                for (key in listOf("hostName", "host")) {
+                    node.optString(key).takeIf { it.isNotEmpty() }?.let { return it }
+                }
+                for (key in node.keys()) {
+                    findHost(node.opt(key))?.let { return it }
+                }
+            }
+            is JSONArray -> {
+                for (i in 0 until node.length()) {
+                    findHost(node.opt(i))?.let { return it }
+                }
+            }
+            is String -> {
+                if (node.contains("[Interface]") || node.contains("Endpoint")) {
+                    return endpointHost(node)
+                }
+            }
+        }
+        return null
+    }
+}

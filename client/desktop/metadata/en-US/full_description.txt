@@ -1,0 +1,14 @@
+Nexa VPN is an open-source, multi-protocol client for connecting to VPN servers you control.
+
+Enter the SSH address and credentials for your own compatible VPS, and the app can deploy protocol-specific Docker containers and create a connection profile. You can also import existing supported VPN profiles or scan a QR code.
+
+Features include:
+
+• AmneziaWG/AWG2, WireGuard, OpenVPN and Xray-based transports
+• Self-hosted server setup
+• Split tunnelling and kill switch controls
+• DNS and routing controls
+• Profile and backup import/export
+• No Nexa-operated VPN subscription is required
+
+Nexa VPN is a GPL-3.0 derivative of Amnezia VPN. AmneziaWG is retained as a technical protocol compatibility name. Review the source, security status and third-party notices before deployment.

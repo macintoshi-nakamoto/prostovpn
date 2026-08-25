@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prosto VPN</title>
+    <meta
+      name="description"
+      content="Prosto VPN: подключение в одно нажатие, 60+ стран, скорость до 1 Гбит/с. Без логов и без сложных настроек. Пробный период — два дня бесплатно."
+    />
+    <meta name="theme-color" content="#FA4C16" />
+    <!-- Иконка сайта — та же оранжевая плитка, что у десктопного клиента. -->
+    <link rel="icon" href="/assets/favicon.ico?v=2" sizes="any" />
+    <link rel="icon" href="/assets/icon-512.png?v=2" type="image/png" sizes="512x512" />
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png?v=2" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <!--
+      Тема и язык до первого кадра.
+
+      Скрипт синхронный и стоит в <head> намеренно: React грузится отдельным
+      файлом, и пока он идёт по сети, страница уже нарисована. Поставь атрибут
+      в компоненте — человеку с тёмной темой сначала мигнёт белый лист. Здесь
+      же считается ровно то, что потом посчитает readTheme()/readLang(): для
+      темы — «сохранённая, иначе светлая» (системную не читаем — сайт по
+      умолчанию светлый), для языка — «сохранённый → язык браузера → русский».
+      Разойдись эти правила — первый кадр спорил бы со вторым.
+    -->
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var stored = null;
+        var lang = null;
+        try {
+          stored = localStorage.getItem("prosto_theme");
+          lang = localStorage.getItem("prosto_lang");
+        } catch (e) {
+          // Приватный режим запрещает хранилище — остаются значения по умолчанию.
+        }
+        var dark = stored === "dark";
+        root.setAttribute("data-theme", dark ? "dark" : "light");
+        if (dark) {
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", "#12141a");
+        }
+        if (lang !== "ru" && lang !== "en") {
+          var nav = navigator.languages || [navigator.language || "ru"];
+          lang = "ru";
+          for (var i = 0; i < nav.length; i++) {
+            var code = String(nav[i] || "").slice(0, 2).toLowerCase();
+            if (code === "ru" || code === "en") {
+              lang = code;
+              break;
+            }
+          }
+        }
+        root.lang = lang;
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

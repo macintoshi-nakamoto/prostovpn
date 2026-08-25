@@ -1,0 +1,13 @@
+[Unit]
+Description=Nexa VPN Service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=1
+ExecStart=/opt/NexaVPN/bin/NexaVPN-service
+
+[Install]
+WantedBy=multi-user.target

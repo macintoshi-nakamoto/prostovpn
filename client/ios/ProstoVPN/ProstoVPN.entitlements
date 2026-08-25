@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	Право поднимать пакетный туннель. Выдаётся Apple по отдельному запросу
+	(Certificates, Identifiers & Profiles → App ID → Network Extensions), и
+	без него профиль VPN не заведётся: приложение соберётся, установится и
+	молча не сможет подключиться.
+	-->
+	<key>com.apple.developer.networking.networkextension</key>
+	<array>
+		<string>packet-tunnel-provider</string>
+	</array>
+
+	<!--
+	Общая группа приложения и расширения. Через неё они делят связку ключей,
+	откуда расширение читает конфиг: сам конфиг в профиле VPN хранить
+	нельзя — там он лежит открытым текстом вместе с приватным ключом.
+	-->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.cc.prostovpn</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)cc.prostovpn.shared</string>
+	</array>
+</dict>
+</plist>

@@ -1,0 +1,2 @@
+singleton GC 1.0 GlobalConfig.qml
+singleton GeoResolver 1.0 GeoResolver.qml

@@ -1,0 +1,220 @@
+import asyncio
+
+from aiogram import F, Router
+from aiogram.types import Message, PreCheckoutQuery
+
+from database import models
+from handlers.common import show_screen
+from keyboards.menus import after_payment_menu, back_menu
+from keyboards.ui import tg
+from utils import assets, panel, screens, texts
+from utils.logger import logger
+from utils.notify import notify_admins
+from utils.render import show
+
+
+router = Router()
+
+
+METHODS = {"stars": "Telegram Stars", "card": "Карта в боте"}
+
+PRE_CHECKOUT_BUDGET = 6
+
+
+def _parse_payload(payload: str) -> tuple[str, str, int]:
+    parts = payload.split(":")
+    code = parts[0] if parts else ""
+    method = parts[1] if len(parts) > 1 else ""
+    quantity = 1
+
+    if len(parts) > 2 and parts[2].isascii() and parts[2].isdigit():
+        quantity = max(1, int(parts[2]))
+
+    return code, method, quantity
+
+
+@router.pre_checkout_query()
+async def pre_checkout(query: PreCheckoutQuery) -> None:
+    code, paid_with, quantity = _parse_payload(query.invoice_payload)
+
+    try:
+        plan = await asyncio.wait_for(panel.plan_by_code(code), timeout=PRE_CHECKOUT_BUDGET)
+    except (panel.PanelError, asyncio.TimeoutError):
+        await query.answer(ok=False, error_message="Сервис недоступен, попробуйте позже")
+        return
+
+    if not plan:
+        await query.answer(ok=False, error_message="Тариф больше недоступен")
+        return
+
+    user_id = query.from_user.id
+    session = await models.get_session(user_id)
+    login = session.panel_login if session else await models.last_login(user_id)
+
+    if not login:
+        await query.answer(
+            ok=False,
+            error_message="Сначала войдите в аккаунт в боте — иначе некому продлевать подписку",
+        )
+        return
+
+    expected = (plan.price_kopecks if paid_with == "card" else plan.stars) * quantity
+
+    if query.total_amount != expected:
+        logger.warning(
+            "устаревший счёт: user=%s тариф=%s способ=%s в счёте %s, сейчас %s",
+            user_id,
+            code,
+            paid_with or "?",
+            query.total_amount,
+            expected,
+        )
+        await query.answer(
+            ok=False,
+            error_message="Цена тарифа изменилась — откройте тарифы и создайте новый счёт",
+        )
+        return
+
+    await query.answer(ok=True)
+
+
+@router.message(F.successful_payment)
+async def successful_payment(message: Message) -> None:
+    payment = message.successful_payment
+    code, method, quantity = _parse_payload(payment.invoice_payload)
+    user_id = message.from_user.id
+
+    session = await models.get_session(user_id)
+    login = session.panel_login if session else await models.last_login(user_id)
+    charge_id = payment.telegram_payment_charge_id
+
+    logger.info(
+        "оплата: user=%s логин=%s тариф=%s сумма=%s %s charge=%s",
+        user_id,
+        login,
+        code,
+        payment.total_amount,
+        payment.currency,
+        charge_id,
+    )
+
+    fresh = await models.claim_star_payment(
+        charge_id=charge_id,
+        user_id=user_id,
+        plan_code=code,
+        amount=payment.total_amount,
+        currency=payment.currency,
+        panel_login=login,
+    )
+
+    if not fresh:
+        logger.info("платёж %s уже обработан — повтор пропускаем", charge_id)
+        return
+
+
+    plan = None
+
+    try:
+        plan = await panel.plan_by_code(code)
+
+        if plan is None:
+            raise panel.PanelError(f"тариф «{code}» пропал из витрины")
+
+        if not login:
+            raise panel.PanelError("не знаем, какой учётке продлевать")
+
+        label = METHODS.get(method, "Telegram")
+        if method == "stars":
+            label = f"{label} · {payment.total_amount}★"
+
+        await panel.extend(
+            login,
+            plan,
+            label,
+            external_id=charge_id,
+            provider="telegram",
+            payment_method=method or "stars",
+            quantity=quantity,
+        )
+        await models.finish_star_payment(charge_id, "done")
+    except Exception as error:
+        logger.exception("продление после оплаты не прошло: %s", error)
+        await models.finish_star_payment(charge_id, "failed", str(error)[:400])
+
+        await show(
+            message,
+            lambda: (
+                f'{tg("warn")} <b>Оплата получена</b>\n\n'
+                "Не удалось включить подписку автоматически — уже разбираемся, "
+                "доступ включим вручную.",
+                back_menu("support", "Поддержка"),
+            ),
+        )
+
+        await notify_admins(
+            message.bot,
+            f"⚠️ Оплата прошла, продление НЕ выполнено\n"
+            f"Пользователь: {user_id}\n"
+            f"Логин: {login or '—'}\n"
+            f"Тариф: {code}\n"
+            f"Сумма: {payment.total_amount} {payment.currency}\n"
+            f"Платёж: {payment.telegram_payment_charge_id}\n"
+            f"Причина: {error}",
+        )
+        return
+
+    account = None
+
+    if session:
+        try:
+            account = await panel.account(session.token)
+        except panel.PanelError:
+            account = None
+
+    await show_screen(
+        message,
+        lambda file_id: screens.paid(file_id, plan, account),
+        after_payment_menu(),
+        text=texts.paid_text(plan, account),
+        animation=assets.CABINET_ACTIVE,
+    )
+
+    await notify_admins(
+        message.bot,
+        f"💸 Оплата\n"
+        f"Логин: {login}\n"
+        f"Тариф: {plan.title}\n"
+        f"Сумма: {payment.total_amount} {payment.currency}",
+    )
+
+
+@router.message(F.refunded_payment)
+async def refunded_payment(message: Message) -> None:
+    refund = message.refunded_payment
+    charge_id = refund.telegram_payment_charge_id
+    row = await models.star_payment(charge_id)
+
+    logger.info(
+        "возврат: user=%s charge=%s сумма=%s %s",
+        message.from_user.id,
+        charge_id,
+        refund.total_amount,
+        refund.currency,
+    )
+
+    if row and row["status"] in ("refunding", "refunded", "refund_partial"):
+        return
+
+    await models.finish_star_payment(charge_id, "refunded_outside", "возврат вне бота")
+
+    await notify_admins(
+        message.bot,
+        f"↩️ Возврат звёзд ВНЕ бота — подписка НЕ снята\n"
+        f"Пользователь: {message.from_user.id}\n"
+        f"Учётка: {(row or {}).get('panel_login') or '—'}\n"
+        f"Тариф: {(row or {}).get('plan_code') or '—'}\n"
+        f"Платёж: {charge_id}\n"
+        f"Сумма: {refund.total_amount} {refund.currency}\n\n"
+        f"Снимите подписку в панели или командой:\n"
+        f"/refund {charge_id} возврат через Telegram",
+    )

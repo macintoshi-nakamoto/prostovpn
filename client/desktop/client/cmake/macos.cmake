@@ -1,0 +1,54 @@
+message("MAC build")
+
+find_library(FW_SYSTEMCONFIG SystemConfiguration)
+find_library(FW_SERVICEMGMT ServiceManagement)
+find_library(FW_SECURITY Security)
+find_library(FW_COREWLAN CoreWLAN)
+find_library(FW_NETWORK Network)
+find_library(FW_USER_NOTIFICATIONS UserNotifications)
+find_library(FW_NETWORK_EXTENSION NetworkExtension)
+
+set(LIBS ${LIBS}
+    ${FW_SYSTEMCONFIG}
+    ${FW_SERVICEMGMT}
+    ${FW_SECURITY}
+    ${FW_COREWLAN}
+    ${FW_NETWORK}
+    ${FW_USER_NOTIFICATIONS}
+    ${FW_NETWORK_EXTENSION}
+)
+
+set_target_properties(${PROJECT} PROPERTIES 
+    MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_GUI_IDENTIFIER "${BUILD_OSX_APP_IDENTIFIER}"
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${CMAKE_PROJECT_VERSION_MAJOR}.${CMAKE_PROJECT_VERSION_MINOR}.${CMAKE_PROJECT_VERSION_PATCH}"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${CMAKE_PROJECT_VERSION_TWEAK}"
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${BUILD_OSX_APP_IDENTIFIER}"
+)
+
+set(HEADERS ${HEADERS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/utils/macosUtil.h
+)
+
+set(SOURCES ${SOURCES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/ui/utils/macosUtil.mm
+)
+
+set(ICON_FILE ${CMAKE_CURRENT_SOURCE_DIR}/images/app.icns)
+set(MACOSX_BUNDLE_ICON_FILE app.icns)
+set_source_files_properties(${ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+set(SOURCES ${SOURCES} ${ICON_FILE})
+
+target_compile_options(${PROJECT} PRIVATE
+    -DGROUP_ID=\"${BUILD_OSX_GROUP_IDENTIFIER}\"
+    -DVPN_NE_BUNDLEID=\"${BUILD_OSX_APP_IDENTIFIER}.network-extension\"
+)
+
+# Get SDK path
+execute_process(
+    COMMAND sh -c "xcrun --sdk macosx --show-sdk-path"
+    OUTPUT_VARIABLE OSX_SDK_PATH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+message("OSX_SDK_PATH is: ${OSX_SDK_PATH}")
+

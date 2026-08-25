@@ -1,0 +1,22 @@
+[Unit]
+Description=Prosto VPN Telegram bot
+After=network-online.target prosto-panel.service
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=main
+WatchdogSec=180
+WorkingDirectory=/opt/prosto-bot
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/prosto-bot/venv/bin/python app.py
+Restart=always
+RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=20
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

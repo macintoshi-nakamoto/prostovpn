@@ -1,0 +1,130 @@
+.sh {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  background: transparent;
+  transition: background 0.24s ease, box-shadow 0.24s ease, border-radius 0.24s ease;
+}
+.sh-solid {
+  background: var(--bg);
+  box-shadow: var(--shadow-soft);
+  border-bottom-left-radius: 24px;
+  border-bottom-right-radius: 24px;
+}
+.sh-in {
+  height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+}
+.sh-logo picture {
+  display: block;
+}
+.sh-logo img {
+  height: 19px;
+  width: auto;
+  display: block;
+  filter: brightness(0) invert(1);
+  transition: filter 0.24s ease;
+}
+
+.sh-solid .sh-logo img {
+  filter: none;
+}
+.sh-nav {
+  display: flex;
+  align-items: center;
+  gap: 30px;
+  font-size: 15px;
+  font-weight: 500;
+}
+.sh-nav a {
+  color: rgba(255, 255, 255, 0.92);
+  transition: color 0.24s ease;
+}
+.sh-nav a:hover {
+  color: #fff;
+}
+.sh-solid .sh-nav a {
+  color: var(--ink);
+}
+.sh-solid .sh-nav a:hover {
+  color: var(--accent);
+}
+.sh-cta {
+  flex: none;
+  background: transparent;
+  color: #fff;
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 11px 22px;
+  border-radius: 999px;
+  transition: background 0.24s ease, color 0.24s ease, border-color 0.24s ease;
+}
+.sh-cta:hover {
+  color: #fff;
+}
+.sh-solid .sh-cta {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sh-solid .sh-cta:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.sh-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+}
+
+.sh:not(.sh-solid) .ctl-lang,
+.sh:not(.sh-solid) .ctl-theme {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.92);
+
+  -webkit-backdrop-filter: blur(10px) saturate(1.4);
+  backdrop-filter: blur(10px) saturate(1.4);
+}
+.sh:not(.sh-solid) .ctl-lang button {
+  color: rgba(255, 255, 255, 0.75);
+}
+.sh:not(.sh-solid) .ctl-lang button:hover {
+  color: #fff;
+}
+
+.sh:not(.sh-solid) .ctl-lang button.active {
+  color: var(--accent-deep);
+}
+.sh:not(.sh-solid) .ctl-thumb {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 10px rgba(120, 30, 0, 0.28);
+}
+.sh:not(.sh-solid) .ctl-theme:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+@media (max-width: 860px) {
+  .sh-nav {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  .sh-right {
+    gap: 10px;
+  }
+
+  .sh-cta {
+    padding: 10px 15px;
+    font-size: 14px;
+  }
+}

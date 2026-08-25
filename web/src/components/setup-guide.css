@@ -1,0 +1,50 @@
+.sg {
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.gd-embedded .gd-tabs-row,
+.gd-embedded .gd-body {
+  background: transparent;
+  border: none;
+}
+.gd-embedded .wrap {
+  width: 100%;
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+.gd-embedded .gd-tabs-row {
+  position: static;
+  padding: 0 0 18px;
+}
+.gd-embedded .gd-body {
+  padding: 0;
+}
+
+.gd-embedded .gd-split,
+.gd-embedded .gd-help {
+  border-radius: var(--radius-card);
+  margin-top: 22px;
+  padding-left: 22px;
+  padding-right: 22px;
+}
+
+.gd-aside-login {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--invert-fg);
+  opacity: 0.86;
+}
+.gd-aside-login b {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 1;
+}
+
+@media (max-width: 900px) {
+  .gd-embedded .gd-split,
+  .gd-embedded .gd-help {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Песочница выключена намеренно. Приложению нужны две вещи, которых в
+	  ней нет: unix-сокет в /var/run для разговора с root-службой и запрос
+	  прав администратора при её установке. Обе доступны только вне
+	  песочницы, поэтому App Store для этой сборки закрыт — распространение
+	  идёт напрямую, как у сборок для Windows и Android.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>

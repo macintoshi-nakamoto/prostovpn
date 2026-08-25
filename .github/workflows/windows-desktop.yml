@@ -1,0 +1,214 @@
+name: windows-desktop
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['client/windows/**', '.github/workflows/windows-desktop.yml']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: client/windows
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: client/windows/tunnel/go.sum
+
+      - name: Test tunnel engine
+        working-directory: client/windows/tunnel
+        run: go test ./...
+
+      - name: Check key parsing and coroutine dispatchers
+        run: ./gradlew keycheck --no-daemon
+
+      - name: Smoke test tunnel engine on real Windows
+        shell: pwsh
+        timeout-minutes: 10
+        working-directory: client/windows
+        run: |
+          ./gradlew buildTunnel fetchWintun --no-daemon
+
+          $work = "$env:RUNNER_TEMP\tunneltest"
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          Copy-Item "$PWD\resources\windows\prostovpn-tunnel.exe" $work
+          Copy-Item "$PWD\resources\windows\wintun.dll" $work
+          $engine = "$work\prostovpn-tunnel.exe"
+
+          function Invoke-Engine {
+            param([string[]]$EngineArgs)
+            $out = "$work\out.txt"
+            $err = "$work\err.txt"
+            $p = Start-Process -FilePath $engine -ArgumentList $EngineArgs -Wait -PassThru `
+              -NoNewWindow -RedirectStandardOutput $out -RedirectStandardError $err
+            $text = (Get-Content $out -Raw -ErrorAction SilentlyContinue)
+            if ($null -ne $p.ExitCode -and $p.ExitCode -ne 0) {
+              Write-Host "движок вернул $($p.ExitCode): $(Get-Content $err -Raw -ErrorAction SilentlyContinue)"
+            }
+            return "$text".Trim()
+          }
+
+          $state = Invoke-Engine @('/status', 'prostovpn')
+          Write-Host "исходное состояние: $state"
+          if ($state -ne 'ABSENT') { throw "служба уже существует: $state" }
+
+          go build -C tunnel -o "$work\testpeer.exe" ./testpeer
+          $peer = Start-Process -FilePath "$work\testpeer.exe" `
+            -ArgumentList @('-port','39999','-conf-out',"$work\live.conf") `
+            -PassThru -NoNewWindow -RedirectStandardOutput "$work\peer.log" -RedirectStandardError "$work\peer.err"
+          $ready = $false
+          foreach ($i in 1..50) {
+            if ((Get-Content "$work\peer.log" -Raw -ErrorAction SilentlyContinue) -match 'PEER READY') { $ready = $true; break }
+            if ($peer.HasExited) { break }
+            Start-Sleep -Milliseconds 200
+          }
+          if (-not $ready) {
+            Get-Content "$work\peer.err" -ErrorAction SilentlyContinue
+            throw "локальный пир не поднялся"
+          }
+
+          Invoke-Engine @('/installtunnelservice', "$work\live.conf", "$work\install-live.log") | Out-Null
+          $liveState = "$work\state.txt"
+          $handshake = $false
+          foreach ($i in 1..60) {
+            $stateText = Get-Content $liveState -Raw -ErrorAction SilentlyContinue
+            if ($stateText -match 'handshake=([1-9][0-9]*)') { $handshake = $true; break }
+            Start-Sleep -Milliseconds 500
+          }
+          Invoke-Engine @('/stop', 'live') | Out-Null
+          foreach ($i in 1..25) {
+            $s = Invoke-Engine @('/status', 'live')
+            if ($s -eq 'STOPPED' -or $s -eq 'ABSENT') { break }
+            Start-Sleep -Milliseconds 400
+          }
+          Invoke-Engine @('/uninstalltunnelservice', 'live') | Out-Null
+          Stop-Process -Id $peer.Id -Force -ErrorAction SilentlyContinue
+          if (-not $handshake) {
+            Write-Host "--- отчёт установки ---"
+            Get-Content "$work\install-live.log" -ErrorAction SilentlyContinue
+            Write-Host "--- журнал туннеля ---"
+            Get-Content "$work\tunnel.log" -ErrorAction SilentlyContinue
+            Write-Host "--- журнал пира ---"
+            Get-Content "$work\peer.log" -ErrorAction SilentlyContinue
+            throw "живое рукопожатие с маскировкой не состоялось"
+          }
+          Write-Host "живое рукопожатие с маскировкой Amnezia 2.x состоялось"
+          Remove-Item $liveState -Force -ErrorAction SilentlyContinue
+          Remove-Item "$work\tunnel.log" -Force -ErrorAction SilentlyContinue
+
+          $conf = @(
+            '[Interface]'
+            'Address = 10.8.1.5/32'
+            'PrivateKey = AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='
+            'Jc = 4'
+            'Jmin = 40'
+            'Jmax = 70'
+            'S1 = 84'
+            'S2 = 43'
+            'S3 = 20'
+            'S4 = 15'
+            'I1 = <b 0xf6ab3267fa><b 0xf6ab><t><r 10>'
+            'I2 = <b 0x11223344><t>'
+            'I3 = <b 0x55667788><r 4>'
+            'H1 = 1234567891'
+            'H2 = 1234567892'
+            'H3 = 1234567893'
+            'H4 = 1234567894'
+            'MTU = 1376'
+            ''
+            '[Peer]'
+            'PublicKey = 1m8v/lROKRSJTeZbV81vZNZi2NZZX4BGU3OcLWqbvxE='
+            'AllowedIPs = 10.9.0.0/24'
+            'Endpoint = 203.0.113.77:41820'
+            'PersistentKeepalive = 25'
+          ) -join "`r`n"
+          [IO.File]::WriteAllText("$work\prostovpn.conf", $conf + "`r`n", (New-Object Text.UTF8Encoding $false))
+
+          Invoke-Engine @('/installtunnelservice', "$work\prostovpn.conf", "$work\install.log") | Out-Null
+          Write-Host "--- отчёт установки ---"
+          Get-Content "$work\install.log" -ErrorAction SilentlyContinue
+
+          $up = $false
+          foreach ($i in 1..25) {
+            $state = Invoke-Engine @('/status', 'prostovpn')
+            if ($state -eq 'RUNNING') { $up = $true; break }
+            if ($state -eq 'STOPPED' -or $state -eq 'ABSENT') { break }
+            Start-Sleep -Milliseconds 400
+          }
+          Write-Host "состояние после запуска: $state"
+
+          if (-not $up) {
+            Write-Host "--- журнал туннеля ---"
+            Get-Content "$work\tunnel.log" -ErrorAction SilentlyContinue
+            Invoke-Engine @('/uninstalltunnelservice', 'prostovpn') | Out-Null
+            throw "движок туннеля не поднялся"
+          }
+
+          $statePath = "$work\state.txt"
+          $seen = $false
+          foreach ($i in 1..15) {
+            if (Test-Path $statePath) { $seen = $true; break }
+            Start-Sleep -Milliseconds 400
+          }
+          if (-not $seen) {
+            Invoke-Engine @('/uninstalltunnelservice', 'prostovpn') | Out-Null
+            throw "движок не выложил состояние туннеля"
+          }
+          Write-Host "--- состояние туннеля ---"
+          $stateText = Get-Content $statePath -Raw
+          Write-Host $stateText
+          if ($stateText -notmatch 'handshake=0') {
+            Invoke-Engine @('/uninstalltunnelservice', 'prostovpn') | Out-Null
+            throw "ожидали отсутствие рукопожатия с недоступным пиром"
+          }
+
+          Invoke-Engine @('/stop', 'prostovpn') | Out-Null
+          foreach ($i in 1..25) {
+            $state = Invoke-Engine @('/status', 'prostovpn')
+            if ($state -eq 'STOPPED' -or $state -eq 'ABSENT') { break }
+            Start-Sleep -Milliseconds 400
+          }
+          Write-Host "состояние после /stop: $state"
+          Write-Host "--- журнал туннеля ---"
+          Get-Content "$work\tunnel.log" -ErrorAction SilentlyContinue
+          Invoke-Engine @('/uninstalltunnelservice', 'prostovpn') | Out-Null
+          if ($state -ne 'STOPPED' -and $state -ne 'ABSENT') {
+            throw "служба не остановилась по сигналу: $state"
+          }
+          Write-Host "движок туннеля работает"
+
+      - name: Build installers (MSI + EXE)
+        env:
+          PANEL_URL: ${{ vars.PANEL_URL || 'https://prostovpn.cc' }}
+        run: ./gradlew packageMsi packageExe --no-daemon
+
+      - name: Print jpackage logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse build/compose/logs -ErrorAction SilentlyContinue | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
+            Write-Host "===== $($_.FullName) ====="
+            Get-Content $_.FullName
+          }
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProstoVPN-windows-msi
+          path: client/windows/build/compose/binaries/main/msi/*.msi
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProstoVPN-windows-exe
+          path: client/windows/build/compose/binaries/main/exe/*.exe

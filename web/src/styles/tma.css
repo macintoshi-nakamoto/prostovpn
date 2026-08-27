@@ -1128,10 +1128,6 @@ html.tma .tp-ribbon b {
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
-html.tma .tp-ribbon-save {
-  background: var(--accent-soft);
-}
-
 html.tma .tp-daily {
   display: grid;
   grid-template-columns: 1fr auto auto;

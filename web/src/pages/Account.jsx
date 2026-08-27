@@ -248,7 +248,7 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply })
 
   return (
     <div className="ac-account">
-      <div className="ac-hero">
+      <div className={`ac-hero${data.freeze?.frozen ? " frozen" : ""}`}>
         <div className="ac-hero-body">
           <span className="ac-hero-status">
             <span className="ac-dot" />

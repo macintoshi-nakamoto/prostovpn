@@ -48,3 +48,4 @@ bot/venv/
 bot/logs/
 bot/database/database.db
 bot/assets/
+.claude/

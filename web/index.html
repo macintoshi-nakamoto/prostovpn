@@ -60,6 +60,19 @@
           try {
             sessionStorage.setItem("prosto_tma", "1");
           } catch (e) {}
+          // Развернуться сразу, не дожидаясь React: иначе до конца загрузки
+          // мини-апп живёт полуокном и закрывается свайпом по списку.
+          try {
+            var wa = window.Telegram && window.Telegram.WebApp;
+            if (wa) {
+              wa.ready();
+              wa.expand();
+              if (wa.disableVerticalSwipes) wa.disableVerticalSwipes();
+            }
+          } catch (e) {}
+          // Безопасные зоны нужны только приложению — сайту не трогаем.
+          var vp = document.querySelector('meta[name="viewport"]');
+          if (vp) vp.setAttribute("content", vp.getAttribute("content") + ", viewport-fit=cover");
           if (stored !== "light" && stored !== "dark") {
             var m = location.hash.match(/tgWebAppThemeParams=([^&]+)/);
             if (m) {

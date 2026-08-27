@@ -234,6 +234,7 @@ export function Account() {
             data={data}
             onManage={() => navigate(sectionPath("plan"))}
             onSetup={() => navigate(sectionPath("setup"))}
+            onFriends={() => navigate(sectionPath("friends"))}
             onPassword={() => setPwOpen(true)}
             onChanged={load}
             onApply={apply}
@@ -249,7 +250,40 @@ export function Account() {
             onApply={apply}
           />
         )}
-        {data && tab === "setup" && <SetupGuide login={data.login} />}
+        {data && tab === "setup" && (
+          <>
+            {isTma() && (
+              <div className="ap ap-setup">
+                <div className="ac-card">
+                  <div className="ac-card-head">
+                    <h2>{t("account.devicesTitle")}</h2>
+                  </div>
+                  {data.devices.length === 0 ? (
+                    <p className="ac-empty">{t("account.devicesEmpty")}</p>
+                  ) : (
+                    <div className="ac-devices">
+                      {data.devices.map((d) => (
+                        <DeviceRow
+                          key={`${d.kind || "app"}-${d.id}`}
+                          device={d}
+                          onChanged={load}
+                          onApply={apply}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <IosCard
+                  ios={data.ios}
+                  active={data.active}
+                  onApply={apply}
+                  onManage={() => navigate(sectionPath("plan"))}
+                />
+              </div>
+            )}
+            <SetupGuide login={data.login} />
+          </>
+        )}
 
         {data && tab === "friends" && <Referrals />}
       </main>
@@ -270,10 +304,202 @@ export function Account() {
   );
 }
 
-function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply }) {
+const AP_ICONS = {
+  shield: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6l7-3z" />
+    </svg>
+  ),
+  plug: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="7" y="3" width="10" height="18" rx="2.5" />
+      <path d="M12 9v6M9 12h6" />
+    </svg>
+  ),
+  key: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="8" cy="14" r="4" />
+      <path d="M11 11l8-8M16 4l3 3M13 7l3 3" />
+    </svg>
+  ),
+  file: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 3h8l4 4v14H6V3z" />
+      <path d="M14 3v5h4M9 13h6M9 17h6" />
+    </svg>
+  ),
+  gift: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="9" width="16" height="12" rx="2" />
+      <path d="M4 13h16M12 9v12M12 9c-3.5 0-4.5-2-4.5-3A1.8 1.8 0 0 1 9.3 4C11 4 12 6.5 12 9zm0 0c3.5 0 4.5-2 4.5-3A1.8 1.8 0 0 0 14.7 4C13 4 12 6.5 12 9z" />
+    </svg>
+  ),
+  person: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="8" r="3.6" />
+      <path d="M5 20c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5" />
+    </svg>
+  ),
+  lock: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="5" y="11" width="14" height="9" rx="2.5" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </svg>
+  ),
+};
+
+function ApRow({ icon, title, sub, value, disabled, onClick, href, download }) {
+  const body = (
+    <>
+      <span className="ap-row-ic">{AP_ICONS[icon]}</span>
+      <span className="ap-row-body">
+        <span className="ap-row-t">{title}</span>
+        {sub && <span className="ap-row-s">{sub}</span>}
+      </span>
+      {value ? <span className="ap-row-v">{value}</span> : <span className="ap-chev">&rsaquo;</span>}
+    </>
+  );
+  if (href) {
+    return (
+      <a className="ap-row" href={href} download={download} aria-disabled={disabled || undefined}>
+        {body}
+      </a>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="ap-row"
+      onClick={onClick}
+      aria-disabled={disabled || undefined}
+      disabled={disabled}
+    >
+      {body}
+    </button>
+  );
+}
+
+// Главная мини-аппа: карта статуса с круглой CTA, пауза, действия и
+// аккаунт — группами строк. Стиль нативных мини-аппов, наш цвет.
+function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChanged, onApply }) {
+  const { t, f } = useI18n();
+  const frozen = Boolean(data.freeze?.frozen);
+  const file = data.tunnel_file;
+  const [copied, setCopied] = useState(false);
+
+  const sub = frozen
+    ? t("account.frozenHero", { days: f.days(data.days_left ?? 0) })
+    : data.active && data.expires_at
+      ? t(data.days_left != null ? "account.validUntilLeft" : "account.validUntil", {
+          date: f.longDate(data.expires_at),
+          left: f.days(data.days_left),
+        })
+      : t("account.subscribePrompt");
+
+  const copyId = async () => {
+    try {
+      await navigator.clipboard.writeText(data.public_id);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {}
+  };
+
+  return (
+    <div className="ap">
+      <div className="ap-card">
+        <div className="ap-head">
+          <span className="ap-ic">{AP_ICONS.shield}</span>
+          <span className="ap-head-body">
+            <span className="ap-title">
+              {data.plan_title ? `Prosto VPN · ${data.plan_title}` : "Prosto VPN"}
+            </span>
+            <span className="ap-sub">{sub}</span>
+          </span>
+        </div>
+        <button className="ap-cta" onClick={onManage}>
+          {t("account.manage")}
+        </button>
+        <div className="ap-mini">
+          <span>
+            {t("account.statDevices")}{" "}
+            <b>{t("account.statOf", { used, total: data.device_limit })}</b>
+          </span>
+          <span>
+            {t("account.statTraffic")} <b>{f.bytes(data.traffic_used_bytes)}</b>
+          </span>
+        </div>
+      </div>
+
+      <FreezeCard freeze={data.freeze} onApply={onApply} />
+
+      <div className="ap-rows">
+        <ApRow
+          icon="plug"
+          title={t("account.devicesAdd")}
+          sub={t("account.tmaConnectSub")}
+          onClick={onSetup}
+        />
+        <ApRow
+          icon="key"
+          title={t("account.tmaIosTitle")}
+          sub={t("account.tmaIosSub")}
+          onClick={onSetup}
+        />
+        <ApRow
+          icon="file"
+          title={t("account.bypassTitle")}
+          sub={t("account.tmaBypassSub")}
+          href={file?.available ? file.url : undefined}
+          download={file?.available ? file.filename : undefined}
+          disabled={!file?.available}
+        />
+        <ApRow
+          icon="gift"
+          title={t("account.tmaRefTitle")}
+          sub={t("account.tmaRefSub")}
+          onClick={onFriends}
+        />
+      </div>
+
+      <div className="ap-rows">
+        <ApRow icon="person" title={t("account.fieldLogin")} value={data.login} onClick={copyId} />
+        <ApRow icon="lock" title={t("account.changePassword")} onClick={onPassword} />
+        <ApRow
+          icon="file"
+          title={t("account.statPublicId")}
+          value={copied ? t("account.tmaCopied") : data.public_id}
+          onClick={copyId}
+        />
+      </div>
+
+      <div className="ac-card">
+        <div className="ac-kvs">
+          <EmailRow email={data.email} onChanged={onChanged} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountTab({ data, onManage, onSetup, onFriends, onPassword, onChanged, onApply }) {
   const { t, f } = useI18n();
   const used = data.devices.length;
   const free = Math.max(0, data.device_limit - used);
+
+  if (isTma()) {
+    return (
+      <TmaHome
+        data={data}
+        used={used}
+        onManage={onManage}
+        onSetup={onSetup}
+        onFriends={onFriends}
+        onPassword={onPassword}
+        onChanged={onChanged}
+        onApply={onApply}
+      />
+    );
+  }
 
   return (
     <div className="ac-account">
@@ -1330,7 +1556,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
         </div>
       )}
 
-      <FreezeCard freeze={data.freeze} onApply={onApply} />
+      {!isTma() && <FreezeCard freeze={data.freeze} onApply={onApply} />}
 
       {upcoming.length > 0 && (
         <div className="ac-card ac-plan-queue">

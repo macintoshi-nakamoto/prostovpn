@@ -17,12 +17,16 @@ html.tma {
   --tma-shadow: 0 14px 44px rgba(20, 25, 35, 0.16);
 }
 html.tma[data-theme="dark"] {
-  --tma-canvas: #0e1013;
-  --tma-card: #17191f;
-  --tma-inset: #1e2128;
-  --tma-glass: rgba(23, 26, 32, 0.66);
-  --tma-glass-line: rgba(255, 255, 255, 0.1);
+  --tma-canvas: #1a1a1c;
+  --tma-card: #29292b;
+  --tma-inset: #343437;
+  --tma-glass: rgba(41, 41, 43, 0.66);
+  --tma-glass-line: rgba(255, 255, 255, 0.09);
   --tma-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+  --tma-sep: rgba(255, 255, 255, 0.07);
+}
+html.tma {
+  --tma-sep: rgba(10, 14, 20, 0.07);
 }
 
 /* ---------- канва и общий тон приложения ---------- */
@@ -512,4 +516,183 @@ html.tma .ac-user-btn,
 html.tma .btn {
   user-select: none;
   -webkit-user-select: none;
+}
+
+/* ==========================================================================
+   Главная мини-аппа: карточный формат «как у нативных» — большая карта
+   статуса с круглой иконкой и полностью круглой CTA, группы строк
+   иконка-текст-шеврон. Скругления 24, канва и карточки — палитра выше.
+   ========================================================================== */
+
+html.tma .ap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+html.tma .ap-card {
+  background: var(--tma-card);
+  border-radius: 24px;
+  padding: 20px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Шапка карты: слоёный круг с иконкой + заголовок + подзаголовок */
+html.tma .ap-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+html.tma .ap-ic {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(closest-side, var(--accent) 58%, rgba(250, 76, 22, 0.28) 59% 74%, rgba(250, 76, 22, 0.12) 75% 100%);
+  color: #fff;
+}
+html.tma .ap-ic svg {
+  width: 26px;
+  height: 26px;
+}
+html.tma .ap-head-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+html.tma .ap-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+html.tma .ap-sub {
+  font-size: 14.5px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+
+/* Полностью круглая CTA, как системная */
+html.tma .ap-cta {
+  border: none;
+  cursor: pointer;
+  min-height: 52px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 16.5px;
+  font-weight: 600;
+  font-family: inherit;
+  transition: transform 0.16s var(--ease-out, ease), background 0.2s ease;
+}
+html.tma .ap-cta:active {
+  transform: scale(0.97);
+}
+
+/* Мини-статы под CTA — через тонкий разделитель */
+html.tma .ap-mini {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--tma-sep);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+html.tma .ap-mini b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Группа строк: иконка в кружке + текст + шеврон, разделители с отступом */
+html.tma .ap-rows {
+  background: var(--tma-card);
+  border-radius: 24px;
+  padding: 6px 0;
+  display: flex;
+  flex-direction: column;
+}
+html.tma .ap-row {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+  color: var(--ink);
+  font-family: inherit;
+  transition: background 0.15s ease;
+  position: relative;
+}
+html.tma .ap-row:active {
+  background: var(--tma-inset);
+}
+html.tma .ap-row + .ap-row::before {
+  content: "";
+  position: absolute;
+  left: 72px;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--tma-sep);
+}
+html.tma .ap-row-ic {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff;
+}
+html.tma .ap-row-ic svg {
+  width: 19px;
+  height: 19px;
+}
+html.tma .ap-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+html.tma .ap-row-t {
+  font-size: 16px;
+  font-weight: 600;
+}
+html.tma .ap-row-s {
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--text-dim);
+}
+html.tma .ap-row-v {
+  font-size: 15px;
+  color: var(--text-dim);
+  max-width: 45vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html.tma .ap-chev {
+  color: var(--text-faint);
+  font-size: 17px;
+  line-height: 1;
+}
+html.tma .ap-row[aria-disabled="true"] {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* Заморозка на главной — в общий радиус */
+html.tma .ac-freeze {
+  border-radius: 24px;
 }

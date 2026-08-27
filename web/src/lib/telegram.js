@@ -105,13 +105,32 @@ function mix(hexA, hexB, k) {
 // его секции. Тогда мини-апп неотличим от родного экрана на любой платформе:
 // на iOS в тёмной теме канва — почти чёрная, на Android — своя, и мы всегда
 // совпадаем, потому что берём цвета из themeParams, а не угадываем.
+// Канва тёмной темы приложения — константа дизайна, а не цвет клиента.
+export const TMA_DARK_CANVAS = "#1a1a1c";
+
 export function syncTmaTheme() {
   const wa = webApp();
   if (!wa) return;
+  const root = document.documentElement;
+
+  if (wa.colorScheme === "dark") {
+    // Тёмная тема — наша собственная палитра (см. tma.css): переменные не
+    // трогаем, а Telegram просим покрасить свою шапку и фон в нашу канву,
+    // чтобы приложение сливалось с обёрткой одним цветом.
+    root.style.removeProperty("--tma-canvas");
+    root.style.removeProperty("--tma-card");
+    root.style.removeProperty("--tma-glass");
+    root.style.removeProperty("--tma-inset");
+    try {
+      wa.setBackgroundColor?.(TMA_DARK_CANVAS);
+      wa.setHeaderColor?.(TMA_DARK_CANVAS);
+    } catch {}
+    return;
+  }
+
   const p = wa.themeParams || {};
   const canvas = p.secondary_bg_color || p.bg_color;
   const card = p.section_bg_color || p.bg_color;
-  const root = document.documentElement;
   if (canvas) root.style.setProperty("--tma-canvas", canvas);
   if (card) {
     root.style.setProperty("--tma-card", card);
@@ -121,8 +140,6 @@ export function syncTmaTheme() {
     if (inset) root.style.setProperty("--tma-inset", inset);
   }
   try {
-    // Шапка и фон самого Telegram — в цвет канвы: исчезает шов между
-    // «его» интерфейсом и нашим.
     wa.setBackgroundColor?.("secondary_bg_color");
     wa.setHeaderColor?.("secondary_bg_color");
   } catch {

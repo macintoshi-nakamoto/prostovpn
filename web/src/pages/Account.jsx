@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
-import { isTma, pushBack, tmaHaptic, tmaUser } from "../lib/telegram.js";
+import { isTma, tmaHaptic, tmaUser } from "../lib/telegram.js";
 import { EmailDialog } from "../components/EmailDialog.jsx";
 import { SheetShell } from "../components/SheetShell.jsx";
 import { ScreenShell } from "../components/ScreenShell.jsx";
@@ -112,13 +112,6 @@ export function Account() {
   // Аватар из Telegram — только внутри мини-аппа; подпись проверяет сервер,
   // фото — чистая витрина.
   const tgPhoto = isTma() ? tmaUser()?.photo_url : null;
-
-  // Системная кнопка «назад» Telegram: с любой вкладки — на главную.
-  // Открытые листы кладут свой обработчик поверх (см. pushBack).
-  useEffect(() => {
-    if (!isTma() || tab === "account") return undefined;
-    return pushBack(() => navigate(sectionPath("account")));
-  }, [tab, navigate]);
 
   const load = useCallback(async () => {
     try {
@@ -1547,12 +1540,9 @@ function TmaPaySheet({ open, plan, quantity, busyMethod, invoice, onPay, onNewIn
           ))}
         </div>
         {method === "stars" ? (
-          <>
-            <a className="ap-cta tps-cta" href={starsPayUrl(plan.code)}>
-              {t("account.tmaStarsGo")}
-            </a>
-            <p className="tps-hint">{t("account.tmaStarsHint")}</p>
-          </>
+          <a className="ap-cta tps-cta" href={starsPayUrl(plan.code)}>
+            {t("account.tmaStarsGo")}
+          </a>
         ) : (
           <button
             type="button"
@@ -1563,6 +1553,9 @@ function TmaPaySheet({ open, plan, quantity, busyMethod, invoice, onPay, onNewIn
             {busyMethod ? "…" : t("account.tmaPayCta", { price })}
           </button>
         )}
+        <p className="tps-hint">
+          {method === "stars" ? t("account.tmaStarsHint") : "\u00a0"}
+        </p>
       </>
     );
   }
@@ -1722,9 +1715,24 @@ function TmaTransfersScreen({ open, onClose }) {
   );
 }
 
-// История платежей — отдельный экран.
+// История платежей — отдельный экран. Тап по строке копирует номер заказа.
 function TmaPaymentsScreen({ open, payments, onClose }) {
   const { t, f } = useI18n();
+  const [copied, setCopied] = useState(null);
+
+  const orderNo = (row) => ((row.comment || "").match(/[0-9a-f-]{8,}/i) || [null])[0];
+
+  const copyRow = async (row, i) => {
+    const no = orderNo(row);
+    if (!no) return;
+    try {
+      await navigator.clipboard.writeText(no);
+      tmaHaptic("light");
+      setCopied(i);
+      setTimeout(() => setCopied((cur) => (cur === i ? null : cur)), 1400);
+    } catch {}
+  };
+
   return (
     <ScreenShell open={open} title={t("account.paymentsTitle")} onClose={onClose}>
       {payments.length === 0 ? (
@@ -1732,13 +1740,17 @@ function TmaPaymentsScreen({ open, payments, onClose }) {
       ) : (
         <div className="scr-rows">
           {payments.map((row, i) => (
-            <div className="scr-row" key={i}>
+            <button type="button" className="scr-row" key={i} onClick={() => copyRow(row, i)}>
               <span className="ap-row-body">
                 <span className="ap-row-t">{row.comment || t("account.payFallback")}</span>
-                <span className="ap-row-s">{f.longDate(row.paid_at)}</span>
+                <span className="ap-row-s">
+                  {copied === i
+                    ? t("account.tmaOrderCopied")
+                    : `${f.longDate(row.paid_at)}${orderNo(row) ? " · " + t("account.tmaTapToCopy") : ""}`}
+                </span>
               </span>
               <b className="scr-in">{f.money(row.amount, row.currency)}</b>
-            </div>
+            </button>
           ))}
         </div>
       )}

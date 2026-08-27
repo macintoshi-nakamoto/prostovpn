@@ -500,6 +500,8 @@ export const ru = {
     tmaEmailTitle: "Почта",
     tmaEmailSub: "Для чеков и восстановления пароля",
     tmaEmailDone: "Почта сохранена",
+    tmaOrderCopied: "Номер заказа скопирован",
+    tmaTapToCopy: "тап — скопировать №",
     tmaPlansTitle: "Выберите тариф",
     tmaSave: "выгода {pct}%",
     tmaHit: "Хит",

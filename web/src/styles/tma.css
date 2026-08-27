@@ -1220,15 +1220,13 @@ html.tma .tps-method.sel {
 html.tma .tps-mic {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
   display: grid;
   place-items: center;
-  background: var(--accent);
-  color: #fff;
+  background: none;
 }
 html.tma .tps-mic svg {
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
 }
 html.tma .tps-check {
   color: var(--accent);
@@ -1313,6 +1311,7 @@ html.tma .scr-head {
 html.tma .scr-head h2 {
   font-size: 17px;
   font-weight: 700;
+  padding: 6px 8px;
 }
 html.tma .scr-back {
   width: 38px;
@@ -1347,6 +1346,23 @@ html.tma .scr-row {
   gap: 12px;
   padding: 13px 12px;
   position: relative;
+  border: none;
+  background: none;
+  border-radius: 18px;
+  text-align: left;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  transition: background 0.35s ease;
+}
+html.tma .scr-row:active {
+  background: var(--tma-inset);
+  transition-duration: 0s;
+}
+html.tma .scr-row:active::before,
+html.tma .scr-row:active + .scr-row::before {
+  opacity: 0;
 }
 html.tma .scr-row + .scr-row::before {
   content: "";

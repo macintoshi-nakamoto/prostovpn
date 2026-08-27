@@ -43,9 +43,6 @@ export function ScreenShell({ open, title, onClose, children }) {
   return (
     <div className={`scr${active ? " is-open" : ""}`}>
       <header className="scr-head">
-        <button type="button" className="scr-back" onClick={onClose} aria-label="назад">
-          ‹
-        </button>
         <h2>{title}</h2>
       </header>
       <div className="scr-body">{children}</div>

@@ -494,6 +494,8 @@ export const en = {
     tmaEmailTitle: "Email",
     tmaEmailSub: "For receipts and password recovery",
     tmaEmailDone: "Email saved",
+    tmaOrderCopied: "Order number copied",
+    tmaTapToCopy: "tap to copy #",
     tmaPlansTitle: "Choose your plan",
     tmaSave: "save {pct}%",
     tmaHit: "Popular",

@@ -1042,7 +1042,7 @@ html.tma .tp-grid {
 }
 html.tma .tp-card {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border: 2px solid transparent;
   border-radius: 22px;
   background: var(--tma-card);
@@ -1090,22 +1090,26 @@ html.tma .tp-month {
   color: var(--text-dim);
 }
 
-/* Лента обнимает угол: лежит поперёк него ВНУТРИ карточки, концы
-   обрезаются её краями заподлицо — как приклеенная поверх угла. */
+/* Объёмная лента: концы срезаны точно по кромкам карточки — читается как
+   «ушла за карточку», середина чуть выступает за скруглённый угол.
+   Срезы делает clip-path, тень — drop-shadow (повторяет форму фигуры). */
 html.tma .tp-ribbon {
   position: absolute;
-  top: 4px;
-  right: -39px;
+  top: -9px;
+  right: -51px;
   width: 120px;
+  height: 34px;
+  line-height: 34px;
+  padding: 0;
   text-align: center;
   transform: rotate(45deg);
   background: var(--accent);
   color: #fff;
   font-size: 11.5px;
   font-weight: 700;
-  padding: 8px 0;
   letter-spacing: 0.02em;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+  clip-path: polygon(31px 34px, 60px 5px, 55px 0px, 65px 0px, 60px 5px, 89px 34px);
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35));
   pointer-events: none;
 }
 html.tma .tp-ribbon-save {

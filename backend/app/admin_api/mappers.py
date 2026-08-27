@@ -32,6 +32,10 @@ def user_status(user: User, now: dt.datetime | None = None) -> str:
         return "blocked"
     if not user.is_active:
         return "paused"
+    # Заморозка — отдельный статус, а не «отключён»: доступа нет, но дни
+    # целы, и в списке это должно читаться с одного взгляда.
+    if user.is_frozen:
+        return "frozen"
     if user.active_subscription(moment) is None:
         return "expired"
     if user.traffic_exhausted(moment):
@@ -95,8 +99,15 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         currency=sub.currency if sub else "RUB",
         period_days=sub.period_days if sub else None,
         subscription_started_at=sub.starts_at if sub else None,
-        expires_at=user.access_expires_at(moment),
+        # Дата — «если разморозить сейчас»: у замороженного в базе лежит
+        # срок, который уже прошёл, и в списке он выглядел бы как долг.
+        expires_at=user.access_ends_if_resumed(moment),
         days_left=user.access_days_left(moment),
+        is_frozen=user.is_frozen,
+        frozen_at=user.frozen_at,
+        frozen_days=user.frozen_for(moment).days,
+        frozen_days_used=user.frozen_days_used,
+        freeze_count=user.freeze_count,
         traffic_used_bytes=used,
         traffic_limit_bytes=limit,
         traffic_pct=(round(used / limit * 100, 1) if limit else None),

@@ -390,6 +390,26 @@ class UpcomingOut(BaseModel):
     period_days: int
 
 
+class FreezeOut(BaseModel):
+    """Пауза подписки — состояние и право её поставить."""
+
+    frozen: bool = False
+    frozen_at: dt.datetime | None = None
+    frozen_days: int = 0
+    # Остаток на момент паузы: он и есть главное число этой карточки — дни,
+    # которые дожидаются возвращения.
+    days_left: int | None = None
+    resumes_by: dt.datetime | None = None
+    can_freeze: bool = False
+    # Почему нельзя — готовым текстом: витрины показывают его как есть.
+    reason: str = ""
+    max_days: int = 0
+    used_days: int = 0
+    count: int = 0
+    per_month: int = 0
+    month_left: int = 0
+
+
 class AccountOut(BaseModel):
     login: str
     email: str | None = None
@@ -405,13 +425,12 @@ class AccountOut(BaseModel):
     upcoming: list[UpcomingOut] = []
     device_limit: int
     devices: list[DeviceOut]
-    frozen_at: dt.datetime | None = None
-    freezes_left: int = 0
     traffic_used_bytes: int = 0
     traffic_limit_bytes: int | None = None
     payments: list[PaymentOut] = []
     ios: IosOut = IosOut()
     tunnel_file: TunnelFileOut = TunnelFileOut()
+    freeze: FreezeOut = FreezeOut()
 
 
 def _device_connected(user: User, device_id: str, now: dt.datetime) -> bool:
@@ -563,11 +582,12 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         period_days=plan.period_days if plan else None,
         price=float(subscription.price) if subscription and subscription.price else None,
         active=user.has_access(now),
-        frozen_at=user.frozen_at,
-        freezes_left=services.freeze.left_this_month(db, user, now),
-        expires_at=user.access_expires_at(now),
+        # Дата показывается «как если бы разморозили сейчас»: у замороженной
+        # подписки в базе лежит старый срок, он уже прошёл, и показывать его
+        # человеку нельзя — он решит, что дни сгорели.
+        expires_at=user.access_ends_if_resumed(now),
         days_left=user.access_days_left(now),
-        expires_total_at=user.access_expires_at(now),
+        expires_total_at=user.access_ends_if_resumed(now),
         upcoming=[
             UpcomingOut(
                 plan=s.plan,
@@ -593,6 +613,7 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         ],
         ios=_ios_out(db, user, now),
         tunnel_file=_tunnel_out(db),
+        freeze=FreezeOut(**services.freeze.state(user, now)),
     )
 
 
@@ -671,6 +692,49 @@ def enable_ios(
 
     for warning in warnings:
         log.warning("ключ AmneziaVPN для %s: %s", user.public_id, warning)
+    return _account_out(db, user, session)
+
+
+@router.post("/account/freeze", response_model=AccountOut)
+def freeze_subscription(
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    """
+    Ставит подписку на паузу: дни перестают тратиться, доступ закрывается.
+
+    Право на паузу проверяет сервис, а не эта ручка: те же правила нужны
+    панели и боту, и разъезжаться им нельзя.
+    """
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+
+    try:
+        problems = services.freeze.freeze(db, user, by="кабинет")
+    except services.FreezeError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": exc.code}
+        ) from exc
+
+    for problem in problems:
+        log.warning("пауза %s: доступ остался на узле — %s", user.public_id, problem)
+
+    return _account_out(db, user, session)
+
+
+@router.post("/account/resume", response_model=AccountOut)
+def resume_subscription(
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    """Снимает паузу и возвращает подписке простоявшее время."""
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+
+    services.freeze.resume(db, user, by="кабинет")
+
     return _account_out(db, user, session)
 
 
@@ -781,42 +845,6 @@ class ResetIn(BaseModel):
 class ResetCheckOut(BaseModel):
     valid: bool
     login: str | None = None
-
-
-@router.post("/account/freeze", response_model=AccountOut)
-def freeze_subscription(
-    response: Response,
-    who: tuple[User, Session] = Depends(current_user),
-    db: OrmSession = Depends(get_db),
-) -> AccountOut:
-    user, session = who
-    response.headers["Cache-Control"] = "no-store"
-    try:
-        services.freeze.freeze(db, user)
-    except services.PanelError as exc:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": exc.code} if exc.code else None
-        ) from exc
-    return _account_out(db, user, session)
-
-
-@router.post("/account/unfreeze", response_model=AccountOut)
-def unfreeze_subscription(
-    response: Response,
-    who: tuple[User, Session] = Depends(current_user),
-    db: OrmSession = Depends(get_db),
-) -> AccountOut:
-    user, session = who
-    response.headers["Cache-Control"] = "no-store"
-    try:
-        warnings = services.freeze.unfreeze(db, user)
-    except services.PanelError as exc:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": exc.code} if exc.code else None
-        ) from exc
-    for warning in warnings:
-        log.warning("разморозка %s: %s", user.public_id, warning)
-    return _account_out(db, user, session)
 
 
 @router.post("/password/forgot")

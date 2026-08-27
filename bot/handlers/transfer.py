@@ -1,3 +1,12 @@
+"""
+Передача дней другу.
+
+Дни уже оплачены — это не покупка, а передача своего, поэтому спрашиваем
+ровно два ответа: кому и сколько. Проверки (хватает ли дней, существует ли
+получатель) делает панель: она одна знает срок доступа, и дублировать её
+арифметику в боте значит однажды разойтись с ней в цифрах.
+"""
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -19,6 +28,14 @@ router.callback_query.middleware(AuthMiddleware())
 @router.callback_query(F.data.in_({"cabinet", "home", "cancel", "plans"}), Transfer.recipient)
 @router.callback_query(F.data.in_({"cabinet", "home", "cancel", "plans"}), Transfer.days)
 async def cancel(callback: CallbackQuery, state: FSMContext) -> None:
+    """
+    Выход из перевода по любой кнопке возврата.
+
+    Без этого состояние переживало «Отмену»: человек уходил в кабинет, потом
+    писал боту что угодно — и следующее же число уходило переводом.
+    Обработчик стоит выше остальных: он должен перехватить кнопку раньше,
+    чем её увидит обычный маршрут.
+    """
     await state.clear()
     await show_cabinet(callback, callback.from_user.id)
     await callback.answer()
@@ -35,6 +52,7 @@ async def start(callback: CallbackQuery, state: FSMContext) -> None:
     try:
         history = await panel.transfers(session.panel_login)
     except panel.PanelError:
+        # История — приятное дополнение, а не условие перевода.
         history = []
 
     await state.set_state(Transfer.recipient)
@@ -68,6 +86,7 @@ async def recipient(message: Message, state: FSMContext) -> None:
 async def days(message: Message, state: FSMContext) -> None:
     raw = (message.text or "").strip()
 
+    # Только ASCII-цифры: «1²» проходит isdigit, но числом не становится.
     if not (raw.isascii() and raw.isdigit()) or not 1 <= int(raw) <= 3650:
         await show(message, lambda: (texts.transfer_days_error(), cancel_menu("cabinet")))
         return
@@ -84,6 +103,8 @@ async def days(message: Message, state: FSMContext) -> None:
     try:
         record = await panel.transfer_days(session.panel_login, key, int(raw))
     except panel.PanelError as error:
+        # Отказы панели — это правила («столько дней нет», «нет такого
+        # аккаунта»), и человеку нужен именно их текст, а не «ошибка».
         await show(message, lambda: (texts.transfer_failed(error), cancel_menu("cabinet")))
         return
 

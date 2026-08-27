@@ -1,3 +1,5 @@
+"""Тексты экранов. Коротко: одна мысль - одна строка."""
+
 from html import escape
 
 from config.settings import PayMethod, SupportTopic, config
@@ -15,6 +17,8 @@ from utils.panel import (
 )
 
 
+# Ящик поддержки. Тот же, что в футере сайта (web/src/lib/contacts.js) — платёжный
+# провайдер требует видимый контакт техподдержки, и расходиться этим адресам нельзя.
 SUPPORT_EMAIL = "support@prostovpn.cc"
 
 
@@ -36,6 +40,10 @@ def traffic_line(account: Account) -> str | None:
 
 
 def status_line(account: Account) -> str:
+    if account.freeze.frozen:
+        left = timeutils.plural_days(account.freeze.days_left or account.days_left or 0)
+        return f'{tg("freeze")} На паузе · в запасе {left}'
+
     if not account.active:
         return f'{tg("warn")} Подписка не активна'
 
@@ -45,6 +53,17 @@ def status_line(account: Account) -> str:
     return f'{tg("check")} {plan} · {left}'
 
 
+# --------------------------------------------------------------------------
+# Экраны
+# --------------------------------------------------------------------------
+
+
+# Стартовый экран собирается блоками — см. utils/rich.py
+#
+# Формулировки согласованы с платёжным провайдером: банк на верификации
+# отклоняет даже косвенные обещания «без ограничений скорости» и «работает
+# там, где другие нет». Пишем только проверяемые факты — цифру скорости,
+# шифрование, отсутствие логов.
 START_LEAD = "Один аккаунт на все устройства - вход по логину и паролю."
 
 START_POINTS = (
@@ -81,7 +100,12 @@ def cabinet_text(account: Account) -> str:
         status_line(account),
     ]
 
-    if account.active and account.expires_at:
+    if account.freeze.frozen:
+        if account.freeze.frozen_days:
+            lines.append(f"На паузе {timeutils.plural_days(account.freeze.frozen_days)}")
+
+        lines.append("Дни не тратятся — снимите паузу, и доступ вернётся")
+    elif account.active and account.expires_at:
         lines.append(f"До {timeutils.human_date(account.expires_at)}")
 
     traffic = traffic_line(account)
@@ -96,6 +120,13 @@ def cabinet_text(account: Account) -> str:
 
 
 def tunnel_text(file: TunnelFile | None) -> str:
+    """
+    Экран файла со списком российских сервисов.
+
+    Первым делом - кому он вообще нужен. В приложениях ProstoVPN список уже
+    внутри, и без этой строки файл скачивают все подряд, а потом спрашивают
+    в поддержке, куда его девать.
+    """
     if file is None:
         return (
             f'{tg("empty")} <b>Российские сервисы напрямую</b>\n\n'
@@ -106,6 +137,8 @@ def tunnel_text(file: TunnelFile | None) -> str:
 
     return (
         f'{tg("rocket")} <b>Российские сервисы напрямую</b>{version}\n\n'
+        # Восклицательный знак, а не «грустная» иконка предупреждения: это
+        # важная строка, но ничего плохого не случилось.
         f'{tg("channel")} Файл нужен <b>только на iPhone</b>.\n'
         "В приложении ProstoVPN для Windows, Android и macOS это уже встроено - "
         "там ничего скачивать и вставлять не надо, всё работает само.\n\n"
@@ -118,6 +151,7 @@ def tunnel_text(file: TunnelFile | None) -> str:
 
 
 def ios_keys_text(account: Account) -> str:
+    """Заголовок перед ключами. Сами ключи уходят отдельными сообщениями."""
     if not account.ios_keys:
         return (
             f'{tg("empty")} <b>Ключ для iPhone</b>\n\n'
@@ -136,6 +170,7 @@ def ios_keys_text(account: Account) -> str:
 
 
 def ios_key_text(key: IosKey) -> str:
+    """Один ключ одним сообщением: нажатие на него копирует ссылку целиком."""
     where = f" · {escape(key.server)}" if key.server else ""
 
     return (
@@ -163,6 +198,7 @@ def docs_text() -> str:
 
 
 def plan_terms(plan: Plan) -> str:
+    """Условия тарифа одной строкой: срок, трафик, устройства, страны."""
     parts = [
         timeutils.plural_days(plan.duration_days),
         f"{plan.traffic_gb} ГБ трафика" if plan.traffic_gb else "безлимитный трафик",
@@ -183,6 +219,8 @@ def plans_text(method: PayMethod, plans: list[Plan]) -> str:
     lines = [f'{tg("wallet")} <b>Тарифы</b> · {escape(method.title)}', ""]
 
     for plan in plans:
+        # Цена в заголовке строки, условия под ней: так же, как на экране
+        # блоками — человек не должен видеть две разные витрины.
         lines.append(f"<b>{escape(plan.title)}</b> - {plan_price(plan, method)}")
         lines.append(escape(plan_terms(plan)))
         lines.append("")
@@ -200,6 +238,8 @@ def plans_text(method: PayMethod, plans: list[Plan]) -> str:
 
 
 def daily_prompt(plan: Plan, method: str | None = None) -> str:
+    # Цену называем в той валюте, в которой сейчас платят: обещать рубли
+    # тому, кто выбрал звёзды, значит показать одну цену, а списать другую.
     price = f"{plan.stars}★" if method == "stars" else f"{plan.rub} ₽"
 
     return (
@@ -217,6 +257,7 @@ def daily_error() -> str:
 
 
 def invoice_text(plan: Plan, quantity: int = 1, method: str | None = None) -> str:
+    """Счёт на оплату по ссылке: что, почём и что будет дальше."""
     terms = plan_terms(plan) if quantity == 1 else timeutils.plural_days(
         plan.duration_days * quantity
     )
@@ -225,6 +266,8 @@ def invoice_text(plan: Plan, quantity: int = 1, method: str | None = None) -> st
         f'{tg("wallet")} <b>Счёт на оплату</b>\n\n'
         f"<b>{escape(plan.title)}</b> - {plan.rub * quantity} ₽ · {escape(terms)}\n\n"
         "Нажмите «Оплатить» и завершите платёж на открывшейся странице. "
+        # Срок у способов разный: банковская ссылка живёт минуты, а перевод
+        # в сети подтверждается своим ходом — обещать ему 15 минут нельзя.
         + (
             "Переведите точную сумму на указанный адрес.\n\n"
             if method == "crypto"
@@ -309,6 +352,7 @@ def about_text() -> str:
 
 
 def friends_text(stats, invite_url: str) -> str:
+    """Тот же экран простым текстом — если блоки не собрались."""
     waiting = (
         "\nДни начислим, как только вы войдёте в аккаунт в этом боте."
         if stats.pending
@@ -399,6 +443,11 @@ def _short(value: str, limit: int = 80) -> str:
     return value if len(value) <= limit else value[: limit - 3] + "..."
 
 
+# --------------------------------------------------------------------------
+# Ошибки панели человеческим языком
+# --------------------------------------------------------------------------
+
+
 def panel_error(error: PanelError) -> str:
     if isinstance(error, PanelUnavailable):
         return "Сервис недоступен, попробуйте через минуту."
@@ -416,6 +465,7 @@ def panel_error(error: PanelError) -> str:
 
 
 def promo_text(days: int) -> str:
+    """Экран после перехода по пригласительной ссылке."""
     return (
         f'{tg("gift")} <b>{timeutils.plural_days(days)} бесплатно</b>\n\n'
         "Вы перешли по пригласительной ссылке.\n"
@@ -426,6 +476,13 @@ def promo_text(days: int) -> str:
 
 
 def promo_granted_text(days: int) -> str:
+    """
+    Поздравление сразу после начисления.
+
+    Отдельным сообщением и с кнопками «поделиться» и «скопировать»:
+    человек прямо сейчас получил бесплатные дни, и это единственная
+    секунда, когда он готов кому-то об этом сказать.
+    """
     return (
         f'{tg("gift")} <b>Поздравляем!</b>\n\n'
         f"Вам начислено <b>{timeutils.plural_days(days)}</b> бесплатного доступа.\n"
@@ -451,6 +508,7 @@ def promo_expired_text() -> str:
 
 
 def iphone_text() -> str:
+    """Экран «iPhone» в разделе о сервисе: приложения нет, есть ключ."""
     return (
         f'{tg("ios")} <b>iPhone</b>\n\n'
         "Своего приложения для iPhone у нас пока нет — и это не мешает.\n\n"
@@ -467,6 +525,14 @@ def iphone_text() -> str:
 
 
 def subscribe_text(days: int | None = None) -> str:
+    """
+    Экран подписки на канал.
+
+    Два разных текста, потому что это две разные встречи. Пришедшему по
+    рекламной ссылке говорим про его подарок: он уже знает, зачем пришёл, и
+    подписка для него — последний шаг, а не новое требование. Остальным
+    объясняем, что в канале вообще есть.
+    """
     if days:
         return (
             f'{tg("gift")} <b>Ваши {timeutils.plural_days(days)} ждут</b>\n\n'
@@ -486,4 +552,123 @@ def subscribe_text(days: int | None = None) -> str:
 
 
 def subscribe_missing_text() -> str:
+    """Нажал «я подписался», а подписки нет."""
     return "Подписки пока не видно. Подпишитесь на канал и нажмите кнопку ещё раз."
+
+
+# --------------------------------------------------------------------------
+# Письма вдогонку
+# --------------------------------------------------------------------------
+#
+# Все три — подпись под видео, а у подписи потолок 1024 символа. Отсюда и
+# длина: три коротких абзаца, дальше кнопка. Первая строка говорит человеку,
+# почему ему вообще пишут, — без неё сообщение читается как реклама.
+
+
+def nudge_signup_text(days: int) -> str:
+    """Зашёл в бота и не завёл аккаунт."""
+    return (
+        f'{tg("history")} <b>Вы зашли в бота, но не прошли регистрацию</b>\n\n'
+        f"Дарим вам <b>{timeutils.plural_days(days)}</b> подписки — начислим "
+        "сразу после регистрации.\n\n"
+        "Нужны только логин и пароль, которые вы придумаете сами. "
+        "Карту привязывать не нужно."
+    )
+
+
+def nudge_idle_text(days: int) -> str:
+    """Аккаунт есть, а VPN так ни разу и не включили."""
+    return (
+        f'{tg("history")} <b>Вы зарегистрировались, но не начали пользоваться</b>\n\n'
+        f"Дарим вам <b>{timeutils.plural_days(days)}</b> бесплатного доступа — "
+        "они уже на вашем счету.\n\n"
+        "Осталось поставить приложение и войти теми же логином и паролем. "
+        "Как это сделать — по кнопке «Инструкция»."
+    )
+
+
+def nudge_renew_text(days_left: int, bonus: int) -> str:
+    """Подписка на исходе. Неделя сверху — только тем, кто продлит сейчас."""
+    return (
+        f'{tg("renew")} <b>Подписка заканчивается через '
+        f"{timeutils.plural_days(days_left)}</b>\n\n"
+        f"Продлите её прямо сейчас — и мы добавим сверху "
+        f"<b>{timeutils.plural_days(bonus)}</b> бесплатно.\n\n"
+        "Неделя начисляется сама, как только пройдёт оплата. Предложение "
+        "действует, пока идёт этот срок."
+    )
+
+
+def renew_bonus_text(bonus: int) -> str:
+    """Продлил в срок — начислили обещанное."""
+    return (
+        f'{tg("gift")} <b>{timeutils.plural_days(bonus)} сверху — ваши</b>\n\n'
+        "Спасибо, что продлили вовремя. Мы добавили их к подписке, "
+        "ничего делать не нужно."
+    )
+
+
+def gift_granted_text(days: int) -> str:
+    """
+    Подарок начислен после регистрации — тот, что обещали письмом.
+
+    Отдельно от `promo_granted_text`: там человек пришёл по чьей-то ссылке и
+    ему есть чем поделиться, здесь делиться нечем — он просто вернулся и
+    завёл аккаунт.
+    """
+    return (
+        f'{tg("gift")} <b>{timeutils.plural_days(days)} начислены</b>\n\n'
+        "Доступ уже работает — оплачивать ничего не нужно.\n\n"
+        "Поставьте приложение и войдите теми же логином и паролем."
+    )
+
+
+# --------------------------------------------------------------------------
+# Пауза подписки
+# --------------------------------------------------------------------------
+
+
+def freeze_ask_text(account: Account) -> str:
+    """Экран подтверждения: что именно произойдёт после нажатия."""
+    left = timeutils.plural_days(account.freeze.days_left or account.days_left or 0)
+
+    return (
+        f'{tg("freeze")} <b>Заморозить подписку</b>\n\n'
+        f"В запасе <b>{left}</b> — на паузе они перестанут тратиться "
+        "и дождутся вашего возвращения.\n\n"
+        "Пока пауза стоит, VPN не работает: приложение отключится от серверов. "
+        "Снять паузу можно в любой момент здесь же."
+    )
+
+
+def freeze_denied_text(account: Account) -> str:
+    """Паузу поставить нельзя — панель объяснила почему."""
+    reason = escape(account.freeze.reason or "Пауза сейчас недоступна.")
+
+    return f'{tg("warn")} <b>Пауза недоступна</b>\n\n{reason}'
+
+
+def freeze_done_text(account: Account) -> str:
+    left = timeutils.plural_days(account.freeze.days_left or account.days_left or 0)
+
+    return (
+        f'{tg("freeze")} <b>Подписка на паузе</b>\n\n'
+        f"Дни остановлены, в запасе {left}. Приложение сейчас отключится "
+        "от серверов — это нормально.\n\n"
+        "Вернётесь — нажмите «Снять паузу», доступ включится сразу."
+    )
+
+
+def resume_done_text(account: Account) -> str:
+    left = timeutils.plural_days(account.freeze.days_left or account.days_left or 0)
+    until = (
+        f" Подписка действует до {timeutils.human_date(account.expires_at)}."
+        if account.expires_at
+        else ""
+    )
+
+    return (
+        f'{tg("check")} <b>Пауза снята</b>\n\n'
+        f"Доступ вернулся, в запасе {left}.{until}\n\n"
+        "Подключайтесь в приложении — заново входить не нужно."
+    )

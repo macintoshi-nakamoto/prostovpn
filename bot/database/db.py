@@ -1,3 +1,10 @@
+"""Локальная база бота.
+
+Здесь только то, что относится к Telegram: кто написал боту, кто под каким
+логином вошёл и какие обращения прислал. Аккаунты, подписки и платежи
+хранит панель — см. utils/panel.py.
+"""
+
 from pathlib import Path
 
 import aiosqlite
@@ -84,6 +91,26 @@ SCHEMA = (
         created_at TEXT NOT NULL,
         done_at TEXT,
         note TEXT
+    )
+    """,
+    """
+    -- Письма вдогонку: зашёл и не завёл аккаунт, завёл и не подключился,
+    -- подписка кончается.
+    --
+    -- Строка на пару «человек — повод», и это главное свойство таблицы:
+    -- одно и то же напоминание не уходит дважды. `promised_days` помнит
+    -- обещанное на словах — его начислит регистрация, а не рассылка;
+    -- `expires_snapshot` помнит, до какого числа была подписка в момент
+    -- письма: по нему видно, что человек продлил, и ему полагается бонус.
+    CREATE TABLE IF NOT EXISTS nudges(
+        user_id INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        sent_at TEXT NOT NULL,
+        promised_days INTEGER NOT NULL DEFAULT 0,
+        expires_snapshot TEXT,
+        claimed_at TEXT,
+        claimed_days INTEGER,
+        PRIMARY KEY (user_id, kind)
     )
     """,
 )

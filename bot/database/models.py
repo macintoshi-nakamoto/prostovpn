@@ -11,6 +11,7 @@ from utils import timeutils
 
 @dataclass
 class Session:
+    """Вход в панель, привязанный к Telegram-аккаунту."""
 
     user_id: int
     panel_login: str
@@ -37,7 +38,13 @@ async def _connect() -> AsyncIterator[aiosqlite.Connection]:
         yield db
 
 
+# --------------------------------------------------------------------------
+# Пользователи Telegram
+# --------------------------------------------------------------------------
+
+
 async def knows_user(user_id: int) -> bool:
+    """Писал ли человек боту раньше. Нужно для приглашений: дни дают за новых."""
     async with _connect() as db:
         cursor = await db.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,))
 
@@ -75,6 +82,11 @@ async def upsert_user(user_id: int, username: str | None, first_name: str | None
             )
 
         await db.commit()
+
+
+# --------------------------------------------------------------------------
+# Сессии панели
+# --------------------------------------------------------------------------
 
 
 async def save_session(
@@ -121,6 +133,14 @@ async def get_session(user_id: int) -> Session | None:
         expires_at = timeutils.from_db(row["expires_at"])
 
         if expires_at <= timeutils.now():
+            # Стираем мёртвый токен, но логин ОСТАВЛЯЕМ.
+            #
+            # Раньше строка удалялась целиком, и вместе с ней пропадал ответ
+            # на вопрос «кому продлевать»: последний рубеж last_login ищет
+            # логин именно здесь. Человек с протухшей сессией платил
+            # звёздами, а продлевать оказывалось некому — деньги списаны,
+            # доступа нет. Явный выход из учётки по-прежнему удаляет строку
+            # целиком, см. close_session: это осознанное «забудьте меня».
             await db.execute("UPDATE sessions SET token = '' WHERE user_id = ?", (user_id,))
             await db.commit()
             return None
@@ -140,6 +160,7 @@ async def close_session(user_id: int) -> None:
 
 
 async def last_login(user_id: int) -> str | None:
+    """Логин прошлого входа — чтобы не спрашивать его снова."""
     async with _connect() as db:
         cursor = await db.execute(
             "SELECT panel_login FROM sessions WHERE user_id = ?",
@@ -162,7 +183,13 @@ async def last_login(user_id: int) -> str | None:
     return row["panel_login"] if row else None
 
 
+# --------------------------------------------------------------------------
+# Загруженные в Telegram файлы
+# --------------------------------------------------------------------------
+
+
 async def get_media(path: str) -> str | None:
+    """file_id уже загруженной анимации: повторная отправка идёт без выгрузки."""
     async with _connect() as db:
         cursor = await db.execute("SELECT file_id FROM media WHERE path = ?", (path,))
         row = await cursor.fetchone()
@@ -190,6 +217,11 @@ async def forget_media(path: str) -> None:
     async with _connect() as db:
         await db.execute("DELETE FROM media WHERE path = ?", (path,))
         await db.commit()
+
+
+# --------------------------------------------------------------------------
+# Обращения в поддержку
+# --------------------------------------------------------------------------
 
 
 def _ticket(row: aiosqlite.Row) -> Ticket:
@@ -260,6 +292,25 @@ async def answer_ticket(ticket_id: int, answer: str) -> None:
         await db.commit()
 
 
+# --------------------------------------------------------------------------
+# Оплата звёздами
+#
+# Своя запись о каждом платеже нужна по трём причинам, и все три про деньги.
+#
+# Первая — повторы. Telegram присылает апдейт заново, если бот не успел его
+# подтвердить: перезапуск в неудачный момент, обрыв сети. Без отметки о том,
+# что этот платёж уже обработан, повтор продлевал бы подписку второй раз и
+# писал второй платёж в кассу.
+#
+# Вторая — возврат. Вернуть звёзды можно только по идентификатору платежа,
+# и если он нигде не сохранён, возвращать нечего.
+#
+# Третья — разбор. Заказ (Order) при оплате звёздами не создаётся, и когда
+# человек говорит «я заплатил», единственным доказательством остаётся эта
+# строка.
+# --------------------------------------------------------------------------
+
+
 async def claim_star_payment(
     charge_id: str,
     user_id: int,
@@ -268,6 +319,13 @@ async def claim_star_payment(
     currency: str,
     panel_login: str | None,
 ) -> bool:
+    """
+    Забирает платёж в работу. False — его уже забрали раньше.
+
+    Проверка и запись — одним оператором: два апдейта об одной оплате могут
+    прийти одновременно, и «сначала посмотреть, потом вставить» их не
+    развело бы.
+    """
     async with _connect() as db:
         cursor = await db.execute(
             """
@@ -284,6 +342,7 @@ async def claim_star_payment(
 
 
 async def finish_star_payment(charge_id: str, status: str, note: str | None = None) -> None:
+    """Чем закончилось: «done» — подписка продлена, «failed» — разбирать руками."""
     async with _connect() as db:
         await db.execute(
             "UPDATE star_payments SET status = ?, done_at = ?, note = ? WHERE charge_id = ?",
@@ -294,6 +353,7 @@ async def finish_star_payment(charge_id: str, status: str, note: str | None = No
 
 
 async def star_payment(charge_id: str) -> dict | None:
+    """Строка платежа как есть — для разбора и для возврата."""
     async with _connect() as db:
         cursor = await db.execute(
             "SELECT * FROM star_payments WHERE charge_id = ?", (charge_id,)
@@ -304,6 +364,13 @@ async def star_payment(charge_id: str) -> dict | None:
 
 
 async def stuck_star_payments(limit: int = 50) -> list[dict]:
+    """
+    Платежи, которые не довели до подписки. Их разбирают руками.
+
+    Завершённые и возвращённые сюда не попадают: список нужен как рабочая
+    очередь, а не как история — иначе разобранное копится и его перестают
+    читать.
+    """
     async with _connect() as db:
         cursor = await db.execute(
             "SELECT * FROM star_payments WHERE status NOT IN ('done', 'refunded')"
@@ -313,6 +380,15 @@ async def stuck_star_payments(limit: int = 50) -> list[dict]:
         rows = await cursor.fetchall()
 
     return [dict(row) for row in rows]
+
+
+# --------------------------------------------------------------------------
+# Пригласительные ссылки с бесплатным периодом
+# --------------------------------------------------------------------------
+#
+# Ссылка одна на всех, дни — каждому по разу. Поэтому здесь две таблицы:
+# сама ссылка со сроком жизни и отметка о переходе, по одной на человека.
+# Дни начисляет панель; здесь только память о том, кому они положены.
 
 
 @dataclass
@@ -337,6 +413,7 @@ def _promo(row: aiosqlite.Row) -> Promo:
 
 
 async def create_promo(code: str, days: int, ttl_days: int, note: str | None = None) -> Promo:
+    """Заводит ссылку. Повторный вызов с тем же кодом продлевает её."""
     now = timeutils.now()
     expires_at = timeutils.to_db(now + timedelta(days=ttl_days))
 
@@ -358,6 +435,7 @@ async def create_promo(code: str, days: int, ttl_days: int, note: str | None = N
 
 
 async def get_promo(code: str) -> Promo | None:
+    """Ссылка как она есть — вместе с истёкшей: срок проверяет вызывающий."""
     async with _connect() as db:
         cursor = await db.execute("SELECT * FROM promos WHERE code = ?", (code,))
         row = await cursor.fetchone()
@@ -366,6 +444,12 @@ async def get_promo(code: str) -> Promo | None:
 
 
 async def remember_promo(user_id: int, code: str) -> None:
+    """
+    Отмечает переход. Дни не начисляет — их даёт регистрация.
+
+    Уже начисленное не трогаем: иначе второй переход по той же ссылке
+    открывал бы бонус заново.
+    """
     async with _connect() as db:
         cursor = await db.execute(
             "SELECT claimed_at FROM promo_visits WHERE user_id = ?", (user_id,)
@@ -389,6 +473,13 @@ async def remember_promo(user_id: int, code: str) -> None:
 
 
 async def pending_promo(user_id: int) -> Promo | None:
+    """
+    Ссылка, по которой этот человек пришёл и дни ещё не получил.
+
+    Истёкшая ссылка засчитывается, если переход был меньше суток назад:
+    иначе тот, кто открыл её за минуту до конца срока и не успел придумать
+    пароль, терял бонус на ровном месте.
+    """
     async with _connect() as db:
         cursor = await db.execute(
             """
@@ -415,6 +506,7 @@ async def pending_promo(user_id: int) -> Promo | None:
 
 
 async def claim_promo(user_id: int, panel_login: str, days: int) -> None:
+    """Дни начислены — переход закрываем, чтобы не начислить второй раз."""
     async with _connect() as db:
         await db.execute(
             """
@@ -428,6 +520,7 @@ async def claim_promo(user_id: int, panel_login: str, days: int) -> None:
 
 
 async def promo_stats(code: str) -> tuple[int, int]:
+    """Сколько переходов по ссылке и сколько из них дошло до аккаунта."""
     async with _connect() as db:
         cursor = await db.execute(
             """
@@ -443,6 +536,7 @@ async def promo_stats(code: str) -> tuple[int, int]:
 
 
 async def all_promos(limit: int = 20) -> list[Promo]:
+    """Все ссылки, свежие сверху."""
     async with _connect() as db:
         cursor = await db.execute(
             "SELECT * FROM promos ORDER BY created_at DESC LIMIT ?", (limit,)
@@ -450,3 +544,175 @@ async def all_promos(limit: int = 20) -> list[Promo]:
         rows = await cursor.fetchall()
 
     return [_promo(row) for row in rows]
+
+
+# --------------------------------------------------------------------------
+# Письма вдогонку
+# --------------------------------------------------------------------------
+#
+# Три повода написать первым: человек зашёл и не завёл аккаунт, завёл и ни
+# разу не подключился, подписка кончается. Каждое напоминание уходит один
+# раз — за это отвечает первичный ключ (user_id, kind), а не проверка в коде.
+
+
+@dataclass
+class Nudge:
+    user_id: int
+    kind: str
+    sent_at: datetime
+    promised_days: int
+    expires_snapshot: datetime | None
+    claimed_at: datetime | None
+    claimed_days: int | None
+
+    @property
+    def open(self) -> bool:
+        """Обещание, которое ещё не выполнено."""
+        return self.claimed_at is None
+
+
+@dataclass
+class Candidate:
+    """Человек из базы бота и логин, под которым он известен панели."""
+
+    user_id: int
+    first_seen: datetime
+    last_visit: datetime | None
+    login: str | None
+
+
+def _nudge(row: aiosqlite.Row) -> Nudge:
+    return Nudge(
+        user_id=row["user_id"],
+        kind=row["kind"],
+        sent_at=timeutils.from_db(row["sent_at"]),
+        promised_days=row["promised_days"],
+        expires_snapshot=(
+            timeutils.from_db(row["expires_snapshot"]) if row["expires_snapshot"] else None
+        ),
+        claimed_at=timeutils.from_db(row["claimed_at"]) if row["claimed_at"] else None,
+        claimed_days=row["claimed_days"],
+    )
+
+
+async def audience() -> list[Candidate]:
+    """
+    Все, кто писал боту, вместе с логином — если он вообще известен.
+
+    Логин ищем в трёх местах сразу, и порядок здесь важен: живая сессия,
+    потом закрытый подарок, потом обращение в поддержку. Человек мог войти
+    год назад, выйти и с тех пор только писать в поддержку — для рассылки он
+    всё равно «с аккаунтом», и предлагать ему регистрацию заново нельзя.
+    """
+    async with _connect() as db:
+        cursor = await db.execute(
+            """
+            SELECT u.user_id,
+                   u.reg_date,
+                   u.last_visit,
+                   COALESCE(s.panel_login, v.panel_login, t.panel_login) AS login
+            FROM users AS u
+            LEFT JOIN sessions AS s ON s.user_id = u.user_id
+            LEFT JOIN promo_visits AS v
+                   ON v.user_id = u.user_id AND v.panel_login IS NOT NULL
+            LEFT JOIN (
+                SELECT user_id, panel_login
+                FROM tickets
+                WHERE panel_login IS NOT NULL
+                GROUP BY user_id
+            ) AS t ON t.user_id = u.user_id
+            """
+        )
+        rows = await cursor.fetchall()
+
+    people = []
+
+    for row in rows:
+        if not row["reg_date"]:
+            continue
+
+        people.append(
+            Candidate(
+                user_id=row["user_id"],
+                first_seen=timeutils.from_db(row["reg_date"]),
+                last_visit=timeutils.from_db(row["last_visit"]) if row["last_visit"] else None,
+                login=row["login"],
+            )
+        )
+
+    return people
+
+
+async def get_nudge(user_id: int, kind: str) -> Nudge | None:
+    async with _connect() as db:
+        cursor = await db.execute(
+            "SELECT * FROM nudges WHERE user_id = ? AND kind = ?", (user_id, kind)
+        )
+        row = await cursor.fetchone()
+
+    return _nudge(row) if row else None
+
+
+async def remember_nudge(
+    user_id: int,
+    kind: str,
+    promised_days: int = 0,
+    expires_snapshot: datetime | None = None,
+) -> None:
+    """
+    Отмечает отправленное напоминание.
+
+    Повторная запись затирает прежнюю целиком — так напоминание о конце
+    подписки уходит и в следующий раз, когда подписка снова подойдёт к концу.
+    Решает, пора ли, вызывающий: здесь только память.
+    """
+    async with _connect() as db:
+        await db.execute(
+            """
+            INSERT INTO nudges(user_id, kind, sent_at, promised_days, expires_snapshot)
+            VALUES(?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, kind) DO UPDATE SET
+                sent_at = excluded.sent_at,
+                promised_days = excluded.promised_days,
+                expires_snapshot = excluded.expires_snapshot,
+                claimed_at = NULL,
+                claimed_days = NULL
+            """,
+            (
+                user_id,
+                kind,
+                timeutils.now_str(),
+                promised_days,
+                timeutils.to_db(expires_snapshot) if expires_snapshot else None,
+            ),
+        )
+        await db.commit()
+
+
+async def claim_nudge(user_id: int, kind: str, days: int) -> bool:
+    """
+    Закрывает обещание. False — его уже закрыли раньше.
+
+    Проверка и запись одним оператором: регистрация и обходчик рассылки
+    могут дойти до одного обещания одновременно, и «сначала посмотреть,
+    потом обновить» подарило бы дни дважды.
+    """
+    async with _connect() as db:
+        cursor = await db.execute(
+            """
+            UPDATE nudges
+            SET claimed_at = ?, claimed_days = ?
+            WHERE user_id = ? AND kind = ? AND claimed_at IS NULL
+            """,
+            (timeutils.now_str(), days, user_id, kind),
+        )
+        await db.commit()
+
+        return cursor.rowcount > 0
+
+
+async def promised_days(user_id: int, kind: str) -> int:
+    """Сколько дней обещано и ещё не выдано. 0 — обещаний нет."""
+    nudge = await get_nudge(user_id, kind)
+
+    return nudge.promised_days if nudge and nudge.open else 0

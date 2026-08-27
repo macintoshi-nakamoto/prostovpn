@@ -77,6 +77,14 @@ class UserRow(Schema):
     expires_at: dt.datetime | None
     days_left: int | None
 
+    # Пауза подписки: дни стоят, доступа нет. `frozen_days` — сколько длится
+    # текущая, `frozen_days_used` — сколько человек напаузил за всё время.
+    is_frozen: bool = False
+    frozen_at: dt.datetime | None = None
+    frozen_days: int = 0
+    frozen_days_used: int = 0
+    freeze_count: int = 0
+
     traffic_used_bytes: int
     traffic_limit_bytes: int | None
     traffic_pct: float | None

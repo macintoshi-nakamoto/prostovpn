@@ -1,3 +1,5 @@
+"""Пускает в разделы бота только тех, кто вошёл в личный кабинет."""
+
 from collections.abc import Awaitable, Callable
 from typing import Any
 

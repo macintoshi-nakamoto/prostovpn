@@ -341,7 +341,6 @@ def issue_cred(
     if not crypto.available():
         raise PanelError("не задан PANEL_SECRETS_KEY — выдать доступ VLESS нечем")
 
-    identity = str(uuid.uuid4())
     params = endpoint.params or {}
     short_ids = params.get("short_ids") or [""]
 
@@ -358,13 +357,19 @@ def issue_cred(
         db.add(cred)
 
     cred.cred_type = "vless"
-    cred.identity_enc = crypto.encrypt(identity)
-    cred.identity_fp = crypto.blind_index(identity)
+    # Отозванной учётке возвращаем ЕЁ ЖЕ UUID и short_id: vless-ссылка у
+    # человека сохранена, и после разморозки или продления она должна
+    # заработать как была, без переимпорта.
+    if not cred.identity_enc:
+        identity = str(uuid.uuid4())
+        cred.identity_enc = crypto.encrypt(identity)
+        cred.identity_fp = crypto.blind_index(identity)
     cred.label = cred.label or _label()
-    cred.extra = {
-        "flow": params.get("flow", FLOW),
-        "short_id": secrets.choice(short_ids),
-    }
+    if not cred.extra:
+        cred.extra = {
+            "flow": params.get("flow", FLOW),
+            "short_id": secrets.choice(short_ids),
+        }
     db.commit()
     db.refresh(cred)
 

@@ -1,3 +1,5 @@
+"""Вход, регистрация и смена пароля. Учётки живут в панели, не в боте."""
+
 import time
 
 from aiogram import F, Router
@@ -50,6 +52,7 @@ def _locked_for(user_id: int) -> int:
 
 
 async def _hide(message: Message) -> None:
+    """Убирает из чата сообщение с паролем."""
     try:
         await message.delete()
     except TelegramBadRequest:
@@ -62,6 +65,11 @@ def _form(title: str, hint: str):
 
 async def _warn(message: Message, text: str) -> None:
     await message.answer(f'{tg("warn")} {text}')
+
+
+# --------------------------------------------------------------------------
+# Регистрация
+# --------------------------------------------------------------------------
 
 
 @router.callback_query(F.data == "register")
@@ -147,6 +155,8 @@ async def register_confirm(message: Message, state: FSMContext) -> None:
         return
 
     await models.save_session(message.from_user.id, session.login, session.token, session.expires_at)
+    # Панель узнаёт, чей это Telegram: по этой связи начисляются бонусы за
+    # приглашения — и те, что ждали появления учётки.
     await panel.referral_link_account(message.from_user.id, session.login)
     await state.clear()
 
@@ -156,9 +166,17 @@ async def register_confirm(message: Message, state: FSMContext) -> None:
         "Эти же логин и пароль работают на сайте и в приложении."
     )
 
+    # Обещанное по пригласительной ссылке — сразу, пока человек здесь.
+    # Отдельным сообщением и после «аккаунт создан»: подарок должно быть
+    # видно, а не искать его строкой в чужом тексте.
     await grant_pending(message, session.login)
 
     await show_cabinet(message, message.from_user.id)
+
+
+# --------------------------------------------------------------------------
+# Вход
+# --------------------------------------------------------------------------
 
 
 @router.callback_query(F.data == "login")
@@ -232,6 +250,8 @@ async def login_password(message: Message, state: FSMContext) -> None:
         return
 
     await models.save_session(message.from_user.id, session.login, session.token, session.expires_at)
+    # Панель узнаёт, чей это Telegram: по этой связи начисляются бонусы за
+    # приглашения — и те, что ждали появления учётки.
     await panel.referral_link_account(message.from_user.id, session.login)
     _failures.pop(message.from_user.id, None)
     await state.clear()
@@ -251,6 +271,11 @@ async def logout(callback: CallbackQuery, state: FSMContext) -> None:
 
     await callback.answer("Вы вышли")
     await show_start(callback)
+
+
+# --------------------------------------------------------------------------
+# Смена пароля
+# --------------------------------------------------------------------------
 
 
 @router.callback_query(F.data == "password")
@@ -316,6 +341,8 @@ async def password_fresh(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer(f'{tg("check")} Пароль изменён.')
 
+    # Смена пароля гасит все сессии панели, включая нашу: входим заново
+    # с новым паролем, иначе кабинет тут же попросил бы залогиниться.
     try:
         fresh_session = await panel.login(session.panel_login, password)
     except panel.PanelError:
@@ -331,6 +358,11 @@ async def password_fresh(message: Message, state: FSMContext) -> None:
     )
 
     await show_cabinet(message, message.from_user.id)
+
+
+# --------------------------------------------------------------------------
+# Отмена формы
+# --------------------------------------------------------------------------
 
 
 @router.callback_query(F.data == "cancel")

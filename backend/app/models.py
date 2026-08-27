@@ -401,9 +401,16 @@ class User(Base):
 
     is_free: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    # Заморозка подписки: пока стоит отметка, доступа нет, а при разморозке
-    # оплаченные дни сдвигаются на длительность заморозки (см. services/freeze.py).
+    # Заморозка подписки. Пока стоит дата, часы подписки не идут: дни не
+    # тратятся, но и доступа нет. Даты в самих подписках при этом не
+    # трогаются — их сдвигает разморозка, см. services/freeze.py.
     frozen_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    frozen_days_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    freeze_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Месячный лимит пауз: месяц «ГГГГ-ММ» и сколько раз в нём морозили.
+    # Смена месяца обнуляет счёт — см. services/freeze.py.
+    freeze_month: Mapped[str | None] = mapped_column(String(7), default=None)
+    freeze_month_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     traffic_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
     traffic_unlimited: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -426,8 +433,39 @@ class User(Base):
     payments: Mapped[list["Payment"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     sessions: Mapped[list["Session"]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
-    def active_subscription(self, now: dt.datetime | None = None) -> "Subscription | None":
+    @property
+    def is_frozen(self) -> bool:
+        return self.frozen_at is not None
+
+    def frozen_for(self, now: dt.datetime | None = None) -> dt.timedelta:
+        """Сколько длится текущая заморозка. Не заморожен — ноль."""
+        if self.frozen_at is None:
+            return dt.timedelta(0)
+
+        return max(dt.timedelta(0), (now or utcnow()) - self.frozen_at)
+
+    def subscription_clock(self, now: dt.datetime | None = None) -> dt.datetime:
+        """
+        Часы подписки: во время заморозки они стоят на минуте заморозки.
+
+        Дни считаются от этого момента, поэтому у замороженной подписки
+        остаток не тает, а даты в базе можно не трогать до разморозки —
+        сдвинуть их одним разом дешевле и честнее, чем пересчитывать каждую
+        подписку в очереди при каждой паузе.
+
+        Повторное применение безвредно: часы уже стоящей подписки возвращают
+        сами себя. Это важно, потому что методы ниже передают полученный
+        момент дальше по цепочке.
+        """
         moment = now or utcnow()
+
+        if self.frozen_at is not None and self.frozen_at < moment:
+            return self.frozen_at
+
+        return moment
+
+    def active_subscription(self, now: dt.datetime | None = None) -> "Subscription | None":
+        moment = self.subscription_clock(now)
         running = [
             s
             for s in self.subscriptions
@@ -436,7 +474,7 @@ class User(Base):
         return max(running, key=lambda s: s.expires_at, default=None)
 
     def upcoming_subscriptions(self, now: dt.datetime | None = None) -> list["Subscription"]:
-        moment = now or utcnow()
+        moment = self.subscription_clock(now)
         return sorted(
             (
                 s
@@ -447,7 +485,7 @@ class User(Base):
         )
 
     def access_expires_at(self, now: dt.datetime | None = None) -> dt.datetime | None:
-        moment = now or utcnow()
+        moment = self.subscription_clock(now)
         ends = [
             s.expires_at
             for s in self.subscriptions
@@ -456,9 +494,21 @@ class User(Base):
         return max(ends, default=None)
 
     def access_days_left(self, now: dt.datetime | None = None) -> int | None:
-        moment = now or utcnow()
+        moment = self.subscription_clock(now)
         end = self.access_expires_at(moment)
         return max(0, (end - moment).days) if end is not None else None
+
+    def access_ends_if_resumed(self, now: dt.datetime | None = None) -> dt.datetime | None:
+        """
+        До какого числа хватит доступа, если разморозить прямо сейчас.
+
+        Витринам нужна именно эта дата: в базе у замороженного лежит старая,
+        она уже «прошла» и показывать её человеку нельзя. У обычного
+        пользователя ничего не меняется — заморозки нет, сдвиг нулевой.
+        """
+        end = self.access_expires_at(now)
+
+        return end + self.frozen_for(now) if end is not None else None
 
     def effective_traffic_limit(self, now: dt.datetime | None = None) -> int | None:
         if self.traffic_unlimited:
@@ -569,13 +619,11 @@ class User(Base):
         limit = self.effective_traffic_limit(now)
         return limit is not None and self.traffic_used_bytes >= limit
 
-    @property
-    def is_frozen(self) -> bool:
-        return self.frozen_at is not None
-
     def has_access(self, now: dt.datetime | None = None) -> bool:
         if self.is_blocked or not self.is_active:
             return False
+        # Заморозка — это пауза и для доступа тоже. Иначе она была бы просто
+        # бесплатной прибавкой к сроку: дни стоят, а VPN работает.
         if self.is_frozen:
             return False
         if self.active_subscription(now) is None:
@@ -720,18 +768,6 @@ class Session(Base):
     @property
     def device_key(self) -> str:
         return (self.device_id or "").strip()
-
-
-class SubscriptionFreeze(Base):
-
-    __tablename__ = "subscription_freezes"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    started_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
-    ended_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
-
-    user: Mapped[User] = relationship()
 
 
 class SubscriptionToken(Base):

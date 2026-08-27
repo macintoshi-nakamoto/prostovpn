@@ -170,6 +170,12 @@ def queue_expiry_reminders(db: OrmSession) -> int:
         user = subscription.user
         if user is None:
             continue
+        # У замороженной подписки срок в базе стоит на месте, а часы —
+        # тем более: письмо «через три дня всё кончится» человеку на паузе
+        # приходило бы каждый раз неправдой. Отметку не ставим — напомним,
+        # когда он вернётся.
+        if user.is_frozen:
+            continue
         address = user.email_plain
         if not address:
             subscription.reminder_sent_at = now

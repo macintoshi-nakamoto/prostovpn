@@ -6,6 +6,7 @@ from utils.logger import logger
 
 
 async def notify_admins(bot: Bot, text: str) -> None:
+    """Служебные уведомления отправляются без разметки — внутри текст пользователя."""
     for admin_id in config.admin_ids:
         try:
             await bot.send_message(admin_id, text, parse_mode=None)

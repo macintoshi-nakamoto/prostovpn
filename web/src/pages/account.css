@@ -287,58 +287,6 @@
   background: var(--brand-tint);
 }
 
-.ac-hero.frozen {
-  background: linear-gradient(130deg, #8b98ac 0%, #64718a 48%, #46516a 100%);
-}
-.ac-hero.frozen .ac-hero-btn {
-  color: #46516a;
-}
-.ac-hero.frozen .ac-hero-btn:hover {
-  background: #e8ecf3;
-}
-
-.ac-freeze {
-  background: var(--surface);
-  border-radius: 22px;
-  padding: 20px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-.ac-freeze-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.ac-freeze-title {
-  font-weight: 600;
-  color: var(--ink);
-}
-.ac-freeze-sub {
-  font-size: 14px;
-  color: var(--text-dim);
-}
-.ac-freeze-btn {
-  border: none;
-  cursor: pointer;
-  background: var(--accent-deep);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 600;
-  padding: 12px 22px;
-  border-radius: 12px;
-  transition: opacity 0.2s ease;
-}
-.ac-freeze-btn:hover {
-  opacity: 0.9;
-}
-.ac-freeze-btn:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
 .ac-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1290,4 +1238,125 @@
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 6px;
+}
+
+/* Пауза подписки.
+ *
+ * Карточка живёт в двух состояниях, и разница между ними видна раньше, чем
+ * прочитан текст: пока пауза не стоит, снежинка обесцвечена и полупрозрачна —
+ * «кнопка, которую можно нажать»; на паузе она оживает в цвете, а карточка
+ * набирает морозный холодок. Иконка одна на оба состояния: это дешевле в
+ * поддержке и честнее — человек видит один и тот же предмет включённым и
+ * выключенным.
+ */
+.ac-freeze {
+  flex-direction: row;
+  align-items: center;
+  gap: 24px;
+  transition: background 0.25s ease, box-shadow 0.25s ease;
+}
+.ac-freeze-art {
+  flex: none;
+  width: 104px;
+  height: 104px;
+  display: grid;
+  place-items: center;
+}
+.ac-freeze-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: grayscale(1) opacity(0.32);
+  transform: scale(0.92);
+  transition: filter 0.3s ease, transform 0.3s ease;
+}
+[data-theme="dark"] .ac-freeze-img {
+  filter: grayscale(1) opacity(0.45);
+}
+.ac-freeze-on {
+  background: linear-gradient(180deg, #eaf4ff 0%, var(--surface) 62%);
+}
+[data-theme="dark"] .ac-freeze-on {
+  background: linear-gradient(180deg, rgba(80, 150, 220, 0.16) 0%, var(--surface) 62%);
+}
+.ac-freeze-on .ac-freeze-img {
+  filter: none;
+  transform: scale(1);
+}
+.ac-freeze-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.ac-freeze-text {
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 62ch;
+}
+.ac-freeze-meta {
+  font-size: 13px;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+.ac-freeze-error {
+  font-size: 14px;
+  color: var(--accent-dark);
+}
+.ac-freeze-ask {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.ac-freeze-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.ac-freeze-btn {
+  border: none;
+  cursor: pointer;
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 13px 24px;
+  border-radius: 13px;
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+.ac-freeze-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.ac-freeze-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.ac-freeze-cancel {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 13px 4px;
+  font-size: 15px;
+  color: var(--text-muted);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.ac-freeze-cancel:hover {
+  color: var(--accent-dark);
+}
+
+@media (max-width: 720px) {
+  .ac-freeze {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .ac-freeze-art {
+    width: 84px;
+    height: 84px;
+  }
 }

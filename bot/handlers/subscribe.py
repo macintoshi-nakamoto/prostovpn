@@ -1,3 +1,14 @@
+"""
+Кнопка «Я подписался».
+
+Проверка настоящая, а не на слово: нажатие сбрасывает кэш и спрашивает
+Telegram заново. Поэтому нажать её раньше времени безвредно — бот честно
+ответит, что подписки не видит, и человек останется на том же экране.
+
+Дальше развилка. Пришёл по пригласительной ссылке — показываем подарок,
+ради которого он и подписывался. Пришёл сам — обычный первый экран.
+"""
+
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
@@ -16,6 +27,8 @@ router = Router()
 async def subscribed(callback: CallbackQuery, state: FSMContext) -> None:
     user_id = callback.from_user.id
 
+    # Сбрасываем кэш: человек только что подписался, и прошлый ответ Telegram
+    # («не подписан») сделал бы кнопку бесполезной на все шесть часов.
     channel.forget(user_id)
 
     if not await channel.is_subscribed(callback.bot, user_id):

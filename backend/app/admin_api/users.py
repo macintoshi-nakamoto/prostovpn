@@ -199,6 +199,45 @@ def disable_user(
     return detail
 
 
+@router.post("/{user_id}/freeze", response_model=schemas.UserDetail)
+def freeze_user(
+    user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
+) -> schemas.UserDetail:
+    """
+    Ставит подписку на паузу — теми же правилами, что и сам клиент.
+
+    Администратор их не обходит намеренно: «заморозил пробный» превращается в
+    бесплатный доступ навсегда, и разбираться с этим потом будет он же.
+    """
+    user = _load(db, user_id)
+
+    try:
+        problems = services.freeze.freeze(db, user, by=f"панель, {admin.login}")
+    except services.FreezeError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+
+    audit(db, admin, "user.freeze", user.public_id)
+    detail = _detail(db, user_id)
+
+    if problems:
+        detail.blocked_reason = "Доступ остался на узлах: " + "; ".join(problems)
+
+    return detail
+
+
+@router.post("/{user_id}/resume", response_model=schemas.UserDetail)
+def resume_user(
+    user_id: int, db: OrmSession = Depends(get_db), admin: Admin = Depends(current_admin)
+) -> schemas.UserDetail:
+    """Снимает паузу и возвращает подписке простоявшее время."""
+    user = _load(db, user_id)
+    elapsed = services.freeze.resume(db, user, by=f"панель, {admin.login}")
+
+    audit(db, admin, "user.resume", user.public_id, f"пауза длилась {elapsed.days} дн.")
+
+    return _detail(db, user_id)
+
+
 @router.post("/{user_id}/block", response_model=schemas.UserDetail)
 def block_user(
     user_id: int,

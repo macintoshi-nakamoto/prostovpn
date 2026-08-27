@@ -40,6 +40,7 @@ def days_left(expires_at: datetime) -> int:
 
 
 def plural(count: int, one: str, few: str, many: str) -> str:
+    """Русское склонение: 1 устройство, 2 устройства, 5 устройств."""
     tail = count % 100
 
     if 11 <= tail <= 14:

@@ -126,6 +126,7 @@ export function UserDrawer({ userId, plans, onClose, onChanged }) {
                   {user.publicId}
                 </span>
                 {user.isFree && <Chip color="var(--gd-gold)">бесплатно</Chip>}
+                {user.isFrozen && <Chip color="var(--gd-info)">на паузе</Chip>}
               </div>
             </div>
           </>
@@ -146,9 +147,15 @@ export function UserDrawer({ userId, plans, onClose, onChanged }) {
               sub={user.periodDays ? `за ${days(user.periodDays)}` : null}
             />
             <Tile
-              label={user.expiresAt ? "Оплачено до" : "Подписка"}
+              label={user.isFrozen ? "Хватит до" : user.expiresAt ? "Оплачено до" : "Подписка"}
               value={user.expiresAt ? date(user.expiresAt) : "нет"}
-              sub={user.daysLeft != null ? `осталось ${days(user.daysLeft)}` : null}
+              sub={
+                user.isFrozen
+                  ? `на паузе с ${date(user.frozenAt)} · в запасе ${days(user.daysLeft || 0)}`
+                  : user.daysLeft != null
+                    ? `осталось ${days(user.daysLeft)}`
+                    : null
+              }
             />
           </div>
 

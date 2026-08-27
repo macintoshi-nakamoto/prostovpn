@@ -1,3 +1,5 @@
+"""Экраны, которые нужны и хендлерам, и middleware."""
+
 from collections.abc import Callable
 from pathlib import Path
 
@@ -24,6 +26,7 @@ Blocks = Callable[[str | None], list[dict]]
 
 
 async def media_id(path: Path) -> str | None:
+    """file_id заставки раздела — её выгружает прогрев, см. warmup.py."""
     return await models.get_media(media_key(path))
 
 
@@ -35,6 +38,11 @@ async def show_screen(
     text: str,
     animation: Path | None = None,
 ) -> None:
+    """Экран блоками. Не вышло — показываем прежний вид с подписью.
+
+    Пока заставка раздела не выгружена, идём текстовым путём: он её выгрузит
+    и запомнит, и со следующего раза экран соберётся блоками уже с картинкой.
+    """
     file_id = await media_id(animation) if animation else None
 
     if (animation is None or file_id) and await render.show_rich(event, blocks(file_id), markup):
@@ -66,6 +74,13 @@ async def show_gate(event: Event, user_id: int) -> None:
 
 
 async def show_subscribe(event: Event, days: int | None = None) -> None:
+    """
+    Экран «подпишитесь на канал».
+
+    `days` — размер подарка, если человек пришёл по пригласительной ссылке.
+    Тогда текст говорит про подарок, а не про канал: он уже знает, зачем
+    пришёл, и подписка для него последний шаг, а не новое требование.
+    """
     await show_screen(
         event,
         lambda file_id: screens.subscribe(file_id, days),
@@ -83,6 +98,7 @@ async def show_error(event: Event, message: str, target: str = "home") -> None:
 
 
 async def fetch_account(event: Event, session: Session) -> panel.Account | None:
+    """Данные аккаунта из панели. Токен протух — просим войти заново."""
     try:
         return await panel.account(session.token)
     except panel.PanelError as error:
@@ -131,7 +147,7 @@ async def show_cabinet(event: Event, user_id: int) -> None:
     await show_screen(
         event,
         lambda file_id: screens.cabinet(file_id, account),
-        cabinet_menu(account.active, ios=account.ios_access),
+        cabinet_menu(account.active, ios=account.ios_access, freeze=account.freeze),
         text=texts.cabinet_text(account),
         animation=assets.cabinet(account.active),
     )

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Ban, Gauge, Gift, KeyRound, Power, ShieldAlert, Smartphone, Trash2, Wallet } from "lucide-react";
+import { Ban, Gauge, Gift, KeyRound, Power, ShieldAlert, Smartphone, Snowflake, Trash2, Wallet } from "lucide-react";
 import { usersApi } from "../../lib/api";
-import { money, trafficLimit } from "../../lib/format";
+import { date, days, money, trafficLimit } from "../../lib/format";
 import { Button, Section, Toggle, confirmDialog } from "../../ui";
 import { TrafficLimitModal } from "./TrafficLimitModal";
 import { ExtendModal } from "./ExtendModal";
@@ -32,6 +32,20 @@ export function UserControls({ user, plans, onResult, onDeleted }) {
     run("active", () => (user.isActive ? usersApi.disable(user.id) : usersApi.enable(user.id)));
 
   const toggleFree = () => run("free", () => usersApi.update(user.id, { isFree: !user.isFree }));
+
+  const toggleFreeze = async () => {
+    if (user.isFrozen) return run("freeze", () => usersApi.resume(user.id));
+
+    const ok = await confirmDialog({
+      title: `Поставить подписку ${user.name || user.login} на паузу?`,
+      message:
+        "Дни перестанут тратиться, ключи будут сняты с серверов, приложение останется без доступа. " +
+        "Простоявшее время вернётся в срок подписки, когда паузу снимут. Пробные и подарочные дни морозить нельзя.",
+      confirmText: "Заморозить",
+    });
+    if (!ok) return null;
+    return run("freeze", () => usersApi.freeze(user.id));
+  };
 
   const toggleBlock = async () => {
     if (user.isBlocked) return run("block", () => usersApi.unblock(user.id));
@@ -143,6 +157,27 @@ export function UserControls({ user, plans, onResult, onDeleted }) {
             }
           >
             <Toggle on={user.isFree} disabled={busy === "free"} onChange={toggleFree} />
+          </ControlRow>
+
+          <ControlRow
+            icon={<Snowflake size={16} />}
+            title="Заморозка подписки"
+            sub={
+              user.isFrozen
+                ? `Пауза с ${date(user.frozenAt)}${user.frozenDays ? ` · идёт ${days(user.frozenDays)}` : ""} · в запасе ${days(user.daysLeft || 0)}`
+                : user.freezeCount
+                  ? `Дни стоят, доступа нет · пауз было ${user.freezeCount}, всего ${days(user.frozenDaysUsed || 0)}`
+                  : "Дни стоят, доступа нет. Только на оплаченном тарифе"
+            }
+          >
+            <Button
+              size="sm"
+              variant={user.isFrozen ? "on" : ""}
+              disabled={busy === "freeze"}
+              onClick={toggleFreeze}
+            >
+              {busy === "freeze" ? "…" : user.isFrozen ? "Снять паузу" : "Заморозить"}
+            </Button>
           </ControlRow>
 
           <ControlRow

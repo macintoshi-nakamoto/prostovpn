@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+# Текст на пустом экране до кнопки «Начать» — первое, что видит человек.
+# Без обещаний «без ограничений»: банк на верификации платёжной системы
+# отклоняет такие формулировки, см. utils/texts.py.
 BOT_DESCRIPTION = (
     "Prosto VPN - быстрый и надёжный VPN.\n\n"
     "В боте: личный кабинет, оплата подписки и поддержка. "
@@ -13,6 +16,7 @@ BOT_DESCRIPTION = (
     "Нажмите «Начать»."
 )
 
+# Подпись в профиле бота и в превью ссылки.
 BOT_SHORT_DESCRIPTION = "Личный кабинет, тарифы и поддержка Prosto VPN"
 
 
@@ -21,6 +25,10 @@ class PayMethod:
     code: str
     title: str
     ready: bool = False
+    # Витрина без оплаты: каталог с ценами открывается и кнопки тарифов
+    # кликабельны, но счёт не выставляется — способ ещё подключается.
+    # Нужно платёжному провайдеру на согласовании: он смотрит, что каталог и
+    # стоимость в боте есть, а не заглушку «скоро» вместо них.
     catalog_only: bool = False
 
     @property
@@ -84,20 +92,26 @@ class Config:
     token: str
     admin_ids: tuple[int, ...] = field(default_factory=tuple)
 
+    # Панель — общая база аккаунтов сайта, приложения и бота.
     panel_url: str = "https://prostovpn.cc"
     panel_admin_login: str = ""
     panel_admin_password: str = ""
     signup_plan: str = "trial"
 
+    # Оплата картой включается токеном провайдера из @BotFather.
     provider_token: str = ""
     currency: str = "RUB"
 
+    # Сколько звёзд просить за рубль цены тарифа: 1.0 — звезда равна рублю.
     stars_rate: float = 1.0
 
+    # Имя бота — для реферальных ссылок вида t.me/<bot>?start=ref123.
     bot_username: str = "prostovpnn_bot"
 
     site_url: str = "https://prostovpn.cc"
     channel_url: str = "https://t.me/myprostovpn"
+    # Инструкция по установке на сайте. Отдельной настройкой: ссылку
+    # показывают и бот, и кабинет, и письмо с доступом.
     guide_url: str = "https://prostovpn.cc/guide"
     brand: str = "Prosto VPN"
     brand_version: str = "bot-1.0"
@@ -162,7 +176,9 @@ def card_payments_enabled() -> bool:
 
 
 def payment_methods() -> tuple[PayMethod, ...]:
+    """Способы оплаты. Неготовые остаются на экране - но честно помечены."""
     methods = [
+        # СБП первым: оплата деньгами - основной путь, звёзды - запасной.
         PayMethod("sbp", "СБП", ready=True),
         PayMethod("stars", "Telegram Stars", ready=True),
         PayMethod("crypto", "Криптовалюта", ready=True),

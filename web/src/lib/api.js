@@ -170,6 +170,13 @@ export const api = {
       body: { plan_code: planCode || null, quantity, payment_method: paymentMethod },
     }),
 
+  // Пауза подписки. Обе ручки возвращают аккаунт целиком — витрине не нужно
+  // догадываться, что изменилось: дни, доступ и состояние паузы приезжают
+  // одним ответом.
+  freeze: () => request("/api/v1/account/freeze", { method: "POST", auth: true }),
+
+  resume: () => request("/api/v1/account/resume", { method: "POST", auth: true }),
+
   transfers: () => request("/api/v1/account/transfers", { auth: true }),
 
   transferDays: (recipient, days, note) =>
@@ -201,10 +208,6 @@ export const api = {
 
   recurringCancel: () =>
     request("/api/v1/account/recurring/cancel", { method: "POST", auth: true }),
-
-  freeze: () => request("/api/v1/account/freeze", { method: "POST", auth: true }),
-
-  unfreeze: () => request("/api/v1/account/unfreeze", { method: "POST", auth: true }),
 
   logout: () => request("/api/v1/logout", { method: "POST", auth: true }).catch(() => {}),
 

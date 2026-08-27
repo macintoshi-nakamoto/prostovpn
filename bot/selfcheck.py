@@ -1,5 +1,12 @@
+"""Проверка бота без Telegram: python selfcheck.py
+
+Читает панель только на чтение: тарифы и список приложений. Ничего не
+создаёт и не меняет.
+"""
+
 import asyncio
 import datetime as dt
+from dataclasses import replace
 import json
 import sys
 
@@ -11,7 +18,7 @@ from config.settings import SUPPORT_TOPICS, config, method_by_code
 from database import db, models
 from keyboards import menus
 from keyboards.ui import DANGER, DEFAULT, PRIMARY, SUCCESS
-from utils import assets, panel, screens, texts
+from utils import assets, drip, panel, screens, texts
 from utils.security import login_error, password_error
 
 
@@ -89,6 +96,7 @@ FAKE_APPS = [
 ]
 
 
+# Цвет разрешён только этим кнопкам — остальные серые.
 COLORED = (
     "Тарифы",
     "Поделиться",
@@ -103,7 +111,20 @@ COLORED = (
     "Отмена",
     "Меню",
     "Выйти",
+    # Письма вдогонку: у каждого ровно одно нужное действие, оно и цветное.
+    "Зарегистрироваться",
+    "Инструкция",
 )
+
+FREEZE_READY = panel.Freeze(can_freeze=True, days_left=27)
+FREEZE_ON = panel.Freeze(frozen=True, frozen_days=3, days_left=27, frozen_at=NOW)
+FREEZE_DENIED = panel.Freeze(
+    reason="Пауза доступна только на оплаченном тарифе — пробные и подарочные дни заморозить нельзя."
+)
+
+FROZEN_ACCOUNT = replace(FAKE_ACCOUNT, active=False, freeze=FREEZE_ON)
+TRIAL_ACCOUNT = replace(FAKE_ACCOUNT, freeze=FREEZE_DENIED)
+
 
 def check_keyboards() -> None:
     boards = {
@@ -113,6 +134,8 @@ def check_keyboards() -> None:
         "main": menus.main_menu(),
         "cabinet": menus.cabinet_menu(True),
         "cabinet_empty": menus.cabinet_menu(False),
+        # Кабинет человека с iPhone: у него на кнопку больше — ключ для
+        # AmneziaVPN, потому что приложения под iOS нет.
         "cabinet_ios": menus.cabinet_menu(True, ios=True),
         "methods": menus.payment_methods_menu(),
         "plans": menus.plans_menu([FAKE_PLAN], method_by_code("stars")),
@@ -126,6 +149,15 @@ def check_keyboards() -> None:
         "ticket_created": menus.ticket_created_menu(),
         "after_payment": menus.after_payment_menu(),
         "back": menus.back_menu(),
+        # Кабинет с паузой и без: кнопка появляется только тем, кому пауза
+        # доступна, и это правило легко потерять при правке меню.
+        "cabinet_freezable": menus.cabinet_menu(True, freeze=FREEZE_READY),
+        "cabinet_frozen": menus.cabinet_menu(False, freeze=FREEZE_ON),
+        "freeze_confirm": menus.freeze_confirm_menu(),
+        "nudge_signup": menus.nudge_signup_menu(),
+        "nudge_idle": menus.nudge_idle_menu(),
+        "nudge_renew": menus.nudge_renew_menu(),
+        "gift": menus.gift_menu(),
     }
 
     colored = 0
@@ -138,6 +170,8 @@ def check_keyboards() -> None:
 
                 assert style in ALLOWED_STYLES, f"{name}: стиль {style}"
                 assert payload.get("icon_custom_emoji_id"), f"{name}: нет иконки"
+                # Кнопка копирования не ведёт никуда: она кладёт текст в
+                # буфер — у неё нет ни callback_data, ни url, и это норма.
                 assert (
                     payload.get("callback_data")
                     or payload.get("url")
@@ -172,6 +206,8 @@ def check_keyboards() -> None:
 
     assert about_rows and len(about_rows[0]) == 1, "«О сервисе» должно стоять отдельной строкой"
 
+    # Инструкция по установке — сразу под каналом: сюда идут после того,
+    # как скачали приложение или получили ключ.
     main_rows = boards["main"].inline_keyboard
     channel_at = next(i for i, row in enumerate(main_rows) if any("канал" in b.text for b in row))
     guide_row = main_rows[channel_at + 1]
@@ -181,6 +217,8 @@ def check_keyboards() -> None:
     )
     assert guide_row[0].url, "кнопка инструкции должна вести ссылкой на сайт"
 
+    # Список российских сервисов — строка на всю ширину прямо над поддержкой: с вопросом
+    # «почему не открывается банк» приходят именно в поддержку.
     cabinet_rows = boards["cabinet"].inline_keyboard
     support_at = next(
         i for i, row in enumerate(cabinet_rows) if any("Поддержка" in b.text for b in row)
@@ -195,7 +233,35 @@ def check_keyboards() -> None:
 
     assert any("iPhone" in label for label in ios_labels), "в кабинете iOS нет кнопки ключа"
 
+    # Автопродление: в кабинете есть вход, счёт даёт кнопку-ссылку, отключение
+    # везде одно и серое — случайный клик не должен отменять подписку.
     cabinet_labels = [b.text for row in cabinet_rows for b in row]
+
+    # Автопродление живёт только в кабинете на сайте: в боте его нет
+    # намеренно — там рядом ни способа оплаты, ни страницы отмены.
+    frozen_labels = [
+        b.text for row in boards["cabinet_frozen"].inline_keyboard for b in row
+    ]
+    assert any("Снять паузу" in label for label in frozen_labels), (
+        "у замороженной подписки в кабинете нет кнопки возврата"
+    )
+    assert any(
+        "Заморозить" in b.text
+        for row in boards["cabinet_freezable"].inline_keyboard
+        for b in row
+    ), "кнопка паузы пропала из кабинета"
+    # Кабинет без данных о паузе (панель постарше, блока в ответе нет) —
+    # единственный случай, когда кнопки быть не должно.
+    assert not any(
+        "аморозить" in b.text or "аузу" in b.text
+        for row in boards["cabinet"].inline_keyboard
+        for b in row
+    ), "кнопка паузы взялась там, где панель про паузу ничего не сказала"
+
+    denied = menus.cabinet_menu(True, freeze=FREEZE_DENIED)
+    assert any(
+        "Заморозить" in b.text for row in denied.inline_keyboard for b in row
+    ), "кнопку паузы спрятали от того, кому она пока недоступна — он о ней не узнает"
 
     assert not any("Автопродление" in label for label in cabinet_labels), (
         "автопродление вернулось в бота"
@@ -210,6 +276,8 @@ def check_keyboards() -> None:
         "на экране счёта нет кнопки-ссылки «Оплатить»"
     )
 
+    # Два одинаковых значка в одном сообщении читаются как ошибка вёрстки:
+    # человек считает такие кнопки одной группой и ищет несуществующую связь.
     for name, board in boards.items():
         icons = [
             json.loads(b.model_dump_json(exclude_none=True)).get("icon_custom_emoji_id")
@@ -223,6 +291,7 @@ def check_keyboards() -> None:
 
 
 def check_referrals() -> None:
+    """Экран приглашений: ссылка на месте, кнопки ведут куда надо."""
     from handlers.friends import inviter_from_payload, invite_url
 
     url = invite_url(USER_ID)
@@ -232,8 +301,12 @@ def check_referrals() -> None:
     assert inviter_from_payload("ref") is None
     assert inviter_from_payload("мусор") is None
     assert inviter_from_payload(None) is None
+    # Надстрочные цифры проходят isdigit, но int их не берёт: обработчик
+    # /start не должен падать на присланном руками мусоре.
     assert inviter_from_payload("ref²") is None
     assert inviter_from_payload("ref-5") is None
+    # Пробелы обрезаются намеренно: в payload Telegram их не бывает, а
+    # скопированная руками ссылка может принести хвост.
     assert inviter_from_payload("ref 12 ") == 12
 
     blocks = screens.friends(None, FAKE_REFERRALS, url)
@@ -253,12 +326,14 @@ def check_referrals() -> None:
 
 
 def check_transfer_and_daily() -> None:
+    """Перевод дней и посуточный тариф: экраны собираются, цена считается."""
     blocks = screens.transfer(None, FAKE_ACCOUNT, [FAKE_TRANSFER])
     dumped = json.dumps(blocks, ensure_ascii=False)
 
     assert "PV-1234-ABCD" in dumped, "в истории перевода нет получателя"
     assert "custom_emoji" in dumped, "на экране перевода нет премиум-эмодзи"
 
+    # Семь дней посуточного — семьдесят рублей, и то же самое в тексте.
     seven = json.dumps(screens.invoice(None, FAKE_DAILY, quantity=7), ensure_ascii=False)
 
     assert "70 ₽" in seven, f"посуточный посчитан неверно: {seven}"
@@ -269,6 +344,7 @@ def check_transfer_and_daily() -> None:
 
 
 def check_emoji() -> None:
+    """Слоты эмодзи: у каждого есть и премиум-идентификатор, и запасной символ."""
     from keyboards.ui import EMOJI_FALLBACK, EMOJI_IDS
 
     assert set(EMOJI_IDS) == set(EMOJI_FALLBACK), "слоты премиум и запасных эмодзи разошлись"
@@ -276,6 +352,8 @@ def check_emoji() -> None:
     for name, value in EMOJI_IDS.items():
         assert value.isdigit(), f"{name}: идентификатор эмодзи не число"
 
+    # Запасной путь: если Telegram отверг премиум-эмодзи, из готового текста
+    # теги снимаются — иначе повторная попытка падает там же, где первая.
     from keyboards.ui import strip_custom_emoji, tg
 
     sample = f'{tg("brand")} <b>Prosto</b>'
@@ -334,6 +412,18 @@ def check_texts() -> None:
         texts.tickets_text([]),
         texts.history_text(FAKE_ACCOUNT.payments),
         texts.history_text([]),
+        # Письма вдогонку: они уходят подписью под видео, и потолок в 1024
+        # символа для них не теория — текста там втрое больше, чем на кнопке.
+        texts.nudge_signup_text(drip.GIFT_DAYS),
+        texts.nudge_idle_text(drip.GIFT_DAYS),
+        texts.nudge_renew_text(drip.RENEW_AT, drip.RENEW_BONUS),
+        texts.renew_bonus_text(drip.RENEW_BONUS),
+        texts.gift_granted_text(drip.GIFT_DAYS),
+        texts.freeze_ask_text(FAKE_ACCOUNT),
+        texts.freeze_done_text(FROZEN_ACCOUNT),
+        texts.resume_done_text(FAKE_ACCOUNT),
+        texts.freeze_denied_text(TRIAL_ACCOUNT),
+        texts.cabinet_text(FROZEN_ACCOUNT),
     ]
 
     for screen in screens:
@@ -360,7 +450,32 @@ async def check_panel() -> None:
 
     apps = await panel.downloads()
 
-    print(f"панель {config.panel_url}: тарифов {len(plans)}, приложений {len(apps)}")
+    # Список учёток для рассылки: сверяем разбор с сырым ответом.
+    #
+    # Ручка отдаёт camelCase, а соседние — snake_case, и промах в написании
+    # ничем себя не выдаёт: поля просто приходят пустыми. Рассылка в таком
+    # виде решила бы, что подписки нет ни у кого, и раздала бы подарки всем.
+    raw = await panel._admin_request("GET", "/api/admin/users")
+    users = await panel.admin_users()
+
+    assert len(raw) == len(users), "учётки потерялись при разборе"
+
+    with_dates = sum(1 for row in raw if row.get("expiresAt") or row.get("expires_at"))
+    parsed_dates = sum(1 for user in users if user.expires_at)
+
+    assert with_dates == parsed_dates, (
+        f"срок подписки разобран у {parsed_dates} из {with_dates} — проверьте написание полей"
+    )
+
+    with_tg = sum(1 for row in raw if row.get("telegramId") or row.get("telegram_id"))
+    parsed_tg = sum(1 for user in users if user.telegram_id)
+
+    assert with_tg == parsed_tg, "Telegram-связка разобрана не у всех"
+
+    print(
+        f"панель {config.panel_url}: тарифов {len(plans)}, приложений {len(apps)},"
+        f" учёток {len(users)} (с подпиской {parsed_dates})"
+    )
 
 
 async def check_storage() -> None:
@@ -413,6 +528,8 @@ def check_assets() -> None:
         assets.CABINET_INACTIVE,
         assets.PLANS,
         assets.SUPPORT,
+        assets.GIFT,
+        assets.RENEW,
     ]
 
     for path in files:

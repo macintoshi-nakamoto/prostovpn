@@ -217,6 +217,7 @@ export function Account() {
             returnOrder={returnOrder}
             payFailed={payFailed}
             onChanged={load}
+            onApply={apply}
           />
         )}
         {data && tab === "setup" && <SetupGuide login={data.login} />}
@@ -247,11 +248,11 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply })
 
   return (
     <div className="ac-account">
-      <div className={`ac-hero${data.frozen_at ? " frozen" : ""}`}>
+      <div className="ac-hero">
         <div className="ac-hero-body">
           <span className="ac-hero-status">
             <span className="ac-dot" />
-            {data.frozen_at
+            {data.freeze?.frozen
               ? t("account.frozen")
               : data.active
                 ? t("account.active")
@@ -261,8 +262,8 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply })
             {data.plan_title ? `Prosto VPN · ${data.plan_title}` : t("account.noPlan")}
           </span>
           <span className="ac-hero-sub">
-            {data.frozen_at
-              ? t("account.frozenSub", { date: f.longDate(data.frozen_at) })
+            {data.freeze?.frozen
+              ? t("account.frozenHero", { days: f.days(data.days_left ?? 0) })
               : data.expires_at
                 ? t(data.days_left != null ? "account.validUntilLeft" : "account.validUntil", {
                     date: f.longDate(data.expires_at),
@@ -275,8 +276,6 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply })
           {t("account.manage")}
         </button>
       </div>
-
-      <FreezeCard data={data} onApply={onApply} />
 
       <div className="ac-stats">
         <div className="ac-stat">
@@ -390,67 +389,6 @@ function BypassCard({ file, guideUrl }) {
           </a>
         )}
       </div>
-    </div>
-  );
-}
-
-function FreezeCard({ data, onApply }) {
-  const { t } = useI18n();
-  const [asking, setAsking] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  const frozen = Boolean(data.frozen_at);
-  if (!frozen && !data.active) return null;
-
-  const run = async (call) => {
-    setBusy(true);
-    setError("");
-    try {
-      onApply(await call());
-      setAsking(false);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t("account.freezeFailed"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="ac-freeze">
-      <span className="ac-freeze-body">
-        <span className="ac-freeze-title">
-          {frozen ? t("account.frozenTitle") : t("account.freezeTitle")}
-        </span>
-        <span className="ac-freeze-sub">
-          {frozen
-            ? t("account.frozenHint")
-            : data.freezes_left > 0
-              ? t("account.freezeHint", { left: data.freezes_left })
-              : t("account.freezeNone")}
-        </span>
-        {error && <span className="ac-device-error">{error}</span>}
-      </span>
-      {frozen ? (
-        <button className="ac-freeze-btn" disabled={busy} onClick={() => run(api.unfreeze)}>
-          {busy ? "…" : t("account.unfreezeBtn")}
-        </button>
-      ) : data.freezes_left > 0 ? (
-        asking ? (
-          <span className="ac-device-confirm">
-            <button className="ac-device-off" disabled={busy} onClick={() => run(api.freeze)}>
-              {busy ? "…" : t("account.freezeConfirm")}
-            </button>
-            <button className="ac-link" disabled={busy} onClick={() => setAsking(false)}>
-              {t("account.cancel")}
-            </button>
-          </span>
-        ) : (
-          <button className="ac-link" onClick={() => setAsking(true)}>
-            {t("account.freezeBtn")}
-          </button>
-        )
-      ) : null}
     </div>
   );
 }
@@ -1039,7 +977,120 @@ function isDaily(plan) {
   return Boolean(plan) && plan.duration_days === 1;
 }
 
-function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
+function FreezeCard({ freeze, onApply }) {
+  const { t, f } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [asking, setAsking] = useState(false);
+
+  if (!freeze) return null;
+
+  const frozen = !!freeze.frozen;
+
+  // Карточка видна всем и всегда, даже когда пауза недоступна: спрятанная
+  // возможность — это возможность, о которой не знают. Кнопка при этом
+  // выключена, а под ней стоит причина отказа — так человек понимает, что
+  // нужно сделать, чтобы пауза стала доступна.
+
+  const run = async (action) => {
+    setBusy(true);
+    setError("");
+    try {
+      onApply(await action());
+      setAsking(false);
+    } catch (err) {
+      setError(err?.message || t("account.freezeFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className={`ac-card ac-freeze${frozen ? " ac-freeze-on" : ""}`}>
+      <Picture
+        src="/assets/freeze.png"
+        alt=""
+        className="ac-freeze-art"
+        imgClassName="ac-freeze-img"
+      />
+
+      <div className="ac-freeze-body">
+        <h2>{frozen ? t("account.freezeOnTitle") : t("account.freezeTitle")}</h2>
+
+        <p className="ac-freeze-text">
+          {frozen
+            ? t("account.freezeOnText", {
+                days: f.days(freeze.days_left ?? 0),
+                since: freeze.frozen_at ? f.shortDate(freeze.frozen_at) : "",
+              })
+            : t("account.freezeText")}
+        </p>
+
+        {frozen && freeze.frozen_days > 0 && (
+          <p className="ac-freeze-meta">
+            {t("account.freezeElapsed", { days: f.days(freeze.frozen_days) })}
+          </p>
+        )}
+
+        {!frozen && freeze.used_days > 0 && (
+          <p className="ac-freeze-meta">
+            {t("account.freezeUsed", { days: f.days(freeze.used_days) })}
+          </p>
+        )}
+
+        {!frozen && !freeze.can_freeze && freeze.reason && (
+          <p className="ac-freeze-meta">{freeze.reason}</p>
+        )}
+
+        {error && <p className="ac-freeze-error">{error}</p>}
+
+        {frozen ? (
+          <button
+            className="ac-freeze-btn"
+            type="button"
+            disabled={busy}
+            onClick={() => run(api.resume)}
+          >
+            {busy ? t("account.freezeBusy") : t("account.freezeResume")}
+          </button>
+        ) : asking ? (
+          <div className="ac-freeze-ask">
+            <p className="ac-freeze-text">{t("account.freezeConfirm")}</p>
+            <div className="ac-freeze-row">
+              <button
+                className="ac-freeze-btn"
+                type="button"
+                disabled={busy}
+                onClick={() => run(api.freeze)}
+              >
+                {busy ? t("account.freezeBusy") : t("account.freezeConfirmYes")}
+              </button>
+              <button
+                className="ac-freeze-cancel"
+                type="button"
+                disabled={busy}
+                onClick={() => setAsking(false)}
+              >
+                {t("account.freezeConfirmNo")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            className="ac-freeze-btn"
+            type="button"
+            disabled={!freeze.can_freeze}
+            onClick={() => setAsking(true)}
+          >
+            {t("account.freezeAction")}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply }) {
   const { t, f } = useI18n();
   const [plans, setPlans] = useState(null);
   const [paying, setPaying] = useState(null);
@@ -1231,7 +1282,9 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
           <span className="ac-plan-v">{data.period_days ? f.days(data.period_days) : "—"}</span>
         </div>
         <div>
-          <span className="ac-plan-l">{t("account.planUntil")}</span>
+          <span className="ac-plan-l">
+            {t(data.freeze?.frozen ? "account.planUntilPaused" : "account.planUntil")}
+          </span>
           <span className="ac-plan-v">{data.expires_at ? f.shortDate(data.expires_at) : "—"}</span>
         </div>
         <div>
@@ -1247,6 +1300,8 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged }) {
           {notice}
         </div>
       )}
+
+      <FreezeCard freeze={data.freeze} onApply={onApply} />
 
       {upcoming.length > 0 && (
         <div className="ac-card ac-plan-queue">

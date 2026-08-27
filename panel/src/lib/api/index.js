@@ -23,6 +23,8 @@ export const usersApi = {
   disable: (id) => http.post(`${BASE}/users/${id}/disable`),
   block: (id, reason) => http.post(`${BASE}/users/${id}/block`, { reason }),
   unblock: (id) => http.post(`${BASE}/users/${id}/unblock`),
+  freeze: (id) => http.post(`${BASE}/users/${id}/freeze`),
+  resume: (id) => http.post(`${BASE}/users/${id}/resume`),
 
   setTrafficLimit: (id, payload) => http.post(`${BASE}/users/${id}/traffic-limit`, payload),
   resetTraffic: (id) => http.post(`${BASE}/users/${id}/traffic-reset`),

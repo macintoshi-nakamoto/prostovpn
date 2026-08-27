@@ -1,3 +1,9 @@
+"""Экраны бота, собранные блоками.
+
+Каждая функция возвращает готовый список блоков: заставка раздела сверху,
+содержимое, отступ перед кнопками. Тексты живут рядом, в utils/texts.py.
+"""
+
 from config.settings import PayMethod, SupportTopic, config
 from database.models import Ticket
 from utils import rich, texts, timeutils
@@ -14,6 +20,7 @@ PLATFORM_TITLES = {
 
 
 def start(file_id: str | None) -> list[dict]:
+    """Первый экран: заставка, главная мысль и три пункта."""
     return rich.screen(
         file_id,
         rich.title(config.brand, "brand"),
@@ -35,6 +42,8 @@ def gate(file_id: str | None, login: str | None) -> list[dict]:
 
 
 def main(file_id: str | None, account: Account) -> list[dict]:
+    # Значок перед статусом читается раньше строки: зелёная галка — всё
+    # хорошо, «ой» — подписки нет и нужно что-то сделать.
     mark = "check" if account.active else "warn"
 
     return rich.screen(
@@ -46,6 +55,23 @@ def main(file_id: str | None, account: Account) -> list[dict]:
 
 def cabinet(file_id: str | None, account: Account) -> list[dict]:
     rows: list[tuple[str, object]] = [("Логин", rich.code(account.login))]
+
+    if account.freeze.frozen:
+        # У замороженной подписки дата окончания уезжает вместе с паузой, и
+        # показывать её незачем: важен остаток и то, что он не тает.
+        rows.append(("Тариф", account.plan_title or "Подписка"))
+        rows.append(("В запасе", timeutils.plural_days(account.freeze.days_left or 0)))
+
+        if account.freeze.frozen_days:
+            rows.append(("На паузе", timeutils.plural_days(account.freeze.frozen_days)))
+
+        return rich.screen(
+            file_id,
+            rich.title("Личный кабинет", "profile"),
+            rich.facts(*rows),
+            rich.paragraph([rich.emoji("freeze"), rich.bold("  Подписка на паузе")]),
+            rich.paragraph("Дни не тратятся. Снимите паузу — доступ вернётся сразу."),
+        )
 
     if account.active:
         rows.append(("Тариф", account.plan_title or "Подписка"))
@@ -66,18 +92,6 @@ def cabinet(file_id: str | None, account: Account) -> list[dict]:
             rows.append(("Устройства", f"{account.devices} из {account.device_limit}"))
 
         return rich.screen(file_id, rich.title("Личный кабинет", "profile"), rich.facts(*rows))
-
-    if account.frozen:
-        return rich.screen(
-            file_id,
-            rich.title("Личный кабинет", "profile"),
-            rich.facts(*rows),
-            rich.paragraph([rich.emoji("warn"), rich.bold("  Подписка заморожена")]),
-            rich.paragraph(
-                "Дни не тратятся и вернутся при разморозке. "
-                "Разморозить можно в кабинете на сайте."
-            ),
-        )
 
     return rich.screen(
         file_id,
@@ -103,6 +117,7 @@ def methods(file_id: str | None) -> list[dict]:
 
 
 def docs(file_id: str | None) -> list[dict]:
+    """Правовые документы. Сами тексты — на сайте, здесь только кнопки."""
     return rich.screen(
         file_id,
         rich.title("Документы", "link"),
@@ -118,6 +133,9 @@ def docs(file_id: str | None) -> list[dict]:
 
 
 def plans(file_id: str | None, method: PayMethod, available: list[Plan]) -> list[dict]:
+    # Не таблицей: колонок под все условия нужно пять, и на телефоне они
+    # схлопываются в нечитаемое. Пара строк на тариф — название с ценой
+    # жирным, условия под ним — читается и в узком окне.
     blocks = [rich.title(f"Тарифы · {method.title}", "calendar")]
 
     for plan in available:
@@ -128,6 +146,8 @@ def plans(file_id: str | None, method: PayMethod, available: list[Plan]) -> list
 
     blocks.append(rich.paragraph(rich.italic("Дни складываются с текущей подпиской.")))
 
+    # Цены настоящие, оплата этим способом ещё подключается — говорим об этом
+    # на самом экране, а не только в ответе на нажатие.
     if method.catalog_only:
         blocks.append(
             rich.paragraph(
@@ -144,6 +164,7 @@ def plans(file_id: str | None, method: PayMethod, available: list[Plan]) -> list
 def invoice(
     file_id: str | None, plan: Plan, quantity: int = 1, method: str | None = None
 ) -> list[dict]:
+    """Счёт на оплату по ссылке. Кнопка «Оплатить» - в клавиатуре под экраном."""
     return rich.screen(
         file_id,
         rich.title("Счёт на оплату", "wallet"),
@@ -165,6 +186,11 @@ def invoice(
 
 
 def transfer(file_id: str | None, account: Account, history: list) -> list[dict]:
+    """
+    Экран перевода дней: сколько есть, что будет дальше и куда уже уходило.
+
+    Сначала свой остаток — от него человек и считает, сколько не жалко.
+    """
     blocks = [
         rich.title("Передать дни", "transfer"),
         rich.facts(("У вас есть", timeutils.plural_days(account.days_left or 0))),
@@ -218,6 +244,12 @@ def about(file_id: str | None, apps: list[Download]) -> list[dict]:
 
 
 def friends(file_id: str | None, stats, invite_url: str) -> list[dict]:
+    """
+    Экран приглашений: сколько дней уже подарено и за что дарят дальше.
+
+    Числа сверху, правила снизу: пришедшему сюда во второй раз интересно
+    «сколько мне капнуло», а не «как это работает».
+    """
     rows: list[tuple[str, object]] = [
         ("Приглашено", str(stats.invited)),
         ("Из них оплатили", str(stats.purchased)),
@@ -239,6 +271,7 @@ def friends(file_id: str | None, stats, invite_url: str) -> list[dict]:
     ]
 
     if stats.pending:
+        # Человек ещё не входил в аккаунт — дни ждут его, а не потерялись.
         blocks.append(
             rich.paragraph(
                 rich.italic("Дни начислим, как только вы войдёте в аккаунт в этом боте.")
@@ -314,8 +347,6 @@ def tickets(file_id: str | None, items: list[Ticket]) -> list[dict]:
 
 
 def _status(account: Account) -> str:
-    if account.frozen:
-        return "Подписка заморожена"
     if not account.active:
         return "Подписка не активна"
 
@@ -325,6 +356,7 @@ def _status(account: Account) -> str:
 
 
 def promo(file_id: str | None, days: int) -> list[dict]:
+    """Экран пригласительной ссылки: сколько дают и что дальше."""
     return rich.screen(
         file_id,
         rich.title(f"{timeutils.plural_days(days)} бесплатно", "gift"),
@@ -337,6 +369,7 @@ def promo(file_id: str | None, days: int) -> list[dict]:
 
 
 def iphone(file_id: str | None) -> list[dict]:
+    """Три шага для iPhone: приложения ProstoVPN под iOS нет."""
     return rich.screen(
         file_id,
         rich.title("iPhone", "ios"),
@@ -354,6 +387,7 @@ def iphone(file_id: str | None) -> list[dict]:
 
 
 def subscribe(file_id: str | None, days: int | None = None) -> list[dict]:
+    """Экран подписки на канал: заставка, зачем это и что нажать."""
     if days:
         return rich.screen(
             file_id,
@@ -376,4 +410,44 @@ def subscribe(file_id: str | None, days: int | None = None) -> list[dict]:
             "порты, обходные файлы, новые страны."
         ),
         rich.paragraph("Подпишитесь и нажмите «Я подписался» — и вернёмся к делу."),
+    )
+
+
+def freeze_ask(file_id: str | None, account: Account) -> list[dict]:
+    """Подтверждение паузы: сначала цена решения, потом кнопка."""
+    left = timeutils.plural_days(account.freeze.days_left or account.days_left or 0)
+
+    return rich.screen(
+        file_id,
+        rich.title("Заморозить подписку", "freeze"),
+        rich.facts(("В запасе", left), ("Тариф", account.plan_title or "Подписка")),
+        rich.paragraph("На паузе дни перестают тратиться и ждут вашего возвращения."),
+        rich.paragraph("Пока пауза стоит, VPN не работает — приложение отключится от серверов."),
+        rich.paragraph(rich.italic("Снять паузу можно в любой момент здесь же.")),
+    )
+
+
+def freeze_done(file_id: str | None, account: Account) -> list[dict]:
+    left = timeutils.plural_days(account.freeze.days_left or account.days_left or 0)
+
+    return rich.screen(
+        file_id,
+        rich.title("Подписка на паузе", "freeze"),
+        rich.facts(("В запасе", left)),
+        rich.paragraph("Дни остановлены. Приложение сейчас отключится от серверов — это нормально."),
+        rich.paragraph("Вернётесь — нажмите «Снять паузу», доступ включится сразу."),
+    )
+
+
+def resume_done(file_id: str | None, account: Account) -> list[dict]:
+    rows = [("В запасе", timeutils.plural_days(account.freeze.days_left or account.days_left or 0))]
+
+    if account.expires_at:
+        rows.append(("Действует до", timeutils.human_date(account.expires_at)))
+
+    return rich.screen(
+        file_id,
+        rich.title("Пауза снята", "check"),
+        rich.facts(*rows),
+        rich.paragraph("Доступ вернулся. Подключайтесь в приложении — входить заново не нужно."),
     )

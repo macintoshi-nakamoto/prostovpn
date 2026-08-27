@@ -2,6 +2,7 @@ export const USER_STATUS = {
   online: { label: "Онлайн", color: "var(--gd-pos)" },
   offline: { label: "Оффлайн", color: "var(--gd-faint)" },
   paused: { label: "Отключён", color: "var(--gd-warn)" },
+  frozen: { label: "На паузе", color: "var(--gd-info)" },
   blocked: { label: "Заблокирован", color: "var(--gd-neg)" },
   expired: { label: "Не оплачен", color: "var(--gd-warn)" },
   traffic: { label: "Трафик исчерпан", color: "var(--gd-info)" },
@@ -17,6 +18,7 @@ export const USER_STATUS_FILTERS = [
   { id: "offline", label: "Оффлайн" },
   { id: "expired", label: "Не оплачены" },
   { id: "traffic", label: "Трафик" },
+  { id: "frozen", label: "На паузе" },
   { id: "paused", label: "Отключены" },
   { id: "blocked", label: "Бан" },
 ];

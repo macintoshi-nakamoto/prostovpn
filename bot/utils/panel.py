@@ -1,3 +1,13 @@
+"""Клиент панели Prosto VPN.
+
+Аккаунты, подписки и платежи живут в панели — той же базе, что у сайта и
+приложения. Бот ничего не хранит у себя: он спрашивает панель.
+
+Два уровня доступа:
+* клиентский API (`/api/v1`) — от имени пользователя, по его токену;
+* админский API (`/api/admin`) — от имени бота, для продления после оплаты.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -19,6 +29,7 @@ GB = 1024**3
 
 
 class PanelError(RuntimeError):
+    """Панель ответила отказом."""
 
     def __init__(self, message: str, *, status: int = 0, code: str = "") -> None:
         super().__init__(message)
@@ -27,7 +38,7 @@ class PanelError(RuntimeError):
 
 
 class PanelUnavailable(PanelError):
-    pass
+    """До панели не достучались."""
 
 
 @dataclass(frozen=True)
@@ -40,6 +51,9 @@ class Plan:
     device_limit: int
     traffic_limit_bytes: int | None
     purchasable: bool
+    # Сколько стран включает тариф. В панели поле зовётся server_limit, на
+    # сайте показывается как «3 страны» — здесь тоже страны, иначе человек
+    # сравнивает витрину бота с сайтом и видит разные слова про одно и то же.
     server_limit: int = 0
 
     @property
@@ -48,6 +62,7 @@ class Plan:
 
     @property
     def stars(self) -> int:
+        """Цена в звёздах — из рублёвой по курсу из настроек (по умолчанию 1:1)."""
         return max(1, round(self.rub * config.stars_rate))
 
     @property
@@ -75,6 +90,7 @@ class Payment:
 
 @dataclass(frozen=True)
 class IosKey:
+    """Ключ AmneziaVPN на одно устройство: ссылка `vpn://` и где она живёт."""
 
     slot: int
     name: str
@@ -85,11 +101,37 @@ class IosKey:
 
 @dataclass(frozen=True)
 class TunnelFile:
+    """Файл раздельного туннелирования — общий для всех, вход не нужен."""
 
     filename: str
     version: str | None
     size_bytes: int
     url: str
+
+
+@dataclass(frozen=True)
+class Freeze:
+    """
+    Пауза подписки глазами кабинета.
+
+    `reason` панель отдаёт готовой строкой — её и показываем. Своих
+    формулировок бот не сочиняет: правила живут в панели, и расходиться
+    объяснениям нельзя.
+    """
+
+    frozen: bool = False
+    frozen_at: dt.datetime | None = None
+    frozen_days: int = 0
+    can_freeze: bool = False
+    reason: str = ""
+    days_left: int | None = None
+    used_days: int = 0
+    count: int = 0
+
+    @property
+    def offered(self) -> bool:
+        """Доступна ли пауза прямо сейчас — или её ещё надо заслужить."""
+        return self.frozen or self.can_freeze
 
 
 @dataclass(frozen=True)
@@ -105,10 +147,12 @@ class Account:
     traffic_used_bytes: int
     traffic_limit_bytes: int | None
     payments: list[Payment] = field(default_factory=list)
+    # Ключи для iPhone. Пустой список у всех, кому этот доступ не выдан, —
+    # то есть у большинства: остальные ходят через приложение.
     ios_keys: list[IosKey] = field(default_factory=list)
     ios_access: bool = False
     guide_url: str = ""
-    frozen: bool = False
+    freeze: Freeze = field(default_factory=Freeze)
 
     @property
     def traffic_left_gb(self) -> float | None:
@@ -180,6 +224,9 @@ async def _request(
             try:
                 body = await response.json(content_type=None)
             except (ValueError, aiohttp.ContentTypeError):
+                # Панель ответила неJSON-ом: 500 от Starlette приходит
+                # обычным текстом, 502 — страницей nginx. Разбирать нечего,
+                # но и падать посреди экрана нельзя.
                 body = None
 
                 if response.status < 400:
@@ -198,9 +245,20 @@ async def _request(
                 )
 
             return body
+    # asyncio.TimeoutError сюда попадает НЕ случайно: общий таймаут
+    # aiohttp.ClientTimeout(total=...) поднимает именно его, а он не наследник
+    # aiohttp.ClientError. Пока его тут не было, зависшая (а не упавшая)
+    # панель роняла обработчик оплаты целиком — то есть ровно в том случае,
+    # ради которого написан запасной путь «уведомим админов», запасной путь
+    # и не срабатывал. Зависшая панель встречается чаще упавшей.
     except (aiohttp.ClientError, asyncio.TimeoutError) as error:
         logger.warning("панель недоступна: %s %s — %s", method, path, error)
         raise PanelUnavailable("панель недоступна") from error
+
+
+# --------------------------------------------------------------------------
+# Клиентский API — от имени пользователя
+# --------------------------------------------------------------------------
 
 
 def _plan(row: dict) -> Plan:
@@ -218,6 +276,7 @@ def _plan(row: dict) -> Plan:
 
 
 async def plans() -> list[Plan]:
+    """Тарифы витрины — те же, что на сайте."""
     rows = await _request("GET", f"{CLIENT}/plans")
 
     return [_plan(row) for row in rows if row.get("purchasable")]
@@ -258,13 +317,28 @@ async def logout(token: str) -> None:
 
 
 async def account(token: str) -> Account:
-    body = await _request("GET", f"{CLIENT}/account", token=token)
+    return _account(await _request("GET", f"{CLIENT}/account", token=token))
+
+
+async def freeze(token: str) -> Account:
+    """Ставит подписку на паузу. Панель отвечает аккаунтом целиком."""
+    return _account(await _request("POST", f"{CLIENT}/account/freeze", token=token))
+
+
+async def resume(token: str) -> Account:
+    """Снимает паузу и возвращает подписке простоявшее время."""
+    return _account(await _request("POST", f"{CLIENT}/account/resume", token=token))
+
+
+def _account(body: dict) -> Account:
+    # Старые сборки панели про iPhone ничего не знают: блока в ответе нет, и
+    # бот просто не показывает кнопку — вместо того чтобы падать.
     ios = body.get("ios") or {}
+    pause = body.get("freeze") or {}
 
     return Account(
         login=body["login"],
         active=body["active"],
-        frozen=bool(body.get("frozen_at")),
         plan=body.get("plan"),
         plan_title=body.get("plan_title"),
         expires_at=_parse_time(body.get("expires_at")),
@@ -295,6 +369,16 @@ async def account(token: str) -> Account:
             for row in ios.get("keys", [])
             if row.get("vpn_url")
         ],
+        freeze=Freeze(
+            frozen=bool(pause.get("frozen")),
+            frozen_at=_parse_time(pause.get("frozen_at")),
+            frozen_days=pause.get("frozen_days") or 0,
+            can_freeze=bool(pause.get("can_freeze")),
+            reason=pause.get("reason") or "",
+            days_left=pause.get("days_left"),
+            used_days=pause.get("used_days") or 0,
+            count=pause.get("count") or 0,
+        ),
     )
 
 
@@ -308,6 +392,7 @@ async def change_password(token: str, current: str, fresh: str) -> None:
 
 
 async def tunnel_file() -> TunnelFile | None:
+    """Сведения о файле списка. None — админ его ещё не загрузил."""
     body = await _request("GET", f"{CLIENT}/tunnel-file")
 
     if not isinstance(body, dict) or not body.get("available"):
@@ -322,6 +407,13 @@ async def tunnel_file() -> TunnelFile | None:
 
 
 async def tunnel_file_bytes(url: str) -> bytes:
+    """
+    Само содержимое файла — байтами, чтобы отправить документом.
+
+    Забираем у панели и пересылаем сами, а не даём ссылку: ссылку человек
+    на телефоне откроет в браузере и получит текст на экране вместо файла,
+    который нужно положить в AmneziaVPN.
+    """
     http = await _http()
     address = url if url.startswith("http") else f"{config.panel_url}{url}"
 
@@ -345,7 +437,13 @@ async def downloads() -> list[Download]:
     ]
 
 
+# --------------------------------------------------------------------------
+# Админский API — от имени бота
+# --------------------------------------------------------------------------
+
+
 async def _admin() -> str:
+    """Токен админа панели. Держим до истечения, дальше входим заново."""
     global _admin_token, _admin_expires
 
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
@@ -366,6 +464,8 @@ async def _admin() -> str:
     )
 
     _admin_token = body["token"]
+    # Старые сборки панели срок жизни токена не отдают — тогда просто входим
+    # заново раз в несколько часов, а протухший токен ловится по 401.
     _admin_expires = _parse_time(body.get("expires_at")) or now + dt.timedelta(hours=6)
 
     return _admin_token
@@ -377,6 +477,7 @@ async def _admin_request(
     *,
     payload: dict | None = None,
 ) -> dict | list:
+    """Запрос от имени бота. Протухший токен — один раз входим заново."""
     global _admin_token
 
     try:
@@ -391,6 +492,11 @@ async def _admin_request(
 
 
 async def create_account(user_login: str, password: str) -> None:
+    """Заводит учётку в панели — тем же путём, что и панель у администратора.
+
+    Через админский API, а не через регистрацию с сайта: та ограничена по
+    IP-адресу, а у бота адрес один на всех.
+    """
     await _admin_request(
         "POST",
         f"{ADMIN}/users",
@@ -401,6 +507,67 @@ async def create_account(user_login: str, password: str) -> None:
             "note": "регистрация в Telegram-боте",
         },
     )
+
+
+@dataclass(frozen=True)
+class AdminUser:
+    """
+    Строка учётки глазами администратора — всё, что нужно рассылке.
+
+    Времена панель отдаёт в UTC, а бот живёт по местному: сравнивать их с
+    `timeutils.now()` нельзя. Поэтому «сколько осталось» берём готовым
+    числом `days_left` от панели, а `expires_at` сравниваем только сам с
+    собой — с тем, что было записано в прошлый раз.
+    """
+
+    id: int
+    login: str
+    telegram_id: int | None
+    active: bool
+    days_left: int | None
+    expires_at: dt.datetime | None
+    last_handshake_at: dt.datetime | None
+    traffic_used_bytes: int
+    is_free: bool
+    is_frozen: bool = False
+
+    @property
+    def never_connected(self) -> bool:
+        """Ни одного рукопожатия: аккаунт завели, а VPN так и не включили."""
+        return self.last_handshake_at is None and self.traffic_used_bytes == 0
+
+
+async def admin_users() -> list[AdminUser]:
+    """
+    Все учётки панели одним запросом — для обхода рассылки.
+
+    Поля этой ручки приходят в camelCase (в отличие от /referrals, где они
+    snake_case). Читаем оба написания: разнобой в панели уже был причиной
+    молчаливо пустых полей — рассылка тогда решила, что подписки нет ни у
+    кого, и это заметно только по данным, а не по ошибке.
+    """
+    rows = await _admin_request("GET", f"{ADMIN}/users")
+
+    def pick(row: dict, camel: str, snake: str):
+        value = row.get(camel)
+
+        return row.get(snake) if value is None else value
+
+    return [
+        AdminUser(
+            id=row["id"],
+            login=row["login"],
+            telegram_id=pick(row, "telegramId", "telegram_id"),
+            active=bool(pick(row, "isActive", "is_active")),
+            days_left=pick(row, "daysLeft", "days_left"),
+            expires_at=_parse_time(pick(row, "expiresAt", "expires_at")),
+            last_handshake_at=_parse_time(pick(row, "lastHandshakeAt", "last_handshake_at")),
+            traffic_used_bytes=pick(row, "trafficUsedBytes", "traffic_used_bytes") or 0,
+            is_free=bool(pick(row, "isFree", "is_free")),
+            is_frozen=bool(pick(row, "isFrozen", "is_frozen")),
+        )
+        for row in rows
+    ]
 
 
 async def find_user_id(user_login: str) -> int | None:
@@ -414,6 +581,20 @@ async def find_user_id(user_login: str) -> int | None:
 
 
 async def grant_days(user_login: str, days: int, reason: str = "промо") -> bool:
+    """
+    Дарит дни доступа. False — учётки с таким логином в панели нет.
+
+    Именно «подарок» (referrals/bonus), а НЕ продление (users/extend), и это
+    не вкусовщина. Продление без цены панель считает бесплатным периодом, а
+    бесплатный период поверх живого доступа она не пристраивает вовсе —
+    `grant_subscription` в таком случае молча возвращает текущую подписку.
+    У новичка сразу после регистрации живой доступ как раз есть: пробные два
+    дня. То есть продлением подарок утекал бы в никуда, отвечая при этом 200.
+
+    Подарок устроен иначе: дни клеятся к самому дальнему периоду, а поверх
+    пробного встают отдельным бонусным периодом, который переживёт первую
+    покупку и не сгорит вместе с пробным.
+    """
     user_id = await find_user_id(user_login)
 
     if user_id is None:
@@ -437,6 +618,15 @@ async def extend(
     payment_method: str | None = None,
     quantity: int = 1,
 ) -> None:
+    """
+    Продлевает подписку после оплаты и записывает платёж в кассу панели.
+
+    `external_id` — идентификатор платежа у того, кто взял деньги. Для звёзд
+    это telegram_payment_charge_id: по нему платёж находят при разборе и по
+    нему же возвращают. Сумма в кассу идёт рублёвая — цена тарифа, а не
+    число звёзд: касса считает выручку в одной валюте, иначе отчёты
+    складывают рубли со звёздами. Чем именно платили, видно в способе.
+    """
     user_id = await find_user_id(user_login)
 
     if user_id is None:
@@ -453,22 +643,38 @@ async def extend(
             "register_payment": True,
             "method": method,
             "external_id": external_id,
+            # Провайдер и способ превращают покупку в оплаченный заказ. Без
+            # него звёздная оплата не видна в «Заказах» и её нечем вернуть.
             "order_provider": provider,
             "payment_method": payment_method,
         },
     )
 
 
+# --------------------------------------------------------------------------
+# Перевод дней
+# --------------------------------------------------------------------------
+
+
 @dataclass(frozen=True)
 class Transfer:
+    """Строка истории переводов."""
 
     days: int
+    # sent | received
     direction: str
     counterpart: str
     created_at: dt.datetime | None
 
 
 async def transfer_days(user_login: str, recipient: str, days: int) -> Transfer:
+    """
+    Передаёт дни другому человеку от имени этой учётки.
+
+    Через админский API: у бота нет пользовательского токена собеседника в
+    момент действия, зато есть его логин — а проверки (хватает ли дней, есть
+    ли получатель) всё равно делает панель.
+    """
     user_id = await find_user_id(user_login)
 
     if user_id is None:
@@ -495,6 +701,7 @@ async def transfer_days(user_login: str, recipient: str, days: int) -> Transfer:
 
 
 async def transfers(user_login: str, limit: int = 10) -> list[Transfer]:
+    """История переводов учётки — и отданные, и полученные."""
     user_id = await find_user_id(user_login)
 
     if user_id is None:
@@ -517,12 +724,20 @@ async def transfers(user_login: str, limit: int = 10) -> list[Transfer]:
     return result
 
 
+# --------------------------------------------------------------------------
+# Приглашения
+# --------------------------------------------------------------------------
+
+
 @dataclass(frozen=True)
 class Referrals:
+    """Сводка приглашений глазами бота."""
 
     invited: int = 0
     purchased: int = 0
     days: int = 0
+    # Сколько приглашений ждут учётки пригласившего: дни начислим, как
+    # только он войдёт в аккаунт.
     pending: int = 0
     join_days: int = 2
     purchase_days: int = 5
@@ -550,6 +765,7 @@ async def referral_invite(
     invited_telegram_id: int,
     invited_login: str | None = None,
 ) -> Referrals:
+    """Переход по ссылке. PanelError со статусом 400 — отказ по правилам."""
     body = await _admin_request(
         "POST",
         f"{ADMIN}/referrals/invite",
@@ -564,6 +780,12 @@ async def referral_invite(
 
 
 async def referral_link_account(telegram_id: int, user_login: str) -> None:
+    """
+    Связывает Telegram с учёткой: панель сама догонит невыданные бонусы.
+
+    Ошибки глотаем: связь — служебное действие, и падать из-за неё на входе
+    в аккаунт нельзя. Не получилось сейчас — получится при следующем входе.
+    """
     try:
         await _admin_request(
             "POST",
@@ -572,6 +794,11 @@ async def referral_link_account(telegram_id: int, user_login: str) -> None:
         )
     except PanelError as error:
         logger.info("связка telegram↔учётка не прошла: %s", error)
+
+
+# --------------------------------------------------------------------------
+# Оплата по ссылке и автопродление (Platega)
+# --------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -588,6 +815,7 @@ class PaymentLink:
 
 @dataclass(frozen=True)
 class Recurring:
+    """Автосписание глазами бота. Пустой статус - не подключено."""
 
     status: str | None = None
     plan_code: str | None = None
@@ -629,6 +857,11 @@ def _recurring(body: dict) -> Recurring:
 async def payment_link(
     user_login: str, plan: Plan, quantity: int = 1, method: str | None = None
 ) -> PaymentLink:
+    """Счёт на разовую оплату: панель регистрирует заказ у провайдера.
+
+    Дальше бот только показывает кнопку со ссылкой - оплату подтверждает
+    вебхук провайдера в панели, и подтверждение человеку приходит от неё же.
+    """
     body = await _admin_request(
         "POST",
         f"{ADMIN}/orders/for-user",
@@ -654,6 +887,13 @@ async def payment_link(
 
 
 async def refund_by_payment(provider: str, external_id: str, reason: str) -> str:
+    """
+    Отменяет в панели покупку, найденную по идентификатору платежа.
+
+    Возвращает номер заказа. Сами деньги возвращает тот, кто их взял: для
+    звёзд это Telegram, и делает это бот отдельным вызовом. Здесь снимается
+    следствие — подписка, бонус пригласившему, переданные дни.
+    """
     order = await _admin_request("GET", f"{ADMIN}/orders/by-payment/{provider}/{external_id}")
     order_id = order["id"]
 

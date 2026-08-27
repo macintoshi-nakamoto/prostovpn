@@ -82,6 +82,13 @@ def _delivery_once(tick: int) -> None:
         services.billing_webhook.retry_stuck(db)
         services.recurring.retry_stuck(db)
         services.delivery.queue_expiry_reminders(db)
+
+        # Паузы, которые стоят дольше положенного, снимаем сами: человек,
+        # забывший про заморозку, иначе сидит без доступа бессрочно.
+        woken = services.freeze.auto_resume(db)
+        if woken:
+            log.info("пауза снята по сроку: %s", ", ".join(woken))
+
         if tick % 100 == 1:
             services.expire_stale(db)
             services.ratelimit.sweep(db)

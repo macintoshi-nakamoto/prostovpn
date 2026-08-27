@@ -1,3 +1,18 @@
+"""Показ экранов бота.
+
+Экран — функция без аргументов, возвращающая «текст + клавиатуру». Она
+собирается заново при повторной попытке: если Telegram не пропустил
+премиум-эмодзи, бот отключает их и перерисовывает экран обычными.
+
+Разделы показываются с анимацией, служебные экраны — текстом. Переход между
+ними идёт заменой сообщения: подпись под видео нельзя превратить в текст
+правкой.
+
+Каждый файл выгружается в Telegram один раз: полученный file_id лежит в базе
+и переживает перезапуск. Выгрузка с сервера небыстрая, и повторять её на
+каждое нажатие нельзя.
+"""
+
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,6 +29,7 @@ Screen = Callable[[], tuple[str, InlineKeyboardMarkup]]
 
 
 def media_key(path: Path) -> str:
+    """Ключ кэша с размером файла: заменили гифку — старый file_id отпадает."""
     size = path.stat().st_size if path.exists() else 0
 
     return f"{path}:{size}"
@@ -27,6 +43,10 @@ async def show(
 ) -> None:
     for attempt in (0, 1):
         text, markup = build()
+        # На повторе премиум-эмодзи уже отключены, но текст мог быть собран
+        # раньше — тогда он всё ещё несёт теги, из-за которых Telegram и
+        # отказал. Снимаем их с готовой строки, иначе вторая попытка падает
+        # ровно там же, где первая.
         if not ui.custom_emoji_enabled():
             text = ui.strip_custom_emoji(text)
 
@@ -46,10 +66,12 @@ async def show_rich(
     blocks: list[dict],
     markup: InlineKeyboardMarkup,
 ) -> bool:
+    """Экран из блоков. False — Telegram не принял, зовите текстовый путь."""
     message = event.message if isinstance(event, CallbackQuery) else None
     chat_id = event.from_user.id
     payload = {"blocks": blocks}
 
+    # Блочный экран правится на месте — переход без мигания.
     if message is not None and _is_rich(message):
         try:
             await event.bot(
@@ -75,6 +97,7 @@ async def show_rich(
         logger.warning("экран блоками не ушёл: %s", error)
         return False
 
+    # Прежний экран убираем, иначе лента задвоится.
     if message is not None:
         try:
             await message.delete()
@@ -90,6 +113,7 @@ async def _deliver(
     markup: InlineKeyboardMarkup,
     animation: Path | None,
 ) -> None:
+    # Раздел без файла анимации показывается обычным текстовым экраном.
     if animation and not animation.exists():
         animation = None
 
@@ -104,6 +128,8 @@ async def _deliver(
         return
 
     if animation:
+        # Подпись правим, только если на экране уже нужная анимация. Другая
+        # картинка правкой не заменяется — сообщение придётся пересобрать.
         known = await models.get_media(media_key(animation))
 
         if message.animation and known and message.animation.file_id == known:
@@ -136,6 +162,7 @@ async def _deliver(
 
 
 def _is_rich(message: Message) -> bool:
+    """Сообщение из блоков: правкой в текст его не превратить."""
     return "rich_message" in (message.model_extra or {})
 
 
@@ -145,6 +172,7 @@ async def _replace(
     markup: InlineKeyboardMarkup,
     animation: Path | None,
 ) -> None:
+    """Меняет экран с картинки на текст и обратно — старое сообщение убираем."""
     try:
         await message.delete()
     except TelegramBadRequest:
@@ -172,6 +200,7 @@ async def _send_animation(
     markup: InlineKeyboardMarkup,
     animation: Path,
 ) -> bool:
+    """Шлёт анимацию: сначала известным file_id, потом файлом. False — не вышло."""
     key = media_key(animation)
     known = await models.get_media(key)
     sources = [known, None] if known else [None]
@@ -188,6 +217,7 @@ async def _send_animation(
                 raise
 
             if source:
+                # file_id больше не годится — забываем и пробуем файлом
                 logger.warning("file_id для %s протух: %s", animation.name, error)
                 await models.forget_media(key)
                 continue
@@ -195,6 +225,8 @@ async def _send_animation(
             logger.warning("анимация %s не отправилась: %s", animation.name, error)
             return False
         except TelegramAPIError as error:
+            # Сеть или сам Telegram подвели (бывает 504 на выгрузке файла):
+            # экран важнее картинки, покажем текстом.
             logger.warning("анимация %s не дошла: %s", animation.name, error)
             return False
 

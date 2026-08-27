@@ -266,9 +266,7 @@ def enforce_access(db: OrmSession) -> list[str]:
         if user.has_access(now):
             continue
         live = [k for k in user.keys if k.revoked_at is None]
-        # По заморозке VLESS не гасим (решение: блокировка на клиенте) — иначе
-        # issue_cred выдаст новый UUID и ссылка после разморозки перестанет совпадать.
-        live_creds = 0 if user.is_frozen else xray.revoke_for_user(db, user.id)
+        live_creds = xray.revoke_for_user(db, user.id) if not user.has_access(now) else 0
         if not live and not live_creds:
             continue
 
@@ -291,7 +289,7 @@ def _why_no_access(user, now: dt.datetime) -> str:
     if not user.is_active:
         return "отключён"
     if user.is_frozen:
-        return "подписка заморожена"
+        return "подписка на паузе"
     if user.active_subscription(now) is None:
         return "подписка кончилась"
     if user.traffic_exhausted(now):

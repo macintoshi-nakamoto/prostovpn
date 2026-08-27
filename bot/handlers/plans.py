@@ -1,3 +1,5 @@
+"""Оплата: сначала способ, потом тариф. Витрина — та же, что на сайте."""
+
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
@@ -20,20 +22,32 @@ from utils.timeutils import plural_days
 router = Router()
 router.callback_query.middleware(AuthMiddleware())
 
+# Способы, которые платятся ссылкой на форму провайдера: счёт выставляет
+# панель, бот только показывает кнопку. Остальные (звёзды, карта Telegram)
+# выставляют инвойс средствами самого Telegram и идут другой веткой.
 LINK_METHODS = frozenset({"sbp", "crypto"})
 
+# Способы, где количество дней спрашиваем мы сами: сумму по ним считает
+# панель или мы, и она зависит от числа дней.
 QUANTITY_METHODS = LINK_METHODS | {"stars"}
 
+# Что сказать, когда Telegram не принял счёт. Молчание в этом месте читается
+# как «кнопка сломана»: человек тапает тариф и не видит вообще ничего.
 INVOICE_FAILED = "Не удалось выставить счёт — попробуйте ещё раз через минуту"
 
+# Приставка параметра ссылки «купить звёздами»: t.me/бот?start=pay_year.
+# Так с сайта доезжает выбранный тариф. Реферальные ссылки начинаются с
+# «ref» и с этой приставкой не пересекаются.
 PAY_PREFIX = "pay_"
 
 
 def plan_code_from_payload(payload: str | None) -> str | None:
+    """Код тарифа из параметра ссылки. Чужой формат и мусор — None."""
     if not payload or not payload.startswith(PAY_PREFIX):
         return None
 
     code = payload[len(PAY_PREFIX) :].strip()
+    # Коды тарифов — короткие латинские слова; всё остальное пришло руками.
     if not code or len(code) > 32 or not code.replace("-", "").replace("_", "").isalnum():
         return None
 
@@ -41,6 +55,15 @@ def plan_code_from_payload(payload: str | None) -> str | None:
 
 
 async def send_stars_invoice(message: Message, plan: Plan, quantity: int = 1) -> bool:
+    """
+    Счёт в звёздах. Общая точка для бота и для перехода с сайта.
+
+    False — Telegram счёт не принял; звать её должен тот, кто знает, как об
+    этом сказать человеку.
+
+    Количество попадает в payload: к приходу оплаты ни экрана, ни состояния
+    уже нет, а продлевать надо ровно на столько, за сколько заплатили.
+    """
     days = plan.duration_days * quantity
     try:
         await message.answer_invoice(
@@ -61,6 +84,7 @@ async def send_stars_invoice(message: Message, plan: Plan, quantity: int = 1) ->
 
 @router.callback_query(F.data.in_({"plans", "home", "cabinet", "cancel"}), BuyDaily.days)
 async def cancel_daily(callback: CallbackQuery, state: FSMContext) -> None:
+    """Выход из выбора числа дней: иначе следующее число купит доступ."""
     await state.clear()
     await methods(callback)
 
@@ -120,6 +144,8 @@ async def buy(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer("Этот способ оплаты пока недоступен", show_alert=True)
         return
 
+    # Витрина без оплаты: тариф и цену показали, счёт выставить пока нечем.
+    # Отвечаем до обращения к панели — человеку важен ответ, а не задержка.
     if method.catalog_only:
         await callback.answer(
             f"{method.title} подключается. Сейчас доступна оплата звёздами Telegram — "
@@ -143,14 +169,23 @@ async def buy(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer("Тариф больше недоступен", show_alert=True)
         return
 
+    # Посуточный берут пачкой дней: сначала спрашиваем сколько, потом счёт.
+    # Посуточный берут пачкой дней при любом способе, где сумму считаем мы.
+    # Раньше звёзды сюда не попадали, и посуточный ими продавался строго по
+    # одному дню — при том что экран обещает «сколько нужно».
     if plan.duration_days == 1 and method.code in QUANTITY_METHODS:
         await state.set_state(BuyDaily.days)
+        # Способ запоминаем вместе с тарифом: счёт выставится после ответа
+        # про количество дней, и к тому моменту выбор кнопки уже не виден.
         await state.update_data(plan=plan.code, method=method.code)
         await callback.message.answer(texts.daily_prompt(plan, method=method.code))
         await callback.answer()
         return
 
     if method.code in LINK_METHODS:
+        # Оплата по ссылке: счёт выставляет панель у провайдера, бот
+        # показывает кнопку. Оплату подтвердит вебхук - и панель напишет
+        # сюда же о продлении, самому боту проверять нечего.
         session = await models.get_session(callback.from_user.id)
         login = session.panel_login if session else await models.last_login(callback.from_user.id)
 
@@ -200,10 +235,16 @@ async def buy(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
+# Только текст. Без этого фильтра хендлер ловит ЛЮБОЕ сообщение в состоянии
+# «сколько дней» — включая служебное successful_payment. Роутер plans
+# подключён раньше payments, поэтому подтверждение оплаты звёздами он
+# перехватывал первым: деньги списаны, а подписка не продлена.
 @router.message(BuyDaily.days, F.text)
 async def daily_days(message: Message, state: FSMContext) -> None:
+    """Сколько дней берём на посуточном тарифе."""
     raw = (message.text or "").strip()
 
+    # Только ASCII-цифры: «7²» проходит isdigit, но числом не становится.
     if not (raw.isascii() and raw.isdigit()) or not 1 <= int(raw) <= 90:
         await show(message, lambda: (texts.daily_error(), cancel_menu("plans")))
         return
@@ -226,6 +267,8 @@ async def daily_days(message: Message, state: FSMContext) -> None:
         if plan is None:
             raise panel.PanelError("тариф больше недоступен")
 
+        # Звёзды платятся счётом Telegram, а не ссылкой на форму провайдера:
+        # ветки расходятся здесь, как и на обычном тарифе.
         if chosen == "stars":
             await state.clear()
 

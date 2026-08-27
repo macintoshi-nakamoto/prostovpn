@@ -44,6 +44,7 @@ from .billing import (
     revenue_summary,
 )
 from .errors import PanelError
+from .freeze import FreezeError
 from .devices import disconnect as disconnect_device, disconnect_by_id as disconnect_device_by_id
 from .keys import active_servers, ensure_keys, find_key, issue_key, known_devices, revoke_key
 from .orders import (

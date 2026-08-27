@@ -12,6 +12,7 @@ export const userColumns = [
         <Dot color={userStatus(u.status).color} glow={u.isOnline} />
         <CellName title={u.name || u.login} sub={u.login} />
         {u.isFree && <Chip color="var(--gd-gold)">фри</Chip>}
+        {u.isFrozen && <Chip color="var(--gd-info)">пауза</Chip>}
       </div>
     ),
   },
@@ -68,7 +69,13 @@ export const userColumns = [
       u.expiresAt ? (
         <CellName
           title={date(u.expiresAt)}
-          sub={u.daysLeft != null ? `осталось ${days(u.daysLeft)}` : null}
+          sub={
+            u.isFrozen
+              ? `на паузе · в запасе ${days(u.daysLeft || 0)}`
+              : u.daysLeft != null
+                ? `осталось ${days(u.daysLeft)}`
+                : null
+          }
         />
       ) : (
         <span style={{ color: "var(--gd-faint)" }}>не оплачен</span>

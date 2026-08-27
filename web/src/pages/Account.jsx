@@ -643,6 +643,7 @@ function TmaFriends() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [howOpen, setHowOpen] = useState(false);
+  const [histOpen, setHistOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -703,12 +704,18 @@ function TmaFriends() {
           </span>
           <span className="ap-head-body">
             <span className="ap-title">{t("account.tmaRefTitle2")}</span>
-            <span className="ap-sub">
-              {t("account.refTerms", { join: data.join_days, purchase: data.purchase_days })}
-            </span>
+            <span className="ap-sub">{t("account.tmaRefSub2")}</span>
             <button type="button" className="rf-how" onClick={() => setHowOpen(true)}>
               {t("account.tmaHowLink")} ›
             </button>
+          </span>
+        </div>
+        <div className="rf-bonus" aria-hidden="true">
+          <span className="rf-chip">
+            {t("account.tmaRefChipJoin", { days: f.days(data.join_days) })}
+          </span>
+          <span className="rf-chip">
+            {t("account.tmaRefChipPay", { days: f.days(data.purchase_days) })}
           </span>
         </div>
         <div className="rf-link-box">
@@ -733,6 +740,15 @@ function TmaFriends() {
         </div>
       </div>
 
+      <div className="ap-rows">
+        <ApRow
+          icon="gift"
+          title={t("account.tmaRefHistT")}
+          sub={t("account.tmaRefHistS")}
+          onClick={() => setHistOpen(true)}
+        />
+      </div>
+
       <TmaRefHow
         open={howOpen}
         onClose={() => setHowOpen(false)}
@@ -740,15 +756,29 @@ function TmaFriends() {
         copied={copied}
         onCopy={copy}
       />
+      <TmaRefHistoryScreen
+        open={histOpen}
+        onClose={() => setHistOpen(false)}
+        friends={data.friends}
+      />
+    </div>
+  );
+}
 
-      {data.friends.length > 0 && (
-        <div className="ap-rows">
-          {data.friends.map((friend, index) => (
-            <div className="ap-row rf-friend" key={friend.joined_at + ":" + index}>
-              <span className="ap-row-ic rf-fic">{data.friends.length - index}</span>
+// История начислений за друзей — отдельная страница.
+function TmaRefHistoryScreen({ open, onClose, friends }) {
+  const { t, f } = useI18n();
+  return (
+    <ScreenShell open={open} title={t("account.tmaRefHistT")} onClose={onClose}>
+      {friends.length === 0 ? (
+        <p className="scr-empty">{t("account.refEmpty")}</p>
+      ) : (
+        <div className="scr-rows">
+          {friends.map((friend, index) => (
+            <div className="scr-row rf-friend" key={friend.joined_at + ":" + index}>
               <span className="ap-row-body">
                 <span className="ap-row-t">
-                  {t("account.refFriend", { n: data.friends.length - index })}
+                  {t("account.refFriend", { n: friends.length - index })}
                 </span>
                 <span className="ap-row-s">
                   {t("account.refCame", { date: f.shortDate(friend.joined_at) })}
@@ -762,7 +792,7 @@ function TmaFriends() {
           ))}
         </div>
       )}
-    </div>
+    </ScreenShell>
   );
 }
 

@@ -1,6 +1,20 @@
 import { useI18n } from "../lib/i18n/index.jsx";
 import { useTheme } from "../lib/theme.jsx";
+import { isTma, tmaHaptic, tmaOpenTg } from "../lib/telegram.js";
 import "./controls.css";
+
+const SUPPORT_TG = "https://t.me/temnoz";
+
+function PlaneIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+      <path
+        d="M21.6 3.1 2.9 10.6c-1 .4-.9 1.4 0 1.7l4.6 1.5 1.7 5.2c.3.9 1.2 1 1.8.3l2.5-2.7 4.7 3.5c.7.5 1.6.2 1.8-.7l3-14.7c.2-1-.6-1.7-1.4-1.6zM9 13.4l8.9-6.5c.3-.2.5.1.3.3l-7.1 6.9-.3 3.2-1.2-3.6z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
 
 function SunIcon() {
   return (
@@ -70,6 +84,21 @@ export function Controls() {
           <MoonIcon />
         </span>
       </button>
+
+      {isTma() && (
+        <button
+          type="button"
+          className="ctl-theme ctl-sup"
+          title={t("footer.support")}
+          aria-label={t("footer.support")}
+          onClick={() => {
+            tmaHaptic("light");
+            tmaOpenTg(SUPPORT_TG);
+          }}
+        >
+          <PlaneIcon />
+        </button>
+      )}
     </div>
   );
 }

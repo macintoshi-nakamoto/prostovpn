@@ -129,6 +129,14 @@ html.tma .ac-user-btn .ac-avatar {
   width: 30px;
   height: 30px;
   font-size: 13px;
+  /* Без оранжевой подложки: за фото и лого не должно ничего выглядывать. */
+  background: transparent;
+}
+html.tma .ac-user-btn .ac-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 html.tma .ac-caret {
   display: inline;

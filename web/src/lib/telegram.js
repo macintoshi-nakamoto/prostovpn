@@ -248,6 +248,22 @@ export function tmaOpenApp(url) {
   } catch {}
 }
 
+// Открыть t.me-ссылку внутри самого Telegram (чат поддержки и т.п.).
+export function tmaOpenTg(url) {
+  try {
+    const wa = webApp();
+    if (wa?.openTelegramLink) {
+      wa.openTelegramLink(url);
+      return;
+    }
+  } catch {}
+  try {
+    window.open(url, "_blank");
+  } catch {
+    window.location.href = url;
+  }
+}
+
 let tapsBound = false;
 
 export function initTma() {

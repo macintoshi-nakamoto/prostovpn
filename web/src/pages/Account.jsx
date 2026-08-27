@@ -175,6 +175,8 @@ export function Account() {
               <span className="ac-avatar">
                 {tgPhoto ? (
                   <img src={tgPhoto} alt="" referrerPolicy="no-referrer" />
+                ) : isTma() ? (
+                  <img src="/assets/guide/app-icon.webp" alt="" />
                 ) : (
                   (data?.login || "P").slice(0, 1).toUpperCase()
                 )}

@@ -76,20 +76,46 @@ html.tma .ac-header-in {
   padding-top: max(4px, env(safe-area-inset-top, 0px));
 }
 
-/* Профиль-пилюля как в нативных мини-аппах: имя видно и на телефоне. */
+/* Переключалки и профиль — «предметы» одного роста (34px), без подложек:
+   в шапке мини-аппа летают сами по себе, гармонично и просто. */
+html.tma .ctl-lang {
+  --ctl-cell: 36px;
+  --ctl-pad: 0px;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+html.tma .ctl-lang button {
+  height: 34px;
+  font-size: 12px;
+}
+html.tma .ctl-theme {
+  width: 34px;
+  height: 34px;
+  background: transparent;
+  border: none;
+}
+html.tma .ctl-theme:hover {
+  color: var(--accent);
+}
+
 html.tma .ac-user-btn {
   font-size: 14px;
   gap: 8px;
-  padding: 4px 12px 4px 4px;
-  background: var(--tma-card);
-  border: 1px solid var(--line-2);
-  box-shadow: 0 2px 10px rgba(15, 20, 30, 0.06);
+  height: 34px;
+  padding: 0 8px 0 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 html.tma .ac-user-btn:hover,
 html.tma .ac-user-btn.open {
-  background: var(--tma-inset);
+  background: transparent;
+  color: var(--accent);
 }
 html.tma .ac-user-btn .ac-avatar {
+  width: 30px;
+  height: 30px;
   font-size: 13px;
 }
 html.tma .ac-caret {
@@ -157,8 +183,7 @@ html.tma .ac-bottom a svg {
   flex: none;
 }
 html.tma .ac-bottom a.active {
-  color: var(--tint-fg);
-  background: var(--accent-tint);
+  color: var(--accent);
   font-weight: 700;
 }
 html.tma .ac-bottom a.active::before {
@@ -166,6 +191,42 @@ html.tma .ac-bottom a.active::before {
 }
 html.tma .ac-bottom a:active {
   transform: scale(0.94);
+}
+
+/* Скользящая «капля» под активной вкладкой: считается в CabinetBottomNav,
+   стилями существует только в мини-аппе. Пружина — как у переключалок. */
+.ac-bottom-pill {
+  display: none;
+}
+html.tma .ac-bottom-pill {
+  display: block;
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow:
+    0 2px 10px rgba(15, 20, 30, 0.14),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  transition:
+    transform 0.5s var(--ease-spring),
+    width 0.5s var(--ease-spring);
+  will-change: transform, width;
+}
+html.tma[data-theme="dark"] .ac-bottom-pill {
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+}
+html.tma .ac-bottom:active .ac-bottom-pill {
+  transition-duration: 0.3s;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.tma .ac-bottom-pill {
+    transition: none;
+  }
 }
 
 /* ---------- герой ---------- */

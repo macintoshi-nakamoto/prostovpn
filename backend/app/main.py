@@ -190,6 +190,8 @@ def _csp_for(path: str) -> str:
     # WebView, а в Telegram Web — iframe с web.telegram.org, поэтому сайту
     # (но не админке) нужны их скрипт и право показываться в этом iframe.
     script_src = "script-src 'self' " + ("" if admin else "https://telegram.org ") + hashes
+    # Аватар пользователя в мини-аппе приходит с t.me (initDataUnsafe.user.photo_url).
+    img_src = "img-src 'self' data: blob:" + ("" if admin else " https://t.me")
     ancestors = "frame-ancestors 'none'" if admin else (
         "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
     )
@@ -199,7 +201,7 @@ def _csp_for(path: str) -> str:
             script_src.strip(),
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
-            "img-src 'self' data: blob:",
+            img_src,
             "connect-src 'self'",
             "object-src 'none'",
             "base-uri 'self'",

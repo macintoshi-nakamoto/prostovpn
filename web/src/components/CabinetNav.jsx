@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useI18n } from "../lib/i18n/index.jsx";
+import { tmaHaptic } from "../lib/telegram.js";
 import { NAV_ICONS } from "./NavIcons.jsx";
 
 function usePill(tab) {
@@ -70,9 +71,19 @@ export function CabinetNav({ tabs, tab, hrefOf }) {
 
 export function CabinetBottomNav({ tabs, tab, hrefOf }) {
   const { t } = useI18n();
+  // Скользящая «капля» под активной вкладкой — как системная переключалка
+  // на iOS. Вне мини-аппа Telegram капля скрыта стилями, механика общая.
+  const [ref, pill] = usePill(tab);
 
   return (
-    <nav className="ac-bottom" aria-label={t("account.navLabel")}>
+    <nav className="ac-bottom" ref={ref} aria-label={t("account.navLabel")}>
+      {pill && (
+        <span
+          className="ac-bottom-pill"
+          aria-hidden="true"
+          style={{ transform: `translateX(${pill.left}px)`, width: `${pill.width}px` }}
+        />
+      )}
       {tabs.map((id) => {
         const Icon = NAV_ICONS[id];
         return (
@@ -81,7 +92,9 @@ export function CabinetBottomNav({ tabs, tab, hrefOf }) {
             to={hrefOf(id)}
             replace={tab === id}
             className={tab === id ? "active" : undefined}
+            data-active={tab === id ? "true" : undefined}
             aria-current={tab === id ? "page" : undefined}
+            onClick={() => tab !== id && tmaHaptic("select")}
           >
             {Icon ? <Icon /> : null}
             <span>{t(`account.tabs.${id}`)}</span>

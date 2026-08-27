@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
+import { isTma, tmaUser } from "../lib/telegram.js";
 import { useDismiss } from "../lib/hooks";
 import { SetupGuide } from "../components/SetupGuide.jsx";
 import { Referrals } from "../components/Referrals.jsx";
@@ -102,6 +103,28 @@ export function Account() {
 
   const scrolled = useScrolled();
 
+  // Аватар из Telegram — только внутри мини-аппа; подпись проверяет сервер,
+  // фото — чистая витрина.
+  const tgPhoto = isTma() ? tmaUser()?.photo_url : null;
+
+  // Системная кнопка «назад» Telegram: с любой вкладки — на главную.
+  useEffect(() => {
+    if (!isTma()) return undefined;
+    const back = window.Telegram?.WebApp?.BackButton;
+    if (!back) return undefined;
+    const home = () => navigate(sectionPath("account"));
+    if (tab === "account") {
+      back.hide();
+      return undefined;
+    }
+    back.onClick(home);
+    back.show();
+    return () => {
+      back.offClick(home);
+      back.hide();
+    };
+  }, [tab, navigate]);
+
   const load = useCallback(async () => {
     try {
       setData(await api.account());
@@ -161,7 +184,13 @@ export function Account() {
               className={`ac-user-btn${menuOpen ? " open" : ""}`}
               onClick={() => setMenuOpen((v) => !v)}
             >
-              <span className="ac-avatar">P</span>
+              <span className="ac-avatar">
+                {tgPhoto ? (
+                  <img src={tgPhoto} alt="" referrerPolicy="no-referrer" />
+                ) : (
+                  (data?.login || "P").slice(0, 1).toUpperCase()
+                )}
+              </span>
               {data?.login || t("account.fallbackName")}
               <span className="ac-caret">▼</span>
             </button>

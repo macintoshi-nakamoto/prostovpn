@@ -57,6 +57,81 @@ export function tmaColorScheme() {
   return webApp()?.colorScheme === "dark" ? "dark" : "light";
 }
 
+// Пользователь Telegram — для витрины (аватар, имя). Доверять этим полям
+// нельзя (подпись проверяет сервер при входе), показывать — можно.
+export function tmaUser() {
+  const wa = webApp();
+  if (wa?.initDataUnsafe?.user) return wa.initDataUnsafe.user;
+  try {
+    const raw = tmaInitData();
+    if (!raw) return null;
+    const user = new URLSearchParams(raw).get("user");
+    return user ? JSON.parse(user) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Отклик как в нативном приложении. Вне Telegram — тишина.
+export function tmaHaptic(kind = "light") {
+  try {
+    const h = webApp()?.HapticFeedback;
+    if (!h) return;
+    if (kind === "select") h.selectionChanged();
+    else h.impactOccurred(kind);
+  } catch {
+    // старый клиент — без вибрации
+  }
+}
+
+function rgba(hex, alpha) {
+  const h = (hex || "").replace("#", "");
+  if (h.length !== 6) return null;
+  const n = parseInt(h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
+function mix(hexA, hexB, k) {
+  const a = (hexA || "").replace("#", "");
+  const b = (hexB || "").replace("#", "");
+  if (a.length !== 6 || b.length !== 6) return null;
+  const na = parseInt(a, 16);
+  const nb = parseInt(b, 16);
+  const ch = (sh) => Math.round(((na >> sh) & 255) * k + ((nb >> sh) & 255) * (1 - k));
+  return `rgb(${ch(16)}, ${ch(8)}, ${ch(0)})`;
+}
+
+// Красимся в цвета КЛИЕНТА Telegram: канва — как его шапка, карточки — как
+// его секции. Тогда мини-апп неотличим от родного экрана на любой платформе:
+// на iOS в тёмной теме канва — почти чёрная, на Android — своя, и мы всегда
+// совпадаем, потому что берём цвета из themeParams, а не угадываем.
+export function syncTmaTheme() {
+  const wa = webApp();
+  if (!wa) return;
+  const p = wa.themeParams || {};
+  const canvas = p.secondary_bg_color || p.bg_color;
+  const card = p.section_bg_color || p.bg_color;
+  const root = document.documentElement;
+  if (canvas) root.style.setProperty("--tma-canvas", canvas);
+  if (card) {
+    root.style.setProperty("--tma-card", card);
+    const glass = rgba(card, 0.66);
+    if (glass) root.style.setProperty("--tma-glass", glass);
+    const inset = mix(card, canvas || card, 0.55);
+    if (inset) root.style.setProperty("--tma-inset", inset);
+  }
+  try {
+    // Шапка и фон самого Telegram — в цвет канвы: исчезает шов между
+    // «его» интерфейсом и нашим.
+    wa.setBackgroundColor?.("secondary_bg_color");
+    wa.setHeaderColor?.("secondary_bg_color");
+  } catch {
+    // не все клиенты умеют — не страшно
+  }
+}
+
+let tapsBound = false;
+
 export function initTma() {
   const wa = webApp();
   if (!wa) return;
@@ -67,5 +142,23 @@ export function initTma() {
     wa.disableVerticalSwipes?.();
   } catch {
     // Старый клиент без части методов — не повод падать.
+  }
+
+  syncTmaTheme();
+  try {
+    wa.onEvent?.("themeChanged", syncTmaTheme);
+  } catch {}
+
+  // Лёгкая вибрация на каждый тап по кнопке или ссылке — как в системных
+  // приложениях. Один раз на документ, дальше живёт само.
+  if (!tapsBound) {
+    tapsBound = true;
+    document.addEventListener(
+      "click",
+      (event) => {
+        if (event.target?.closest?.("button, a")) tmaHaptic("light");
+      },
+      { capture: true, passive: true },
+    );
   }
 }

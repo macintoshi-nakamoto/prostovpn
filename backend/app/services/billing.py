@@ -82,10 +82,9 @@ def grant_subscription(
         tail.reminder_sent_at = None
         return _finish(tail)
 
-    for stale in upcoming:
-        stale.is_cancelled = True
-
-    starts = running.expires_at if running is not None else now
+    # Оплаченные периоды из очереди не сгорают: другой тариф просто встаёт
+    # в хвост — все тарифы здесь один сервис, различается только срок.
+    starts = tail.expires_at if tail is not None else now
     sub = Subscription(
         user_id=user.id,
         plan=code,

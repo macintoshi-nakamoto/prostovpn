@@ -217,6 +217,8 @@ export function Account() {
 
         {error && <div className="ac-error">{error}</div>}
 
+        {!data && !error && isTma() && <TmaSkeleton variant={tab} />}
+
         {data && tab === "account" && (
           <AccountTab
             data={data}
@@ -711,7 +713,7 @@ function TmaGuideScreen({ open, platform, link, login, downloads, file, onClose 
     platform === "store"
       ? t("account.tmaStoreTitle")
       : platform === "bypass"
-        ? t("account.bypassTitle")
+        ? t("account.tmaBypassTitle")
         : TMA_PLATFORMS[platform]?.title || platform;
   const total = steps.length;
   const complete = total > 0 && done.length >= total;
@@ -960,7 +962,7 @@ function TmaBypassSheet({ open, file, onGuide, onClose }) {
 
   return (
     <SheetShell open={open} onClose={onClose}>
-      <h2>{t("account.bypassTitle")}</h2>
+      <h2>{t("account.tmaBypassTitle")}</h2>
       <p className="pd-sub">{t("account.bypassText")}</p>
       <button type="button" className="rf-how st-guide-link" onClick={onGuide}>
         {t("account.tmaGuideBtn")} ›
@@ -1167,7 +1169,7 @@ function TmaSetup({ data, onChanged, onApply }) {
       <div className="ap-rows">
         <ApRow
           icon="file"
-          title={t("account.bypassTitle")}
+          title={t("account.tmaBypassTitle")}
           sub={t("account.tmaBypassSub")}
           onClick={() => setBypassOpen(true)}
           disabled={!file?.available}
@@ -1306,7 +1308,7 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         />
         <ApRow
           icon="file"
-          title={t("account.bypassTitle")}
+          title={t("account.tmaBypassTitle")}
           sub={t("account.tmaBypassSub")}
           onClick={() => setBypassOpen(true)}
           disabled={!file?.available}
@@ -1416,6 +1418,48 @@ function TmaRefHow({ open, onClose, data, onCopy, copied }) {
 
 // «Друзья» мини-аппа: ссылка запускает само приложение (startapp=код),
 // делиться — нативным телеграм-шэром.
+// Скелет страницы: каркас блоков с шиммером на месте контента, пока идёт
+// загрузка — вместо мигания пустотой при переключении вкладок.
+function TmaSkeleton({ variant }) {
+  if (variant === "plan")
+    return (
+      <div className="ap" aria-hidden="true">
+        <span className="sk" style={{ height: 96 }} />
+        <div className="sk-grid">
+          <span className="sk" style={{ height: 136 }} />
+          <span className="sk" style={{ height: 136 }} />
+          <span className="sk" style={{ height: 136 }} />
+          <span className="sk" style={{ height: 136 }} />
+        </div>
+        <span className="sk" style={{ height: 64 }} />
+      </div>
+    );
+  if (variant === "setup")
+    return (
+      <div className="ap" aria-hidden="true">
+        <span className="sk" style={{ height: 64 }} />
+        <span className="sk" style={{ height: 190 }} />
+        <span className="sk" style={{ height: 64 }} />
+        <span className="sk" style={{ height: 64 }} />
+      </div>
+    );
+  if (variant === "friends")
+    return (
+      <div className="ap" aria-hidden="true">
+        <span className="sk" style={{ height: 178 }} />
+        <span className="sk" style={{ height: 64 }} />
+        <span className="sk" style={{ height: 132 }} />
+      </div>
+    );
+  return (
+    <div className="ap" aria-hidden="true">
+      <span className="sk" style={{ height: 168 }} />
+      <span className="sk" style={{ height: 250 }} />
+      <span className="sk" style={{ height: 64 }} />
+    </div>
+  );
+}
+
 function TmaFriends() {
   const { t, f } = useI18n();
   const [data, setData] = useState(null);
@@ -1438,7 +1482,14 @@ function TmaFriends() {
   }, []);
 
   if (error) return <p className="scr-empty">{error}</p>;
-  if (!data) return <p className="scr-empty">{t("account.refLoading")}</p>;
+  if (!data)
+    return (
+      <div className="ap" aria-hidden="true">
+        <span className="sk" style={{ height: 178 }} />
+        <span className="sk" style={{ height: 64 }} />
+        <span className="sk" style={{ height: 132 }} />
+      </div>
+    );
 
   const code = (() => {
     try {
@@ -2862,7 +2913,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
   });
 
   useEffect(() => {
-    if (!invoice || invoice.status !== "pending" || paying || !plans) return;
+    if (!invoice || invoice.status !== "pending" || invoice.dismissed || paying || !plans) return;
     const plan = plans.find((p) => p.code === invoice.planCode);
     if (plan) {
       setPaying(plan);
@@ -2972,6 +3023,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
         : null;
 
     const startPay = () => {
+      setInvoice((inv) => (inv && inv.dismissed ? { ...inv, dismissed: false } : inv));
       if (!selPlan) return;
       if (invoice && invoice.planCode === selPlan.code && invoice.status !== "pending") {
         setInvoice(null);
@@ -3031,7 +3083,12 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
         </div>
 
         {plans === null ? (
-          <p className="scr-empty">{t("account.plansLoading")}</p>
+          <div className="sk-grid" aria-hidden="true">
+            <span className="sk" style={{ height: 136 }} />
+            <span className="sk" style={{ height: 136 }} />
+            <span className="sk" style={{ height: 136 }} />
+            <span className="sk" style={{ height: 136 }} />
+          </div>
         ) : (
           <>
             <div className="tp-grid">
@@ -3188,7 +3245,15 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
           invoice={paying && invoice && invoice.planCode === paying.code ? invoice : null}
           onPay={payWith}
           onNewInvoice={() => setInvoice(null)}
-          onClose={() => (busyMethod ? null : setPaying(null))}
+          onClose={() => {
+            if (busyMethod) return;
+            setPaying(null);
+            // Закрыл лист сам — не открываем его снова при возврате на
+            // страницу; счёт при этом продолжает ждать оплату.
+            setInvoice((inv) =>
+              inv && inv.status === "pending" ? { ...inv, dismissed: true } : inv,
+            );
+          }}
         />
         <TmaTransferSheet
           open={transferOpen}

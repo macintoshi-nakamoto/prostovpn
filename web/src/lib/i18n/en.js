@@ -544,6 +544,66 @@ export const en = {
     tmaUnlink: "Unlink",
     tmaUnlinkAsk: "Unlink \u201c{name}\u201d? VPN on it will stop.",
     tmaFail: "Something went wrong. Try again.",
+    tmaGuideBtn: "How to set up",
+    tmaGuideMinutes: "A couple of minutes and it works",
+    tmaGuideDl: "Download · version {v}",
+    tmaGuideStore: "Open the App Store",
+    tmaGuideStoreMiss: "Not in the App Store? Happens with Russian Apple IDs.",
+    tmaGuideStoreHow: "Workaround",
+    tmaAppRowSub: "Version {v} — guide & download",
+    tmaGuide: {
+      windows: [
+        ["Download the installer", "Button below — the file lands in Downloads."],
+        [
+          "Install",
+          "Open the file and click Next. If Windows warns about an unknown publisher — More info → Run anyway: the app is ours.",
+        ],
+        [
+          "Sign in",
+          "Same login as here; the password is the one you set at signup. Forgot it — change it on the Account tab.",
+        ],
+        ["Connect", "One big button in the app. Servers and keys arrive by themselves."],
+        ["Done", "VPN is on. You can close the window — the connection stays."],
+      ],
+      android: [
+        ["Download the app", "Button below — an APK installer will download."],
+        [
+          "Install",
+          "Open the file. The phone asks to allow installs from this source — allow it once.",
+        ],
+        [
+          "Sign in",
+          "Same login as here; the password is the one you set at signup. Forgot it — change it on the Account tab.",
+        ],
+        ["Connect", "Tap the button and confirm the VPN profile — OK."],
+        ["Done", "A key icon in the status bar means it works."],
+      ],
+      macos: [
+        ["Download the image", "Button below — a .dmg file will download."],
+        [
+          "Install",
+          "Open the image and drag Prosto VPN into Applications. First launch — right-click → Open.",
+        ],
+        [
+          "Sign in",
+          "Same login as here; the password is the one you set at signup. Forgot it — change it on the Account tab.",
+        ],
+        ["Connect", "The button in the app. macOS asks about the VPN configuration — allow it."],
+        ["Done", "The icon lives in the menu bar — manage the connection from there."],
+      ],
+      ios: [
+        [
+          "Install AmneziaVPN",
+          "There is no dedicated iPhone app yet — your key works in the official AmneziaVPN.",
+        ],
+        [
+          "Add the key",
+          "Tap \u201cOpen in AmneziaVPN\u201d — the profile appears by itself, named prostovpn.cc. Or copy the key and paste it in the app.",
+        ],
+        ["Connect", "The connect button in AmneziaVPN. iPhone asks to allow the VPN configuration — allow it."],
+        ["Done", "One key per iPhone: issue a separate one for a second phone."],
+      ],
+    },
     tmaPlansTitle: "Choose your plan",
     tmaSave: "save {pct}%",
     tmaHit: "Popular",

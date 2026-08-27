@@ -475,7 +475,7 @@ function tmaConfirm(question, onYes) {
 
 // Лист одного ключа iPhone: QR крупно, копия, открыть в AmneziaVPN,
 // отключение и удаление — с системным подтверждением.
-function TmaIosKeySheet({ open, group, onClose, onApply }) {
+function TmaIosKeySheet({ open, group, onClose, onApply, onGuide }) {
   const { t } = useI18n();
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -524,6 +524,9 @@ function TmaIosKeySheet({ open, group, onClose, onApply }) {
         {link.country ? ` · ${link.country}` : ""}
       </h2>
       <p className="pd-sub">{t("account.tmaKeySub")}</p>
+      <button type="button" className="rf-how st-guide-link" onClick={() => onGuide(link)}>
+        {t("account.tmaGuideBtn")} ›
+      </button>
 
       {group.links.length > 1 && (
         <div className="st-servers">
@@ -648,6 +651,120 @@ function TmaAddKeySheet({ open, servers, exists, onClose, onApply }) {
   );
 }
 
+const TMA_APPSTORE = "https://apps.apple.com/app/amneziavpn/id1600529900";
+
+// Эмодзи пака на каждый шаг гайда.
+const TMA_GUIDE_EMOJI = {
+  windows: ["folder", "sparkle", "goldkey", "fire", "hundred"],
+  android: ["folder", "robot", "goldkey", "fire", "hundred"],
+  macos: ["folder", "coffee", "goldkey", "fire", "hundred"],
+  ios: ["star", "goldkey", "unlockem", "hundred"],
+};
+
+function TmaStep({ emoji, n, title, text, children }) {
+  return (
+    <div className="st-step">
+      <span className="st-step-e">
+        <TgsEmoji name={emoji} size={40} />
+      </span>
+      <span className="st-step-body">
+        <span className="st-step-t">
+          <i>{n}</i>
+          {title}
+        </span>
+        <span className="st-step-s">{text}</span>
+        {children}
+      </span>
+    </div>
+  );
+}
+
+// Инструкция для конкретного устройства: шаги человеческим языком,
+// живые эмодзи пака, скачивание и логин — прямо в нужном шаге.
+function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
+  const { t, raw } = useI18n();
+  const [copied, setCopied] = useState("");
+
+  useEffect(() => {
+    if (open) setCopied("");
+  }, [open, platform]);
+
+  if (!platform) return null;
+  const steps = raw(`account.tmaGuide.${platform}`) || [];
+  const emojis = TMA_GUIDE_EMOJI[platform] || [];
+  const release = (downloads || []).find((row) => row.platform === platform);
+  const title = TMA_PLATFORMS[platform]?.title || platform;
+
+  const copy = async (kind, value) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      tmaHaptic("light");
+      setCopied(kind);
+      setTimeout(() => setCopied(""), 1400);
+    } catch {}
+  };
+
+  return (
+    <ScreenShell open={open} title={title} onClose={onClose}>
+      <div className="ap st-guide">
+        <p className="st-minutes">{t("account.tmaGuideMinutes")}</p>
+        {steps.map(([head, text], index) => (
+          <TmaStep
+            key={index}
+            emoji={emojis[index] || "sparkle"}
+            n={index + 1}
+            title={head}
+            text={text}
+          >
+            {index === 0 && platform !== "ios" && release && (
+              <a className="ap-cta st-g-cta" href={release.url} download>
+                {t("account.tmaGuideDl", { v: release.version })}
+              </a>
+            )}
+            {index === 0 && platform === "ios" && (
+              <>
+                <a className="ap-cta st-g-cta" href={TMA_APPSTORE}>
+                  {t("account.tmaGuideStore")}
+                </a>
+                <span className="st-note">
+                  {t("account.tmaGuideStoreMiss")}{" "}
+                  <a href="https://prostovpn.cc/guide" className="st-note-link">
+                    {t("account.tmaGuideStoreHow")}
+                  </a>
+                </span>
+              </>
+            )}
+            {platform === "ios" && index === 1 && link && (
+              <>
+                <a className="ap-cta st-g-cta" href={link.vpn_url}>
+                  {t("account.tmaKeyOpen")}
+                </a>
+                <button
+                  type="button"
+                  className="tps-alt st-g-alt"
+                  onClick={() => copy("key", link.vpn_url)}
+                >
+                  {copied === "key" ? t("account.tmaCopied") : t("account.tmaKeyCopy")}
+                </button>
+              </>
+            )}
+            {platform !== "ios" && index === 2 && (
+              <button
+                type="button"
+                className="st-login st-g-login"
+                onClick={() => copy("login", login)}
+              >
+                <span className="ap-row-s">{t("account.tmaSetupLogin")}</span>
+                <b>{copied === "login" ? t("account.tmaCopied") : login}</b>
+              </button>
+            )}
+          </TmaStep>
+        ))}
+      </div>
+    </ScreenShell>
+  );
+}
+
 // «Установка»: скачал приложение → вошёл логином. iPhone — ключом.
 // Ниже — живые сессии и файл обхода. Всё строками, всё тапается.
 function TmaSetup({ data, onChanged, onApply }) {
@@ -656,6 +773,7 @@ function TmaSetup({ data, onChanged, onApply }) {
   const [keyOpen, setKeyOpen] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [copiedLogin, setCopiedLogin] = useState(false);
+  const [guide, setGuide] = useState(null); // {platform, link?}
 
   useEffect(() => {
     let alive = true;
@@ -737,9 +855,8 @@ function TmaSetup({ data, onChanged, onApply }) {
               key={row.platform}
               icon={TMA_PLATFORMS[row.platform].icon}
               title={TMA_PLATFORMS[row.platform].title}
-              sub={t("account.tmaAppVer", { v: row.version })}
-              href={row.url}
-              download
+              sub={t("account.tmaAppRowSub", { v: row.version })}
+              onClick={() => setGuide({ platform: row.platform })}
             />
           ))
         )}
@@ -839,6 +956,18 @@ function TmaSetup({ data, onChanged, onApply }) {
         group={keyOpen}
         onClose={() => setKeyOpen(null)}
         onApply={onApply}
+        onGuide={(link) => {
+          setKeyOpen(null);
+          setGuide({ platform: "ios", link });
+        }}
+      />
+      <TmaGuideScreen
+        open={Boolean(guide)}
+        platform={guide?.platform}
+        link={guide?.link}
+        login={data.login}
+        downloads={downloads}
+        onClose={() => setGuide(null)}
       />
       <TmaAddKeySheet
         open={addOpen}

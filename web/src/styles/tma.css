@@ -808,3 +808,78 @@ html.tma .ap-days-d {
   font-size: 13px;
   color: var(--text-faint);
 }
+
+/* Смена пароля: в мини-аппе — нижний лист, как системный */
+html.tma .pd-overlay {
+  align-items: flex-end;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+html.tma .pd {
+  max-width: none;
+  border-radius: 26px 26px 0 0;
+  padding: 12px 18px calc(20px + env(safe-area-inset-bottom, 0px));
+  gap: 14px;
+  background: var(--tma-card);
+  animation: tma-sheet-up 0.38s var(--ease-spring);
+}
+@keyframes tma-sheet-up {
+  from {
+    transform: translateY(48px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.tma .pd {
+    animation: none;
+  }
+}
+html.tma .pd-grip {
+  display: block;
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--text-faint);
+  opacity: 0.45;
+  margin: 0 auto 6px;
+}
+html.tma .pd h2 {
+  font-size: 20px;
+}
+html.tma .pd-sub {
+  font-size: 14px;
+}
+html.tma .pd-field span {
+  font-size: 13px;
+}
+html.tma .pd-field input {
+  background: var(--tma-inset);
+  border: 1.5px solid transparent;
+  border-radius: 14px;
+  color: var(--ink);
+  transition: border-color 0.15s ease;
+}
+html.tma .pd-field input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+html.tma .pd-actions {
+  flex-direction: column-reverse;
+  gap: 8px;
+}
+html.tma .pd-actions .btn {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 999px;
+  font-size: 16px;
+}
+html.tma .pd-actions .btn-outline {
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  min-height: 44px;
+  box-shadow: none;
+}
+html.tma .pd-actions .btn:active {
+  transform: scale(0.97);
+}

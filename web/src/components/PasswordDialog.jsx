@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
+import { tmaHaptic } from "../lib/telegram.js";
 import { useT } from "../lib/i18n/index.jsx";
 import "./password-dialog.css";
 
@@ -47,6 +48,7 @@ export function PasswordDialog({ open, onClose, onDone }) {
     setError("");
     try {
       await api.changePassword(current, next);
+      tmaHaptic("medium");
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("password.failed"));
@@ -57,6 +59,7 @@ export function PasswordDialog({ open, onClose, onDone }) {
   return (
     <div className="pd-overlay" onMouseDown={onClose}>
       <form className="pd" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
+        <span className="pd-grip" aria-hidden="true" />
         <h2>{t("password.title")}</h2>
         <p className="pd-sub">{t("password.sub")}</p>
 

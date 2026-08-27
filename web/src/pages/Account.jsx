@@ -66,7 +66,7 @@ function sectionPath(tab, search = "") {
 
 export function Account() {
   const { t, raw } = useI18n();
-  const { signOut } = useSession();
+  const { signOut, signInTelegram } = useSession();
   const navigate = useNavigate();
   const { section } = useParams();
 
@@ -296,6 +296,20 @@ export function Account() {
           setPwOpen(false);
 
           await signOut();
+          if (isTma()) {
+            // Личность подтверждает Telegram — перевходим сами, человек
+            // остаётся в кабинете и просто видит, что пароль сменился.
+            try {
+              await signInTelegram();
+              await load();
+              try {
+                window.Telegram?.WebApp?.showAlert?.(t("password.tmaDone"));
+              } catch {}
+              return;
+            } catch {
+              // не вышло — честная форма входа
+            }
+          }
           navigate("/login", { replace: true });
         }}
       />

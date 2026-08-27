@@ -808,6 +808,7 @@ export const en = {
   },
 
   password: {
+    tmaDone: "Password changed",
     title: "Change password",
     sub:
       "Changing it signs out every device — you'll need to enter the new password again in " +

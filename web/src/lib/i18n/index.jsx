@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { ru } from "./ru.js";
 import { en } from "./en.js";
+import { isTma } from "../telegram.js";
 import * as fmt from "../format.js";
 
 const DICTS = { ru, en };
@@ -12,6 +13,10 @@ export function readLang() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored && DICTS[stored]) return stored;
   } catch {}
+  // Мини-апп: аудитория русскоязычная, язык системы телефона — не
+  // показатель (айфон часто на английском). По умолчанию русский,
+  // переключатель RU/EN в шапке никуда не девается.
+  if (isTma()) return "ru";
   const nav = typeof navigator !== "undefined" ? navigator.languages || [navigator.language] : [];
   for (const tag of nav) {
     const code = String(tag || "").slice(0, 2).toLowerCase();

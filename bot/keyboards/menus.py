@@ -62,10 +62,11 @@ LEGAL_DOCS = (
 
 
 def start_menu() -> InlineKeyboardMarkup:
-    """Первый экран: всё в мини-приложении — одна кнопка, которая его открывает."""
+    """Первый экран: кнопка мини-приложения и наш канал под ней."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [make_btn("Открыть приложение", web_app=f"{config.site_url}/account")],
+            [make_btn("Наш канал", url=config.channel_url, emoji="channel")],
         ]
     )
 

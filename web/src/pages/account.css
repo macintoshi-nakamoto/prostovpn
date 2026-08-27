@@ -287,6 +287,58 @@
   background: var(--brand-tint);
 }
 
+.ac-hero.frozen {
+  background: linear-gradient(130deg, #8b98ac 0%, #64718a 48%, #46516a 100%);
+}
+.ac-hero.frozen .ac-hero-btn {
+  color: #46516a;
+}
+.ac-hero.frozen .ac-hero-btn:hover {
+  background: #e8ecf3;
+}
+
+.ac-freeze {
+  background: var(--surface);
+  border-radius: 22px;
+  padding: 20px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.ac-freeze-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ac-freeze-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+.ac-freeze-sub {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+.ac-freeze-btn {
+  border: none;
+  cursor: pointer;
+  background: var(--accent-deep);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 22px;
+  border-radius: 12px;
+  transition: opacity 0.2s ease;
+}
+.ac-freeze-btn:hover {
+  opacity: 0.9;
+}
+.ac-freeze-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .ac-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

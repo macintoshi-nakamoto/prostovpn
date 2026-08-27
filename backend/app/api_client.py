@@ -183,6 +183,8 @@ def _notice_for(db: OrmSession, user: User, servers: list[ServerOut]) -> str | N
     if not user.is_active:
         return "Доступ приостановлен. Напишите в поддержку."
 
+    if user.is_frozen:
+        return "Подписка заморожена. Разморозить можно в личном кабинете на сайте."
     if user.active_subscription() is None:
         return "Подписка закончилась. Продлите её в личном кабинете на сайте."
     if user.traffic_exhausted():

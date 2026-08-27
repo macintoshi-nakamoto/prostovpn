@@ -67,6 +67,18 @@ def cabinet(file_id: str | None, account: Account) -> list[dict]:
 
         return rich.screen(file_id, rich.title("Личный кабинет", "profile"), rich.facts(*rows))
 
+    if account.frozen:
+        return rich.screen(
+            file_id,
+            rich.title("Личный кабинет", "profile"),
+            rich.facts(*rows),
+            rich.paragraph([rich.emoji("warn"), rich.bold("  Подписка заморожена")]),
+            rich.paragraph(
+                "Дни не тратятся и вернутся при разморозке. "
+                "Разморозить можно в кабинете на сайте."
+            ),
+        )
+
     return rich.screen(
         file_id,
         rich.title("Личный кабинет", "profile"),
@@ -302,6 +314,8 @@ def tickets(file_id: str | None, items: list[Ticket]) -> list[dict]:
 
 
 def _status(account: Account) -> str:
+    if account.frozen:
+        return "Подписка заморожена"
     if not account.active:
         return "Подписка не активна"
 
@@ -333,7 +347,7 @@ def iphone(file_id: str | None) -> list[dict]:
             "Откройте ключ — профиль добавится сам",
         ),
         rich.paragraph(
-            "В списке профиль будет называться ProstoVPN. Ключ свой на каждое "
+            "В списке профиль будет называться prostovpn.cc. Ключ свой на каждое "
             "устройство: на два телефона один и тот же не поставить."
         ),
     )

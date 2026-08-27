@@ -405,6 +405,8 @@ class AccountOut(BaseModel):
     upcoming: list[UpcomingOut] = []
     device_limit: int
     devices: list[DeviceOut]
+    frozen_at: dt.datetime | None = None
+    freezes_left: int = 0
     traffic_used_bytes: int = 0
     traffic_limit_bytes: int | None = None
     payments: list[PaymentOut] = []
@@ -561,6 +563,8 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         period_days=plan.period_days if plan else None,
         price=float(subscription.price) if subscription and subscription.price else None,
         active=user.has_access(now),
+        frozen_at=user.frozen_at,
+        freezes_left=services.freeze.left_this_month(db, user, now),
         expires_at=user.access_expires_at(now),
         days_left=user.access_days_left(now),
         expires_total_at=user.access_expires_at(now),
@@ -777,6 +781,42 @@ class ResetIn(BaseModel):
 class ResetCheckOut(BaseModel):
     valid: bool
     login: str | None = None
+
+
+@router.post("/account/freeze", response_model=AccountOut)
+def freeze_subscription(
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        services.freeze.freeze(db, user)
+    except services.PanelError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": exc.code} if exc.code else None
+        ) from exc
+    return _account_out(db, user, session)
+
+
+@router.post("/account/unfreeze", response_model=AccountOut)
+def unfreeze_subscription(
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        warnings = services.freeze.unfreeze(db, user)
+    except services.PanelError as exc:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": exc.code} if exc.code else None
+        ) from exc
+    for warning in warnings:
+        log.warning("разморозка %s: %s", user.public_id, warning)
+    return _account_out(db, user, session)
 
 
 @router.post("/password/forgot")

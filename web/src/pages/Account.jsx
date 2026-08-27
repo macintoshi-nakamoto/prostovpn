@@ -247,28 +247,36 @@ function AccountTab({ data, onManage, onSetup, onPassword, onChanged, onApply })
 
   return (
     <div className="ac-account">
-      <div className="ac-hero">
+      <div className={`ac-hero${data.frozen_at ? " frozen" : ""}`}>
         <div className="ac-hero-body">
           <span className="ac-hero-status">
             <span className="ac-dot" />
-            {data.active ? t("account.active") : t("account.inactive")}
+            {data.frozen_at
+              ? t("account.frozen")
+              : data.active
+                ? t("account.active")
+                : t("account.inactive")}
           </span>
           <span className="ac-hero-plan">
             {data.plan_title ? `Prosto VPN · ${data.plan_title}` : t("account.noPlan")}
           </span>
           <span className="ac-hero-sub">
-            {data.expires_at
-              ? t(data.days_left != null ? "account.validUntilLeft" : "account.validUntil", {
-                  date: f.longDate(data.expires_at),
-                  left: f.days(data.days_left),
-                })
-              : t("account.subscribePrompt")}
+            {data.frozen_at
+              ? t("account.frozenSub", { date: f.longDate(data.frozen_at) })
+              : data.expires_at
+                ? t(data.days_left != null ? "account.validUntilLeft" : "account.validUntil", {
+                    date: f.longDate(data.expires_at),
+                    left: f.days(data.days_left),
+                  })
+                : t("account.subscribePrompt")}
           </span>
         </div>
         <button className="ac-hero-btn" onClick={onManage}>
           {t("account.manage")}
         </button>
       </div>
+
+      <FreezeCard data={data} onApply={onApply} />
 
       <div className="ac-stats">
         <div className="ac-stat">
@@ -382,6 +390,67 @@ function BypassCard({ file, guideUrl }) {
           </a>
         )}
       </div>
+    </div>
+  );
+}
+
+function FreezeCard({ data, onApply }) {
+  const { t } = useI18n();
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const frozen = Boolean(data.frozen_at);
+  if (!frozen && !data.active) return null;
+
+  const run = async (call) => {
+    setBusy(true);
+    setError("");
+    try {
+      onApply(await call());
+      setAsking(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("account.freezeFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="ac-freeze">
+      <span className="ac-freeze-body">
+        <span className="ac-freeze-title">
+          {frozen ? t("account.frozenTitle") : t("account.freezeTitle")}
+        </span>
+        <span className="ac-freeze-sub">
+          {frozen
+            ? t("account.frozenHint")
+            : data.freezes_left > 0
+              ? t("account.freezeHint", { left: data.freezes_left })
+              : t("account.freezeNone")}
+        </span>
+        {error && <span className="ac-device-error">{error}</span>}
+      </span>
+      {frozen ? (
+        <button className="ac-freeze-btn" disabled={busy} onClick={() => run(api.unfreeze)}>
+          {busy ? "…" : t("account.unfreezeBtn")}
+        </button>
+      ) : data.freezes_left > 0 ? (
+        asking ? (
+          <span className="ac-device-confirm">
+            <button className="ac-device-off" disabled={busy} onClick={() => run(api.freeze)}>
+              {busy ? "…" : t("account.freezeConfirm")}
+            </button>
+            <button className="ac-link" disabled={busy} onClick={() => setAsking(false)}>
+              {t("account.cancel")}
+            </button>
+          </span>
+        ) : (
+          <button className="ac-link" onClick={() => setAsking(true)}>
+            {t("account.freezeBtn")}
+          </button>
+        )
+      ) : null}
     </div>
   );
 }

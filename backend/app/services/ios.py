@@ -26,7 +26,7 @@ log = logging.getLogger("panel.ios")
 
 def key_name(user: User, slot: int = 1) -> str:
     tail = "" if slot <= 1 else f" · {slot}"
-    return f"ProstoVPN ({user.login}){tail}"
+    return f"prostovpn.cc ({user.login}){tail}"
 
 
 slot_number = ios_slot_number

@@ -401,6 +401,10 @@ class User(Base):
 
     is_free: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Заморозка подписки: пока стоит отметка, доступа нет, а при разморозке
+    # оплаченные дни сдвигаются на длительность заморозки (см. services/freeze.py).
+    frozen_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
     traffic_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
     traffic_unlimited: Mapped[bool] = mapped_column(Boolean, default=False)
     traffic_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -565,8 +569,14 @@ class User(Base):
         limit = self.effective_traffic_limit(now)
         return limit is not None and self.traffic_used_bytes >= limit
 
+    @property
+    def is_frozen(self) -> bool:
+        return self.frozen_at is not None
+
     def has_access(self, now: dt.datetime | None = None) -> bool:
         if self.is_blocked or not self.is_active:
+            return False
+        if self.is_frozen:
             return False
         if self.active_subscription(now) is None:
             return False
@@ -710,6 +720,18 @@ class Session(Base):
     @property
     def device_key(self) -> str:
         return (self.device_id or "").strip()
+
+
+class SubscriptionFreeze(Base):
+
+    __tablename__ = "subscription_freezes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    started_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    ended_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
+    user: Mapped[User] = relationship()
 
 
 class SubscriptionToken(Base):

@@ -108,6 +108,7 @@ class Account:
     ios_keys: list[IosKey] = field(default_factory=list)
     ios_access: bool = False
     guide_url: str = ""
+    frozen: bool = False
 
     @property
     def traffic_left_gb(self) -> float | None:
@@ -263,6 +264,7 @@ async def account(token: str) -> Account:
     return Account(
         login=body["login"],
         active=body["active"],
+        frozen=bool(body.get("frozen_at")),
         plan=body.get("plan"),
         plan_title=body.get("plan_title"),
         expires_at=_parse_time(body.get("expires_at")),

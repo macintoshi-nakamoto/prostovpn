@@ -128,7 +128,7 @@ def ios_keys_text(account: Account) -> str:
     return (
         f'{tg("key")} <b>Ключ для iPhone</b>\n\n'
         "Своего приложения ProstoVPN для iPhone пока нет - ключ работает в "
-        "AmneziaVPN из App Store, в списке он появится под именем ProstoVPN.\n\n"
+        "AmneziaVPN из App Store, в списке он появится под именем prostovpn.cc.\n\n"
         f"Ключей {len(account.ios_keys)}: по одному на устройство, "
         "на два телефона один и тот же ключ не поставить.\n\n"
         f"Инструкция: {account.guide_url or config.guide_url}"
@@ -457,7 +457,7 @@ def iphone_text() -> str:
         "1. Поставьте <b>AmneziaVPN</b> из App Store.\n"
         "2. Возьмите ключ в кабинете: «Ключ для iPhone».\n"
         "3. Откройте ключ — профиль добавится сам, в списке он будет "
-        "называться ProstoVPN.\n\n"
+        "называться prostovpn.cc.\n\n"
         "Ключ выдаётся свой на каждое устройство: на два телефона один и "
         "тот же не поставить.\n\n"
         "Если AmneziaVPN не находится в App Store — так и должно быть с "

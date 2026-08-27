@@ -6,6 +6,7 @@ from . import (
     delivery,
     devices,
     diagnostics,
+    freeze,
     ios,
     letters,
     orders,

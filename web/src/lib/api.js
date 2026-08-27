@@ -202,6 +202,10 @@ export const api = {
   recurringCancel: () =>
     request("/api/v1/account/recurring/cancel", { method: "POST", auth: true }),
 
+  freeze: () => request("/api/v1/account/freeze", { method: "POST", auth: true }),
+
+  unfreeze: () => request("/api/v1/account/unfreeze", { method: "POST", auth: true }),
+
   logout: () => request("/api/v1/logout", { method: "POST", auth: true }).catch(() => {}),
 
   plans: () => request("/api/v1/plans"),

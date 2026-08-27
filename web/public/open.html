@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Prosto VPN — открыть в AmneziaVPN</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 20px;
+    background: #1a1a1c;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: #29292b;
+    border-radius: 28px;
+    padding: 30px 22px 24px;
+    text-align: center;
+  }
+  .em { font-size: 44px; line-height: 1; margin-bottom: 14px; }
+  h1 { font-size: 20px; font-weight: 700; margin: 0 0 8px; }
+  p { font-size: 14.5px; line-height: 1.55; color: #a5a5aa; margin: 0 0 22px; }
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 15px;
+    border: none;
+    border-radius: 16px;
+    background: #fa4c16;
+    color: #fff;
+    font: inherit;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    text-decoration: none;
+    margin-bottom: 10px;
+  }
+  .btn:active { opacity: 0.85; }
+  .alt { background: #343437; font-weight: 600; }
+  .note { font-size: 13px; line-height: 1.55; color: #7c7c82; margin: 16px 0 0; }
+  .note a { color: #fa4c16; text-decoration: none; font-weight: 600; }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="em" id="em">🔑</div>
+    <h1 id="title">Открываем AmneziaVPN…</h1>
+    <p id="sub">Подтвердите открытие приложения. Если запрос не появился — нажмите кнопку ниже.</p>
+    <button type="button" class="btn" id="open">Открыть AmneziaVPN</button>
+    <button type="button" class="btn alt" id="copy">Скопировать ключ</button>
+    <p class="note" id="note">Нет приложения? Установите из
+      <a href="https://apps.apple.com/app/amneziavpn/id1600529900">App&nbsp;Store</a> или
+      <a href="https://play.google.com/store/apps/details?id=org.amnezia.vpn">Google&nbsp;Play</a>
+      и вернитесь на эту страницу.</p>
+  </div>
+  <script src="/open.js"></script>
+</body>
+</html>

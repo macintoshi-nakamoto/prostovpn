@@ -221,9 +221,22 @@ export function tmaOpenLink(url) {
   }
 }
 
-// Открыть другое приложение по его схеме (vpn:// и т.п.): из вебвью
-// работает только прямой переход, <a href> Telegram глотает.
+// Открыть другое приложение по его схеме (vpn:// и т.п.). Вебвью Telegram
+// глушит кастомные схемы совсем, поэтому уводим во внешний браузер на
+// страницу-трамплин /open.html — уже она дёргает схему из Safari/Chrome.
+// Ключ кладётся во фрагмент: он не отправляется на сервер.
 export function tmaOpenApp(url) {
+  if (/^https?:/i.test(url)) {
+    tmaOpenLink(url);
+    return;
+  }
+  const wa = webApp();
+  if (wa?.openLink) {
+    try {
+      wa.openLink(`${window.location.origin}/open.html#${encodeURIComponent(url)}`);
+      return;
+    } catch {}
+  }
   try {
     window.location.href = url;
   } catch {}

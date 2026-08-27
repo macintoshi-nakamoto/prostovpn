@@ -1760,3 +1760,251 @@ html.tma .st-note-link {
 html.tma .st-guide-link {
   margin: -6px 0 2px;
 }
+
+/* Гайд-«путь»: линия квеста, узлы-эмодзи, отметки и празднование */
+html.tma .gd2 {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+html.tma .gd2-hero {
+  background: var(--tma-card);
+  border-radius: 24px;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  animation: ap-slide-in 0.4s var(--ease-out, ease) backwards;
+}
+html.tma .gd2-hero-b {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+html.tma .gd2-hero-b b {
+  font-size: 17px;
+  font-weight: 700;
+}
+html.tma .gd2-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+html.tma .gd2-chip {
+  background: var(--tma-inset);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+html.tma .gd2-chip.on {
+  background: rgba(250, 76, 22, 0.15);
+  color: var(--accent);
+}
+
+html.tma .gd2-path {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+html.tma .gd2-step {
+  display: grid;
+  grid-template-columns: 48px 1fr;
+  gap: 12px;
+  position: relative;
+  animation: ap-slide-in 0.45s var(--ease-out, ease) backwards;
+}
+@keyframes ap-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+/* Линия пути между узлами */
+html.tma .gd2-step::after {
+  content: "";
+  position: absolute;
+  left: 22.5px;
+  top: 52px;
+  bottom: -14px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--tma-sep);
+  transition: background 0.4s ease;
+}
+html.tma .gd2-step:last-child::after {
+  display: none;
+}
+html.tma .gd2-step.is-done::after {
+  background: linear-gradient(180deg, var(--accent), rgba(250, 76, 22, 0.35));
+}
+html.tma .gd2-node {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--tma-card);
+  border: 2px solid var(--tma-sep);
+  display: grid;
+  place-items: center;
+  position: relative;
+  z-index: 1;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+html.tma .gd2-step.is-done .gd2-node {
+  border-color: var(--accent);
+  box-shadow: 0 0 14px rgba(250, 76, 22, 0.35);
+}
+html.tma .gd2-card {
+  background: var(--tma-card);
+  border-radius: 22px;
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  transition: opacity 0.3s ease;
+}
+html.tma .gd2-step.is-done .gd2-card {
+  opacity: 0.72;
+}
+html.tma .gd2-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+html.tma .gd2-t {
+  font-size: 16.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+html.tma .gd2-t i {
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--accent);
+  background: rgba(250, 76, 22, 0.15);
+  border-radius: 999px;
+  min-width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+html.tma .gd2-s {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+/* Круглая отметка «сделал» */
+html.tma .gd2-check {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--tma-sep);
+  background: transparent;
+  color: transparent;
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition:
+    background 0.25s var(--ease-spring),
+    border-color 0.25s ease,
+    color 0.2s ease,
+    transform 0.25s var(--ease-spring);
+}
+html.tma .gd2-check:active {
+  transform: scale(0.85);
+  transition-duration: 0.06s;
+}
+html.tma .gd2-step.is-done .gd2-check {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Празднование */
+html.tma .gd2-done {
+  position: relative;
+  overflow: hidden;
+  background: var(--tma-card);
+  border-radius: 24px;
+  padding: 26px 18px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  animation: gd2-pop 0.5s var(--ease-spring);
+}
+@keyframes gd2-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(14px);
+  }
+}
+html.tma .gd2-done b {
+  font-size: 19px;
+  font-weight: 800;
+}
+html.tma .gd2-done > span:not(.gd2-confetti):not(.tgs) {
+  font-size: 14px;
+  color: var(--text-dim);
+}
+html.tma .gd2-done-cta {
+  align-self: stretch;
+  margin-top: 8px;
+}
+html.tma .gd2-confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+html.tma .gd2-confetti i {
+  position: absolute;
+  top: 12%;
+  left: calc(6% + var(--i) * 8%);
+  width: 7px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0;
+  animation: gd2-confetti 1.6s ease-out calc(var(--i) * 90ms) 2;
+}
+html.tma .gd2-confetti i:nth-child(3n) {
+  background: #34c759;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+html.tma .gd2-confetti i:nth-child(4n) {
+  background: #f7c53d;
+}
+@keyframes gd2-confetti {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) rotate(0deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(130px) rotate(260deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.tma .gd2-step,
+  html.tma .gd2-hero,
+  html.tma .gd2-done,
+  html.tma .gd2-confetti i {
+    animation: none;
+  }
+}

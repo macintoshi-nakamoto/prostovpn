@@ -656,37 +656,36 @@ const TMA_APPSTORE = "https://apps.apple.com/app/amneziavpn/id1600529900";
 // Эмодзи пака на каждый шаг гайда.
 const TMA_GUIDE_EMOJI = {
   windows: ["backpack", "thumbup", "goldkey", "fire", "hundred"],
-  android: ["backpack", "robot", "goldkey", "fire", "hundred"],
+  android: ["backpack", "thumbup", "goldkey", "fire", "hundred"],
   macos: ["backpack", "coffee", "goldkey", "fire", "hundred"],
   ios: ["star", "goldkey", "unlockem", "hundred"],
 };
 
-function TmaStep({ emoji, n, title, text, children }) {
-  return (
-    <div className="st-step">
-      <span className="st-step-e">
-        <TgsEmoji name={emoji} size={40} />
-      </span>
-      <span className="st-step-body">
-        <span className="st-step-t">
-          <i>{n}</i>
-          {title}
-        </span>
-        <span className="st-step-s">{text}</span>
-        {children}
-      </span>
-    </div>
-  );
-}
+const TMA_GUIDE_HERO = {
+  windows: "globe",
+  android: "robot",
+  macos: "coffee",
+  ios: "wink",
+};
 
-// Инструкция для конкретного устройства: шаги человеческим языком,
-// живые эмодзи пака, скачивание и логин — прямо в нужном шаге.
+// Инструкция-«путь»: линия квеста через живые эмодзи-узлы, отмечаемые
+// шаги с прогрессом и празднование в конце. Кнопки — в нужных шагах.
 function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
   const { t, raw } = useI18n();
   const [copied, setCopied] = useState("");
+  const [done, setDone] = useState([]);
+
+  const storageKey = `prosto_guide_${platform}`;
 
   useEffect(() => {
-    if (open) setCopied("");
+    if (!open) return;
+    setCopied("");
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      setDone(Array.isArray(saved) ? saved : []);
+    } catch {
+      setDone([]);
+    }
   }, [open, platform]);
 
   if (!platform) return null;
@@ -694,6 +693,21 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
   const emojis = TMA_GUIDE_EMOJI[platform] || [];
   const release = (downloads || []).find((row) => row.platform === platform);
   const title = TMA_PLATFORMS[platform]?.title || platform;
+  const total = steps.length;
+  const complete = total > 0 && done.length >= total;
+
+  const toggle = (index) => {
+    setDone((prev) => {
+      const next = prev.includes(index)
+        ? prev.filter((x) => x !== index)
+        : [...prev, index];
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {}
+      tmaHaptic(next.length === total && next.length > prev.length ? "medium" : "light");
+      return next;
+    });
+  };
 
   const copy = async (kind, value) => {
     try {
@@ -706,76 +720,133 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
 
   return (
     <ScreenShell open={open} title={title} onClose={onClose}>
-      <div className="ap st-guide">
-        <p className="st-minutes">{t("account.tmaGuideMinutes")}</p>
-        {steps.map(([head, text], index) => (
-          <TmaStep
-            key={index}
-            emoji={emojis[index] || "sparkle"}
-            n={index + 1}
-            title={head}
-            text={text}
-          >
-            {index === 0 && platform !== "ios" && release && (
-              <>
-                <a className="ap-cta st-g-cta" href={release.url} download>
-                  {t("account.tmaGuideDl", { v: release.version })}
-                </a>
-                <button
-                  type="button"
-                  className="tps-alt st-g-alt"
-                  onClick={() => copy("dl", release.url)}
-                >
-                  {copied === "dl" ? t("account.tmaCopied") : t("account.tmaGuideCopyLink")}
-                </button>
-              </>
-            )}
-            {index === 0 && platform === "ios" && (
-              <>
-                <a className="ap-cta st-g-cta" href={TMA_APPSTORE}>
-                  {t("account.tmaGuideStore")}
-                </a>
-                <button
-                  type="button"
-                  className="tps-alt st-g-alt"
-                  onClick={() => copy("store", TMA_APPSTORE)}
-                >
-                  {copied === "store" ? t("account.tmaCopied") : t("account.tmaGuideCopyLink")}
-                </button>
-                <span className="st-note">
-                  {t("account.tmaGuideStoreMiss")}{" "}
-                  <a href="https://prostovpn.cc/guide" className="st-note-link">
-                    {t("account.tmaGuideStoreHow")}
-                  </a>
-                </span>
-              </>
-            )}
-            {platform === "ios" && index === 1 && link && (
-              <>
-                <a className="ap-cta st-g-cta" href={link.vpn_url}>
-                  {t("account.tmaKeyOpen")}
-                </a>
-                <button
-                  type="button"
-                  className="tps-alt st-g-alt"
-                  onClick={() => copy("key", link.vpn_url)}
-                >
-                  {copied === "key" ? t("account.tmaCopied") : t("account.tmaKeyCopy")}
-                </button>
-              </>
-            )}
-            {platform !== "ios" && index === 2 && (
-              <button
-                type="button"
-                className="st-login st-g-login"
-                onClick={() => copy("login", login)}
+      <div className="gd2">
+        <div className="gd2-hero">
+          <span className="ap-ic ap-ic-emoji">
+            <TgsEmoji name={TMA_GUIDE_HERO[platform] || "globe"} size={64} />
+          </span>
+          <span className="gd2-hero-b">
+            <b>{t("account.tmaGuideMinutes")}</b>
+            <span className="gd2-chips">
+              <span className="gd2-chip">{t("account.tmaGuideSteps", { n: total })}</span>
+              <span className={`gd2-chip${done.length ? " on" : ""}`}>
+                {t("account.tmaGuideProgress", { done: done.length, total })}
+              </span>
+            </span>
+          </span>
+        </div>
+
+        <div className="gd2-path">
+          {steps.map(([head, text], index) => {
+            const isDone = done.includes(index);
+            return (
+              <div
+                key={index}
+                className={`gd2-step${isDone ? " is-done" : ""}`}
+                style={{ animationDelay: `${index * 70}ms` }}
               >
-                <span className="ap-row-s">{t("account.tmaSetupLogin")}</span>
-                <b>{copied === "login" ? t("account.tmaCopied") : login}</b>
-              </button>
-            )}
-          </TmaStep>
-        ))}
+                <span className="gd2-node">
+                  <TgsEmoji name={emojis[index] || "sparkle"} size={32} />
+                </span>
+                <div className="gd2-card">
+                  <div className="gd2-head">
+                    <span className="gd2-t">
+                      <i>{index + 1}</i>
+                      {head}
+                    </span>
+                    <button
+                      type="button"
+                      className="gd2-check"
+                      aria-label={head}
+                      aria-pressed={isDone}
+                      onClick={() => toggle(index)}
+                    >
+                      ✓
+                    </button>
+                  </div>
+                  <span className="gd2-s">{text}</span>
+
+                  {index === 0 && platform !== "ios" && release && (
+                    <>
+                      <a className="ap-cta st-g-cta" href={release.url} download>
+                        {t("account.tmaGuideDl", { v: release.version })}
+                      </a>
+                      <button
+                        type="button"
+                        className="tps-alt st-g-alt"
+                        onClick={() => copy("dl", release.url)}
+                      >
+                        {copied === "dl" ? t("account.tmaCopied") : t("account.tmaGuideCopyLink")}
+                      </button>
+                    </>
+                  )}
+                  {index === 0 && platform === "ios" && (
+                    <>
+                      <a className="ap-cta st-g-cta" href={TMA_APPSTORE}>
+                        {t("account.tmaGuideStore")}
+                      </a>
+                      <button
+                        type="button"
+                        className="tps-alt st-g-alt"
+                        onClick={() => copy("store", TMA_APPSTORE)}
+                      >
+                        {copied === "store"
+                          ? t("account.tmaCopied")
+                          : t("account.tmaGuideCopyLink")}
+                      </button>
+                      <span className="st-note">
+                        {t("account.tmaGuideStoreMiss")}{" "}
+                        <a href="https://prostovpn.cc/guide" className="st-note-link">
+                          {t("account.tmaGuideStoreHow")}
+                        </a>
+                      </span>
+                    </>
+                  )}
+                  {platform === "ios" && index === 1 && link && (
+                    <>
+                      <a className="ap-cta st-g-cta" href={link.vpn_url}>
+                        {t("account.tmaKeyOpen")}
+                      </a>
+                      <button
+                        type="button"
+                        className="tps-alt st-g-alt"
+                        onClick={() => copy("key", link.vpn_url)}
+                      >
+                        {copied === "key" ? t("account.tmaCopied") : t("account.tmaKeyCopy")}
+                      </button>
+                    </>
+                  )}
+                  {platform !== "ios" && index === 2 && (
+                    <button
+                      type="button"
+                      className="st-login st-g-login"
+                      onClick={() => copy("login", login)}
+                    >
+                      <span className="ap-row-s">{t("account.tmaSetupLogin")}</span>
+                      <b>{copied === "login" ? t("account.tmaCopied") : login}</b>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {complete && (
+          <div className="gd2-done">
+            <span className="gd2-confetti" aria-hidden="true">
+              {Array.from({ length: 12 }, (_, i) => (
+                <i key={i} style={{ "--i": i }} />
+              ))}
+            </span>
+            <TgsEmoji name="hundred" size={64} />
+            <b>{t("account.tmaGuideDoneT")}</b>
+            <span>{t("account.tmaGuideDoneS")}</span>
+            <button type="button" className="ap-cta gd2-done-cta" onClick={onClose}>
+              {t("account.tmaGuideDoneCta")}
+            </button>
+          </div>
+        )}
       </div>
     </ScreenShell>
   );

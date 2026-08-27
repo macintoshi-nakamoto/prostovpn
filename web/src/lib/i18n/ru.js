@@ -550,6 +550,7 @@ export const ru = {
     tmaUnlink: "Отвязать",
     tmaUnlinkAsk: "Отвязать «{name}»? VPN на нём отключится.",
     tmaFail: "Не получилось. Попробуйте ещё раз.",
+    tmaGuideCopyLink: "Скопировать ссылку для браузера",
     tmaGuideBtn: "Инструкция",
     tmaGuideMinutes: "Пара минут — и всё работает",
     tmaGuideDl: "Скачать · версия {v}",

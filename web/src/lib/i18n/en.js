@@ -544,6 +544,7 @@ export const en = {
     tmaUnlink: "Unlink",
     tmaUnlinkAsk: "Unlink \u201c{name}\u201d? VPN on it will stop.",
     tmaFail: "Something went wrong. Try again.",
+    tmaGuideCopyLink: "Copy link for a browser",
     tmaGuideBtn: "How to set up",
     tmaGuideMinutes: "A couple of minutes and it works",
     tmaGuideDl: "Download · version {v}",

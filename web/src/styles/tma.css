@@ -1735,6 +1735,10 @@ html.tma .st-g-cta {
   margin-top: 6px;
   min-height: 48px;
   font-size: 15.5px;
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  text-align: center;
 }
 html.tma .st-g-alt {
   padding: 8px;

@@ -655,9 +655,9 @@ const TMA_APPSTORE = "https://apps.apple.com/app/amneziavpn/id1600529900";
 
 // Эмодзи пака на каждый шаг гайда.
 const TMA_GUIDE_EMOJI = {
-  windows: ["folder", "sparkle", "goldkey", "fire", "hundred"],
-  android: ["folder", "robot", "goldkey", "fire", "hundred"],
-  macos: ["folder", "coffee", "goldkey", "fire", "hundred"],
+  windows: ["backpack", "thumbup", "goldkey", "fire", "hundred"],
+  android: ["backpack", "robot", "goldkey", "fire", "hundred"],
+  macos: ["backpack", "coffee", "goldkey", "fire", "hundred"],
   ios: ["star", "goldkey", "unlockem", "hundred"],
 };
 
@@ -717,15 +717,31 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
             text={text}
           >
             {index === 0 && platform !== "ios" && release && (
-              <a className="ap-cta st-g-cta" href={release.url} download>
-                {t("account.tmaGuideDl", { v: release.version })}
-              </a>
+              <>
+                <a className="ap-cta st-g-cta" href={release.url} download>
+                  {t("account.tmaGuideDl", { v: release.version })}
+                </a>
+                <button
+                  type="button"
+                  className="tps-alt st-g-alt"
+                  onClick={() => copy("dl", release.url)}
+                >
+                  {copied === "dl" ? t("account.tmaCopied") : t("account.tmaGuideCopyLink")}
+                </button>
+              </>
             )}
             {index === 0 && platform === "ios" && (
               <>
                 <a className="ap-cta st-g-cta" href={TMA_APPSTORE}>
                   {t("account.tmaGuideStore")}
                 </a>
+                <button
+                  type="button"
+                  className="tps-alt st-g-alt"
+                  onClick={() => copy("store", TMA_APPSTORE)}
+                >
+                  {copied === "store" ? t("account.tmaCopied") : t("account.tmaGuideCopyLink")}
+                </button>
                 <span className="st-note">
                   {t("account.tmaGuideStoreMiss")}{" "}
                   <a href="https://prostovpn.cc/guide" className="st-note-link">

@@ -2084,3 +2084,360 @@ html.tma .sk-grid {
     animation: none;
   }
 }
+
+/* ===== Онбординг: полноэкранные слайды со снапом и параллаксом ===== */
+html.tma .ob {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: var(--tma-canvas);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+html.tma .ob-top {
+  position: absolute;
+  top: calc(14px + env(safe-area-inset-top));
+  left: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 2;
+}
+html.tma .ob-logo {
+  height: 22px;
+  width: auto;
+  opacity: 0.9;
+}
+html.tma .ob-skip {
+  border: none;
+  background: var(--tma-card);
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+html.tma .ob-track {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+html.tma .ob-track::-webkit-scrollbar {
+  display: none;
+}
+html.tma .ob-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 30px 30px;
+  min-width: 0;
+}
+/* Параллакс: --d = смещение слайда от центра (-1..1), --a = видимость */
+html.tma .ob-hero {
+  position: relative;
+  z-index: 1;
+  width: 148px;
+  height: 148px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(250, 76, 22, 0.16), transparent 70%);
+  transform: translateX(calc(var(--d, 0) * -46px));
+  animation: ob-float 3.6s ease-in-out infinite;
+}
+@keyframes ob-float {
+  50% {
+    translate: 0 -10px;
+  }
+}
+html.tma .ob-slide h1 {
+  position: relative;
+  z-index: 1;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 22px 0 0;
+  transform: translateX(calc(var(--d, 0) * -80px));
+  opacity: var(--a, 1);
+}
+html.tma .ob-slide p {
+  position: relative;
+  z-index: 1;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  max-width: 300px;
+  margin: 12px 0 0;
+  transform: translateX(calc(var(--d, 0) * -120px));
+  opacity: var(--a, 1);
+}
+html.tma .ob-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(52px);
+  pointer-events: none;
+}
+html.tma .ob-blob-a {
+  width: 240px;
+  height: 240px;
+  top: 6%;
+  left: -60px;
+  background: rgba(250, 76, 22, 0.22);
+  transform: translateX(calc(var(--d, 0) * 90px));
+}
+html.tma .ob-blob-b {
+  width: 200px;
+  height: 200px;
+  bottom: 4%;
+  right: -50px;
+  background: rgba(250, 140, 40, 0.13);
+  transform: translateX(calc(var(--d, 0) * 150px));
+}
+html.tma .ob-ring {
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(250, 76, 22, 0.18);
+  pointer-events: none;
+  transform: translateX(calc(var(--d, 0) * 40px)) rotate(calc(var(--d, 0) * 40deg));
+}
+html.tma .ob-foot {
+  padding: 8px 24px calc(20px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+html.tma .ob-dots {
+  display: flex;
+  gap: 7px;
+}
+html.tma .ob-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--tma-inset);
+  cursor: pointer;
+  transition: width 0.35s var(--ease-spring), background 0.25s ease;
+}
+html.tma .ob-dot.on {
+  width: 24px;
+  background: var(--accent);
+}
+html.tma .ob-next {
+  align-self: stretch;
+}
+html.tma .ob-have {
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s var(--ease-spring);
+}
+html.tma .ob-have.show {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  html.tma .ob-hero {
+    animation: none;
+  }
+}
+
+/* ===== Вход и регистрация ===== */
+html.tma .au {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: calc(40px + env(safe-area-inset-top)) 24px calc(28px + env(safe-area-inset-bottom));
+  background: var(--tma-canvas);
+}
+html.tma .au-hero {
+  width: 116px;
+  height: 116px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(250, 76, 22, 0.15), transparent 70%);
+  animation: ap-slide-in 0.45s var(--ease-out, ease) backwards;
+}
+html.tma .au-title {
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 14px 0 0;
+  text-align: center;
+  animation: ap-slide-in 0.45s var(--ease-out, ease) 0.05s backwards;
+}
+html.tma .au-sub {
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  margin: 8px 0 0;
+  text-align: center;
+  max-width: 300px;
+  animation: ap-slide-in 0.45s var(--ease-out, ease) 0.1s backwards;
+}
+html.tma .au-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-self: stretch;
+  margin-top: 22px;
+  background: var(--tma-card);
+  border-radius: 999px;
+  padding: 4px;
+  animation: ap-slide-in 0.45s var(--ease-out, ease) 0.15s backwards;
+}
+html.tma .au-pill {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border-radius: 999px;
+  background: var(--tma-inset);
+  transition: transform 0.35s var(--ease-spring);
+}
+html.tma .au-pill.right {
+  transform: translateX(100%);
+}
+html.tma .au-tabs button {
+  position: relative;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-dim);
+  padding: 11px 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.25s ease;
+}
+html.tma .au-tabs button.on {
+  color: var(--ink);
+}
+html.tma .au-form {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+  animation: ap-slide-in 0.45s var(--ease-out, ease) 0.2s backwards;
+}
+html.tma .au-pass {
+  position: relative;
+}
+html.tma .au-eye {
+  position: absolute;
+  right: 12px;
+  bottom: 11px;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+html.tma .au-pass input {
+  padding-right: 92px;
+}
+html.tma .au-accept {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+html.tma .au-accept input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+html.tma .au-box {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  border-radius: 7px;
+  border: 2px solid var(--tma-sep);
+  display: grid;
+  place-items: center;
+  transition: background 0.2s var(--ease-spring), border-color 0.2s ease;
+}
+html.tma .au-box::after {
+  content: "✓";
+  font-size: 13px;
+  font-weight: 800;
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 0.15s ease, transform 0.2s var(--ease-spring);
+}
+html.tma .au-accept input:checked + .au-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+html.tma .au-accept input:checked + .au-box::after {
+  opacity: 1;
+  transform: scale(1);
+}
+html.tma .au-accept-text {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+html.tma .au-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+html.tma .au-submit {
+  margin-top: 4px;
+}
+html.tma .au-forgot {
+  border: none;
+  background: none;
+  align-self: center;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 6px 10px;
+  cursor: pointer;
+}

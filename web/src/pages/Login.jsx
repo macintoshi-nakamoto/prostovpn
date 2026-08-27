@@ -5,9 +5,18 @@ import { SiteHeader } from "../components/SiteHeader.jsx";
 import { HeroOrbit } from "../components/HeroOrbit.jsx";
 import { ApiError, getToken } from "../lib/api";
 import { useT } from "../lib/i18n/index.jsx";
+import { isTma } from "../lib/telegram.js";
+import { TmaAuth } from "./TmaAuth.jsx";
 import "./login.css";
 
+// В мини-аппе Telegram вход и регистрация свои — с онбордингом и в стиле
+// приложения; сайтовая форма остаётся как была.
 export function Login() {
+  if (isTma()) return <TmaAuth />;
+  return <SiteLogin />;
+}
+
+function SiteLogin() {
   const t = useT();
   const { signIn, signUp, authed } = useSession();
   const navigate = useNavigate();

@@ -382,6 +382,26 @@ export const en = {
     titleSignup: "Create an account",
     help: "Need help?",
     helpLink: "support",
+    tmaOb: [
+      [
+        "Internet without borders",
+        "Fast, stable access to the services you love — from anywhere in the world.",
+      ],
+      [
+        "No limits at all",
+        "Unlimited traffic on every plan: no throttling, no caps.",
+      ],
+      [
+        "Banks keep working",
+        "Russian services go direct: gov portals, banks and delivery never notice the VPN.",
+      ],
+      ["Every device", "iPhone, Android, computer and TV — one subscription for everything."],
+      ["Days as a gift", "Invite friends and get subscription days for each one."],
+    ],
+    tmaObSkip: "Skip",
+    tmaObNext: "Next",
+    tmaObStart: "Create an account",
+    tmaObHave: "I already have an account",
     tabSignin: "Sign in",
     tabSignup: "Sign up",
     headSignin: "Welcome back",

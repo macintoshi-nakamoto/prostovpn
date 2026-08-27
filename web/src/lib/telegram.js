@@ -100,6 +100,8 @@ export function tmaHaptic(kind = "light") {
     const h = webApp()?.HapticFeedback;
     if (!h) return;
     if (kind === "select") h.selectionChanged();
+    else if (kind === "error" || kind === "success" || kind === "warning")
+      h.notificationOccurred(kind);
     else h.impactOccurred(kind);
   } catch {
     // старый клиент — без вибрации

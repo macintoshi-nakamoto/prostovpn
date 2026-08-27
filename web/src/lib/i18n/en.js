@@ -550,6 +550,8 @@ export const en = {
     tmaGuideDoneT: "It works!",
     tmaGuideDoneS: "If something went wrong — write to support, we\u2019ll sort it out together.",
     tmaGuideDoneCta: "Back",
+    tmaStoreTitle: "App Store workaround",
+    tmaBypassDl: "Download the file",
     tmaGuideBtn: "How to set up",
     tmaGuideMinutes: "A couple of minutes and it works",
     tmaGuideDl: "Download · version {v}",
@@ -558,6 +560,25 @@ export const en = {
     tmaGuideStoreHow: "Workaround",
     tmaAppRowSub: "Version {v} — guide & download",
     tmaGuide: {
+      store: [
+        [
+          "Why the app is hidden",
+          "The App Store hides AmneziaVPN for the Russian region. A second Apple ID with another country fixes it — free, about five minutes.",
+        ],
+        [
+          "Create a second Apple ID",
+          "At appleid.apple.com. Country — Kazakhstan or Turkey, for example. Any email that can receive a code will do.",
+        ],
+        [
+          "Sign into the App Store only",
+          "Open the App Store → tap your avatar → sign out and sign in with the new ID. The iPhone itself stays on your Apple ID — photos and notes are safe.",
+        ],
+        ["Install AmneziaVPN", "Now the app shows up in search and installs as usual."],
+        [
+          "Put everything back",
+          "You can sign out of the second Apple ID — the installed app stays and keeps working.",
+        ],
+      ],
       windows: [
         ["Download the installer", "Button below — the file lands in Downloads."],
         [

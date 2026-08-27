@@ -204,6 +204,31 @@ export function pushBack(handler) {
   };
 }
 
+// Открыть http(s)-ссылку во внешнем браузере: там скачивание работает,
+// в отличие от вебвью Telegram, где файл откроется просмотром.
+export function tmaOpenLink(url) {
+  try {
+    const wa = webApp();
+    if (wa?.openLink) {
+      wa.openLink(url);
+      return;
+    }
+  } catch {}
+  try {
+    window.open(url, "_blank");
+  } catch {
+    window.location.href = url;
+  }
+}
+
+// Открыть другое приложение по его схеме (vpn:// и т.п.): из вебвью
+// работает только прямой переход, <a href> Telegram глотает.
+export function tmaOpenApp(url) {
+  try {
+    window.location.href = url;
+  } catch {}
+}
+
 let tapsBound = false;
 
 export function initTma() {

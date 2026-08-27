@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
-import { isTma, tmaHaptic, tmaUser } from "../lib/telegram.js";
+import { isTma, tmaHaptic, tmaOpenApp, tmaOpenLink, tmaUser } from "../lib/telegram.js";
 import { EmailDialog } from "../components/EmailDialog.jsx";
 import { SheetShell } from "../components/SheetShell.jsx";
 import { ScreenShell } from "../components/ScreenShell.jsx";
@@ -550,9 +550,13 @@ function TmaIosKeySheet({ open, group, onClose, onApply, onGuide }) {
       <button type="button" className="ap-cta" onClick={copyKey}>
         {copied ? t("account.tmaCopied") : t("account.tmaKeyCopy")}
       </button>
-      <a className="ap-cta tps-cta st-open" href={link.vpn_url}>
+      <button
+        type="button"
+        className="ap-cta st-open"
+        onClick={() => tmaOpenApp(link.vpn_url)}
+      >
         {t("account.tmaKeyOpen")}
-      </a>
+      </button>
 
       {error && <div className="pd-error">{error}</div>}
 
@@ -659,6 +663,7 @@ const TMA_GUIDE_EMOJI = {
   android: ["backpack", "thumbup", "goldkey", "fire", "hundred"],
   macos: ["backpack", "coffee", "goldkey", "fire", "hundred"],
   ios: ["star", "goldkey", "unlockem", "hundred"],
+  store: ["globe", "goldkey", "star", "backpack", "hundred"],
 };
 
 const TMA_GUIDE_HERO = {
@@ -666,6 +671,7 @@ const TMA_GUIDE_HERO = {
   android: "robot",
   macos: "coffee",
   ios: "wink",
+  store: "shush",
 };
 
 // Инструкция-«путь»: линия квеста через живые эмодзи-узлы, отмечаемые
@@ -674,12 +680,14 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
   const { t, raw } = useI18n();
   const [copied, setCopied] = useState("");
   const [done, setDone] = useState([]);
+  const [storeOpen, setStoreOpen] = useState(false);
 
   const storageKey = `prosto_guide_${platform}`;
 
   useEffect(() => {
     if (!open) return;
     setCopied("");
+    setStoreOpen(false);
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || "[]");
       setDone(Array.isArray(saved) ? saved : []);
@@ -692,7 +700,8 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
   const steps = raw(`account.tmaGuide.${platform}`) || [];
   const emojis = TMA_GUIDE_EMOJI[platform] || [];
   const release = (downloads || []).find((row) => row.platform === platform);
-  const title = TMA_PLATFORMS[platform]?.title || platform;
+  const title =
+    platform === "store" ? t("account.tmaStoreTitle") : TMA_PLATFORMS[platform]?.title || platform;
   const total = steps.length;
   const complete = total > 0 && done.length >= total;
 
@@ -796,17 +805,41 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
                       </button>
                       <span className="st-note">
                         {t("account.tmaGuideStoreMiss")}{" "}
-                        <a href="https://prostovpn.cc/guide" className="st-note-link">
+                        <button
+                          type="button"
+                          className="st-note-link st-note-btn"
+                          onClick={() => setStoreOpen(true)}
+                        >
                           {t("account.tmaGuideStoreHow")}
-                        </a>
+                        </button>
                       </span>
+                    </>
+                  )}
+                  {platform === "store" && index === 3 && (
+                    <>
+                      <a className="ap-cta st-g-cta" href={TMA_APPSTORE}>
+                        {t("account.tmaGuideStore")}
+                      </a>
+                      <button
+                        type="button"
+                        className="tps-alt st-g-alt"
+                        onClick={() => copy("store2", TMA_APPSTORE)}
+                      >
+                        {copied === "store2"
+                          ? t("account.tmaCopied")
+                          : t("account.tmaGuideCopyLink")}
+                      </button>
                     </>
                   )}
                   {platform === "ios" && index === 1 && link && (
                     <>
-                      <a className="ap-cta st-g-cta" href={link.vpn_url}>
+                      <button
+                        type="button"
+                        className="ap-cta st-g-cta"
+                        onClick={() => tmaOpenApp(link.vpn_url)}
+                      >
                         {t("account.tmaKeyOpen")}
-                      </a>
+                      </button>
                       <button
                         type="button"
                         className="tps-alt st-g-alt"
@@ -832,6 +865,16 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
           })}
         </div>
 
+        {platform === "ios" && (
+          <TmaGuideScreen
+            open={storeOpen}
+            platform="store"
+            login={login}
+            downloads={downloads}
+            onClose={() => setStoreOpen(false)}
+          />
+        )}
+
         {complete && (
           <div className="gd2-done">
             <span className="gd2-confetti" aria-hidden="true">
@@ -852,6 +895,54 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
   );
 }
 
+// Файл обхода — лист: скачивание через внешний браузер (в вебвью файл
+// открылся бы просмотром) и копия ссылки.
+function TmaBypassSheet({ open, file, onClose }) {
+  const { t, f } = useI18n();
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (open) setCopied(false);
+  }, [open]);
+
+  if (!file?.available) return null;
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(file.url);
+      tmaHaptic("light");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {}
+  };
+
+  return (
+    <SheetShell open={open} onClose={onClose}>
+      <h2>{t("account.bypassTitle")}</h2>
+      <p className="pd-sub">{t("account.bypassText")}</p>
+      <span className="st-note">
+        {file.updated_at
+          ? t("account.bypassUpdated", { date: f.longDate(file.updated_at) }) +
+            (file.size_bytes ? ` · ${f.bytes(file.size_bytes)}` : "")
+          : ""}
+      </span>
+      <button
+        type="button"
+        className="ap-cta"
+        onClick={() => {
+          tmaHaptic("light");
+          tmaOpenLink(file.url);
+        }}
+      >
+        {t("account.tmaBypassDl")}
+      </button>
+      <button type="button" className="tps-alt" onClick={copyLink}>
+        {copied ? t("account.tmaCopied") : t("account.tmaGuideCopyLink")}
+      </button>
+    </SheetShell>
+  );
+}
+
 // «Установка»: скачал приложение → вошёл логином. iPhone — ключом.
 // Ниже — живые сессии и файл обхода. Всё строками, всё тапается.
 function TmaSetup({ data, onChanged, onApply }) {
@@ -861,6 +952,7 @@ function TmaSetup({ data, onChanged, onApply }) {
   const [addOpen, setAddOpen] = useState(false);
   const [copiedLogin, setCopiedLogin] = useState(false);
   const [guide, setGuide] = useState(null); // {platform, link?}
+  const [bypassOpen, setBypassOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -1032,11 +1124,12 @@ function TmaSetup({ data, onChanged, onApply }) {
           icon="file"
           title={t("account.bypassTitle")}
           sub={t("account.tmaBypassSub")}
-          href={file?.available ? file.url : undefined}
-          download={file?.available ? file.filename : undefined}
+          onClick={() => setBypassOpen(true)}
           disabled={!file?.available}
         />
       </div>
+
+      <TmaBypassSheet open={bypassOpen} file={file} onClose={() => setBypassOpen(false)} />
 
       <TmaIosKeySheet
         open={Boolean(keyOpen)}
@@ -1075,6 +1168,7 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
   const file = data.tunnel_file;
   const [copied, setCopied] = useState(null);
   const [emailOpen, setEmailOpen] = useState(false);
+  const [bypassOpen, setBypassOpen] = useState(false);
 
   // Иерархия карты: статус — точкой и словом, дни — крупной цифрой,
   // тариф — чипом, точная дата — мелко. Никаких предложений из данных.
@@ -1159,8 +1253,7 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
           icon="file"
           title={t("account.bypassTitle")}
           sub={t("account.tmaBypassSub")}
-          href={file?.available ? file.url : undefined}
-          download={file?.available ? file.filename : undefined}
+          onClick={() => setBypassOpen(true)}
           disabled={!file?.available}
         />
         <ApRow
@@ -1199,6 +1292,7 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         onClose={() => setEmailOpen(false)}
         onChanged={onChanged}
       />
+      <TmaBypassSheet open={bypassOpen} file={file} onClose={() => setBypassOpen(false)} />
     </div>
   );
 }

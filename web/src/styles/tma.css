@@ -137,9 +137,66 @@ html.tma .ac-caret {
   font-size: 9px;
   opacity: 0.6;
 }
+/* Меню профиля: капсула жидкого стекла, выпрыгивающая из пилюли — как
+   контекстное меню iOS. Появление пружиной из правого верхнего угла. */
 html.tma .ac-menu {
-  border-radius: 18px;
+  border-radius: 20px;
+  border: 1px solid var(--tma-glass-line);
+  background: var(--tma-card);
   box-shadow: var(--tma-shadow);
+  overflow: hidden;
+  padding: 6px;
+  transform-origin: top right;
+  animation: tma-menu-pop 0.42s var(--ease-spring);
+}
+@supports ((backdrop-filter: blur(1px))) or ((-webkit-backdrop-filter: blur(1px))) {
+  html.tma .ac-menu {
+    background: var(--tma-glass);
+    -webkit-backdrop-filter: blur(24px) saturate(1.7);
+    backdrop-filter: blur(24px) saturate(1.7);
+  }
+}
+@keyframes tma-menu-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.82) translateY(-8px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html.tma .ac-menu {
+    animation: none;
+  }
+}
+
+html.tma .ac-menu-head {
+  padding: 10px 12px 8px;
+}
+html.tma .ac-menu-sep {
+  margin: 4px 6px;
+  background: var(--tma-glass-line);
+}
+html.tma .ac-menu-item {
+  border-radius: 14px;
+  padding: 12px 12px;
+  min-height: 44px;
+  transition: background 0.15s ease, transform 0.15s var(--ease-out, ease);
+}
+html.tma .ac-menu-item:active {
+  transform: scale(0.97);
+}
+html.tma .ac-menu-item:hover {
+  background: var(--tma-inset);
+}
+html.tma .ac-menu-danger:hover {
+  background: var(--accent-tint);
+}
+
+/* Пилюля профиля отвечает на нажатие телом, не только вибрацией. */
+html.tma .ac-user-btn {
+  transition: transform 0.16s var(--ease-out, ease), color 0.18s ease;
+}
+html.tma .ac-user-btn:active {
+  transform: scale(0.95);
 }
 
 /* ---------- нижний таб-бар: плавающее стекло ---------- */

@@ -70,9 +70,14 @@
               if (wa.disableVerticalSwipes) wa.disableVerticalSwipes();
             }
           } catch (e) {}
-          // Безопасные зоны нужны только приложению — сайту не трогаем.
+          // Безопасные зоны и запрет зума — только приложению, сайт не трогаем.
           var vp = document.querySelector('meta[name="viewport"]');
-          if (vp) vp.setAttribute("content", vp.getAttribute("content") + ", viewport-fit=cover");
+          if (vp)
+            vp.setAttribute(
+              "content",
+              vp.getAttribute("content") +
+                ", viewport-fit=cover, maximum-scale=1, user-scalable=no"
+            );
           if (stored !== "light" && stored !== "dark") {
             var m = location.hash.match(/tgWebAppThemeParams=([^&]+)/);
             if (m) {

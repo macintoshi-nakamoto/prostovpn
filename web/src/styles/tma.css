@@ -181,6 +181,7 @@ html.tma .ac-menu-item {
 }
 html.tma .ac-menu-item:active {
   transform: scale(0.97);
+  transition-duration: 0s;
 }
 html.tma .ac-menu-item:hover {
   background: var(--tma-inset);
@@ -223,10 +224,15 @@ html.tma .ac-bottom {
     backdrop-filter: blur(22px) saturate(1.6);
   }
 }
-/* Открытая клавиатура: бар поверх неё закрывал бы поле ввода. Где :has не
-   поддержан, остаётся старое поведение — не хуже, чем было. */
+/* Открытая клавиатура: бар плавно ныряет вниз, а не исчезает рывком.
+   Где :has не поддержан — остаётся как было. */
+html.tma .ac-bottom {
+  transition: transform 0.3s var(--ease-out, ease), opacity 0.25s ease;
+}
 html.tma:has(input:focus, textarea:focus) .ac-bottom {
-  display: none;
+  transform: translateY(140%);
+  opacity: 0;
+  pointer-events: none;
 }
 html.tma .ac-bottom a {
   position: relative;
@@ -260,6 +266,7 @@ html.tma .ac-bottom a.active::before {
 }
 html.tma .ac-bottom a:active {
   transform: scale(0.94);
+  transition-duration: 0.08s;
 }
 
 /* Скользящая «капля» под активной вкладкой: считается в CabinetBottomNav,
@@ -315,6 +322,7 @@ html.tma .ac-hero-btn {
 }
 html.tma .ac-hero-btn:active {
   transform: scale(0.97);
+  transition-duration: 0.06s;
 }
 
 /* Пауза: герой гаснет в сталь, чтобы статус читался с первого взгляда. */
@@ -593,6 +601,7 @@ html.tma .ap-cta {
 }
 html.tma .ap-cta:active {
   transform: scale(0.97);
+  transition-duration: 0.06s;
 }
 
 /* Мини-статы под CTA — через тонкий разделитель */
@@ -631,11 +640,12 @@ html.tma .ap-row {
   text-decoration: none;
   color: var(--ink);
   font-family: inherit;
-  transition: background 0.15s ease;
+  transition: background 0.35s ease;
   position: relative;
 }
 html.tma .ap-row:active {
   background: var(--tma-inset);
+  transition-duration: 0s;
 }
 html.tma .ap-row + .ap-row::before {
   content: "";
@@ -722,6 +732,7 @@ html.tma .ap-freeze-btn {
 }
 html.tma .ap-freeze-btn:active {
   transform: scale(0.95);
+  transition-duration: 0.06s;
 }
 html.tma .ap-freeze-btn:disabled {
   opacity: 0.6;
@@ -873,10 +884,13 @@ html.tma .pd-field input {
   border: 1.5px solid transparent;
   border-radius: 14px;
   color: var(--ink);
-  transition: border-color 0.15s ease;
+  caret-color: var(--accent);
+  box-shadow: 0 0 0 0 rgba(250, 76, 22, 0);
+  transition: border-color 0.18s ease, box-shadow 0.3s ease;
 }
 html.tma .pd-field input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(250, 76, 22, 0.16);
   outline: none;
 }
 html.tma .pd-actions {
@@ -898,4 +912,66 @@ html.tma .pd-actions .btn-outline {
 }
 html.tma .pd-actions .btn:active {
   transform: scale(0.97);
+}
+
+/* ---------- микроплавность ---------- */
+
+/* Любое поле ввода в мини-аппе — не меньше 16px: iOS иначе делает рывок
+   зумом при фокусе, это главный источник «не плавно» на айфоне. */
+html.tma input,
+html.tma textarea,
+html.tma select {
+  font-size: 16px;
+}
+
+/* Тапы без задержек двойного тапа и синих вспышек */
+html.tma a,
+html.tma button,
+html.tma input,
+html.tma label {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Выделение текста — фирменное */
+html.tma ::selection {
+  background: rgba(250, 76, 22, 0.28);
+}
+
+/* Ошибка в листе появляется мягко, а не вспыхивает */
+html.tma .pd-error {
+  animation: tma-err-in 0.25s ease;
+}
+@keyframes tma-err-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* Значение в строке (почта, ID) меняется мягким проявлением */
+html.tma .ap-row-v {
+  transition: color 0.25s ease, opacity 0.25s ease;
+}
+
+/* ---------- формат приложения: жесты ---------- */
+
+/* Только вертикальная прокрутка: щипок-зум и двойной тап не работают. */
+html.tma,
+html.tma body {
+  touch-action: pan-y;
+}
+
+/* Долгий тап не выделяет интерфейс и не зовёт системное меню — текст
+   выделяется только там, где это осмысленно: поля ввода и коды. */
+html.tma body {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+html.tma input,
+html.tma textarea,
+html.tma code {
+  user-select: text;
+  -webkit-user-select: text;
 }

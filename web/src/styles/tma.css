@@ -1096,12 +1096,12 @@ html.tma .tp-month {
    кромки, тень даёт объём. Пропорции сняты с эталона. */
 html.tma .tp-ribbon {
   position: absolute;
-  top: 19px;
-  right: -23px;
-  width: 108px;
-  height: 24px;
+  top: 2px;
+  right: -18px;
+  width: 66px;
+  height: 26px;
   background: var(--accent);
-  border-radius: 12px;
+  border-radius: 13px;
   transform: rotate(45deg);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
   display: grid;

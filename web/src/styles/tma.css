@@ -987,3 +987,390 @@ html.tma code {
   user-select: text;
   -webkit-user-select: text;
 }
+
+/* ==========================================================================
+   Страница «Подписка»: полоска дней, витрина тарифов, экраны историй
+   ========================================================================== */
+
+html.tma .tp-progress {
+  background: var(--tma-card);
+  border-radius: 24px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+html.tma .tp-progress-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+html.tma .tp-progress-top b {
+  font-size: 18px;
+  font-weight: 700;
+}
+html.tma .tp-progress-top span {
+  font-size: 13px;
+  color: var(--text-faint);
+}
+html.tma .tp-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--tma-inset);
+  overflow: hidden;
+}
+html.tma .tp-track span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand-gradient);
+  transition: width 0.6s var(--ease-out, ease);
+}
+html.tma .tp-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+html.tma .tp-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+html.tma .tp-card {
+  position: relative;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 22px;
+  background: var(--tma-card);
+  padding: 16px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+  font-family: inherit;
+  transition: border-color 0.18s ease, transform 0.16s var(--ease-out, ease);
+}
+html.tma .tp-card:active {
+  transform: scale(0.98);
+  transition-duration: 0.06s;
+}
+html.tma .tp-card.sel {
+  border-color: var(--accent);
+}
+html.tma .tp-name {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+html.tma .tp-save {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--accent);
+  min-height: 18px;
+}
+html.tma .tp-save.off {
+  color: var(--text-faint);
+  font-weight: 500;
+}
+html.tma .tp-price {
+  margin-top: 14px;
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+html.tma .tp-month {
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+html.tma .tp-ribbon {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 110px;
+  text-align: center;
+  transform: rotate(45deg) translate(30px, -18px);
+  background: var(--accent);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 0;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+html.tma .tp-ribbon-save {
+  background: var(--accent-soft);
+}
+
+html.tma .tp-daily {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+}
+html.tma .tp-daily-total {
+  margin-top: 0;
+}
+
+html.tma .tps-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+html.tma .tps-stepper input {
+  width: 52px;
+  text-align: center;
+  background: var(--tma-inset);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  padding: 10px 4px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 600;
+}
+html.tma .tps-step {
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 50%;
+  background: var(--tma-inset);
+  color: var(--ink);
+  font-size: 20px;
+  cursor: pointer;
+  transition: transform 0.16s var(--ease-out, ease), opacity 0.2s ease;
+}
+html.tma .tps-step:active {
+  transform: scale(0.9);
+  transition-duration: 0.06s;
+}
+html.tma .tps-step:disabled {
+  opacity: 0.4;
+}
+
+html.tma .tp-cta {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  z-index: 44;
+  min-height: 54px;
+  border: none;
+  border-radius: 999px;
+  background: var(--brand-gradient);
+  color: #fff;
+  font-size: 16.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 12px 32px rgba(250, 76, 22, 0.4);
+  transition: transform 0.16s var(--ease-out, ease);
+  animation: tp-cta-in 0.35s var(--ease-spring);
+}
+html.tma .tp-cta:active {
+  transform: scale(0.97);
+  transition-duration: 0.06s;
+}
+@keyframes tp-cta-in {
+  from {
+    transform: translateY(60px);
+    opacity: 0;
+  }
+}
+html.tma .tp {
+  padding-bottom: 70px;
+}
+
+html.tma .tps-methods {
+  display: flex;
+  flex-direction: column;
+  background: var(--tma-inset);
+  border-radius: 18px;
+  padding: 4px;
+  gap: 2px;
+}
+html.tma .tps-method {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  border: none;
+  border-radius: 14px;
+  background: transparent;
+  padding: 11px 12px;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+  font-family: inherit;
+  transition: background 0.3s ease;
+}
+html.tma .tps-method:active {
+  background: var(--tma-card);
+  transition-duration: 0s;
+}
+html.tma .tps-method.sel {
+  background: var(--tma-card);
+}
+html.tma .tps-mic {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: #fff;
+}
+html.tma .tps-mic svg {
+  width: 20px;
+  height: 20px;
+}
+html.tma .tps-check {
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 17px;
+}
+html.tma .tps-cta {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+html.tma .tps-hint {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  text-align: center;
+}
+html.tma .tps-alt {
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 10px;
+}
+html.tma .tps-center {
+  text-align: center;
+}
+html.tma .tps-state {
+  width: 64px;
+  height: 64px;
+  margin: 6px auto 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  font-weight: 800;
+}
+html.tma .tps-ok {
+  background: rgba(52, 199, 89, 0.16);
+  color: #34c759;
+}
+html.tma .tps-bad {
+  background: rgba(255, 92, 92, 0.14);
+  color: var(--danger);
+}
+html.tma .tps-wait {
+  background: conic-gradient(var(--accent) 0 25%, var(--tma-inset) 25% 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent 62%, #000 64%);
+  mask: radial-gradient(farthest-side, transparent 62%, #000 64%);
+  animation: tps-spin 1s linear infinite;
+}
+@keyframes tps-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+html.tma .scr {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: var(--tma-canvas);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+html.tma .scr.is-open {
+  transform: translateX(0);
+}
+html.tma .scr-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: max(8px, env(safe-area-inset-top, 0px)) 10px 8px;
+  background: var(--tma-glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+}
+html.tma .scr-head h2 {
+  font-size: 17px;
+  font-weight: 700;
+}
+html.tma .scr-back {
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--accent);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+}
+html.tma .scr-back:active {
+  transform: scale(0.9);
+}
+html.tma .scr-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+}
+html.tma .scr-rows {
+  background: var(--tma-card);
+  border-radius: 24px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+}
+html.tma .scr-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 12px;
+  position: relative;
+}
+html.tma .scr-row + .scr-row::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 0;
+  height: 1px;
+  background: var(--tma-sep);
+}
+html.tma .scr-in {
+  color: #34c759;
+}
+html.tma .scr-out {
+  color: var(--accent);
+}
+html.tma .scr-empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 40px 0;
+}
+
+html.tma .ac-rec-line {
+  background: var(--tma-card);
+  border-radius: 18px;
+  padding: 14px 16px;
+}

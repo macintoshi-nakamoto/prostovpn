@@ -4,6 +4,10 @@ import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
 import { isTma, pushBack, tmaHaptic, tmaUser } from "../lib/telegram.js";
 import { EmailDialog } from "../components/EmailDialog.jsx";
+import { SheetShell } from "../components/SheetShell.jsx";
+import { ScreenShell } from "../components/ScreenShell.jsx";
+import { CryptoIcon, SbpIcon, TelegramIcon } from "../components/PayIcons.jsx";
+import { starsPayUrl } from "../lib/contacts.js";
 import { TgsEmoji } from "../components/TgsEmoji.jsx";
 import { useDismiss } from "../lib/hooks";
 import { SetupGuide } from "../components/SetupGuide.jsx";
@@ -1454,6 +1458,294 @@ function FreezeCard({ freeze, onApply }) {
   );
 }
 
+const PAY_METHODS = [
+  { id: "sbp", Icon: SbpIcon, title: "tmaMethSbp", sub: "tmaMethSbpSub" },
+  { id: "stars", Icon: TelegramIcon, title: "tmaMethStars", sub: "tmaMethStarsSub" },
+  { id: "crypto", Icon: CryptoIcon, title: "tmaMethCrypto", sub: "tmaMethCryptoSub" },
+];
+
+// Лист оплаты мини-аппа: способы строками с галочкой, большая круглая CTA;
+// после создания счёта — ожидание с поллингом (логика в PlanTab).
+function TmaPaySheet({ open, plan, quantity, busyMethod, invoice, onPay, onNewInvoice, onClose }) {
+  const { t, f } = useI18n();
+  const [method, setMethod] = useState("sbp");
+
+  useEffect(() => {
+    if (open) setMethod("sbp");
+  }, [open]);
+
+  if (!plan) return null;
+  const price = f.moneyFromKopecks(plan.price_kopecks * quantity, plan.currency);
+  const openInvoice = () => {
+    try {
+      const wa = window.Telegram?.WebApp;
+      if (wa?.openLink) wa.openLink(invoice.url);
+      else window.open(invoice.url, "_blank");
+    } catch {}
+  };
+
+  let body;
+  if (invoice && invoice.status === "paid") {
+    body = (
+      <>
+        <div className="tps-state tps-ok">✓</div>
+        <h2 className="tps-center">{t("account.tmaPayPaid")}</h2>
+        <p className="pd-sub tps-center">{t("account.tmaPayPaidSub")}</p>
+        <button type="button" className="ap-cta" onClick={onClose}>
+          {t("account.tmaPayDone")}
+        </button>
+      </>
+    );
+  } else if (invoice && invoice.status === "failed") {
+    body = (
+      <>
+        <div className="tps-state tps-bad">!</div>
+        <h2 className="tps-center">{t("account.tmaPayFailed")}</h2>
+        <button type="button" className="ap-cta" onClick={onNewInvoice}>
+          {t("account.tmaPayRetry")}
+        </button>
+      </>
+    );
+  } else if (invoice) {
+    body = (
+      <>
+        <div className="tps-state tps-wait" aria-hidden="true" />
+        <h2 className="tps-center">{t("account.tmaPayWaiting")}</h2>
+        <p className="pd-sub tps-center">{t("account.tmaPayWaitingSub")}</p>
+        <button type="button" className="ap-cta" onClick={openInvoice}>
+          {t("account.tmaPayOpen")}
+        </button>
+        <button type="button" className="tps-alt" onClick={onNewInvoice}>
+          {t("account.tmaPayAnother")}
+        </button>
+      </>
+    );
+  } else {
+    body = (
+      <>
+        <h2>{t("account.tmaPayTitle")}</h2>
+        <p className="pd-sub">
+          {plan.title} · {price}
+        </p>
+        <div className="tps-methods">
+          {PAY_METHODS.map(({ id, Icon, title, sub }) => (
+            <button
+              key={id}
+              type="button"
+              className={`tps-method${method === id ? " sel" : ""}`}
+              onClick={() => setMethod(id)}
+            >
+              <span className="tps-mic">
+                <Icon />
+              </span>
+              <span className="ap-row-body">
+                <span className="ap-row-t">{t(`account.${title}`)}</span>
+                <span className="ap-row-s">{t(`account.${sub}`)}</span>
+              </span>
+              {method === id && <span className="tps-check">✓</span>}
+            </button>
+          ))}
+        </div>
+        {method === "stars" ? (
+          <>
+            <a className="ap-cta tps-cta" href={starsPayUrl(plan.code)}>
+              {t("account.tmaStarsGo")}
+            </a>
+            <p className="tps-hint">{t("account.tmaStarsHint")}</p>
+          </>
+        ) : (
+          <button
+            type="button"
+            className="ap-cta"
+            disabled={Boolean(busyMethod)}
+            onClick={() => onPay(method)}
+          >
+            {busyMethod ? "…" : t("account.tmaPayCta", { price })}
+          </button>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <SheetShell open={open} onClose={busyMethod ? () => {} : onClose}>
+      {body}
+    </SheetShell>
+  );
+}
+
+// Передача дней другу — лист с получателем и степпером дней.
+function TmaTransferSheet({ open, data, onClose, onChanged, onHistory }) {
+  const { t, f } = useI18n();
+  const [recipient, setRecipient] = useState("");
+  const [days, setDays] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setRecipient("");
+      setDays(1);
+      setError("");
+      setBusy(false);
+    }
+  }, [open]);
+
+  const left = data.days_left || 0;
+  const amount = Number(days) || 0;
+  const ready = recipient.trim().length > 0 && amount >= 1 && amount <= left;
+
+  const send = async (e) => {
+    e.preventDefault();
+    if (!ready || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.transferDays(recipient.trim(), amount);
+      tmaHaptic("medium");
+      onClose();
+      onChanged();
+      try {
+        window.Telegram?.WebApp?.showAlert?.(t("account.trSent", { days: f.days(amount) }));
+      } catch {}
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("account.trFailed"));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SheetShell open={open} onClose={onClose} onSubmit={send}>
+      <h2>{t("account.trTitle")}</h2>
+      <p className="pd-sub">{t("account.trHint", { left: f.days(left) })}</p>
+
+      <label className="pd-field">
+        <span>{t("account.tmaTrRecipient")}</span>
+        <input
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
+          placeholder="prosto_user"
+          autoComplete="off"
+        />
+      </label>
+
+      <label className="pd-field">
+        <span>{t("account.tmaTrDays")}</span>
+        <div className="tps-stepper">
+          <button
+            type="button"
+            className="tps-step"
+            disabled={amount <= 1}
+            onClick={() => setDays(Math.max(1, amount - 1))}
+          >
+            −
+          </button>
+          <input
+            inputMode="numeric"
+            value={days}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "").slice(0, 3);
+              setDays(digits ? Number(digits) : "");
+            }}
+            onBlur={() => setDays((n) => (Number(n) >= 1 ? Number(n) : 1))}
+          />
+          <button
+            type="button"
+            className="tps-step"
+            disabled={amount >= left}
+            onClick={() => setDays(Math.min(left, amount + 1))}
+          >
+            +
+          </button>
+        </div>
+      </label>
+
+      {amount > left && left > 0 && <div className="pd-error">{t("account.trTooMany")}</div>}
+      {error && <div className="pd-error">{error}</div>}
+
+      <div className="pd-actions">
+        <button type="button" className="btn btn-outline" onClick={onHistory}>
+          {t("account.tmaTrHistory")}
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={!ready || busy}>
+          {busy ? t("password.busy") : t("account.tmaTrSend")}
+        </button>
+      </div>
+    </SheetShell>
+  );
+}
+
+// История передач — отдельный экран.
+function TmaTransfersScreen({ open, onClose }) {
+  const { t, f } = useI18n();
+  const [rows, setRows] = useState(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    api
+      .transfers()
+      .then((list) => alive && setRows(Array.isArray(list) ? list : []))
+      .catch(() => alive && setRows([]));
+    return () => {
+      alive = false;
+    };
+  }, [open]);
+
+  return (
+    <ScreenShell open={open} title={t("account.tmaTrHistTitle")} onClose={onClose}>
+      {rows === null ? (
+        <p className="scr-empty">{t("account.plansLoading")}</p>
+      ) : rows.length === 0 ? (
+        <p className="scr-empty">{t("account.tmaTrHistEmpty")}</p>
+      ) : (
+        <div className="scr-rows">
+          {rows.map((row) => (
+            <div className="scr-row" key={row.id}>
+              <span className="ap-row-body">
+                <span className="ap-row-t">
+                  {t(row.direction === "sent" ? "account.trTo" : "account.trFrom", {
+                    who: row.counterpart,
+                  })}
+                </span>
+                <span className="ap-row-s">{f.shortDate(row.created_at)}</span>
+              </span>
+              <b className={row.direction === "sent" ? "scr-out" : "scr-in"}>
+                {row.direction === "sent" ? "−" : "+"}
+                {f.days(row.days)}
+              </b>
+            </div>
+          ))}
+        </div>
+      )}
+    </ScreenShell>
+  );
+}
+
+// История платежей — отдельный экран.
+function TmaPaymentsScreen({ open, payments, onClose }) {
+  const { t, f } = useI18n();
+  return (
+    <ScreenShell open={open} title={t("account.paymentsTitle")} onClose={onClose}>
+      {payments.length === 0 ? (
+        <p className="scr-empty">{t("account.paymentsEmpty")}</p>
+      ) : (
+        <div className="scr-rows">
+          {payments.map((row, i) => (
+            <div className="scr-row" key={i}>
+              <span className="ap-row-body">
+                <span className="ap-row-t">{row.comment || t("account.payFallback")}</span>
+                <span className="ap-row-s">{f.longDate(row.paid_at)}</span>
+              </span>
+              <b className="scr-in">{f.money(row.amount, row.currency)}</b>
+            </div>
+          ))}
+        </div>
+      )}
+    </ScreenShell>
+  );
+}
+
 function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply }) {
   const { t, f } = useI18n();
   const [plans, setPlans] = useState(null);
@@ -1473,6 +1765,12 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
   }, [notice]);
 
   const [dailyDays, setDailyDays] = useState(7);
+
+  // Мини-апп: выбранный тариф (карточка + прилипшая CTA) и под-экраны.
+  const [selected, setSelected] = useState(preselected || null);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [showTransfers, setShowTransfers] = useState(false);
+  const [showPayments, setShowPayments] = useState(false);
 
   const [invoice, setInvoiceState] = useState(() => readInvoice(data.login));
   const setInvoice = useCallback(
@@ -1538,6 +1836,20 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
     };
   }, []);
 
+  useEffect(() => {
+    if (!isTma() || !plans || !plans.length) return;
+    setSelected((cur) => {
+      if (cur && plans.some((p) => p.code === cur)) return cur;
+      const nonDaily = plans.filter((p) => !isDaily(p));
+      const perDay = (p) => p.price_kopecks / p.duration_days;
+      const best = nonDaily.reduce(
+        (a, b) => (a === null || perDay(b) < perDay(a) ? b : a),
+        null,
+      );
+      return (best || plans[0]).code;
+    });
+  }, [plans]);
+
   const list = plans || [];
   const current = list.find((plan) => plan.code === data.plan) || null;
   const paid = Boolean(current);
@@ -1562,13 +1874,20 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
   const payWith = async (method) => {
     if (!paying || busyMethod) return;
     const days = isDaily(paying) ? dailyDays : 1;
-    const win = window.open("about:blank", "_blank");
+    const tma = isTma();
+    const win = tma ? null : window.open("about:blank", "_blank");
     setBusyMethod(method);
     setNotice("");
     try {
       const order = await api.renew(paying.code, days, method);
       if (order && order.redirect_url) {
-        if (win) {
+        if (tma) {
+          // Внутри Telegram страницу оплаты открывает сам клиент — во
+          // внешнем браузере; window.open в вебвью ненадёжен.
+          try {
+            window.Telegram?.WebApp?.openLink?.(order.redirect_url);
+          } catch {}
+        } else if (win) {
           try {
             win.opener = null;
           } catch {}
@@ -1633,6 +1952,256 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
       clearTimeout(timer);
     };
   }, [invoice && invoice.orderId, invoice && invoice.status]);
+
+  if (isTma()) {
+    const nonDaily = ordered.filter((plan) => !isDaily(plan));
+    const daily = ordered.find(isDaily) || null;
+    const perDay = (plan) => plan.price_kopecks / plan.duration_days;
+    const base = nonDaily.length ? Math.max(...nonDaily.map(perDay)) : 0;
+    const saveOf = (plan) => (base ? Math.round((1 - perDay(plan) / base) * 100) : 0);
+    const best = nonDaily.reduce(
+      (a, b) => (a === null || saveOf(b) > saveOf(a) ? b : a),
+      null,
+    );
+    const selPlan = list.find((plan) => plan.code === selected) || null;
+    const qty = selPlan && isDaily(selPlan) ? Number(dailyDays) || 1 : 1;
+    const total = data.period_days || 0;
+    const frac =
+      total && data.days_left != null
+        ? Math.max(0.02, Math.min(1, data.days_left / total))
+        : null;
+
+    const startPay = () => {
+      if (!selPlan) return;
+      if (invoice && invoice.planCode === selPlan.code && invoice.status !== "pending") {
+        setInvoice(null);
+      }
+      setPaying(selPlan);
+    };
+
+    return (
+      <div className="ap tp">
+        {notice && (
+          <div className="ac-notice" role="alert" ref={noticeRef}>
+            {notice}
+          </div>
+        )}
+
+        {frac !== null && (
+          <div className="tp-progress">
+            <div className="tp-progress-top">
+              <b>{f.days(data.days_left)}</b>
+              <span>
+                {data.expires_at
+                  ? t("account.tmaUntil", { date: f.shortDate(data.expires_at) })
+                  : ""}
+              </span>
+            </div>
+            <div className="tp-track" aria-hidden="true">
+              <span style={{ width: `${Math.round(frac * 100)}%` }} />
+            </div>
+            {upcoming.length > 0 && (
+              <div className="tp-queue">
+                {upcoming.map((next, i) => (
+                  <span key={i}>
+                    {t("account.planQueued", {
+                      plan: next.plan_title || next.plan,
+                      term: f.days(next.period_days),
+                      date: f.shortDate(next.starts_at),
+                    })}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="ap-card">
+          <div className="ap-head">
+            <span className="ap-ic ap-ic-emoji">
+              <TgsEmoji name="rabbit" size={62} />
+            </span>
+            <span className="ap-head-body">
+              <span className="ap-title">{t("account.tmaPlansTitle")}</span>
+              <span className="ap-sub">
+                {paid ? t("account.plansHintPaid") : t("account.plansHintTrial")}
+              </span>
+            </span>
+          </div>
+        </div>
+
+        {plans === null ? (
+          <p className="scr-empty">{t("account.plansLoading")}</p>
+        ) : (
+          <>
+            <div className="tp-grid">
+              {nonDaily.map((plan) => {
+                const save = saveOf(plan);
+                const months = plan.duration_days / 30;
+                return (
+                  <button
+                    type="button"
+                    key={plan.code}
+                    className={`tp-card${selected === plan.code ? " sel" : ""}`}
+                    onClick={() => {
+                      setSelected(plan.code);
+                      tmaHaptic("select");
+                    }}
+                  >
+                    {best && plan.code === best.code && save > 0 ? (
+                      <span className="tp-ribbon">{t("account.tmaHit")}</span>
+                    ) : (
+                      save >= 5 && <span className="tp-ribbon tp-ribbon-save">−{save}%</span>
+                    )}
+                    <span className="tp-name">{plan.title}</span>
+                    <span className={`tp-save${save >= 5 ? "" : " off"}`}>
+                      {save >= 5
+                        ? t("account.tmaSave", { pct: save })
+                        : plan.code === data.plan
+                          ? t("account.planCurrent")
+                          : "\u00a0"}
+                    </span>
+                    <span className="tp-price">
+                      {f.moneyFromKopecks(plan.price_kopecks, plan.currency)}
+                    </span>
+                    <span className="tp-month">
+                      {months >= 2
+                        ? t("account.tmaPerMonth", {
+                            price: f.moneyFromKopecks(
+                              Math.round(plan.price_kopecks / months),
+                              plan.currency,
+                            ),
+                          })
+                        : f.days(plan.duration_days)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {daily && (
+              <button
+                type="button"
+                className={`tp-card tp-daily${selected === daily.code ? " sel" : ""}`}
+                onClick={() => {
+                  setSelected(daily.code);
+                  tmaHaptic("select");
+                }}
+              >
+                <span className="ap-row-body">
+                  <span className="tp-name">{daily.title}</span>
+                  <span className="tp-month">
+                    {t("account.tmaDailyPerDay", {
+                      price: f.moneyFromKopecks(daily.price_kopecks, daily.currency),
+                    })}
+                  </span>
+                </span>
+                <span
+                  className="tps-stepper tp-stepper"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="tps-step"
+                    disabled={dailyDays <= 1}
+                    onClick={() => setDailyDays((n) => Math.max(1, (Number(n) || 1) - 1))}
+                  >
+                    −
+                  </button>
+                  <input
+                    inputMode="numeric"
+                    value={dailyDays}
+                    aria-label={t("account.dailyLabel")}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 2);
+                      setDailyDays(digits ? Math.min(90, Number(digits)) : "");
+                    }}
+                    onBlur={() => setDailyDays((n) => (n >= 1 ? n : 1))}
+                  />
+                  <button
+                    type="button"
+                    className="tps-step"
+                    disabled={dailyDays >= 90}
+                    onClick={() => setDailyDays((n) => Math.min(90, (Number(n) || 0) + 1))}
+                  >
+                    +
+                  </button>
+                </span>
+                <span className="tp-price tp-daily-total">
+                  {f.moneyFromKopecks(daily.price_kopecks * (Number(dailyDays) || 1), daily.currency)}
+                </span>
+              </button>
+            )}
+          </>
+        )}
+
+        <RecurringControl onChanged={onChanged} />
+
+        <div className="ap-rows">
+          <ApRow
+            icon="gift"
+            title={t("account.trTitle")}
+            sub={t("account.tmaTrSub", { left: f.days(data.days_left || 0) })}
+            onClick={() => setTransferOpen(true)}
+          />
+          <ApRow
+            icon="file"
+            title={t("account.paymentsTitle")}
+            sub={t("account.tmaPayHistSub")}
+            onClick={() => setShowPayments(true)}
+          />
+        </div>
+
+        {selPlan && !paying && (
+          <button
+            type="button"
+            className="tp-cta"
+            disabled={isDaily(selPlan) && !(Number(dailyDays) >= 1)}
+            onClick={startPay}
+          >
+            {t("account.tmaContinue", {
+              price: f.moneyFromKopecks(selPlan.price_kopecks * qty, selPlan.currency),
+            })}
+          </button>
+        )}
+
+        <TmaPaySheet
+          open={Boolean(paying)}
+          plan={paying}
+          quantity={
+            invoice &&
+            invoice.planCode === (paying && paying.code) &&
+            invoice.status === "pending"
+              ? invoice.quantity || 1
+              : isDaily(paying)
+                ? Number(dailyDays) || 1
+                : 1
+          }
+          busyMethod={busyMethod}
+          invoice={paying && invoice && invoice.planCode === paying.code ? invoice : null}
+          onPay={payWith}
+          onNewInvoice={() => setInvoice(null)}
+          onClose={() => (busyMethod ? null : setPaying(null))}
+        />
+        <TmaTransferSheet
+          open={transferOpen}
+          data={data}
+          onClose={() => setTransferOpen(false)}
+          onChanged={onChanged}
+          onHistory={() => {
+            setTransferOpen(false);
+            setShowTransfers(true);
+          }}
+        />
+        <TmaTransfersScreen open={showTransfers} onClose={() => setShowTransfers(false)} />
+        <TmaPaymentsScreen
+          open={showPayments}
+          payments={data.payments || []}
+          onClose={() => setShowPayments(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="ac-plan">

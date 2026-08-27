@@ -2979,17 +2979,18 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
                       tmaHaptic("select");
                     }}
                   >
-                    {best && plan.code === best.code && save > 0 ? (
-                      <span className="tp-ribbon">
-                        <b>{t("account.tmaHit")}</b>
+                    {(best && plan.code === best.code && save > 0) || save >= 5 ? (
+                      <span
+                        className={`tp-ribbon${
+                          best && plan.code === best.code ? "" : " tp-ribbon-save"
+                        }`}
+                      >
+                        <svg viewBox="0 0 84 84" aria-hidden="true">
+                          <path d="M23 2 L45 2 Q54 2 60.4 8.4 L75.6 23.6 Q82 30 82 39 L82 61 Q82 70 75.6 63.6 L20.4 8.4 Q14 2 23 2 Z" />
+                        </svg>
+                        <b>{best && plan.code === best.code ? t("account.tmaHit") : `−${save}%`}</b>
                       </span>
-                    ) : (
-                      save >= 5 && (
-                        <span className="tp-ribbon tp-ribbon-save">
-                          <b>−{save}%</b>
-                        </span>
-                      )
-                    )}
+                    ) : null}
                     <span className="tp-name">{plan.title}</span>
                     <span className={`tp-save${save >= 5 ? "" : " off"}`}>
                       {save >= 5

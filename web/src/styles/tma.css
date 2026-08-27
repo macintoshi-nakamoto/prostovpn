@@ -76,41 +76,55 @@ html.tma .ac-header-in {
   padding-top: max(4px, env(safe-area-inset-top, 0px));
 }
 
-/* Переключалки и профиль — «предметы» одного роста (34px), без подложек:
-   в шапке мини-аппа летают сами по себе, гармонично и просто. */
+/* Переключалки и профиль: у каждого — СВОЁ тело из жидкого стекла, одного
+   роста (36px). Не общая подложка, а отдельные капсулы, парящие в шапке. */
+html.tma .ctl-lang,
+html.tma .ctl-theme,
+html.tma .ac-user-btn {
+  height: 36px;
+  background: var(--tma-card);
+  border: 1px solid var(--tma-glass-line);
+  box-shadow: 0 4px 16px rgba(15, 20, 30, 0.12);
+}
+html.tma[data-theme="dark"] .ctl-lang,
+html.tma[data-theme="dark"] .ctl-theme,
+html.tma[data-theme="dark"] .ac-user-btn {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+@supports ((backdrop-filter: blur(1px))) or ((-webkit-backdrop-filter: blur(1px))) {
+  html.tma .ctl-lang,
+  html.tma .ctl-theme,
+  html.tma .ac-user-btn {
+    background: var(--tma-glass);
+    -webkit-backdrop-filter: blur(18px) saturate(1.6);
+    backdrop-filter: blur(18px) saturate(1.6);
+  }
+}
+
 html.tma .ctl-lang {
   --ctl-cell: 36px;
-  --ctl-pad: 0px;
-  background: transparent;
-  border: none;
-  padding: 0;
+  --ctl-pad: 3px;
+  box-sizing: border-box;
 }
 html.tma .ctl-lang button {
-  height: 34px;
+  height: 28px;
   font-size: 12px;
 }
 html.tma .ctl-theme {
-  width: 34px;
-  height: 34px;
-  background: transparent;
-  border: none;
+  width: 36px;
 }
 html.tma .ctl-theme:hover {
   color: var(--accent);
+  border-color: var(--tma-glass-line);
 }
 
 html.tma .ac-user-btn {
   font-size: 14px;
   gap: 8px;
-  height: 34px;
-  padding: 0 8px 0 0;
-  background: transparent;
-  border: none;
-  box-shadow: none;
+  padding: 0 10px 0 3px;
 }
 html.tma .ac-user-btn:hover,
 html.tma .ac-user-btn.open {
-  background: transparent;
   color: var(--accent);
 }
 html.tma .ac-user-btn .ac-avatar {

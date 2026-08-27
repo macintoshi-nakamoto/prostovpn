@@ -57,18 +57,11 @@ html.tma .ac-main {
 /* ---------- шапка: тонкое стекло ---------- */
 
 html.tma .ac-header {
-  background: var(--tma-card);
-  border-bottom: 1px solid transparent;
-}
-@supports ((backdrop-filter: blur(1px))) or ((-webkit-backdrop-filter: blur(1px))) {
-  html.tma .ac-header {
-    background: var(--tma-glass);
-    -webkit-backdrop-filter: blur(18px) saturate(1.5);
-    backdrop-filter: blur(18px) saturate(1.5);
-  }
+  background: transparent;
+  border-bottom: none;
 }
 html.tma .ac-header.scrolled {
-  border-bottom-color: var(--tma-glass-line);
+  border-bottom: none;
   box-shadow: none;
 }
 html.tma .ac-header-in {
@@ -83,21 +76,22 @@ html.tma .ctl-theme,
 html.tma .ac-user-btn {
   height: 36px;
   background: var(--tma-card);
-  border: 1px solid var(--tma-glass-line);
-  box-shadow: 0 4px 16px rgba(15, 20, 30, 0.12);
+  border: none;
+  box-shadow: 0 6px 20px rgba(15, 20, 30, 0.14);
 }
 html.tma[data-theme="dark"] .ctl-lang,
 html.tma[data-theme="dark"] .ctl-theme,
 html.tma[data-theme="dark"] .ac-user-btn {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 @supports ((backdrop-filter: blur(1px))) or ((-webkit-backdrop-filter: blur(1px))) {
   html.tma .ctl-lang,
   html.tma .ctl-theme,
   html.tma .ac-user-btn {
+    /* Матовое: сильный блюр, приглушённый цвет, плотнее обычного стекла. */
     background: var(--tma-glass);
-    -webkit-backdrop-filter: blur(18px) saturate(1.6);
-    backdrop-filter: blur(18px) saturate(1.6);
+    -webkit-backdrop-filter: blur(28px) saturate(1.1);
+    backdrop-filter: blur(28px) saturate(1.1);
   }
 }
 

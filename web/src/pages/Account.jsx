@@ -2980,9 +2980,15 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
                     }}
                   >
                     {best && plan.code === best.code && save > 0 ? (
-                      <span className="tp-ribbon">{t("account.tmaHit")}</span>
+                      <span className="tp-ribbon">
+                        <b>{t("account.tmaHit")}</b>
+                      </span>
                     ) : (
-                      save >= 5 && <span className="tp-ribbon tp-ribbon-save">−{save}%</span>
+                      save >= 5 && (
+                        <span className="tp-ribbon tp-ribbon-save">
+                          <b>−{save}%</b>
+                        </span>
+                      )
                     )}
                     <span className="tp-name">{plan.title}</span>
                     <span className={`tp-save${save >= 5 ? "" : " off"}`}>

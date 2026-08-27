@@ -16,6 +16,7 @@ from . import (
     referrals,
     subscription,
     transfers,
+    telegram,
     tunnel,
     xray,
 )
@@ -24,6 +25,7 @@ from .auth import (
     LoginThrottled,
     admin_session_for_token,
     authenticate,
+    open_session,
     authenticate_admin,
     reset_login_throttle,
     revoke_admin_session,

@@ -6,6 +6,7 @@ import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from . import geo, provisioning, services
@@ -385,6 +386,97 @@ class RegisterRequest(BaseModel):
     device_id: str | None = Field(default=None, max_length=64)
     device_name: str | None = Field(default=None, max_length=96)
     ref: str | None = Field(default=None, max_length=16)
+
+
+class TgLoginRequest(BaseModel):
+
+    init_data: str = Field(min_length=24, max_length=8192)
+    app_version: str | None = Field(default=None, max_length=32)
+
+
+@router.post("/login/telegram", response_model=LoginResponse)
+def login_telegram(
+    body: TgLoginRequest,
+    request: Request,
+    background: BackgroundTasks,
+    db: OrmSession = Depends(get_db),
+) -> LoginResponse:
+    """
+    Вход из мини-приложения Telegram: личность удостоверяет подпись initData.
+
+    Пароль не спрашиваем — Telegram уже проверил, кто это. Учётку ищем по
+    telegram_id, который привязал бот; не нашли — мини-приложение покажет
+    обычную форму входа. Сессия платформы «telegram» слот устройства не
+    занимает и ключей не выдаёт.
+    """
+    config = settings()
+    if not config.telegram_bot_token:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "вход через Telegram не настроен",
+            headers={"X-Error-Code": "tg_disabled"},
+        )
+
+    verdict = services.ratelimit.hit(
+        db,
+        f"tg-login:{ip_tag(client_ip(request))}",
+        limit=30,
+        window_minutes=5,
+        lock_minutes=5,
+    )
+    if not verdict.allowed:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "слишком часто, попробуйте позже",
+            headers={"Retry-After": str(verdict.retry_after), "X-Error-Code": "throttled"},
+        )
+
+    try:
+        data = services.telegram.validate_init_data(body.init_data, config.telegram_bot_token)
+    except services.PanelError as exc:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, str(exc), headers=_error_code_header(exc)
+        ) from exc
+
+    telegram_id = (data.get("user") or {}).get("id")
+    user = (
+        db.scalar(
+            select(User).where(User.telegram_id == telegram_id).order_by(User.id).limit(1)
+        )
+        if telegram_id
+        else None
+    )
+    if user is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "этот Telegram не привязан к учётной записи — войдите логином или зайдите в бота",
+            headers={"X-Error-Code": "tg_not_linked"},
+        )
+    if user.is_blocked:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "доступ заблокирован", headers={"X-Error-Code": "blocked"}
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "доступ отключён", headers={"X-Error-Code": "disabled"}
+        )
+
+    user.last_login_at = utcnow()
+    token = services.open_session(
+        db, user, platform="telegram", app_version=body.app_version
+    )
+    session = services.session_for_token(db, token)
+    assert session is not None
+    servers = _servers_out(db, user, session, background)
+    return LoginResponse(
+        token=token,
+        expires_at=session.expires_at,
+        account=AccountOut(public_id=user.public_id, login=user.login, name=user.name),
+        subscription=_subscription_out(user),
+        servers=servers,
+        notice=_notice_for(db, user, servers),
+        subscription_url=_subscription_url(db, session),
+    )
 
 
 @router.post("/register", response_model=LoginResponse, status_code=status.HTTP_201_CREATED)

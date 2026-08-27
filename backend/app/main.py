@@ -181,14 +181,22 @@ def _inline_hashes(index: Path) -> str:
 def _csp_for(path: str) -> str:
     site = _site_dir()
     index = None
+    admin = path.startswith("/admin")
     if site is not None:
         candidate = site.parent.parent / "panel" / "dist" / "index.html"
-        index = candidate if path.startswith("/admin") and candidate.is_file() else site / "index.html"
+        index = candidate if admin and candidate.is_file() else site / "index.html"
     hashes = _inline_hashes(index) if index is not None else ""
+    # Сайт открывается и как мини-приложение Telegram: на телефонах это
+    # WebView, а в Telegram Web — iframe с web.telegram.org, поэтому сайту
+    # (но не админке) нужны их скрипт и право показываться в этом iframe.
+    script_src = "script-src 'self' " + ("" if admin else "https://telegram.org ") + hashes
+    ancestors = "frame-ancestors 'none'" if admin else (
+        "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
+    )
     return "; ".join(
         [
             "default-src 'self'",
-            ("script-src 'self' " + hashes).strip(),
+            script_src.strip(),
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
             "img-src 'self' data: blob:",
@@ -196,7 +204,7 @@ def _csp_for(path: str) -> str:
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
-            "frame-ancestors 'none'",
+            ancestors,
             "upgrade-insecure-requests",
         ]
     )
@@ -207,7 +215,11 @@ async def security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    response.headers.setdefault("X-Frame-Options", "DENY")
+    # X-Frame-Options не умеет списки разрешённых, а сайту нужно открываться
+    # в iframe Telegram Web — для него хватает frame-ancestors из CSP
+    # (браузеры с поддержкой CSP2 ставят его выше XFO). Админке — запрет.
+    if request.url.path.startswith("/admin"):
+        response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault(
         "Permissions-Policy",
         "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()",

@@ -10,7 +10,7 @@ Telegram принимает только четыре стиля, остальн
 import re
 
 from aiogram.exceptions import TelegramBadRequest
-from aiogram.types import CopyTextButton, InlineKeyboardButton
+from aiogram.types import CopyTextButton, InlineKeyboardButton, WebAppInfo
 
 
 PRIMARY = "primary"    # синяя  — оставлена для точечных акцентов
@@ -161,11 +161,16 @@ def make_btn(
     emoji: str | None = None,
     style: str | None = DEFAULT,
     copy_text: str | None = None,
+    web_app: str | None = None,
 ) -> InlineKeyboardButton:
     kwargs = {}
 
     if url:
         kwargs["url"] = url
+    if web_app:
+        # Мини-приложение: сайт откроется внутри Telegram и сам войдёт в
+        # кабинет по подписи initData.
+        kwargs["web_app"] = WebAppInfo(url=web_app)
     if callback_data:
         kwargs["callback_data"] = callback_data
     if copy_text:

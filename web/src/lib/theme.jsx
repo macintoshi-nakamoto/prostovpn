@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
+import { isTma, tmaColorScheme } from "./telegram.js";
+
 const STORAGE_KEY = "prosto_theme";
 const Ctx = createContext(null);
 
@@ -8,6 +10,9 @@ export function readTheme() {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored === "light" || stored === "dark") return stored;
   } catch {}
+  // Внутри Telegram, пока тему не выбрали руками, живём в теме Telegram —
+  // белый кабинет в тёмном клиенте выглядит как вспышка.
+  if (isTma()) return tmaColorScheme();
   return "light";
 }
 

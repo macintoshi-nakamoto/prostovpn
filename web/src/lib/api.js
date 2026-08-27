@@ -173,6 +173,9 @@ export const api = {
   // Пауза подписки. Обе ручки возвращают аккаунт целиком — витрине не нужно
   // догадываться, что изменилось: дни, доступ и состояние паузы приезжают
   // одним ответом.
+  tgLogin: (initData) =>
+    request("/api/v1/login/telegram", { method: "POST", body: { init_data: initData } }),
+
   freeze: () => request("/api/v1/account/freeze", { method: "POST", auth: true }),
 
   resume: () => request("/api/v1/account/resume", { method: "POST", auth: true }),

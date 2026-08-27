@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
-import { useSession } from "./lib/session.jsx";
+import { tmaSignedOut, useSession } from "./lib/session.jsx";
+import { initTma, isTma } from "./lib/telegram.js";
 import { rememberRef } from "./lib/referral.js";
 import { Landing } from "./pages/Landing.jsx";
 import { Login } from "./pages/Login.jsx";
@@ -39,6 +40,37 @@ function ScrollToTop() {
   return null;
 }
 
+// Мини-приложение Telegram: развернуться на весь экран и войти самим по
+// подписи initData, пока человек смотрит на пустой фон. Не вышло (Telegram
+// не привязан к учётке) — покажем обычную форму входа.
+function TmaGate({ children }) {
+  const { authed, signInTelegram } = useSession();
+  const [pending, setPending] = useState(() => isTma() && !authed && !tmaSignedOut());
+
+  useEffect(() => {
+    initTma();
+  }, []);
+
+  useEffect(() => {
+    if (!pending) return;
+    let alive = true;
+    (async () => {
+      try {
+        await signInTelegram();
+      } catch {
+        // не привязан или подпись устарела — дальше обычный вход
+      }
+      if (alive) setPending(false);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [pending, signInTelegram]);
+
+  if (pending) return <div className="tma-boot" aria-hidden="true" />;
+  return children;
+}
+
 function Private({ children }) {
   const { authed } = useSession();
   const location = useLocation();
@@ -51,8 +83,9 @@ export function App() {
     <>
       <CatchReferral />
       <ScrollToTop />
+      <TmaGate>
       <Routes>
-        <Route path="/" element={<Landing />} />
+        <Route path="/" element={isTma() ? <Navigate to="/account" replace /> : <Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/reset" element={<Reset />} />
         <Route
@@ -81,6 +114,7 @@ export function App() {
         <Route path="/contacts" element={<Legal doc="contacts" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </TmaGate>
     </>
   );
 }

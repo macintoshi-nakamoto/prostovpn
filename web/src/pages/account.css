@@ -233,6 +233,24 @@
   gap: 22px;
 }
 
+/* Мини-приложение Telegram: свой логотип и лишний воздух не нужны —
+   Telegram уже нарисовал шапку со своим названием и кнопкой закрытия. */
+.tma .ac-logo {
+  display: none;
+}
+.tma .ac-main {
+  padding-top: 20px;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+}
+.tma .ac-header-in {
+  padding-top: max(6px, env(safe-area-inset-top, 0px));
+}
+
+.tma-boot {
+  min-height: 100vh;
+  background: var(--bg, transparent);
+}
+
 .ac-hero {
   background: linear-gradient(130deg, #ff7a3d 0%, #fa4c16 48%, #d93a05 100%);
   color: #fff;

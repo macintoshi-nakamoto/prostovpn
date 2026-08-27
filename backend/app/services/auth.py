@@ -127,22 +127,40 @@ def authenticate(
     if needs_rehash(stored):
         user.password_hash = hash_password(password)
 
-    token = new_token()
-    session = Session(
-        user_id=user.id,
-        token_hash=token_hash(token),
-        platform=platform,
-        app_version=app_version,
-        ip=None,
-        device_id=sanitize_device_id(device_id),
-        device_name=None,
-        expires_at=utcnow() + dt.timedelta(days=config.client_token_days),
+    token = open_session(
+        db, user, platform=platform, app_version=app_version, device_id=device_id
     )
-    db.add(session)
-    db.commit()
-
+    session = db.scalar(select(Session).where(Session.token_hash == token_hash(token)))
     _enforce_device_limit(db, user, session)
     return user, token
+
+
+def open_session(
+    db: OrmSession,
+    user: User,
+    *,
+    platform: str | None = None,
+    app_version: str | None = None,
+    device_id: str | None = None,
+) -> str:
+    """Выдаёт токен сессии без проверки пароля — для входов, где личность
+    уже удостоверена иначе (подпись Telegram). Лимит устройств здесь не
+    проверяется: звать отдельно, если вход претендует на слот."""
+    token = new_token()
+    db.add(
+        Session(
+            user_id=user.id,
+            token_hash=token_hash(token),
+            platform=platform,
+            app_version=app_version,
+            ip=None,
+            device_id=sanitize_device_id(device_id),
+            device_name=None,
+            expires_at=utcnow() + dt.timedelta(days=settings().client_token_days),
+        )
+    )
+    db.commit()
+    return token
 
 
 def _enforce_device_limit(db: OrmSession, user: User, current: Session) -> None:

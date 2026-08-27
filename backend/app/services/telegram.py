@@ -1,12 +1,52 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import logging
+import time
+from urllib.parse import parse_qsl
 
 import httpx
 
 from ..config import settings
+from .errors import PanelError
 
 log = logging.getLogger("panel.telegram")
+
+# initData живёт недолго: Telegram выдаёт свежую при каждом открытии
+# мини-приложения, поэтому сутки — запас с горкой. Старее — считаем украденной.
+INIT_DATA_MAX_AGE = 24 * 3600
+
+
+def validate_init_data(init_data: str, token: str) -> dict:
+    """
+    Проверяет подпись initData мини-приложения и возвращает разобранные поля.
+
+    Алгоритм из документации Telegram: secret = HMAC_SHA256("WebAppData",
+    токен бота), подпись — HMAC_SHA256(secret, отсортированные пары
+    key=value без поля hash). Не сошлось — данные не от Telegram.
+    """
+    pairs = dict(parse_qsl(init_data, keep_blank_values=True))
+    received = pairs.pop("hash", "")
+    if not received:
+        raise PanelError("подпись Telegram не найдена", "tg_invalid")
+
+    check_string = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
+    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    expected = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, received):
+        raise PanelError("подпись Telegram не сошлась", "tg_invalid")
+
+    auth_date = pairs.get("auth_date", "")
+    if not auth_date.isdigit() or time.time() - int(auth_date) > INIT_DATA_MAX_AGE:
+        raise PanelError("данные Telegram устарели — откройте приложение заново", "tg_stale")
+
+    try:
+        pairs["user"] = json.loads(pairs.get("user", "") or "{}")
+    except ValueError:
+        pairs["user"] = {}
+    return pairs
 
 API = "https://api.telegram.org"
 

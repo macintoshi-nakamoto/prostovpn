@@ -90,6 +90,15 @@ def main_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [make_btn("Личный кабинет", callback_data="cabinet", emoji="profile")],
+            # Полный кабинет — тот же, что на сайте, но открывается внутри
+            # Telegram и входит сам, без пароля.
+            [
+                make_btn(
+                    "Кабинет на сайте — без пароля",
+                    web_app=f"{config.site_url}/account",
+                    emoji="link",
+                )
+            ],
             [make_btn("Тарифы и оплата", callback_data="plans", emoji="wallet", style=SUCCESS)],
             # Приглашения сразу под оплатой: это второй способ получить дни,
             # и человеку он интересен ровно в тот момент, когда он смотрит на цену.
@@ -152,6 +161,9 @@ def cabinet_menu(active: bool, ios: bool = False, freeze=None) -> InlineKeyboard
     # Файл нужен тем, кто сидит с iPhone: в наших приложениях список
     # уже внутри. Строка на всю ширину и прямо над поддержкой — сюда и
     # приходят с вопросом «почему не открывается сбербанк».
+    rows.append(
+        [make_btn("Полный кабинет", web_app=f"{config.site_url}/account", emoji="link")]
+    )
     rows.append([make_btn("Российские сервисы напрямую", callback_data="tunnel", emoji="rocket")])
     rows.append([make_btn("Поддержка", callback_data="support", emoji="support")])
     rows.append([make_btn("Меню", callback_data="home", emoji="back", style=DANGER)])

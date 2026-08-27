@@ -20,6 +20,11 @@
       rel="stylesheet"
     />
     <!--
+      Мини-приложение Telegram. Скрипт даёт window.Telegram.WebApp (expand,
+      тема, viewport); вне Telegram он безвреден и ничего не делает.
+    -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!--
       Тема и язык до первого кадра.
 
       Скрипт синхронный и стоит в <head> намеренно: React грузится отдельным
@@ -40,6 +45,36 @@
           lang = localStorage.getItem("prosto_lang");
         } catch (e) {
           // Приватный режим запрещает хранилище — остаются значения по умолчанию.
+        }
+        // Внутри Telegram признак приходит в хеше адреса раньше любого
+        // скрипта: класс tma прячет сайтовую обвязку с первого кадра, а
+        // тема, пока свою не выбрали, берётся из темы Telegram (по фону).
+        var tma = false;
+        try {
+          tma =
+            location.hash.indexOf("tgWebAppData=") !== -1 ||
+            sessionStorage.getItem("prosto_tma") === "1";
+        } catch (e) {}
+        if (tma) {
+          root.classList.add("tma");
+          try {
+            sessionStorage.setItem("prosto_tma", "1");
+          } catch (e) {}
+          if (stored !== "light" && stored !== "dark") {
+            var m = location.hash.match(/tgWebAppThemeParams=([^&]+)/);
+            if (m) {
+              try {
+                var bg = (JSON.parse(decodeURIComponent(m[1])).bg_color || "").replace("#", "");
+                if (bg.length === 6) {
+                  var lum =
+                    parseInt(bg.slice(0, 2), 16) * 0.299 +
+                    parseInt(bg.slice(2, 4), 16) * 0.587 +
+                    parseInt(bg.slice(4, 6), 16) * 0.114;
+                  stored = lum < 128 ? "dark" : "light";
+                }
+              } catch (e) {}
+            }
+          }
         }
         var dark = stored === "dark";
         root.setAttribute("data-theme", dark ? "dark" : "light");

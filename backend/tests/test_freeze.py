@@ -31,6 +31,7 @@ def client():
                     name="test-nl",
                     country="Нидерланды",
                     country_code="NL",
+                    city="Амстердам",
                     host="10.20.30.1",
                     provisioning=Provisioning.SHARED,
                     shared_config="[Interface]\nAddress = 10.0.0.2/32\n",

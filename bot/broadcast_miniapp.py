@@ -18,6 +18,8 @@ if hasattr(sys.stdout, "reconfigure"):
 
 import aiosqlite
 from aiogram import Bot
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from aiogram.types import InlineKeyboardMarkup
 
 from app import BotSession
@@ -73,7 +75,13 @@ async def main() -> None:
         targets = await user_ids()
 
     print(f"получателей: {len(targets)}")
-    bot = Bot(token=config.token, session=BotSession(timeout=600))
+    # Без parse_mode=HTML теги <b> и <tg-emoji> уходят получателям сырым
+    # текстом — основной бот создаётся ровно с этими же настройками.
+    bot = Bot(
+        token=config.token,
+        session=BotSession(timeout=600),
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
     sent = failed = 0
 
     try:

@@ -233,7 +233,11 @@ export function tmaOpenApp(url) {
   const wa = webApp();
   if (wa?.openLink) {
     try {
-      wa.openLink(`${window.location.origin}/open.html#${encodeURIComponent(url)}`);
+      let lang = "ru";
+      try {
+        if (localStorage.getItem("prosto_lang") === "en") lang = "en";
+      } catch {}
+      wa.openLink(`${window.location.origin}/open.html?l=${lang}#${encodeURIComponent(url)}`);
       return;
     } catch {}
   }

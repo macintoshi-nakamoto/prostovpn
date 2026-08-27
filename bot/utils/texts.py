@@ -74,7 +74,11 @@ START_POINTS = (
 
 
 def start_text() -> str:
-    return f'{tg("brand")} <b>{config.brand}</b>\nПросто быстрый VPN'
+    return (
+        "Привет! <b>Prosto</b> - ваш инструмент для цифровой свободы:\n\n"
+        f'{tg("key")} VPN нового уровня: быстрый, надежный и безопасный '
+        "доступ без ограничений."
+    )
 
 
 def gate_text(login: str | None) -> str:

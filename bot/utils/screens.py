@@ -20,12 +20,19 @@ PLATFORM_TITLES = {
 
 
 def start(file_id: str | None) -> list[dict]:
-    """Первый экран: заставка, главная мысль и три пункта."""
+    """Первый экран: бот лишь открывает мини-приложение — всё остальное в нём."""
     return rich.screen(
         file_id,
-        rich.title(config.brand, "brand"),
-        rich.paragraph(rich.bold(texts.START_LEAD)),
-        rich.bullets(*texts.START_POINTS),
+        rich.paragraph(
+            ["Привет! ", rich.bold("Prosto"), " - ваш инструмент для цифровой свободы:"]
+        ),
+        rich.spacer(),
+        rich.paragraph(
+            [
+                rich.emoji("key"),
+                " VPN нового уровня: быстрый, надежный и безопасный доступ без ограничений.",
+            ]
+        ),
     )
 
 

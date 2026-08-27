@@ -57,7 +57,7 @@ async def show_start(event: Event) -> None:
         screens.start,
         start_menu(),
         text=texts.start_text(),
-        animation=assets.WELCOME,
+        animation=assets.MINIAPP,
     )
 
 

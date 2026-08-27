@@ -48,7 +48,8 @@ async def start_command(message: Message, command: CommandObject, state: FSMCont
     if await offer_stars(message, command.args):
         return
 
-    await show_home(message, message.from_user.id)
+    # Всё в мини-приложении: любой /start показывает экран с кнопкой запуска.
+    await show_start(message)
 
 
 async def offer_stars(message: Message, payload: str | None) -> bool:

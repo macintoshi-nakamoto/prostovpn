@@ -62,12 +62,10 @@ LEGAL_DOCS = (
 
 
 def start_menu() -> InlineKeyboardMarkup:
-    """Первый экран: личный кабинет выше всего остального."""
+    """Первый экран: всё в мини-приложении — одна кнопка, которая его открывает."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [make_btn("Личный кабинет", callback_data="gate", emoji="profile")],
-            [make_btn("О сервисе", callback_data="about", emoji="rocket")],
-            [make_btn("Документы", callback_data="docs", emoji="link")],
+            [make_btn("Открыть приложение", web_app=f"{config.site_url}/account")],
         ]
     )
 

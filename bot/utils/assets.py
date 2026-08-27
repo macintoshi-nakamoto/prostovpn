@@ -9,7 +9,8 @@ from pathlib import Path
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 
-WELCOME = ASSETS / "welcome.mp4"                 # первый экран, до входа
+WELCOME = ASSETS / "welcome.mp4"                 # первый экран, до входа (старый)
+MINIAPP = ASSETS / "miniapp.mp4"                 # первый экран: всё в мини-приложении
 MENU = ASSETS / "menu.mp4"                       # главное меню
 GATE = ASSETS / "splash.mp4"                     # вход и регистрация
 LOGIN_LOGIN = ASSETS / "login_login.mp4"         # шаг «введите логин»
@@ -32,6 +33,7 @@ AVATAR = ASSETS / "avatar.mp4"
 
 SCREENS = (
     WELCOME,
+    MINIAPP,
     MENU,
     GATE,
     LOGIN_LOGIN,

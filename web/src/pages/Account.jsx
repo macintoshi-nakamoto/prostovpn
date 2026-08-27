@@ -587,6 +587,54 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
   );
 }
 
+// «Как это работает» — отдельная страница с баннером-персонажами из пака.
+function TmaRefHow({ open, onClose, data, onCopy, copied }) {
+  const { t, f } = useI18n();
+  if (!data) return null;
+  return (
+    <ScreenShell open={open} title={t("account.tmaHowTitle")} onClose={onClose}>
+      <div className="ap">
+        <div className="hw-banner">
+          <span className="hw-fig">
+            <span className="hw-badge">{t("account.tmaHowShare")}</span>
+            <TgsEmoji name="wink" size={56} />
+            <span className="hw-name">{t("account.tmaHowYou")}</span>
+          </span>
+          <span className="hw-line" aria-hidden="true" />
+          <span className="hw-fig">
+            <span className="hw-badge">+{f.days(data.join_days)}</span>
+            <TgsEmoji name="shush" size={56} />
+            <span className="hw-name">{t("account.tmaHowFriend")}</span>
+          </span>
+          <span className="hw-line" aria-hidden="true" />
+          <span className="hw-fig">
+            <span className="hw-badge">+{f.days(data.join_days)}</span>
+            <TgsEmoji name="laugh" size={56} />
+            <span className="hw-name">{t("account.tmaHowFriend2")}</span>
+          </span>
+        </div>
+
+        <div className="ap-card hw-card">
+          <h2>{t("account.tmaHowJoinT", { days: f.days(data.join_days) })}</h2>
+          <p>{t("account.tmaHowJoinS")}</p>
+        </div>
+        <div className="ap-card hw-card">
+          <h2>{t("account.tmaHowPayT", { days: f.days(data.purchase_days) })}</h2>
+          <p>{t("account.tmaHowPayS")}</p>
+        </div>
+        <div className="ap-card hw-card">
+          <h2>{t("account.tmaHowStackT")}</h2>
+          <p>{t("account.tmaHowStackS")}</p>
+        </div>
+
+        <button type="button" className="scr-cta" onClick={onCopy}>
+          {copied ? t("account.tmaCopied") : t("account.tmaHowCopy")}
+        </button>
+      </div>
+    </ScreenShell>
+  );
+}
+
 // «Друзья» мини-аппа: ссылка запускает само приложение (startapp=код),
 // делиться — нативным телеграм-шэром.
 function TmaFriends() {
@@ -594,6 +642,7 @@ function TmaFriends() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [howOpen, setHowOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -657,6 +706,9 @@ function TmaFriends() {
             <span className="ap-sub">
               {t("account.refTerms", { join: data.join_days, purchase: data.purchase_days })}
             </span>
+            <button type="button" className="rf-how" onClick={() => setHowOpen(true)}>
+              {t("account.tmaHowLink")} ›
+            </button>
           </span>
         </div>
         <div className="rf-link-box">
@@ -680,6 +732,14 @@ function TmaFriends() {
           <span>{t("account.tmaRefDays")}</span>
         </div>
       </div>
+
+      <TmaRefHow
+        open={howOpen}
+        onClose={() => setHowOpen(false)}
+        data={data}
+        copied={copied}
+        onCopy={copy}
+      />
 
       {data.friends.length > 0 && (
         <div className="ap-rows">

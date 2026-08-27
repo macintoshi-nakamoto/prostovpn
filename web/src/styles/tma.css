@@ -751,3 +751,60 @@ html.tma .ap-ic-emoji {
   height: 100%;
   display: block;
 }
+
+/* Карта статуса: тариф — чип, статус — точка со словом, дни — крупно */
+html.tma .ap-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+html.tma .ap-chip {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--tma-inset);
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+html.tma .ap-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14.5px;
+  color: var(--text-dim);
+}
+html.tma .ap-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+html.tma .ap-dot.is-on {
+  background: #34c759;
+  box-shadow: 0 0 8px rgba(52, 199, 89, 0.55);
+}
+html.tma .ap-dot.is-frozen {
+  background: #8b98ac;
+}
+html.tma .ap-dot.is-off {
+  background: var(--text-faint);
+}
+html.tma .ap-days {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+html.tma .ap-days-n {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1;
+}
+html.tma .ap-days-d {
+  font-size: 13px;
+  color: var(--text-faint);
+}

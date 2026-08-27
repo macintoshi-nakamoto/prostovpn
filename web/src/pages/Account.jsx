@@ -452,14 +452,13 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
   const file = data.tunnel_file;
   const [copied, setCopied] = useState(false);
 
-  const sub = frozen
-    ? t("account.frozenHero", { days: f.days(data.days_left ?? 0) })
-    : data.active && data.expires_at
-      ? t(data.days_left != null ? "account.validUntilLeft" : "account.validUntil", {
-          date: f.longDate(data.expires_at),
-          left: f.days(data.days_left),
-        })
-      : t("account.subscribePrompt");
+  // Иерархия карты: статус — точкой и словом, дни — крупной цифрой,
+  // тариф — чипом, точная дата — мелко. Никаких предложений из данных.
+  const status = frozen
+    ? t("account.tmaStatusFrozen")
+    : data.active
+      ? t("account.tmaStatusOn")
+      : t("account.tmaStatusOff");
 
   const copyId = async () => {
     try {
@@ -477,12 +476,30 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
             <TgsEmoji name="fire" size={62} />
           </span>
           <span className="ap-head-body">
-            <span className="ap-title">
-              {data.plan_title ? `Prosto VPN · ${data.plan_title}` : "Prosto VPN"}
+            <span className="ap-title-row">
+              <span className="ap-title">Prosto VPN</span>
+              {data.plan_title && <span className="ap-chip">{data.plan_title}</span>}
             </span>
-            <span className="ap-sub">{sub}</span>
+            <span className="ap-status">
+              <span
+                className={`ap-dot${frozen ? " is-frozen" : data.active ? " is-on" : " is-off"}`}
+              />
+              {status}
+            </span>
           </span>
         </div>
+        {(data.active || frozen) && data.days_left != null ? (
+          <div className="ap-days">
+            <span className="ap-days-n">{f.days(data.days_left)}</span>
+            {data.expires_at && (
+              <span className="ap-days-d">
+                {t("account.tmaUntil", { date: f.longDate(data.expires_at) })}
+              </span>
+            )}
+          </div>
+        ) : (
+          !data.active && !frozen && <p className="ap-sub">{t("account.subscribePrompt")}</p>
+        )}
         <button className="ap-cta" onClick={onManage}>
           {t("account.manage")}
         </button>

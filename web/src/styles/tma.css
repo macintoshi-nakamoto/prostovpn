@@ -696,3 +696,58 @@ html.tma .ap-row[aria-disabled="true"] {
 html.tma .ac-freeze {
   border-radius: 24px;
 }
+
+/* Пауза подписки — компактный ряд с фирменным эмодзи */
+html.tma .ap-freeze {
+  background: var(--tma-card);
+  border-radius: 24px;
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 14px;
+}
+html.tma .ap-freeze-btn {
+  border: none;
+  cursor: pointer;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  padding: 0 18px;
+  min-height: 40px;
+  transition: transform 0.16s var(--ease-out, ease);
+}
+html.tma .ap-freeze-btn:active {
+  transform: scale(0.95);
+}
+html.tma .ap-freeze-btn:disabled {
+  opacity: 0.6;
+}
+html.tma .ap-freeze-err {
+  font-size: 12.5px;
+  color: var(--danger);
+}
+html.tma .ap-ic-emoji {
+  background: none;
+}
+
+/* Анимированные эмодзи пака */
+.tgs {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.tgs img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.tgs-box,
+.tgs-box svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}

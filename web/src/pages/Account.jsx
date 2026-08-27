@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
-import { isTma, tmaUser } from "../lib/telegram.js";
+import { isTma, tmaHaptic, tmaUser } from "../lib/telegram.js";
+import { TgsEmoji } from "../components/TgsEmoji.jsx";
 import { useDismiss } from "../lib/hooks";
 import { SetupGuide } from "../components/SetupGuide.jsx";
 import { Referrals } from "../components/Referrals.jsx";
@@ -379,6 +380,70 @@ function ApRow({ icon, title, sub, value, disabled, onClick, href, download }) {
   );
 }
 
+// Пауза подписки — компактный ряд с фирменным эмодзи. Подтверждение —
+// системным диалогом Telegram, снятие паузы — одним тапом.
+function TmaFreeze({ freeze, onApply }) {
+  const { t, f } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  if (!freeze) return null;
+  const frozen = Boolean(freeze.frozen);
+
+  const run = async (call) => {
+    setBusy(true);
+    setError("");
+    try {
+      onApply(await call());
+      tmaHaptic("medium");
+    } catch (err) {
+      setError(err?.message || t("account.freezeFailed"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const askFreeze = () => {
+    const wa = window.Telegram?.WebApp;
+    const question = t("account.tmaFreezeConfirm");
+    try {
+      wa.showConfirm(question, (ok) => {
+        if (ok) run(api.freeze);
+      });
+    } catch {
+      // старый клиент или не-Telegram: обычный confirm
+      if (window.confirm(question)) run(api.freeze);
+    }
+  };
+
+  const sub = frozen
+    ? t("account.tmaFrozenSub", { date: f.shortDate(freeze.frozen_at) })
+    : freeze.can_freeze
+      ? t("account.tmaFreezeSub")
+      : freeze.reason || "";
+
+  return (
+    <div className="ap-freeze">
+      <TgsEmoji name="freeze-emoji" size={48} />
+      <span className="ap-row-body">
+        <span className="ap-row-t">{t("account.tmaFreezeTitle")}</span>
+        {sub && <span className="ap-row-s">{sub}</span>}
+        {error && <span className="ap-freeze-err">{error}</span>}
+      </span>
+      {(frozen || freeze.can_freeze) && (
+        <button
+          type="button"
+          className="ap-freeze-btn"
+          disabled={busy}
+          onClick={frozen ? () => run(api.resume) : askFreeze}
+        >
+          {busy ? "…" : frozen ? t("account.tmaResumeBtn") : t("account.tmaFreezeBtn")}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Главная мини-аппа: карта статуса с круглой CTA, пауза, действия и
 // аккаунт — группами строк. Стиль нативных мини-аппов, наш цвет.
 function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChanged, onApply }) {
@@ -408,7 +473,9 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
     <div className="ap">
       <div className="ap-card">
         <div className="ap-head">
-          <span className="ap-ic">{AP_ICONS.shield}</span>
+          <span className="ap-ic ap-ic-emoji">
+            <TgsEmoji name="fire" size={62} />
+          </span>
           <span className="ap-head-body">
             <span className="ap-title">
               {data.plan_title ? `Prosto VPN · ${data.plan_title}` : "Prosto VPN"}
@@ -430,7 +497,7 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         </div>
       </div>
 
-      <FreezeCard freeze={data.freeze} onApply={onApply} />
+      <TmaFreeze freeze={data.freeze} onApply={onApply} />
 
       <div className="ap-rows">
         <ApRow

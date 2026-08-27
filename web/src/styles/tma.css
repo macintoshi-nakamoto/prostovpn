@@ -1042,7 +1042,7 @@ html.tma .tp-grid {
 }
 html.tma .tp-card {
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   border: 2px solid transparent;
   border-radius: 22px;
   background: var(--tma-card);
@@ -1090,19 +1090,24 @@ html.tma .tp-month {
   color: var(--text-dim);
 }
 
+/* Лента-обёртка: объёмная, лежит поперёк угла со скруглёнными концами,
+   торчащими за края; уголок карточки остаётся виден над ней. */
 html.tma .tp-ribbon {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 110px;
+  top: 6px;
+  right: -36px;
+  z-index: 3;
+  width: 132px;
   text-align: center;
-  transform: rotate(45deg) translate(30px, -18px);
+  transform: rotate(45deg);
+  border-radius: 14px;
   background: var(--accent);
   color: #fff;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
-  padding: 5px 0;
+  padding: 9px 0;
   letter-spacing: 0.02em;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.3);
   pointer-events: none;
 }
 html.tma .tp-ribbon-save {

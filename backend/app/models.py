@@ -56,6 +56,13 @@ HANDSHAKE_WINDOW = dt.timedelta(minutes=3)
 
 WEB_PLATFORMS = frozenset({"web", "site", "browser"})
 
+# Бот ходит в панель тем же /login, что и приложения (bot/utils/panel.py),
+# но телеграм — не устройство: в кабинете он не показывается и в лимит
+# тарифа не идёт.
+BOT_PLATFORMS = frozenset({"telegram", "bot"})
+
+NON_DEVICE_PLATFORMS = WEB_PLATFORMS | BOT_PLATFORMS
+
 IOS_SLOT_PREFIX = "ios-"
 
 IOS_MAX_KEYS = 5
@@ -86,7 +93,7 @@ def sanitize_device_id(device_id: str | None) -> str | None:
 
 
 def is_device_platform(platform: str | None) -> bool:
-    return (platform or "").strip().lower() not in WEB_PLATFORMS
+    return (platform or "").strip().lower() not in NON_DEVICE_PLATFORMS
 
 
 def normalize_email(value: str | None) -> str | None:

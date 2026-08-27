@@ -457,6 +457,26 @@ def test_browser_does_not_take_a_device_slot(client):
     assert devices[0]["is_current"] is True
 
 
+def test_telegram_bot_does_not_take_a_device_slot(client):
+    order = _order(client, "bot-slot@example.com")
+    _deliver_webhook(client, order["id"])
+    status = client.get(f"/api/v1/orders/{order['id']}/status").json()
+
+    def login(payload: dict) -> str:
+        r = client.post("/api/v1/login", json={**payload, "login": status["login"], "password": status["password"]})
+        assert r.status_code == 200, r.text
+        return r.json()["token"]
+
+    phone = login({"platform": "android", "device_id": "phone-1", "device_name": "phone-1"})
+    # Ровно так входит бот — см. bot/utils/panel.py: ни device_id, ни имени.
+    login({"platform": "telegram", "app_version": "1.0.0"})
+
+    account = client.get("/api/v1/account", headers={"Authorization": f"Bearer {phone}"})
+    assert account.status_code == 200, account.text
+    devices = account.json()["devices"]
+    assert [d["platform"] for d in devices] == ["android"]
+
+
 def test_device_limit_drops_oldest_session(client):
     order = _order(client, "devices@example.com")
     _deliver_webhook(client, order["id"])

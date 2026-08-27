@@ -147,6 +147,41 @@ export function syncTmaTheme() {
   }
 }
 
+// Системная кнопка «назад»: стек обработчиков. Верхний — активный (лист
+// поверх вкладки закрывается первым), пустой стек прячет кнопку.
+const backStack = [];
+let backBound = false;
+
+function backDispatch() {
+  const top = backStack[backStack.length - 1];
+  if (top) top();
+}
+
+export function pushBack(handler) {
+  const wa = webApp();
+  if (!wa?.BackButton) return () => {};
+  if (!backBound) {
+    try {
+      wa.BackButton.onClick(backDispatch);
+      backBound = true;
+    } catch {
+      return () => {};
+    }
+  }
+  backStack.push(handler);
+  try {
+    wa.BackButton.show();
+  } catch {}
+  return () => {
+    const i = backStack.lastIndexOf(handler);
+    if (i >= 0) backStack.splice(i, 1);
+    try {
+      if (backStack.length) wa.BackButton.show();
+      else wa.BackButton.hide();
+    } catch {}
+  };
+}
+
 let tapsBound = false;
 
 export function initTma() {

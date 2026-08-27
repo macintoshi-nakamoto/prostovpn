@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
-import { isTma, tmaHaptic, tmaUser } from "../lib/telegram.js";
+import { isTma, pushBack, tmaHaptic, tmaUser } from "../lib/telegram.js";
+import { EmailDialog } from "../components/EmailDialog.jsx";
 import { TgsEmoji } from "../components/TgsEmoji.jsx";
 import { useDismiss } from "../lib/hooks";
 import { SetupGuide } from "../components/SetupGuide.jsx";
@@ -109,21 +110,10 @@ export function Account() {
   const tgPhoto = isTma() ? tmaUser()?.photo_url : null;
 
   // Системная кнопка «назад» Telegram: с любой вкладки — на главную.
+  // Открытые листы кладут свой обработчик поверх (см. pushBack).
   useEffect(() => {
-    if (!isTma()) return undefined;
-    const back = window.Telegram?.WebApp?.BackButton;
-    if (!back) return undefined;
-    const home = () => navigate(sectionPath("account"));
-    if (tab === "account") {
-      back.hide();
-      return undefined;
-    }
-    back.onClick(home);
-    back.show();
-    return () => {
-      back.offClick(home);
-      back.hide();
-    };
+    if (!isTma() || tab === "account") return undefined;
+    return pushBack(() => navigate(sectionPath("account")));
   }, [tab, navigate]);
 
   const load = useCallback(async () => {
@@ -355,6 +345,12 @@ const AP_ICONS = {
       <path d="M5 20c1.2-3.4 3.8-5 7-5s5.8 1.6 7 5" />
     </svg>
   ),
+  mail: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2.5" />
+      <path d="M4.5 7.5l7.5 5.5 7.5-5.5" />
+    </svg>
+  ),
   lock: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="5" y="11" width="14" height="9" rx="2.5" />
@@ -465,6 +461,7 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
   const frozen = Boolean(data.freeze?.frozen);
   const file = data.tunnel_file;
   const [copied, setCopied] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   // Иерархия карты: статус — точкой и словом, дни — крупной цифрой,
   // тариф — чипом, точная дата — мелко. Никаких предложений из данных.
@@ -561,6 +558,12 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
 
       <div className="ap-rows">
         <ApRow icon="person" title={t("account.fieldLogin")} value={data.login} onClick={copyId} />
+        <ApRow
+          icon="mail"
+          title={t("account.fieldEmail")}
+          value={data.email || t("account.emailEmpty")}
+          onClick={() => setEmailOpen(true)}
+        />
         <ApRow icon="lock" title={t("account.changePassword")} onClick={onPassword} />
         <ApRow
           icon="file"
@@ -570,11 +573,12 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         />
       </div>
 
-      <div className="ac-card">
-        <div className="ac-kvs">
-          <EmailRow email={data.email} onChanged={onChanged} />
-        </div>
-      </div>
+      <EmailDialog
+        open={emailOpen}
+        email={data.email}
+        onClose={() => setEmailOpen(false)}
+        onChanged={onChanged}
+      />
     </div>
   );
 }

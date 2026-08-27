@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
-import { tmaHaptic } from "../lib/telegram.js";
+import { isTma, tmaHaptic } from "../lib/telegram.js";
 import { useT } from "../lib/i18n/index.jsx";
+import { SheetShell } from "./SheetShell.jsx";
 import "./password-dialog.css";
 
 export function PasswordDialog({ open, onClose, onDone }) {
@@ -21,17 +22,6 @@ export function PasswordDialog({ open, onClose, onDone }) {
       setBusy(false);
     }
   }, [open]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  if (!open) return null;
 
   const submit = async (e) => {
     e.preventDefault();
@@ -57,9 +47,7 @@ export function PasswordDialog({ open, onClose, onDone }) {
   };
 
   return (
-    <div className="pd-overlay" onMouseDown={onClose}>
-      <form className="pd" onMouseDown={(e) => e.stopPropagation()} onSubmit={submit}>
-        <span className="pd-grip" aria-hidden="true" />
+    <SheetShell open={open} onClose={onClose} onSubmit={submit}>
         <h2>{t("password.title")}</h2>
         <p className="pd-sub">{t("password.sub")}</p>
 
@@ -70,7 +58,7 @@ export function PasswordDialog({ open, onClose, onDone }) {
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
             autoComplete="current-password"
-            autoFocus
+            autoFocus={!isTma()}
           />
         </label>
         <label className="pd-field">
@@ -103,7 +91,6 @@ export function PasswordDialog({ open, onClose, onDone }) {
             {busy ? t("password.busy") : t("password.submit")}
           </button>
         </div>
-      </form>
-    </div>
+    </SheetShell>
   );
 }

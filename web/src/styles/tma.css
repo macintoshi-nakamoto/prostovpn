@@ -813,7 +813,19 @@ html.tma .ap-days-d {
 html.tma .pd-overlay {
   align-items: flex-end;
   padding: 0;
-  background: rgba(0, 0, 0, 0.5);
+  animation: none;
+  background: rgba(0, 0, 0, 0);
+  -webkit-backdrop-filter: blur(0px);
+  backdrop-filter: blur(0px);
+  transition:
+    background 0.42s ease,
+    -webkit-backdrop-filter 0.42s ease,
+    backdrop-filter 0.42s ease;
+}
+html.tma .pd-overlay.is-open {
+  background: rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 html.tma .pd {
   max-width: none;
@@ -821,17 +833,21 @@ html.tma .pd {
   padding: 12px 18px calc(20px + env(safe-area-inset-bottom, 0px));
   gap: 14px;
   background: var(--tma-card);
-  animation: tma-sheet-up 0.38s var(--ease-spring);
+  animation: none;
+  transform: translateY(105%);
+  transition: transform 0.46s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
-@keyframes tma-sheet-up {
-  from {
-    transform: translateY(48px);
-    opacity: 0;
-  }
+html.tma .pd-overlay.is-open .pd {
+  transform: translateY(0);
 }
 @media (prefers-reduced-motion: reduce) {
+  html.tma .pd,
+  html.tma .pd-overlay {
+    transition: none;
+  }
   html.tma .pd {
-    animation: none;
+    transform: none;
   }
 }
 html.tma .pd-grip {

@@ -1547,3 +1547,137 @@ html.tma .rf-chip {
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* ==========================================================================
+   Страница «Установка»
+   ========================================================================== */
+
+html.tma .st-h {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 4px 4px -6px;
+}
+
+/* Логин для входа — плашка с копией */
+html.tma .st-login {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  background: var(--tma-inset);
+  border-radius: 16px;
+  padding: 12px 14px;
+  color: var(--ink);
+  transition: transform 0.16s var(--ease-out, ease);
+}
+html.tma .st-login:active {
+  transform: scale(0.98);
+  transition-duration: 0.06s;
+}
+html.tma .st-login b {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* Сессии */
+html.tma .st-dev {
+  cursor: default;
+}
+html.tma .st-dev-off {
+  cursor: pointer;
+}
+html.tma .st-dev-ic {
+  background: var(--tma-inset);
+  color: var(--text-dim);
+}
+html.tma .st-live {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34c759;
+  box-shadow: 0 0 6px rgba(52, 199, 89, 0.6);
+  margin-left: 7px;
+  vertical-align: 2px;
+}
+html.tma .st-cur {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--tma-inset);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+html.tma .st-unlink {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+/* Лист ключа iPhone */
+html.tma .st-qr {
+  background: #fff;
+  border-radius: 20px;
+  padding: 14px;
+  width: min(240px, 70vw);
+  margin: 4px auto;
+}
+html.tma .st-qr svg,
+html.tma .st-qr canvas,
+html.tma .st-qr img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+html.tma .st-open {
+  background: var(--tma-inset);
+  color: var(--ink);
+  box-shadow: none;
+}
+html.tma .st-key-acts {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+}
+html.tma .st-danger {
+  color: var(--danger);
+}
+html.tma .st-servers {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+html.tma .st-server {
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: var(--tma-inset);
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+html.tma .st-server.sel {
+  background: rgba(250, 76, 22, 0.15);
+  color: var(--accent);
+}
+html.tma .st-flag {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+}
+html.tma .st-flag img,
+html.tma .st-flag svg {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+}

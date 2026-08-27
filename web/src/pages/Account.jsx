@@ -238,40 +238,12 @@ export function Account() {
             onApply={apply}
           />
         )}
-        {data && tab === "setup" && (
-          <>
-            {isTma() && (
-              <div className="ap ap-setup">
-                <div className="ac-card">
-                  <div className="ac-card-head">
-                    <h2>{t("account.devicesTitle")}</h2>
-                  </div>
-                  {data.devices.length === 0 ? (
-                    <p className="ac-empty">{t("account.devicesEmpty")}</p>
-                  ) : (
-                    <div className="ac-devices">
-                      {data.devices.map((d) => (
-                        <DeviceRow
-                          key={`${d.kind || "app"}-${d.id}`}
-                          device={d}
-                          onChanged={load}
-                          onApply={apply}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <IosCard
-                  ios={data.ios}
-                  active={data.active}
-                  onApply={apply}
-                  onManage={() => navigate(sectionPath("plan"))}
-                />
-              </div>
-            )}
+        {data && tab === "setup" &&
+          (isTma() ? (
+            <TmaSetup data={data} onChanged={load} onApply={apply} />
+          ) : (
             <SetupGuide login={data.login} />
-          </>
-        )}
+          ))}
 
         {data && tab === "friends" && (isTma() ? <TmaFriends /> : <Referrals />)}
       </main>
@@ -346,6 +318,37 @@ const AP_ICONS = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3.5" y="5.5" width="17" height="13" rx="2.5" />
       <path d="M4.5 7.5l7.5 5.5 7.5-5.5" />
+    </svg>
+  ),
+  windows: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 5.5l7-1v7H4v-6zM13 4.2l7-1v8.3h-7V4.2zM4 13.5h7v7l-7-1v-6zM13 13.5h7v8.3l-7-1v-7.3z" />
+    </svg>
+  ),
+  android: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 15a7 7 0 0 1 14 0v3H5v-3z" />
+      <path d="M7 8l-1.6-2.6M17 8l1.6-2.6" />
+      <circle cx="9.4" cy="13" r="0.6" fill="currentColor" />
+      <circle cx="14.6" cy="13" r="0.6" fill="currentColor" />
+    </svg>
+  ),
+  laptop: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="5" y="5" width="14" height="10" rx="1.6" />
+      <path d="M3 19h18" />
+    </svg>
+  ),
+  tv: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3.5" y="5" width="17" height="11" rx="2" />
+      <path d="M9 20h6" />
+    </svg>
+  ),
+  phone: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="7" y="3" width="10" height="18" rx="2.5" />
+      <path d="M11 17.5h2" />
     </svg>
   ),
   lock: (
@@ -447,6 +450,403 @@ function TmaFreeze({ freeze, onApply }) {
           {busy ? "…" : frozen ? t("account.tmaResumeBtn") : t("account.tmaFreezeBtn")}
         </button>
       )}
+    </div>
+  );
+}
+
+const TMA_PLATFORMS = {
+  windows: { icon: "windows", title: "Windows" },
+  android: { icon: "android", title: "Android" },
+  macos: { icon: "laptop", title: "macOS" },
+  linux: { icon: "laptop", title: "Linux" },
+  ios: { icon: "phone", title: "iPhone" },
+};
+
+function tmaConfirm(question, onYes) {
+  const wa = window.Telegram?.WebApp;
+  try {
+    wa.showConfirm(question, (ok) => {
+      if (ok) onYes();
+    });
+  } catch {
+    if (window.confirm(question)) onYes();
+  }
+}
+
+// Лист одного ключа iPhone: QR крупно, копия, открыть в AmneziaVPN,
+// отключение и удаление — с системным подтверждением.
+function TmaIosKeySheet({ open, group, onClose, onApply }) {
+  const { t } = useI18n();
+  const [index, setIndex] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setIndex(0);
+      setBusy(false);
+      setCopied(false);
+      setError("");
+    }
+  }, [open, group && group.slot]);
+
+  if (!group) return null;
+  const link = group.links[Math.min(index, group.links.length - 1)];
+
+  const run = async (call, haptic = "medium") => {
+    setBusy(true);
+    setError("");
+    try {
+      const fresh = await call();
+      tmaHaptic(haptic);
+      onApply(fresh);
+      onClose();
+    } catch (err) {
+      setError(err?.message || t("account.tmaFail"));
+      setBusy(false);
+    }
+  };
+
+  const copyKey = async () => {
+    try {
+      await navigator.clipboard.writeText(link.vpn_url);
+      tmaHaptic("light");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {}
+  };
+
+  return (
+    <SheetShell open={open} onClose={onClose}>
+      <h2>
+        {t("account.tmaKeyN", { n: group.slot })}
+        {link.country ? ` · ${link.country}` : ""}
+      </h2>
+      <p className="pd-sub">{t("account.tmaKeySub")}</p>
+
+      {group.links.length > 1 && (
+        <div className="st-servers">
+          {group.links.map((one, i) => (
+            <button
+              key={one.server_id}
+              type="button"
+              className={`st-server${i === index ? " sel" : ""}`}
+              onClick={() => setIndex(i)}
+            >
+              {one.country || one.server}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="st-qr">
+        <QrCode value={link.qr_payload || link.vpn_url} />
+      </div>
+
+      <button type="button" className="ap-cta" onClick={copyKey}>
+        {copied ? t("account.tmaCopied") : t("account.tmaKeyCopy")}
+      </button>
+      <a className="ap-cta tps-cta st-open" href={link.vpn_url}>
+        {t("account.tmaKeyOpen")}
+      </a>
+
+      {error && <div className="pd-error">{error}</div>}
+
+      <div className="st-key-acts">
+        <button
+          type="button"
+          className="tps-alt"
+          disabled={busy}
+          onClick={() =>
+            tmaConfirm(t("account.tmaKeyOffAsk"), () =>
+              run(() => api.disconnectIosKey(group.slot)),
+            )
+          }
+        >
+          {t("account.tmaKeyOff")}
+        </button>
+        <button
+          type="button"
+          className="tps-alt st-danger"
+          disabled={busy}
+          onClick={() =>
+            tmaConfirm(t("account.tmaKeyDelAsk"), () =>
+              run(() => api.deleteIosKey(group.slot)),
+            )
+          }
+        >
+          {t("account.tmaKeyDel")}
+        </button>
+      </div>
+    </SheetShell>
+  );
+}
+
+// Лист выбора сервера для нового ключа iPhone.
+function TmaAddKeySheet({ open, servers, exists, onClose, onApply }) {
+  const { t } = useI18n();
+  const [picked, setPicked] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setPicked(servers[0]?.id ?? null);
+      setBusy(false);
+      setError("");
+    }
+  }, [open, servers]);
+
+  const create = async () => {
+    if (busy || picked == null) return;
+    setBusy(true);
+    setError("");
+    try {
+      const fresh = exists ? await api.addIosKey(picked) : await api.enableIos(picked);
+      tmaHaptic("medium");
+      onApply(fresh);
+      onClose();
+    } catch (err) {
+      setError(
+        err instanceof ApiError && err.code === "no_subscription"
+          ? t("account.iosNoSubscription")
+          : err?.message || t("account.tmaFail"),
+      );
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SheetShell open={open} onClose={onClose}>
+      <h2>{t("account.tmaKeyAddT")}</h2>
+      <p className="pd-sub">{t("account.tmaKeyAddS")}</p>
+      <div className="tps-methods">
+        {servers.map((server) => (
+          <button
+            key={server.id}
+            type="button"
+            className={`tps-method${picked === server.id ? " sel" : ""}`}
+            onClick={() => setPicked(server.id)}
+          >
+            <span className="st-flag">
+              <Flag code={server.country_code} />
+            </span>
+            <span className="ap-row-body">
+              <span className="ap-row-t">{server.country || server.name}</span>
+              {server.city && <span className="ap-row-s">{server.city}</span>}
+            </span>
+            {picked === server.id && <span className="tps-check">✓</span>}
+          </button>
+        ))}
+      </div>
+      {error && <div className="pd-error">{error}</div>}
+      <button type="button" className="ap-cta" disabled={busy} onClick={create}>
+        {busy ? "…" : t("account.tmaKeyAddCta")}
+      </button>
+    </SheetShell>
+  );
+}
+
+// «Установка»: скачал приложение → вошёл логином. iPhone — ключом.
+// Ниже — живые сессии и файл обхода. Всё строками, всё тапается.
+function TmaSetup({ data, onChanged, onApply }) {
+  const { t, f } = useI18n();
+  const [downloads, setDownloads] = useState(null);
+  const [keyOpen, setKeyOpen] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [copiedLogin, setCopiedLogin] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .downloads()
+      .then((list) => alive && setDownloads(Array.isArray(list) ? list : []))
+      .catch(() => alive && setDownloads([]));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const ios = data.ios || {};
+  const groups = (() => {
+    const bySlot = new Map();
+    for (const key of ios.keys || []) {
+      if (!bySlot.has(key.slot)) bySlot.set(key.slot, { slot: key.slot, links: [] });
+      bySlot.get(key.slot).links.push(key);
+    }
+    return [...bySlot.values()];
+  })();
+  const offGroups = (() => {
+    const seen = new Set();
+    const rows = [];
+    for (const key of ios.disconnected_keys || []) {
+      if (seen.has(key.slot)) continue;
+      seen.add(key.slot);
+      rows.push(key);
+    }
+    return rows;
+  })();
+
+  const copyLogin = async () => {
+    try {
+      await navigator.clipboard.writeText(data.login);
+      tmaHaptic("light");
+      setCopiedLogin(true);
+      setTimeout(() => setCopiedLogin(false), 1400);
+    } catch {}
+  };
+
+  const unlink = (device) =>
+    tmaConfirm(t("account.tmaUnlinkAsk", { name: device.name || device.platform || "" }), async () => {
+      try {
+        await api.unlinkDevice(device.id);
+        tmaHaptic("medium");
+        onChanged();
+      } catch {}
+    });
+
+  const file = data.tunnel_file;
+  const apps = (downloads || []).filter((row) => TMA_PLATFORMS[row.platform]);
+
+  return (
+    <div className="ap">
+      <div className="ap-card">
+        <div className="ap-head">
+          <span className="ap-ic ap-ic-emoji">
+            <TgsEmoji name="nerd" size={62} />
+          </span>
+          <span className="ap-head-body">
+            <span className="ap-title">{t("account.tmaSetupTitle")}</span>
+            <span className="ap-sub">{t("account.tmaSetupSub")}</span>
+          </span>
+        </div>
+        <button type="button" className="st-login" onClick={copyLogin}>
+          <span className="ap-row-s">{t("account.tmaSetupLogin")}</span>
+          <b>{copiedLogin ? t("account.tmaCopied") : data.login}</b>
+        </button>
+      </div>
+
+      <h3 className="st-h">{t("account.tmaAppsH")}</h3>
+      <div className="ap-rows">
+        {downloads === null ? (
+          <p className="scr-empty">{t("account.plansLoading")}</p>
+        ) : (
+          apps.map((row) => (
+            <ApRow
+              key={row.platform}
+              icon={TMA_PLATFORMS[row.platform].icon}
+              title={TMA_PLATFORMS[row.platform].title}
+              sub={t("account.tmaAppVer", { v: row.version })}
+              href={row.url}
+              download
+            />
+          ))
+        )}
+      </div>
+
+      <h3 className="st-h">{t("account.tmaIosH")}</h3>
+      <div className="ap-rows">
+        {groups.map((group) => {
+          const live = group.links.some((one) => one.is_connected);
+          const where = [...new Set(group.links.map((one) => one.country || one.server))].join(" · ");
+          return (
+            <ApRow
+              key={group.slot}
+              icon="key"
+              title={t("account.tmaKeyN", { n: group.slot })}
+              sub={`${where}${live ? " · " + t("account.deviceConnected") : ""}`}
+              onClick={() => setKeyOpen(group)}
+            />
+          );
+        })}
+        {offGroups.map((key) => (
+          <ApRow
+            key={"off-" + key.slot}
+            icon="key"
+            title={t("account.tmaKeyN", { n: key.slot })}
+            sub={t("account.tmaKeyOffSub")}
+            disabled={false}
+            onClick={() =>
+              tmaConfirm(t("account.tmaKeyOnAsk"), async () => {
+                try {
+                  onApply(await api.enableIosKey(key.slot));
+                  tmaHaptic("medium");
+                } catch {}
+              })
+            }
+          />
+        ))}
+        {!ios.blocked && (ios.available ? ios.can_add : true) && (
+          <ApRow
+            icon="plug"
+            title={groups.length ? t("account.tmaKeyMore") : t("account.tmaKeyGet")}
+            sub={t("account.tmaKeyWorks")}
+            onClick={() => setAddOpen(true)}
+          />
+        )}
+      </div>
+
+      <h3 className="st-h">{t("account.tmaSessionsH")}</h3>
+      <div className="ap-rows">
+        {data.devices.length === 0 ? (
+          <p className="scr-empty">{t("account.devicesEmpty")}</p>
+        ) : (
+          data.devices.map((device) => (
+            <div
+              className={`ap-row rf-friend st-dev${device.is_current ? "" : " st-dev-off"}`}
+              key={`${device.kind || "app"}-${device.id}`}
+              onClick={device.is_current ? undefined : () => unlink(device)}
+              role={device.is_current ? undefined : "button"}
+            >
+              <span className="ap-row-ic st-dev-ic">
+                {AP_ICONS[TMA_PLATFORMS[device.platform]?.icon || "plug"]}
+              </span>
+              <span className="ap-row-body">
+                <span className="ap-row-t">
+                  {device.name || TMA_PLATFORMS[device.platform]?.title || device.platform}
+                  {device.is_connected && <span className="st-live" aria-hidden="true" />}
+                </span>
+                <span className="ap-row-s">
+                  {device.is_current
+                    ? t("account.thisDevice")
+                    : f.ago(device.last_seen_at)}
+                </span>
+              </span>
+              {device.is_current ? (
+                <span className="st-cur">{t("account.tmaYou")}</span>
+              ) : (
+                <span className="st-unlink">{t("account.tmaUnlink")}</span>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="ap-rows">
+        <ApRow
+          icon="file"
+          title={t("account.bypassTitle")}
+          sub={t("account.tmaBypassSub")}
+          href={file?.available ? file.url : undefined}
+          download={file?.available ? file.filename : undefined}
+          disabled={!file?.available}
+        />
+      </div>
+
+      <TmaIosKeySheet
+        open={Boolean(keyOpen)}
+        group={keyOpen}
+        onClose={() => setKeyOpen(null)}
+        onApply={onApply}
+      />
+      <TmaAddKeySheet
+        open={addOpen}
+        servers={ios.servers || []}
+        exists={Boolean(ios.available)}
+        onClose={() => setAddOpen(false)}
+        onApply={onApply}
+      />
     </div>
   );
 }

@@ -1395,3 +1395,55 @@ html.tma .ac-rec-line {
   border-radius: 18px;
   padding: 14px 16px;
 }
+
+/* Страница «Друзья» */
+html.tma .rf-link-box {
+  background: var(--tma-inset);
+  border-radius: 16px;
+  padding: 13px 14px;
+  overflow: hidden;
+}
+html.tma .rf-link-box code {
+  display: block;
+  font-size: 13.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html.tma .rf-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+html.tma .rf-tile {
+  background: var(--tma-card);
+  border-radius: 22px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+html.tma .rf-tile b {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+html.tma .rf-tile span {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+html.tma .rf-friend {
+  cursor: default;
+}
+html.tma .rf-fic {
+  background: var(--tma-inset);
+  color: var(--text-dim);
+  font-weight: 700;
+  font-size: 15px;
+}
+html.tma .rf-wait {
+  color: var(--text-faint);
+  font-weight: 500;
+  font-size: 13px;
+}

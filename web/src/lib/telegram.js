@@ -72,6 +72,28 @@ export function tmaUser() {
   }
 }
 
+// Параметр запуска мини-аппа (t.me/бот?startapp=КОД) — им приходят
+// реферальные коды. Хеш ловим прямо при загрузке модуля: роутер срезает
+// его первым же редиректом, эффекты React уже опаздывают. Значение
+// переживает перезагрузку в sessionStorage.
+const START_KEY = "prosto_tma_start";
+try {
+  const match = window.location.hash.match(/tgWebAppStartParam=([^&]+)/);
+  if (match) sessionStorage.setItem(START_KEY, decodeURIComponent(match[1]));
+} catch {
+  // приватный режим — обойдёмся WebApp-полем
+}
+
+export function tmaStartParam() {
+  const wa = webApp();
+  if (wa?.initDataUnsafe?.start_param) return wa.initDataUnsafe.start_param;
+  try {
+    return sessionStorage.getItem(START_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+
 // Отклик как в нативном приложении. Вне Telegram — тишина.
 export function tmaHaptic(kind = "light") {
   try {

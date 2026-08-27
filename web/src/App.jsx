@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { tmaSignedOut, useSession } from "./lib/session.jsx";
-import { initTma, isTma } from "./lib/telegram.js";
+import { initTma, isTma, tmaStartParam } from "./lib/telegram.js";
 import { rememberRef } from "./lib/referral.js";
 import { Landing } from "./pages/Landing.jsx";
 import { Login } from "./pages/Login.jsx";
@@ -49,6 +49,10 @@ function TmaGate({ children }) {
 
   useEffect(() => {
     initTma();
+    // Реферальный код из ссылки запуска — в ту же память, что и ?ref= на
+    // сайте: регистрация подхватит его сама.
+    const param = tmaStartParam();
+    if (param) rememberRef("?ref=" + encodeURIComponent(param));
   }, []);
 
   useEffect(() => {

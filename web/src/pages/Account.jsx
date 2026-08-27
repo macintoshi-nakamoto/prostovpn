@@ -273,7 +273,7 @@ export function Account() {
           </>
         )}
 
-        {data && tab === "friends" && <Referrals />}
+        {data && tab === "friends" && (isTma() ? <TmaFriends /> : <Referrals />)}
       </main>
 
       <PasswordDialog
@@ -583,6 +583,125 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         onClose={() => setEmailOpen(false)}
         onChanged={onChanged}
       />
+    </div>
+  );
+}
+
+// «Друзья» мини-аппа: ссылка запускает само приложение (startapp=код),
+// делиться — нативным телеграм-шэром.
+function TmaFriends() {
+  const { t, f } = useI18n();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .referrals()
+      .then((body) => alive && setData(body))
+      .catch((err) =>
+        alive && setError(err instanceof ApiError ? err.message : t("account.refFailed")),
+      );
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (error) return <p className="scr-empty">{error}</p>;
+  if (!data) return <p className="scr-empty">{t("account.refLoading")}</p>;
+
+  const code = (() => {
+    try {
+      return new URL(data.site_url).searchParams.get("ref") || "";
+    } catch {
+      return "";
+    }
+  })();
+  const appLink = code && data.bot_url ? `${data.bot_url}?startapp=${code}` : data.site_url;
+
+  const share = () => {
+    const url =
+      "https://t.me/share/url?url=" +
+      encodeURIComponent(appLink) +
+      "&text=" +
+      encodeURIComponent(t("account.refShareText"));
+    try {
+      const wa = window.Telegram?.WebApp;
+      if (wa?.openTelegramLink) {
+        wa.openTelegramLink(url);
+        return;
+      }
+    } catch {}
+    window.open(url, "_blank");
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(appLink);
+      tmaHaptic("light");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {}
+  };
+
+  return (
+    <div className="ap">
+      <div className="ap-card">
+        <div className="ap-head">
+          <span className="ap-ic ap-ic-emoji">
+            <TgsEmoji name="popcorn" size={62} />
+          </span>
+          <span className="ap-head-body">
+            <span className="ap-title">{t("account.tmaRefTitle2")}</span>
+            <span className="ap-sub">
+              {t("account.refTerms", { join: data.join_days, purchase: data.purchase_days })}
+            </span>
+          </span>
+        </div>
+        <div className="rf-link-box">
+          <code>{appLink}</code>
+        </div>
+        <button type="button" className="ap-cta" onClick={share}>
+          {t("account.tmaRefShare")}
+        </button>
+        <button type="button" className="tps-alt" onClick={copy}>
+          {copied ? t("account.tmaCopied") : t("account.refCopy")}
+        </button>
+      </div>
+
+      <div className="rf-tiles">
+        <div className="rf-tile">
+          <b>{data.invited}</b>
+          <span>{t("account.refStatInvited")}</span>
+        </div>
+        <div className="rf-tile">
+          <b>{f.days(data.days_total)}</b>
+          <span>{t("account.tmaRefDays")}</span>
+        </div>
+      </div>
+
+      {data.friends.length > 0 && (
+        <div className="ap-rows">
+          {data.friends.map((friend, index) => (
+            <div className="ap-row rf-friend" key={friend.joined_at + ":" + index}>
+              <span className="ap-row-ic rf-fic">{data.friends.length - index}</span>
+              <span className="ap-row-body">
+                <span className="ap-row-t">
+                  {t("account.refFriend", { n: data.friends.length - index })}
+                </span>
+                <span className="ap-row-s">
+                  {t("account.refCame", { date: f.shortDate(friend.joined_at) })}
+                  {friend.paid ? " · " + t("account.refPaid") : ""}
+                </span>
+              </span>
+              <b className={friend.pending ? "rf-wait" : "scr-in"}>
+                {friend.pending ? t("account.refWaiting") : "+" + f.days(friend.days)}
+              </b>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

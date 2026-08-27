@@ -460,7 +460,7 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
   const { t, f } = useI18n();
   const frozen = Boolean(data.freeze?.frozen);
   const file = data.tunnel_file;
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(null);
   const [emailOpen, setEmailOpen] = useState(false);
 
   // Иерархия карты: статус — точкой и словом, дни — крупной цифрой,
@@ -471,11 +471,13 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
       ? t("account.tmaStatusOn")
       : t("account.tmaStatusOff");
 
-  const copyId = async () => {
+  // Копирование по тапу: «Скопировано» загорается на той строке, которую
+  // нажали, и само гаснет.
+  const copy = async (key, text) => {
     try {
-      await navigator.clipboard.writeText(data.public_id);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      setTimeout(() => setCopied((cur) => (cur === key ? null : cur)), 1400);
     } catch {}
   };
 
@@ -557,7 +559,12 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
       </div>
 
       <div className="ap-rows">
-        <ApRow icon="person" title={t("account.fieldLogin")} value={data.login} onClick={copyId} />
+        <ApRow
+          icon="person"
+          title={t("account.fieldLogin")}
+          value={copied === "login" ? t("account.tmaCopied") : data.login}
+          onClick={() => copy("login", data.login)}
+        />
         <ApRow
           icon="mail"
           title={t("account.fieldEmail")}
@@ -568,8 +575,8 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         <ApRow
           icon="file"
           title={t("account.statPublicId")}
-          value={copied ? t("account.tmaCopied") : data.public_id}
-          onClick={copyId}
+          value={copied === "id" ? t("account.tmaCopied") : data.public_id}
+          onClick={() => copy("id", data.public_id)}
         />
       </div>
 

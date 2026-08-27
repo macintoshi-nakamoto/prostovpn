@@ -38,6 +38,7 @@ export function Flag({ code, title }) {
     <svg
       className="sheet-flag"
       viewBox="0 0 30 21"
+      preserveAspectRatio="xMidYMid slice"
       role="img"
       aria-label={title || ""}
       focusable="false"

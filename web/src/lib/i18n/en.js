@@ -560,6 +560,25 @@ export const en = {
     tmaGuideStoreHow: "Workaround",
     tmaAppRowSub: "Version {v} — guide & download",
     tmaGuide: {
+      bypass: [
+        [
+          "Download the bypass file",
+          "Use the button below — the browser opens and the file lands in your downloads. Inside is a list of Russian addresses that should skip the VPN.",
+        ],
+        [
+          "Open “Split VPN tunneling”",
+          "In AmneziaVPN the section lives in the connection settings.",
+        ],
+        [
+          "Pick the list mode",
+          "“Addresses from the list must not be opened via VPN” — banks and local services go direct, everything else stays in the tunnel.",
+        ],
+        ["Open import", "Additional settings → “Import”."],
+        [
+          "Replace the site list",
+          "Pick the downloaded file and tap “Replace the site list”. Done — familiar services work as usual.",
+        ],
+      ],
       store: [
         [
           "Why the app is hidden",

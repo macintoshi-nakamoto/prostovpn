@@ -2031,3 +2031,19 @@ html.tma .st-note-btn {
   font-size: inherit;
   cursor: pointer;
 }
+
+/* Скрин приложения внутри шага гайда */
+html.tma .gd2-shot {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  margin: 8px auto 2px;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--tma-sep);
+}
+html.tma .gd2-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}

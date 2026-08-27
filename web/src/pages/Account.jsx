@@ -664,6 +664,7 @@ const TMA_GUIDE_EMOJI = {
   macos: ["backpack", "coffee", "goldkey", "fire", "hundred"],
   ios: ["star", "goldkey", "unlockem", "hundred"],
   store: ["globe", "goldkey", "star", "backpack", "hundred"],
+  bypass: ["backpack", "globe", "thumbup", "nerd", "hundred"],
 };
 
 const TMA_GUIDE_HERO = {
@@ -672,11 +673,17 @@ const TMA_GUIDE_HERO = {
   macos: "coffee",
   ios: "wink",
   store: "shush",
+  bypass: "unlockem",
+};
+
+// Скрины с лендинга к шагам гайда: индекс шага -> файл в /assets/guide/.
+const TMA_GUIDE_SHOTS = {
+  bypass: { 1: "guide-split-1", 2: "guide-split-2", 3: "guide-split-3", 4: "guide-split-4" },
 };
 
 // Инструкция-«путь»: линия квеста через живые эмодзи-узлы, отмечаемые
 // шаги с прогрессом и празднование в конце. Кнопки — в нужных шагах.
-function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
+function TmaGuideScreen({ open, platform, link, login, downloads, file, onClose }) {
   const { t, raw } = useI18n();
   const [copied, setCopied] = useState("");
   const [done, setDone] = useState([]);
@@ -701,7 +708,11 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
   const emojis = TMA_GUIDE_EMOJI[platform] || [];
   const release = (downloads || []).find((row) => row.platform === platform);
   const title =
-    platform === "store" ? t("account.tmaStoreTitle") : TMA_PLATFORMS[platform]?.title || platform;
+    platform === "store"
+      ? t("account.tmaStoreTitle")
+      : platform === "bypass"
+        ? t("account.bypassTitle")
+        : TMA_PLATFORMS[platform]?.title || platform;
   const total = steps.length;
   const complete = total > 0 && done.length >= total;
 
@@ -775,6 +786,37 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
                   </div>
                   <span className="gd2-s">{text}</span>
 
+                  {TMA_GUIDE_SHOTS[platform]?.[index] && (
+                    <Picture
+                      className="gd2-shot"
+                      src={`/assets/guide/${TMA_GUIDE_SHOTS[platform][index]}.jpg`}
+                      alt={head}
+                    />
+                  )}
+
+                  {platform === "bypass" && index === 0 && file?.available && (
+                    <>
+                      <button
+                        type="button"
+                        className="ap-cta st-g-cta"
+                        onClick={() => {
+                          tmaHaptic("light");
+                          tmaOpenLink(file.url);
+                        }}
+                      >
+                        {t("account.tmaBypassDl")}
+                      </button>
+                      <button
+                        type="button"
+                        className="tps-alt st-g-alt"
+                        onClick={() => copy("bypass", file.url)}
+                      >
+                        {copied === "bypass"
+                          ? t("account.tmaCopied")
+                          : t("account.tmaGuideCopyLink")}
+                      </button>
+                    </>
+                  )}
                   {index === 0 && platform !== "ios" && release && (
                     <>
                       <a className="ap-cta st-g-cta" href={release.url} download>
@@ -849,7 +891,7 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
                       </button>
                     </>
                   )}
-                  {platform !== "ios" && index === 2 && (
+                  {platform !== "ios" && platform !== "bypass" && index === 2 && (
                     <button
                       type="button"
                       className="st-login st-g-login"
@@ -897,7 +939,7 @@ function TmaGuideScreen({ open, platform, link, login, downloads, onClose }) {
 
 // Файл обхода — лист: скачивание через внешний браузер (в вебвью файл
 // открылся бы просмотром) и копия ссылки.
-function TmaBypassSheet({ open, file, onClose }) {
+function TmaBypassSheet({ open, file, onGuide, onClose }) {
   const { t, f } = useI18n();
   const [copied, setCopied] = useState(false);
 
@@ -920,6 +962,9 @@ function TmaBypassSheet({ open, file, onClose }) {
     <SheetShell open={open} onClose={onClose}>
       <h2>{t("account.bypassTitle")}</h2>
       <p className="pd-sub">{t("account.bypassText")}</p>
+      <button type="button" className="rf-how st-guide-link" onClick={onGuide}>
+        {t("account.tmaGuideBtn")} ›
+      </button>
       <span className="st-note">
         {file.updated_at
           ? t("account.bypassUpdated", { date: f.longDate(file.updated_at) }) +
@@ -1129,7 +1174,15 @@ function TmaSetup({ data, onChanged, onApply }) {
         />
       </div>
 
-      <TmaBypassSheet open={bypassOpen} file={file} onClose={() => setBypassOpen(false)} />
+      <TmaBypassSheet
+        open={bypassOpen}
+        file={file}
+        onGuide={() => {
+          setBypassOpen(false);
+          setGuide({ platform: "bypass" });
+        }}
+        onClose={() => setBypassOpen(false)}
+      />
 
       <TmaIosKeySheet
         open={Boolean(keyOpen)}
@@ -1147,6 +1200,7 @@ function TmaSetup({ data, onChanged, onApply }) {
         link={guide?.link}
         login={data.login}
         downloads={downloads}
+        file={file}
         onClose={() => setGuide(null)}
       />
       <TmaAddKeySheet
@@ -1169,6 +1223,7 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
   const [copied, setCopied] = useState(null);
   const [emailOpen, setEmailOpen] = useState(false);
   const [bypassOpen, setBypassOpen] = useState(false);
+  const [bypassGuide, setBypassGuide] = useState(false);
 
   // Иерархия карты: статус — точкой и словом, дни — крупной цифрой,
   // тариф — чипом, точная дата — мелко. Никаких предложений из данных.
@@ -1292,7 +1347,21 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         onClose={() => setEmailOpen(false)}
         onChanged={onChanged}
       />
-      <TmaBypassSheet open={bypassOpen} file={file} onClose={() => setBypassOpen(false)} />
+      <TmaBypassSheet
+        open={bypassOpen}
+        file={file}
+        onGuide={() => {
+          setBypassOpen(false);
+          setBypassGuide(true);
+        }}
+        onClose={() => setBypassOpen(false)}
+      />
+      <TmaGuideScreen
+        open={bypassGuide}
+        platform="bypass"
+        file={file}
+        onClose={() => setBypassGuide(false)}
+      />
     </div>
   );
 }

@@ -102,7 +102,7 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         # Дата — «если разморозить сейчас»: у замороженного в базе лежит
         # срок, который уже прошёл, и в списке он выглядел бы как долг.
         expires_at=user.access_ends_if_resumed(moment),
-        days_left=user.access_days_left(moment),
+        days_left=user.access_days_left_display(moment),
         is_frozen=user.is_frozen,
         frozen_at=user.frozen_at,
         frozen_days=user.frozen_for(moment).days,

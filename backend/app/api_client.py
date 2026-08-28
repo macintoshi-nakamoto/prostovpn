@@ -36,6 +36,10 @@ def _error_code_header(exc: services.PanelError) -> dict[str, str] | None:
 
 
 class LoginRequest(BaseModel):
+
+    # Вход из мини-приложения: подпись Telegram привязывает учётку,
+    # чтобы следующий запуск открывался сразу.
+    init_data: str | None = Field(default=None, max_length=8192)
     login: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=256)
     platform: str | None = Field(default=None, max_length=32)
@@ -76,6 +80,10 @@ class AccountOut(BaseModel):
     public_id: str
     login: str
     name: str | None = None
+    # Заполнен ровно один раз: в ответе на регистрацию через Telegram, где
+    # пароль придумали за человека. Витрина обязана показать его сразу —
+    # второй раз узнать пароль будет неоткуда.
+    password: str | None = None
 
 
 class LoginResponse(BaseModel):
@@ -135,13 +143,18 @@ def _subscription_out(user: User) -> SubscriptionOut:
             renew_url=_renew_url(),
         )
 
-    days_left = max(0, (sub.expires_at - services.utcnow()).days)
+    # Считаем по всей цепочке подписок, а не по текущей: после пробных
+    # двух дней в очереди могут стоять подаренные две недели, и «остался
+    # 1 день» с кнопкой продления — неправда. Дата — «как если бы
+    # разморозили сейчас»: у замороженного в базе лежит уже прошедший
+    # срок, показывать его нельзя.
+    days_left = user.access_days_left_display() or 0
     expires_soon = days_left <= EXPIRES_SOON_DAYS
 
     return SubscriptionOut(
         active=True,
         plan=sub.plan,
-        expires_at=sub.expires_at,
+        expires_at=user.access_ends_if_resumed() or sub.expires_at,
         days_left=days_left,
         traffic_used_bytes=used,
         traffic_limit_bytes=limit,
@@ -314,6 +327,45 @@ def _with_chosen_port(
     return provisioning.with_endpoint_port(config, chosen)
 
 
+def _link_telegram(db: OrmSession, user: User, init_data: str | None) -> None:
+    """
+    Привязывает Telegram к учётке по подписи из мини-приложения.
+
+    Молча уходим при любой заминке: привязка — удобство (следующий запуск
+    откроется без пароля), и ронять из-за неё вход или регистрацию нельзя.
+    Чужой аккаунт не трогаем: если этот Telegram уже к кому-то привязан,
+    оставляем как есть — разбираться, кто здесь настоящий, должен человек,
+    а не молчаливая перезапись.
+    """
+    if not init_data:
+        return
+    config = settings()
+    if not config.telegram_bot_token:
+        return
+    try:
+        data = services.telegram.validate_init_data(init_data, config.telegram_bot_token)
+    except Exception:
+        log.info("привязка Telegram: подпись не сошлась")
+        return
+
+    telegram_id = (data.get("user") or {}).get("id")
+    if not telegram_id:
+        return
+    if user.telegram_id == telegram_id:
+        return
+
+    taken = db.scalar(
+        select(User).where(User.telegram_id == telegram_id, User.id != user.id).limit(1)
+    )
+    if taken is not None:
+        log.info("привязка Telegram %s: уже за учёткой %s", telegram_id, taken.login)
+        return
+
+    user.telegram_id = telegram_id
+    db.commit()
+    log.info("Telegram %s привязан к %s", telegram_id, user.login)
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(
     body: LoginRequest,
@@ -345,6 +397,7 @@ def login(
 
     session = services.session_for_token(db, token)
     assert session is not None
+    _link_telegram(db, user, body.init_data)
     _provision_for_login(db, user, session)
     servers = _servers_out(db, user, session, background)
     return LoginResponse(
@@ -378,6 +431,10 @@ def _provision_for_login(db: OrmSession, user: User, session: Session) -> None:
 
 class RegisterRequest(BaseModel):
 
+    # Регистрация из мини-приложения присылает подпись Telegram: по ней
+    # учётка сразу привязывается к аккаунту, и в следующий раз человек
+    # заходит без логина и пароля.
+    init_data: str | None = Field(default=None, max_length=8192)
     login: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=8, max_length=128)
     email: str | None = Field(default=None, max_length=254)
@@ -545,6 +602,9 @@ def register(
     )
     session = services.session_for_token(db, token)
     assert session is not None
+    # Регистрация из мини-приложения: сразу привязываем Telegram, чтобы
+    # следующий запуск открывался без логина и пароля.
+    _link_telegram(db, user, body.init_data)
     _provision_for_login(db, user, session)
     servers = _servers_out(db, user, session, background)
     return LoginResponse(

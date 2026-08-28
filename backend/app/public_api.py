@@ -586,7 +586,7 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
         # подписки в базе лежит старый срок, он уже прошёл, и показывать его
         # человеку нельзя — он решит, что дни сгорели.
         expires_at=user.access_ends_if_resumed(now),
-        days_left=user.access_days_left(now),
+        days_left=user.access_days_left_display(now),
         expires_total_at=user.access_ends_if_resumed(now),
         upcoming=[
             UpcomingOut(

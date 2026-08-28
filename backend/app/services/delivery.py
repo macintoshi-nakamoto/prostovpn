@@ -176,6 +176,15 @@ def queue_expiry_reminders(db: OrmSession) -> int:
         # когда он вернётся.
         if user.is_frozen:
             continue
+        # Кончается только этот период, а следом в очереди стоит другой
+        # (например, подаренные две недели после пробных двух дней) —
+        # напоминать не о чем. Отметку ставим, чтобы не пересматривать
+        # эту запись каждый час: про конец доступа напомнит уже хвост
+        # очереди, когда подойдёт его срок.
+        access_end = user.access_expires_at(now)
+        if access_end is not None and access_end > subscription.expires_at:
+            subscription.reminder_sent_at = now
+            continue
         address = user.email_plain
         if not address:
             subscription.reminder_sent_at = now
@@ -248,14 +257,16 @@ def _reminder_letter(user: User):
     subscription = user.active_subscription()
     if subscription is None:
         raise RuntimeError("напоминать не о чем: действующей подписки нет")
-    left = max(0, (subscription.expires_at - utcnow()).days)
+    # Дни и дата — по всему доступу, а не по текущему периоду: иначе
+    # письмо обещает конец, когда в очереди ещё стоят оплаченные или
+    # подаренные дни.
     return letters.renewal_reminder(
         login=user.login,
         amount=subscription.price,
         currency=subscription.currency,
         period_days=subscription.period_days,
-        expires_at=subscription.expires_at,
-        days_left=left,
+        expires_at=user.access_ends_if_resumed() or subscription.expires_at,
+        days_left=user.access_days_left_display() or 0,
     )
 
 
@@ -337,10 +348,11 @@ def _password(user: User) -> str:
 
 
 def _expires_label(user: User) -> str:
-    subscription = user.active_subscription()
-    if subscription is None:
+    # Конец всего доступа, включая очередь, а не только текущего периода.
+    end = user.access_ends_if_resumed()
+    if end is None:
         return "—"
-    return subscription.expires_at.strftime("%d.%m.%Y")
+    return end.strftime("%d.%m.%Y")
 
 
 def stuck(db: OrmSession) -> list[DeliveryJob]:

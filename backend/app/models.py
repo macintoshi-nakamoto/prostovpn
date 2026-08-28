@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import math
 import enum
 import secrets
 import uuid
@@ -494,9 +495,32 @@ class User(Base):
         return max(ends, default=None)
 
     def access_days_left(self, now: dt.datetime | None = None) -> int | None:
+        """Целых суток доступа впереди — округление вниз.
+
+        Это «сколько можно отдать»: передача дней и проверки лимитов
+        считают только полные сутки. Для показа человеку есть
+        access_days_left_display.
+        """
         moment = self.subscription_clock(now)
         end = self.access_expires_at(moment)
         return max(0, (end - moment).days) if end is not None else None
+
+    def access_days_left_display(self, now: dt.datetime | None = None) -> int | None:
+        """Дней доступа для витрин — округление вверх.
+
+        Округление вниз врёт почти всю жизнь подписки: купил два дня,
+        через час осталось 1.96 — и человек читает «остался 1 день»,
+        хотя сервис работает ещё почти двое суток. Показываем то, что
+        человек считает днями: пока идут последние сутки — «1 день».
+        """
+        moment = self.subscription_clock(now)
+        end = self.access_expires_at(moment)
+        if end is None:
+            return None
+        seconds = (end - moment).total_seconds()
+        if seconds <= 0:
+            return 0
+        return int(math.ceil(seconds / 86400))
 
     def access_ends_if_resumed(self, now: dt.datetime | None = None) -> dt.datetime | None:
         """

@@ -122,7 +122,7 @@ def state(user: User, now: dt.datetime | None = None) -> dict[str, object]:
         "frozen": user.is_frozen,
         "frozen_at": user.frozen_at,
         "frozen_days": user.frozen_for(moment).days,
-        "days_left": user.access_days_left(moment),
+        "days_left": user.access_days_left_display(moment),
         "resumes_by": (user.frozen_at + dt.timedelta(days=MAX_DAYS)) if user.is_frozen else None,
         "can_freeze": not reason,
         "reason": reason,

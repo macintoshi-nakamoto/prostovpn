@@ -264,7 +264,5 @@ def expire_overdue(db: OrmSession) -> int:
 
 
 def days_left(user: User, now: dt.datetime | None = None) -> int | None:
-    sub = user.active_subscription(now)
-    if sub is None:
-        return None
-    return max(0, (sub.expires_at - (now or utcnow())).days)
+    """Дней доступа для показа — по всей цепочке подписок."""
+    return user.access_days_left_display(now)

@@ -131,7 +131,7 @@ class SplitTunnelTest {
             [Peer]
             PublicKey = bbb=
             AllowedIPs = 0.0.0.0/0, ::/0
-            Endpoint = 45.151.106.253:51820
+            Endpoint = 198.51.100.10:51820
         """.trimIndent()
 
         val full = SplitTunnel.applyToConfig(base, "0.0.0.0/0, ::/0")

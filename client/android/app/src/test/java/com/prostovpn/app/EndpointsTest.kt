@@ -23,7 +23,7 @@ class EndpointsTest {
         [Peer]
         PublicKey = nV0ZUJvb+1nW5YGzkQI4//ZRp/PdeZSv+FS813zp6lU=
         AllowedIPs = 0.0.0.0/0, ::/0
-        Endpoint = 45.151.106.253:51820
+        Endpoint = 198.51.100.10:51820
         PersistentKeepalive = 25
     """.trimIndent()
 
@@ -35,7 +35,7 @@ class EndpointsTest {
     @Test
     fun `подмена порта не трогает остальное`() {
         val moved = Endpoints.withPort(config, 443)
-        assertEquals("Endpoint = 45.151.106.253:443", moved.lineSequence().first { it.startsWith("Endpoint") })
+        assertEquals("Endpoint = 198.51.100.10:443", moved.lineSequence().first { it.startsWith("Endpoint") })
 
         assertEquals(
             config.lines().filterNot { it.startsWith("Endpoint") },
@@ -45,7 +45,7 @@ class EndpointsTest {
 
     @Test
     fun `имя узла вместо адреса тоже переписывается`() {
-        val named = config.replace("45.151.106.253:51820", "nl.example.com:51820")
+        val named = config.replace("198.51.100.10:51820", "nl.example.com:51820")
         assertEquals(51820, Endpoints.portOf(named))
         assertEquals(
             "Endpoint = nl.example.com:2408",
@@ -55,10 +55,10 @@ class EndpointsTest {
 
     @Test
     fun `эндпоинт без порта получает порт`() {
-        val bare = config.replace("45.151.106.253:51820", "45.151.106.253")
+        val bare = config.replace("198.51.100.10:51820", "198.51.100.10")
         assertEquals(0, Endpoints.portOf(bare))
         assertEquals(
-            "Endpoint = 45.151.106.253:443",
+            "Endpoint = 198.51.100.10:443",
             Endpoints.withPort(bare, 443).lineSequence().first { it.startsWith("Endpoint") },
         )
     }

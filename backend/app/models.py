@@ -392,6 +392,11 @@ class User(Base):
     email_enc: Mapped[str | None] = mapped_column(Text, default=None)
     email_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, default=None)
     telegram_id: Mapped[int | None] = mapped_column(BigInteger, index=True, default=None)
+    # @юзернейм из Telegram — только для показа в админке: по нему человека
+    # находят глазами, тогда как telegram_id ни о чём не говорит. Хранится
+    # без «@» и может быть пустым: юзернейм в Telegram не обязателен, и его
+    # меняют — на связку учётки с Telegram опираться нельзя, для этого есть id.
+    telegram_username: Mapped[str | None] = mapped_column(String(32), default=None)
 
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 

@@ -48,6 +48,23 @@ def validate_init_data(init_data: str, token: str) -> dict:
         pairs["user"] = {}
     return pairs
 
+USERNAME_MAX = 32
+
+
+def clean_username(value: str | None) -> str | None:
+    """
+    Приводит @юзернейм к тому виду, в котором он лежит в базе: без «@».
+
+    Юзернейм в Telegram не обязателен и приходит то с решёткой, то без, то
+    пустой строкой. Всё, что не похоже на юзернейм, отбрасываем: поле нужно
+    только для показа в админке, и мусор там хуже пустоты.
+    """
+    name = (value or "").strip().lstrip("@")
+    if not name or len(name) > USERNAME_MAX:
+        return None
+    return name if all(c.isascii() and (c.isalnum() or c == "_") for c in name) else None
+
+
 API = "https://api.telegram.org"
 
 

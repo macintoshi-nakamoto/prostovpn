@@ -89,6 +89,7 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         contact=user.contact,
         email=user.email_plain,
         telegram_id=user.telegram_id,
+        telegram_username=user.telegram_username,
         status=user_status(user, moment),
         is_active=user.is_active,
         is_blocked=user.is_blocked,

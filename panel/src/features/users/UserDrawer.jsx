@@ -237,6 +237,18 @@ function Overview({ user }) {
         </KV>
       )}
       {user.contact && <KV k="Контакт">{user.contact}</KV>}
+      {(user.telegramUsername || user.telegramId) && (
+        <KV k="Telegram">
+          {user.telegramUsername ? (
+            <Copyable text={`@${user.telegramUsername}`} />
+          ) : (
+            <span style={{ color: "var(--gd-faint)" }}>юзернейма нет</span>
+          )}
+          {user.telegramId != null && (
+            <span style={{ color: "var(--gd-faint)", marginLeft: 8 }}>id {user.telegramId}</span>
+          )}
+        </KV>
+      )}
       <KV k="Подключение">
         {user.isOnline ? (
           <span style={{ color: "var(--gd-pos)" }}>подключён к VPN сейчас</span>

@@ -61,6 +61,9 @@ def invite(
 class LinkIn(BaseModel):
     telegram_id: int
     login: str
+    # Бот присылает @юзернейм отправителя, если тот у него есть: в админке
+    # по нему человека находят, а по одному telegram_id — нет.
+    telegram_username: str | None = None
 
 
 @router.post("/link", response_model=ReferralStats)
@@ -73,7 +76,7 @@ def link(
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"учётка «{body.login}» не найдена")
 
-    services.referrals.attach_user(db, body.telegram_id, user)
+    services.referrals.attach_user(db, body.telegram_id, user, body.telegram_username)
     return _stats(db, body.telegram_id)
 
 

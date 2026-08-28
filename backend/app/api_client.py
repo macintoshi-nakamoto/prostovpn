@@ -348,10 +348,19 @@ def _link_telegram(db: OrmSession, user: User, init_data: str | None) -> None:
         log.info("привязка Telegram: подпись не сошлась")
         return
 
-    telegram_id = (data.get("user") or {}).get("id")
+    profile = data.get("user") or {}
+    telegram_id = profile.get("id")
     if not telegram_id:
         return
+    username = services.telegram.clean_username(profile.get("username"))
     if user.telegram_id == telegram_id:
+        # Уже привязан — но юзернейм человек мог сменить, и в админке
+        # должен быть нынешний. Пустой не затирает: Telegram присылает его
+        # не всегда, а потерять единственную зацепку хуже, чем показать
+        # чуть устаревшую.
+        if username and user.telegram_username != username:
+            user.telegram_username = username
+            db.commit()
         return
 
     taken = db.scalar(
@@ -362,6 +371,8 @@ def _link_telegram(db: OrmSession, user: User, init_data: str | None) -> None:
         return
 
     user.telegram_id = telegram_id
+    if username:
+        user.telegram_username = username
     db.commit()
     log.info("Telegram %s привязан к %s", telegram_id, user.login)
 
@@ -495,7 +506,8 @@ def login_telegram(
             status.HTTP_401_UNAUTHORIZED, str(exc), headers=_error_code_header(exc)
         ) from exc
 
-    telegram_id = (data.get("user") or {}).get("id")
+    profile = data.get("user") or {}
+    telegram_id = profile.get("id")
     user = (
         db.scalar(
             select(User).where(User.telegram_id == telegram_id).order_by(User.id).limit(1)
@@ -517,6 +529,12 @@ def login_telegram(
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "доступ отключён", headers={"X-Error-Code": "disabled"}
         )
+
+    # Вход из мини-приложения — самый свежий источник юзернейма: Telegram
+    # прислал его прямо сейчас. Пустым не затираем, см. _link_telegram.
+    username = services.telegram.clean_username(profile.get("username"))
+    if username and user.telegram_username != username:
+        user.telegram_username = username
 
     user.last_login_at = utcnow()
     token = services.open_session(

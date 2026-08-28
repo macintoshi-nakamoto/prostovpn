@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session as OrmSession
 
 from ..config import settings
 from ..models import DeliveryJob, Referral, User, new_referral_code, utcnow
+from . import telegram
 from .billing import add_bonus_days, take_bonus_days
 from .errors import PanelError
 
@@ -212,9 +213,19 @@ def _settle_join_bonus(db: OrmSession, referral: Referral) -> bool:
     return True
 
 
-def attach_user(db: OrmSession, telegram_id: int, user: User) -> None:
+def attach_user(
+    db: OrmSession, telegram_id: int, user: User, username: str | None = None
+) -> None:
     if not telegram_id:
         return
+
+    # Юзернейм бот знает из самого сообщения — кладём его рядом с id, чтобы
+    # в админке человека было видно по @имени. Пустым не затираем: в Telegram
+    # юзернейма может не быть вовсе.
+    clean = telegram.clean_username(username)
+    if clean and user.telegram_username != clean:
+        user.telegram_username = clean
+        db.commit()
 
     if not user.telegram_id:
         user.telegram_id = telegram_id

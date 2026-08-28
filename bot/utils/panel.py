@@ -779,18 +779,26 @@ async def referral_invite(
     return _referrals(body)
 
 
-async def referral_link_account(telegram_id: int, user_login: str) -> None:
+async def referral_link_account(
+    telegram_id: int, user_login: str, username: str | None = None
+) -> None:
     """
     Связывает Telegram с учёткой: панель сама догонит невыданные бонусы.
+
+    Заодно отдаём @юзернейм, если он у человека есть: в панели по нему видно,
+    кто это, а по одному telegram_id — нет.
 
     Ошибки глотаем: связь — служебное действие, и падать из-за неё на входе
     в аккаунт нельзя. Не получилось сейчас — получится при следующем входе.
     """
+    payload = {"telegram_id": telegram_id, "login": user_login}
+    if username:
+        payload["telegram_username"] = username
     try:
         await _admin_request(
             "POST",
             f"{ADMIN}/referrals/link",
-            payload={"telegram_id": telegram_id, "login": user_login},
+            payload=payload,
         )
     except PanelError as error:
         logger.info("связка telegram↔учётка не прошла: %s", error)

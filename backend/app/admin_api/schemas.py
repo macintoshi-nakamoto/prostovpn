@@ -62,6 +62,7 @@ class UserRow(Schema):
     contact: str | None
     email: str | None = None
     telegram_id: int | None = None
+    telegram_username: str | None = None
 
     status: str
     is_active: bool

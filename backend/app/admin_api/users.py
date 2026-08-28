@@ -73,7 +73,9 @@ def _all(db: OrmSession) -> list[User]:
 
 @router.get("", response_model=list[schemas.UserRow])
 def list_users(
-    q: str | None = Query(default=None, description="Поиск по ID, логину, имени и контакту"),
+    q: str | None = Query(
+        default=None, description="Поиск по ID, логину, имени, контакту и @юзернейму Telegram"
+    ),
     status_filter: str | None = Query(default=None, alias="status"),
     plan: str | None = None,
     ios: bool | None = Query(default=None, description="Только клиенты с ключом для iPhone"),
@@ -84,7 +86,9 @@ def list_users(
     rows = [mappers.user_row(u, now) for u in _all(db)]
 
     if q:
-        needle = q.strip().lower()
+        # «@» отрезаем: юзернейм копируют из Telegram вместе с ним, а в базе
+        # он лежит без решётки.
+        needle = q.strip().lower().lstrip("@")
         rows = [
             r
             for r in rows
@@ -93,6 +97,7 @@ def list_users(
             or needle in (r.name or "").lower()
             or needle in (r.contact or "").lower()
             or needle in (r.email or "").lower()
+            or needle in (r.telegram_username or "").lower()
         ]
     if status_filter and status_filter != "all":
         rows = [r for r in rows if r.status == status_filter]

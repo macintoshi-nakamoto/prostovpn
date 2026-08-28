@@ -77,7 +77,9 @@ async def friends(callback: CallbackQuery) -> None:
     # учёткой — а без связи его бонусы висели бы неначисленными.
     session = await models.get_session(user_id)
     if session:
-        await panel.referral_link_account(user_id, session.panel_login)
+        await panel.referral_link_account(
+            user_id, session.panel_login, callback.from_user.username
+        )
 
     try:
         stats = await panel.referral_stats(user_id)

@@ -10,7 +10,10 @@ export const userColumns = [
     render: (u) => (
       <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
         <Dot color={userStatus(u.status).color} glow={u.isOnline} />
-        <CellName title={u.name || u.login} sub={u.login} />
+        <CellName
+          title={u.name || u.login}
+          sub={u.telegramUsername ? `${u.login} · @${u.telegramUsername}` : u.login}
+        />
         {u.isFree && <Chip color="var(--gd-gold)">фри</Chip>}
         {u.isFrozen && <Chip color="var(--gd-info)">пауза</Chip>}
       </div>

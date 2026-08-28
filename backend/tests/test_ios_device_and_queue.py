@@ -379,9 +379,12 @@ def test_queue_stays_one_period_on_repeated_change(server_id):
         billing.grant_subscription(db, user, days=180, plan=half, price=899)
         db.refresh(user)
 
+        # Оплаченные периоды в очереди не сгорают при покупке другого тарифа —
+        # новый встаёт в хвост (коммит «биллинг: оплаченные периоды очереди не
+        # сгорают…»). Раньше очередь держала ровно один период, и вторая
+        # покупка затирала первую вместе с деньгами за неё.
         upcoming = user.upcoming_subscriptions()
-        assert len(upcoming) == 1
-        assert upcoming[0].plan == "q-half"
+        assert [s.plan for s in upcoming] == ["q-pro", "q-half"]
         assert user.active_subscription().plan == "q-basic"
 
 

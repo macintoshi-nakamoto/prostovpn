@@ -812,8 +812,10 @@ def test_app_sees_days_left_and_renew_link_when_expiring(client):
 
     uid, login, password = _paid_user(client, "renew-soon@example.com")
 
+    # Дни для показа округляются вверх (access_days_left_display): только что
+    # оплаченный месяц — это «30 дней», а не «29», как считало округление вниз.
     body = client.post("/api/v1/login", json={"login": login, "password": password}).json()
-    assert body["subscription"]["days_left"] == 29
+    assert body["subscription"]["days_left"] == 30
     assert body["subscription"]["expires_soon"] is False
     assert body["subscription"]["renew_url"] is None
 
@@ -825,7 +827,8 @@ def test_app_sees_days_left_and_renew_link_when_expiring(client):
 
     body = client.post("/api/v1/login", json={"login": login, "password": password}).json()
     s = body["subscription"]
-    assert s["days_left"] == 2
+    # Двое суток и час — это идущие третьи сутки, поэтому 3, а не 2.
+    assert s["days_left"] == 3
     assert s["expires_soon"] is True
     assert s["renew_url"].endswith("/account")
 

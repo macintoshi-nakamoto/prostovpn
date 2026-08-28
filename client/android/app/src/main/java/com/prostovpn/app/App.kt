@@ -13,7 +13,8 @@ class App : Application() {
 
         GoBackend.setAlwaysOnCallback {
             thread(name = "always-on-vpn") {
-                val base = ConnectConfig.storedConfig(this) ?: return@thread
+                runCatching {
+                val base = ConnectConfig.storedConfig(this) ?: return@runCatching
                 val prepared = runCatching { ConnectConfig.build(this, base) }.getOrDefault(base)
                 val ports = ConnectConfig.storedAltPorts(this)
                 val result = runBlocking {
@@ -26,6 +27,7 @@ class App : Application() {
                     val s = strings(lang)
                     VpnForegroundService.start(this, s.connected, s.notifDisconnect)
                 }
+                }.onFailure { Log.e(TAG, "always-on не поднялся", it) }
             }
         }
     }

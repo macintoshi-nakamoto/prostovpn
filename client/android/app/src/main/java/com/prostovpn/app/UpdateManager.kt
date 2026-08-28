@@ -56,6 +56,11 @@ class UpdateManager(
 
     private var verified: File? = null
 
+    /** Ушли в системные настройки за разрешением на установку — после
+     *  возврата продолжаем ровно один раз, без петли повторных инсталлеров. */
+    var waitingInstallPermission = false
+        private set
+
     fun check(silent: Boolean = false) {
         when (stage) {
             Stage.DOWNLOADING, Stage.INSTALLING -> return
@@ -89,9 +94,37 @@ class UpdateManager(
         val update = info ?: return
         if (stage == Stage.DOWNLOADING || stage == Stage.INSTALLING) return
 
-        verified?.takeIf { it.isFile }?.let {
-            launchInstaller(it)
+        verified?.takeIf { it.isFile }?.let { cached ->
+            // Файл могли подменить/побить между проверкой и установкой —
+            // перед инсталлером сверяем контрольную сумму заново.
+            job?.cancel()
+            job = scope.launch {
+                stage = Stage.INSTALLING
+                val ok = withContext(Dispatchers.Default) {
+                    runCatching { checksumOk(update, cached) }.getOrDefault(false)
+                }
+                if (ok) {
+                    launchInstaller(cached)
+                } else {
+                    verified = null
+                    runCatching { cached.delete() }
+                    stage = Stage.AVAILABLE
+                }
+            }
             return
+        }
+
+        // Незавершённая загрузка прошлого запуска не должна писать в тот же
+        // файл параллельно с новой.
+        appContext.getSharedPreferences("prosto", 0).let { prefs ->
+            val orphan = prefs.getLong(PREF_DOWNLOAD_ID, -1L)
+            if (orphan > 0) {
+                runCatching {
+                    (appContext.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager)
+                        ?.remove(orphan)
+                }
+                prefs.edit().remove(PREF_DOWNLOAD_ID).apply()
+            }
         }
 
         val url = update.url
@@ -123,6 +156,8 @@ class UpdateManager(
             return
         }
 
+        appContext.getSharedPreferences("prosto", 0)
+            .edit().putLong(PREF_DOWNLOAD_ID, id).apply()
         percent = 0
         stage = Stage.DOWNLOADING
         job?.cancel()
@@ -135,25 +170,32 @@ class UpdateManager(
         update: PanelApi.UpdateInfo,
         target: File,
     ) {
+        var lastDone = -1L
+        var stalledSince = System.currentTimeMillis()
         while (true) {
             delay(500)
             var status = -1
             var done = 0L
             var total = -1L
-            manager.query(DownloadManager.Query().setFilterById(id))?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-                    done = cursor.getLong(
-                        cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
-                    )
-                    total = cursor.getLong(
-                        cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
-                    )
+            // Запросы к DownloadManager — межпроцессные, главному потоку
+            // здесь делать нечего.
+            withContext(Dispatchers.IO) {
+                manager.query(DownloadManager.Query().setFilterById(id))?.use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+                        done = cursor.getLong(
+                            cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR)
+                        )
+                        total = cursor.getLong(
+                            cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES)
+                        )
+                    }
                 }
             }
 
             when (status) {
                 DownloadManager.STATUS_SUCCESSFUL -> {
+                    clearDownloadId()
                     verifyAndInstall(update, target)
                     return
                 }
@@ -161,14 +203,48 @@ class UpdateManager(
 
                 -1 -> {
                     runCatching { manager.remove(id) }
+                    clearDownloadId()
                     stage = Stage.FAILED
                     return
                 }
                 else -> {
+                    if (done != lastDone || status == DownloadManager.STATUS_PAUSED) {
+                        // PAUSED — DownloadManager сам ждёт сеть и продолжит;
+                        // таймаут только для молча замершего RUNNING.
+                        lastDone = done
+                        stalledSince = System.currentTimeMillis()
+                    } else if (System.currentTimeMillis() - stalledSince > STALL_TIMEOUT_MS) {
+                        // Загрузка встала намертво — не держим механизм
+                        // обновления заложником, отдаём «повторить».
+                        runCatching { manager.remove(id) }
+                        clearDownloadId()
+                        stage = Stage.FAILED
+                        return
+                    }
                     val known = if (total > 0) total else update.sizeBytes ?: -1L
                     if (known > 0) percent = (done * 100 / known).toInt().coerceIn(0, 100)
                 }
             }
+        }
+    }
+
+    private fun clearDownloadId() {
+        appContext.getSharedPreferences("prosto", 0)
+            .edit().remove(PREF_DOWNLOAD_ID).apply()
+    }
+
+    /** Возврат в приложение после выдачи разрешения на установку.
+     *  Идёт через install(): кэш переверифицируется той же контрольной
+     *  суммой — пока пользователь ходил по системным настройкам, файл
+     *  пролежал дольше всего. */
+    fun resumeAfterPermission() {
+        if (!waitingInstallPermission) return
+        waitingInstallPermission = false
+        if (verified?.isFile != true) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            appContext.packageManager.canRequestPackageInstalls()
+        ) {
+            install()
         }
     }
 
@@ -184,10 +260,10 @@ class UpdateManager(
         launchInstaller(file)
     }
 
-    private fun checksumOk(update: PanelApi.UpdateInfo, file: File): Boolean {
-        if (update.sizeBytes != null && update.sizeBytes != file.length()) return false
-        val expected = update.sha256?.lowercase() ?: return true
-        if (!HEX64.matches(expected)) return false
+    private fun checksumOk(update: PanelApi.UpdateInfo, file: File): Boolean = runCatching {
+        if (update.sizeBytes != null && update.sizeBytes != file.length()) return@runCatching false
+        val expected = update.sha256?.lowercase() ?: return@runCatching true
+        if (!HEX64.matches(expected)) return@runCatching false
 
         val digest = MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
@@ -198,21 +274,28 @@ class UpdateManager(
                 digest.update(buffer, 0, read)
             }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) } == expected
-    }
+        digest.digest().joinToString("") { "%02x".format(it) } == expected
+    }.getOrDefault(false)
 
     private fun launchInstaller(file: File) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             !appContext.packageManager.canRequestPackageInstalls()
         ) {
             stage = Stage.AVAILABLE
-            runCatching {
+            val opened = runCatching {
                 appContext.startActivity(
                     Intent(
                         Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                         Uri.parse("package:${appContext.packageName}"),
                     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 )
+            }.isSuccess
+            if (opened) {
+                waitingInstallPermission = true
+            } else {
+                // Экрана разрешения на устройстве нет — честный отказ вместо
+                // кнопки, которая молча ничего не делает.
+                stage = Stage.FAILED
             }
             return
         }
@@ -246,5 +329,9 @@ class UpdateManager(
         private const val APK_MIME = "application/vnd.android.package-archive"
 
         private val HEX64 = Regex("^[0-9a-f]{64}$")
+
+        private const val PREF_DOWNLOAD_ID = "update.downloadId"
+
+        private const val STALL_TIMEOUT_MS = 3 * 60 * 1000L
     }
 }

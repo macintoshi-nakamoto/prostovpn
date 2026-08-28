@@ -35,6 +35,9 @@ class TunnelManager(context: Context) {
         NO_HANDSHAKE,
 
         FAILED,
+
+        /** Подключение отменили (кнопкой в уведомлении) — это не ошибка. */
+        CANCELLED,
     }
 
     enum class Status { OFF, CONNECTING, ON, RECONNECTING }
@@ -87,7 +90,7 @@ class TunnelManager(context: Context) {
         _status.value = Status.CONNECTING
         val result = attemptConnect(configText, alternativePorts)
 
-        if (wanted == null) return Result.FAILED
+        if (wanted == null) return Result.CANCELLED
 
         if (result == Result.CONNECTED) {
             lastFailure = null
@@ -345,6 +348,12 @@ class TunnelManager(context: Context) {
                         Log.w(TAG, "поднять туннель не удаётся — прекращаем")
                         wanted = null
                         _status.value = Status.OFF
+                        // Иначе уведомление «Подключено» висит при снятом туннеле.
+                        runCatching {
+                            appContext.stopService(
+                                Intent(appContext, VpnForegroundService::class.java),
+                            )
+                        }
                         return@launch
                     }
                 }
@@ -368,7 +377,9 @@ class TunnelManager(context: Context) {
             val (servers, _) = PanelApi.servers(token)
             servers.isEmpty()
         } catch (error: PanelApi.PanelException) {
-            error.status == 401 || error.status == 403
+            // Только решение самой панели: 401 или 403 с её X-Error-Code.
+            // Голая 403 — WAF/анти-DDoS по пути, туннель из-за неё не рвём.
+            error.status == 401 || (error.status == 403 && error.code.isNotEmpty())
         } catch (_: Exception) {
             false
         }

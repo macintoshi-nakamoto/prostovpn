@@ -178,6 +178,50 @@ private fun TogglesCard(state: AppState, onAddFile: () -> Unit) {
         ToggleRow(s.autoconnect, s.autoconnectDesc, state.autoConnect) { state.changeAutoConnect(it) }
         CardDivider()
         BackgroundWorkRow(state)
+        NotificationsOffRow(state)
+    }
+}
+
+@Composable
+private fun NotificationsOffRow(state: AppState) {
+    val s = state.s
+    val context = LocalContext.current
+    var enabled by remember {
+        mutableStateOf(androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled())
+    }
+    LifecycleResumeEffect(Unit) {
+        enabled = androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+        onPauseOrDispose { }
+    }
+    if (enabled) return
+
+    CardDivider()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .tvFocusHighlight(RoundedCornerShape(12.dp))
+            .noRippleClickable {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS,
+                        )
+                            .putExtra(
+                                android.provider.Settings.EXTRA_APP_PACKAGE,
+                                context.packageName,
+                            )
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }
+            .padding(vertical = 13.dp, horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = s.notifOffWarn,
+            style = manrope(12.5.sp, W.medium, Theme.accentSoft),
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -471,7 +515,11 @@ private fun TunnelFileSheet(state: AppState, onDismiss: () -> Unit) {
                     height = 50.dp,
                     cornerRadius = 16.dp,
                     onClick = {
-                        filePicker.launch(arrayOf("application/json", "text/plain", "text/*"))
+                        // На ТВ-боксах и урезанных ROM системного пикера может
+                        // не быть — это ActivityNotFoundException и краш.
+                        runCatching {
+                            filePicker.launch(arrayOf("application/json", "text/plain", "text/*"))
+                        }.onFailure { showImportError = true }
                     },
                 )
             }

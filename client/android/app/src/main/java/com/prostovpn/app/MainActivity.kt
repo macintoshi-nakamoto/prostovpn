@@ -63,6 +63,13 @@ fun RootView(state: AppState = viewModel()) {
         if (state.isLoggedIn) state.maybeAutoConnect()
     }
 
+    // Возврат из системных настроек «неизвестных источников»: продолжить
+    // установку один раз — с какого бы экрана она ни началась.
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        state.updates.resumeAfterPermission()
+        onPauseOrDispose { }
+    }
+
     val context = LocalContext.current
     val notificationPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()

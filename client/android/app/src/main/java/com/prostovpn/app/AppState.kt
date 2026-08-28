@@ -185,7 +185,13 @@ class AppState(application: Application) : AndroidViewModel(application) {
         TunnelManager.getInstance(getApplication()).also { manager ->
 
             manager.onStateChange = { up ->
-                if (!up && phase == Phase.ON) this@AppState.disconnect()
+                // Во время supervision-реконнекта интерфейс штатно опускается —
+                // DOWN в этот момент не повод для полного disconnect.
+                if (!up && phase == Phase.ON &&
+                    manager.status.value == TunnelManager.Status.ON
+                ) {
+                    this@AppState.disconnect()
+                }
             }
         }
     }
@@ -242,9 +248,17 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
 
     private fun reconnectIfActive() {
-        if (phase == Phase.OFF) return
-        disconnect()
-        toggleConnection()
+        // Только живое соединение: тумблер во время ручного отключения не
+        // должен поднимать туннель обратно.
+        if (phase != Phase.ON && phase != Phase.CONNECTING) return
+        // disconnect ставит DISCONNECTING и уходит в корутину — немедленный
+        // toggleConnection попал бы в ветку «DISCONNECTING -> ничего».
+        // Ждём фактического OFF, как это делает selectServer.
+        viewModelScope.launch {
+            disconnect()
+            awaitOff()
+            if (phase == Phase.OFF) toggleConnection()
+        }
     }
 
     val tunnelFiles = mutableStateListOf<TunnelFile>()
@@ -279,7 +293,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
         if (tunnelFiles.first().count == 0) {
             viewModelScope.launch(Dispatchers.Default) {
-                val count = entryCount(defaultListJson() ?: "", "json")
+                val count = SplitTunnel.parseCidrList(defaultListJson() ?: "").size
                 prefs.edit().putInt("tunnel.defaultCount", count).apply()
                 withContext(Dispatchers.Main) {
                     val index = tunnelFiles.indexOfFirst { it.isDefault }
@@ -312,14 +326,21 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     fun addTunnelFile(originalName: String, content: String): Boolean {
         if (content.isBlank()) return false
-        val extension = originalName.substringAfterLast('.', "")
-        val count = entryCount(content, extension)
+        // Имя приходит из SAF-провайдера — не даём ему уйти из tunnelDir.
+        val safeName = originalName
+            .substringAfterLast('/')
+            .substringAfterLast('\\')
+            .replace("..", "_")
+        val extension = safeName.substringAfterLast('.', "")
+        // Считаем тем же парсером, который применяет список: файл из
+        // доменов «импортировался успешно», а маршруты получались пустыми.
+        val count = SplitTunnel.parseCidrList(content).size
         if (count == 0) return false
 
-        var name = originalName.ifBlank { "list.json" }
+        var name = safeName.ifBlank { "list.json" }
         var attempt = 1
         while (tunnelFiles.any { it.name == name }) {
-            val base = originalName.substringBeforeLast('.')
+            val base = safeName.substringBeforeLast('.')
             val ext = if (extension.isEmpty()) "" else ".$extension"
             name = "${base}_$attempt$ext"
             attempt++
@@ -402,7 +423,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         if (panelServers.isNotEmpty()) {
             return panelServers.map { item ->
                 DisplayServer(
-                    flag = item.countryCode?.takeIf { it.isNotEmpty() }?.let { flagEmoji(it) }.orEmpty(),
+                    flag = item.countryCode?.takeIf { it.isNotEmpty() }?.let { flagEmoji(it) } ?: "🌐",
                     name = item.countryFor(lang).orEmpty(),
                     sub = item.cityFor(lang).orEmpty(),
                 )
@@ -458,9 +479,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
             refreshGeo()
         }
         loadTunnelFiles()
-        if (selectedServerIndex >= displayServers().size) {
-            selectServer(0)
-        }
+        // Индекс не валидируем по раннему списку: до ответа панели
+        // displayServers() — один импортированный сервер, и сохранённый
+        // выбор «№2+» ошибочно сбрасывался бы на первый при каждом старте.
+        // Валидация по настоящему списку живёт в applyPanelServers.
         restoreRunningTunnel()
 
         refreshPanelServers()
@@ -473,9 +495,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val config = server?.config
 
+            val prepared = if (config.isNullOrBlank()) null else buildConfigForConnect(config)
             val up = withContext(tunnelDispatcher) {
-                if (config.isNullOrBlank()) tunnel.isUp
-                else tunnel.adopt(config, server?.altPorts ?: emptyList())
+                if (prepared == null) tunnel.isUp
+                else tunnel.adopt(prepared, server?.altPorts ?: emptyList())
             }
             if (up && phase == Phase.OFF) {
                 phase = Phase.ON
@@ -565,10 +588,26 @@ class AppState(application: Application) : AndroidViewModel(application) {
             .apply()
     }
 
+    private fun clearPersistedServer() {
+        prefs.edit()
+            .remove("server.host")
+            .remove("server.country")
+            .remove("server.city")
+            .remove("server.countryEn")
+            .remove("server.cityEn")
+            .remove("server.countryCode")
+            .remove("server.config")
+            .remove("server.altPorts")
+            .apply()
+    }
+
     private fun applyPanelServers(list: List<ServerInfo>) {
         panelServers = list
         if (list.isEmpty()) {
             server = null
+            // Иначе отозванный конфиг воскресает из prefs после рестарта.
+            clearPersistedServer()
+            cachedAllowedIps = null
             return
         }
         if (selectedServerIndex !in list.indices) selectServer(0)
@@ -582,6 +621,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) {
             val result = runCatching { PanelApi.servers(token) }
             withContext(Dispatchers.Main) {
+                // Пока запрос летал, могли выйти из аккаунта или перевойти —
+                // ответ устаревшего токена не должен воскрешать сессию.
+                if (panelToken != token) return@withContext
                 result
                     .onSuccess { reply ->
 
@@ -594,8 +636,14 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     }
                     .onFailure { error ->
 
-                        val status = (error as? PanelApi.PanelException)?.status ?: 0
-                        if (status == 401 || status == 403) {
+                        // Разлогин — только по решению панели: 401 или 403 с её
+                        // X-Error-Code. Голая 403 — это WAF/анти-DDoS по пути,
+                        // стирать аккаунт из-за неё нельзя.
+                        val panel = error as? PanelApi.PanelException
+                        val status = panel?.status ?: 0
+                        val fromPanel = status == 401 ||
+                            (status == 403 && !panel?.code.isNullOrEmpty())
+                        if (fromPanel) {
                             logout()
 
                             signedOutReason = s.noticeRemoteSignout
@@ -634,6 +682,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
         panelNotice = ""
         selectedServerIndex = 0
         val language = lang
+        // Идентификатор установки живёт дольше сессии: иначе каждый новый
+        // вход плодит в кабинете новое «устройство».
+        val keepInstallId = prefs.getString("installId", null)
         prefs.edit().clear().apply()
 
         prefs.edit()
@@ -641,6 +692,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
             .putBoolean("fulltunnel.migrated", true)
             .putBoolean("split.enabled", false)
             .apply()
+        keepInstallId?.let { prefs.edit().putString("installId", it).apply() }
+        // Реестр файлов стёрт clear()-ом — подчистим и сами файлы.
+        runCatching { tunnelDir().listFiles()?.forEach { it.delete() } }
         cachedAllowedIps = null
 
         splitTunnelEnabled = false
@@ -670,6 +724,13 @@ class AppState(application: Application) : AndroidViewModel(application) {
             Phase.OFF -> {
                 val config = server?.config
                 if (config.isNullOrBlank()) {
+                    // У залогиненного пустой config значит «нет доступных
+                    // серверов» (кончилась подписка) — честная ошибка вместо
+                    // симуляции подключения без VPN.
+                    if (panelToken.isNotEmpty()) {
+                        connectionError = s.errNoServers
+                        return
+                    }
                     startSimulated()
                     return
                 }
@@ -720,6 +781,11 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 TunnelManager.Result.FAILED -> {
                     phase = Phase.OFF
                     connectionError = s.errTunnelFailed
+                    stopForegroundNotice()
+                }
+                TunnelManager.Result.CANCELLED -> {
+                    // Отменили сами (кнопкой «Отключить») — без плашки ошибки.
+                    phase = Phase.OFF
                     stopForegroundNotice()
                 }
             }
@@ -795,7 +861,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 city = ru?.optString("city")?.takeIf { it.isNotEmpty() } ?: current.city,
                 countryEn = en?.optString("country")?.takeIf { it.isNotEmpty() } ?: current.countryEn,
                 cityEn = en?.optString("city")?.takeIf { it.isNotEmpty() } ?: current.cityEn,
-                countryCode = (ru ?: en)?.optString("countryCode")?.takeIf { it.isNotEmpty() }
+                countryCode = (ru ?: en)?.optString("country_code")?.takeIf { it.isNotEmpty() }
                     ?: current.countryCode,
             )
             persistServer()
@@ -803,12 +869,16 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
 
     private fun fetchGeo(host: String, lang: String): JSONObject? = runCatching {
-        val url = URL("http://ip-api.com/json/$host?fields=status,country,countryCode,city&lang=$lang")
+        // ipwho.is принимает только IP — доменный Endpoint резолвим сами.
+        val ip = if (host.any { it.isLetter() }) {
+            java.net.InetAddress.getByName(host).hostAddress ?: return@runCatching null
+        } else host
+        val url = URL("https://ipwho.is/$ip?lang=$lang&fields=success,country,country_code,city")
         val connection = url.openConnection() as HttpURLConnection
         connection.connectTimeout = 8000
         connection.readTimeout = 8000
         val text = connection.inputStream.bufferedReader().use { it.readText() }
-        JSONObject(text).takeIf { it.optString("status") == "success" }
+        JSONObject(text).takeIf { it.optBoolean("success") }
     }.getOrNull()
 
     companion object {

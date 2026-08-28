@@ -20,7 +20,9 @@ object SplitTunnel {
     private fun cidrToRange(cidr: String): Range? {
         val slash = cidr.split("/")
         val ip = ipToLong(slash[0].trim()) ?: return null
-        val prefix = if (slash.size > 1) (slash[1].trim().toIntOrNull() ?: 32) else 32
+        // «1.2.3.4/abc» — битая запись, а не /32: молчаливая подмена маски
+        // расширяла бы исключение до одного адреса без ведома пользователя.
+        val prefix = if (slash.size > 1) (slash[1].trim().toIntOrNull() ?: return null) else 32
         if (prefix < 0 || prefix > 32) return null
         if (prefix == 0) return Range(0, 0xFFFFFFFFL)
         val mask = (0xFFFFFFFFL shl (32 - prefix)) and 0xFFFFFFFFL
@@ -61,7 +63,7 @@ object SplitTunnel {
 
         if (!parsedJson) {
             content.lineSequence()
-                .map { it.trim() }
+                .map { it.substringBefore('#').trim() }
                 .filter { it.isNotEmpty() && cidrToRange(it) != null }
                 .forEach { result.add(it) }
         }
@@ -125,10 +127,14 @@ object SplitTunnel {
     private fun alignToGrid(ranges: List<Range>, gridPrefix: Int): List<Range> {
         if (gridPrefix >= 32) return ranges
         val grid = 1L shl (32 - gridPrefix)
-        return ranges.mapNotNull {
-            val start = (it.start + grid - 1) / grid * grid
-            val end = (it.end + 1) / grid * grid - 1
-            if (start <= end) Range(start, end) else null
+        // Расширяем НАРУЖУ (floor/ceil): диапазон мельче сетки раньше
+        // выбрасывался целиком, и список из одних мелких подсетей молча
+        // превращался в полный туннель. Для списка исключений расширение —
+        // консервативная сторона: исключим чуть больше, но не потеряем.
+        return ranges.map {
+            val start = it.start / grid * grid
+            val end = (it.end / grid + 1) * grid - 1
+            Range(start, end.coerceAtMost(0xFFFFFFFFL))
         }
     }
 

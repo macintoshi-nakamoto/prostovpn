@@ -2924,6 +2924,17 @@ html.app .wz-first {
   justify-content: center;
 }
 
+/* Плашка под плашкой под плашкой выглядела как склад коробок: серый квадрат
+   под значком, карточка под кнопками, заливка у самой кнопки. Здесь фона нет
+   ни у чего — форму держат волосяная линия и заливка только там, где надо
+   нажать. Линия одна на обе темы, чтобы не заводить её в каждом правиле. */
+html.app .wz {
+  --wz-line: rgba(10, 14, 20, 0.14);
+}
+html.app[data-theme="dark"] .wz {
+  --wz-line: rgba(255, 255, 255, 0.13);
+}
+
 html.app .wz-hi {
   display: flex;
   flex-direction: column;
@@ -2949,23 +2960,25 @@ html.app .wz-hi-s {
 html.app .wz-ic {
   display: grid;
   place-items: center;
-  width: 68px;
-  height: 68px;
-  border-radius: 22px;
-  background: var(--tma-inset);
+  width: 104px;
+  height: 104px;
+  /* Не коробка, а мягкое свечение: оно не спорит с формой логотипа —
+     у яблока и у окон Windows силуэт узнаваемый, обводить его незачем.
+     Цвет вписан числом: color-mix понимают не все вебвью Telegram. */
+  background: radial-gradient(closest-side, rgba(250, 76, 22, 0.15), rgba(250, 76, 22, 0));
   color: var(--accent);
 }
 html.app .wz-ic svg {
-  width: 34px;
-  height: 34px;
+  width: 54px;
+  height: 54px;
 }
 html.app .wz-ic-lg {
-  width: 64px;
-  height: 64px;
+  width: 84px;
+  height: 84px;
 }
 html.app .wz-ic-lg svg {
-  width: 32px;
-  height: 32px;
+  width: 42px;
+  height: 42px;
 }
 
 /* Карточка вопроса «ставим сюда?» — главный экран мастера. */
@@ -2973,25 +2986,30 @@ html.app .wz-card {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Зазор здесь — только между двумя кнопками; воздух вокруг вопроса
+     набирается его собственными полями. */
   gap: 12px;
-  padding: 30px 20px 22px;
-  border-radius: 24px;
-  background: var(--tma-card);
+  padding: 0;
 }
 html.app .wz-q {
-  font-size: 19px;
+  margin: 12px 0 14px;
+  font-size: 21px;
   font-weight: 700;
   text-align: center;
+  text-wrap: balance;
   line-height: 1.3;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
 html.app .wz-btn {
   width: 100%;
-  padding: 15px 18px;
-  border: none;
+  padding: 16px 18px;
+  /* Обводка вместо заливки: кнопка по-прежнему читается как кнопка,
+     но не выглядит ещё одним слоем поверх фона. */
+  border: 1px solid var(--wz-line);
   border-radius: 16px;
-  background: var(--tma-inset);
+  background: none;
   font: inherit;
   font-size: 16px;
   font-weight: 700;
@@ -3003,9 +3021,14 @@ html.app .wz-btn:active {
   transform: scale(0.98);
   transition-duration: 0.06s;
 }
+/* Главное действие — единственное цветное пятно на экране. */
 html.app .wz-btn-on {
+  border-color: transparent;
   background: var(--accent);
   color: #fff;
+  /* Отрицательный разброс держит тень строго под кнопкой: обычная
+     дотягивалась до соседней и подсвечивала её, будто выбраны обе. */
+  box-shadow: 0 8px 18px -8px rgba(250, 76, 22, 0.55);
 }
 
 html.app .wz-h {
@@ -3027,11 +3050,11 @@ html.app .wz-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  padding: 20px 12px;
-  border: none;
+  gap: 12px;
+  padding: 22px 12px;
+  border: 1px solid var(--wz-line);
   border-radius: 20px;
-  background: var(--tma-card);
+  background: none;
   font: inherit;
   cursor: pointer;
   transition: transform 0.16s var(--ease-out, ease);
@@ -3043,15 +3066,14 @@ html.app .wz-tile:active {
 html.app .wz-tile-ic {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 15px;
-  background: var(--tma-inset);
+  width: 40px;
+  height: 40px;
   color: var(--accent);
 }
+/* Без плашки значку можно быть крупнее — он и опознаёт платформу. */
 html.app .wz-tile-ic svg {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
 }
 html.app .wz-tile-t {
   font-size: 14.5px;
@@ -3066,9 +3088,13 @@ html.app .wz-step {
   display: grid;
   grid-template-columns: 34px 1fr;
   gap: 14px;
-  padding: 18px;
-  border-radius: 20px;
-  background: var(--tma-card);
+  padding: 0;
+}
+/* Шаги идут подряд, поэтому граница у соседа — линия ровно между ними
+   и ни одной лишней сверху или снизу списка. */
+html.app .wz-step + .wz-step {
+  padding-top: 22px;
+  border-top: 1px solid var(--wz-line);
 }
 html.app .wz-num {
   display: grid;
@@ -3080,6 +3106,7 @@ html.app .wz-num {
   font-size: 16px;
   font-weight: 800;
   color: #fff;
+  box-shadow: 0 6px 14px -6px rgba(250, 76, 22, 0.6);
 }
 html.app .wz-step-body {
   display: flex;
@@ -3111,13 +3138,11 @@ html.app .wz-cta {
   color: #fff;
   text-decoration: none;
   cursor: pointer;
+  box-shadow: 0 8px 18px -8px rgba(250, 76, 22, 0.55);
 }
 
 html.app .wz-login {
-  margin-top: 4px;
-  padding: 10px 13px;
-  border-radius: 13px;
-  background: var(--tma-inset);
+  margin-top: 6px;
   font-size: 14.5px;
   color: var(--text-faint);
 }
@@ -3143,9 +3168,8 @@ html.app .wz-done {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 18px;
-  border-radius: 20px;
-  background: var(--tma-inset);
+  padding-top: 22px;
+  border-top: 1px solid var(--wz-line);
 }
 html.app .wz-done-t {
   font-size: 16px;

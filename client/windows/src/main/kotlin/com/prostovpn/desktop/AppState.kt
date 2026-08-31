@@ -33,6 +33,10 @@ data class ServerInfo(
     val config: String? = null,
 
     val altPorts: List<Int> = emptyList(),
+
+    // Запасной путь до того же узла. Пусто — значит панель его не дала:
+    // на узле нет живой точки Reality либо доступ не выдался.
+    val vless: XrayTunnel.Access? = null,
 ) {
     fun countryFor(lang: String): String? =
         if (lang == "en") countryEn ?: country else country ?: countryEn
@@ -64,6 +68,9 @@ data class TunnelFile(
 )
 
 enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
+
+/** Чем поднят туннель: основным AmneziaWG или запасным VLESS поверх Reality. */
+enum class Protocol { AWG, VLESS }
 
 enum class UpdateStage { CHECKING, IDLE, DOWNLOADING, INSTALLING }
 
@@ -129,6 +136,12 @@ class AppState(private val scope: CoroutineScope) {
 
     private var connectJob: Job? = null
     private var timerJob: Job? = null
+
+    // Каким протоколом стоим сейчас. Нужно и чтобы снимать именно то, что
+    // поднято, и чтобы сторож проверял живость правильным способом: у
+    // AmneziaWG есть счётчики и рукопожатие, у Reality — процесс и адаптер.
+    var activeProtocol by mutableStateOf(Protocol.AWG)
+        private set
 
     var lang by mutableStateOf(prefs.get("lang", "ru") ?: "ru")
         private set
@@ -906,6 +919,11 @@ class AppState(private val scope: CoroutineScope) {
     private fun startConnect() {
         val config = server?.config
         connectionError = null
+        // Каждая попытка начинается с основного протокола: запасной — это
+        // ответ на неудачу, а не постоянный режим. Иначе человек, у которого
+        // однажды не прошёл UDP, навсегда остался бы на прокси, даже когда
+        // сеть давно починилась.
+        activeProtocol = Protocol.AWG
 
         // Гостевой режим и демо-серверы: реального конфига нет, показываем
         // интерфейс как есть — подключаться нечем.
@@ -971,6 +989,20 @@ class AppState(private val scope: CoroutineScope) {
             }
 
             if (phase != Phase.CONNECTING) return@launch
+
+            // Порты этой страны молчат. Прежде чем уезжать в другую, пробуем
+            // второй протокол на том же узле: Reality идёт по TCP на 443 и
+            // переживает сети, где UDP не проходит вовсе — сколько портов ни
+            // перебирай. Смена протокола дешевле смены страны: человек
+            // остаётся там, где выбрал.
+            //
+            // Только после «нет рукопожатия». Отказ в правах или отсутствие
+            // движка повторятся и здесь, а лишнее окно UAC после того, как
+            // человек уже нажал «нет», — издевательство.
+            if (lastFailure == null || lastFailure.reason == WindowsTunnel.Reason.NoHandshake) {
+                if (tryVless()) return@launch
+            }
+
             val result = lastFailure
             if (result == null) {
                 phase = Phase.OFF
@@ -1064,6 +1096,13 @@ class AppState(private val scope: CoroutineScope) {
                     nextCheck = elapsed + 5
                     val alive = withContext(Dispatchers.IO) {
                         runCatching {
+                            // У запасного протокола своих счётчиков нет:
+                            // xray не расскажет, сколько байт прошло, не
+                            // открыв ещё один служебный порт. Смотрим на то,
+                            // что есть, — жив ли процесс и стоит ли адаптер.
+                            if (activeProtocol == Protocol.VLESS) {
+                                return@runCatching XrayTunnel.isHealthy()
+                            }
                             if (!tunnel.isUp()) return@runCatching false
                             val live = tunnel.live() ?: return@runCatching true
                             // Рукопожатие обновляется не чаще раза в две минуты,
@@ -1145,6 +1184,35 @@ class AppState(private val scope: CoroutineScope) {
     }
 
     /**
+     * Поднимает запасной протокол на нынешнем узле. `true` — получилось.
+     *
+     * Панель присылает доступ к Reality вместе с обычным конфигом, поэтому
+     * ходить за ним отдельно не нужно. Если узел его не дал — тихо уходим:
+     * отсутствие запасного пути не ошибка, просто пробовать нечего.
+     */
+    private suspend fun tryVless(): Boolean {
+        val access = server?.vless ?: return false
+        if (phase != Phase.CONNECTING) return false
+
+        // Снимаем недоподнятый AmneziaWG: два туннеля сразу поспорят за
+        // маршрут по умолчанию, и выиграет неизвестно кто.
+        withContext(Dispatchers.IO) { runCatching { tunnel.disconnect() } }
+
+        val result = withContext(Dispatchers.IO) { XrayTunnel.connect(access) }
+        if (result is XrayTunnel.Result.Success) {
+            activeProtocol = Protocol.VLESS
+            phase = Phase.ON
+            startTimer()
+            return true
+        }
+
+        // Не вышло — прибираем за собой, иначе повисший xray займёт порт и
+        // следующая попытка упрётся уже в него.
+        withContext(Dispatchers.IO) { XrayTunnel.disconnect(access.host) }
+        return false
+    }
+
+    /**
      * Последняя надежда: уводит на соседнюю страну.
      *
      * Если ни один порт этой страны не поднялся за минуту с лишним, дело уже
@@ -1188,10 +1256,23 @@ class AppState(private val scope: CoroutineScope) {
         */
         phase = Phase.DISCONNECTING
         // seconds не обнуляем: уходящий таймер дофейдится с последним значением
+        val vlessHost = server?.vless?.host.orEmpty()
+        val wasVless = activeProtocol == Protocol.VLESS
         connectJob = scope.launch {
             val down = withContext(Dispatchers.IO) {
-                runCatching { tunnel.disconnect() }.getOrDefault(false)
+                // Снимаем то, что подняли. Гасим и второй движок на всякий
+                // случай: если прошлая попытка оборвалась на полпути, от неё
+                // мог остаться живой xray, и он тихо держал бы маршруты.
+                if (wasVless) {
+                    runCatching { XrayTunnel.disconnect(vlessHost) }
+                    runCatching { tunnel.disconnect() }.getOrDefault(true)
+                } else {
+                    val ok = runCatching { tunnel.disconnect() }.getOrDefault(false)
+                    if (XrayTunnel.isUp()) runCatching { XrayTunnel.disconnect(vlessHost) }
+                    ok
+                }
             }
+            activeProtocol = Protocol.AWG
             phase = Phase.OFF
             connectJob = null
             if (!down) connectionError = s.errDisconnectStuck

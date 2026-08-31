@@ -49,6 +49,28 @@ class LoginRequest(BaseModel):
     device_name: str | None = Field(default=None, max_length=96)
 
 
+class VlessOut(BaseModel):
+    """
+    Второй путь до того же узла — VLESS поверх Reality.
+
+    Нужен там, где AmneziaWG не проходит вовсе: он идёт по TCP на 443 и от
+    настоящего HTTPS к донорскому сайту неотличим. Поля разложены по одному,
+    а не только ссылкой, чтобы клиенту не пришлось разбирать `vless://`
+    самому; ссылка тоже есть — её удобно отдать человеку для стороннего
+    приложения.
+    """
+
+    host: str
+    port: int
+    id: str
+    public_key: str
+    short_id: str = ""
+    server_name: str = ""
+    fingerprint: str = "chrome"
+    flow: str = ""
+    url: str = ""
+
+
 class ServerOut(BaseModel):
 
     id: int
@@ -60,6 +82,9 @@ class ServerOut(BaseModel):
     country_code: str | None = None
     config: str
     alt_ports: list[int] = []
+    # Пусто, если на узле нет живой точки Reality или её не удалось выдать:
+    # отсутствие запасного пути не повод не отдать основной.
+    vless: VlessOut | None = None
 
 
 class SubscriptionOut(BaseModel):
@@ -287,9 +312,66 @@ def _servers_out(
                 country_code=server.country_code,
                 config=config,
                 alt_ports=[main_port] + spare_ports,
+                vless=_vless_out(db, user, server, device_id),
             )
         )
     return out
+
+
+def _vless_out(
+    db: OrmSession, user: User, server: Server, device_id: str
+) -> VlessOut | None:
+    """
+    Готовит запасной путь до узла: доступ к Reality для этого устройства.
+
+    Молчим при любой заминке. Reality — запасной ход, и если он не сложился,
+    человек должен получить обычный конфиг, а не ошибку входа. Сессиям, что
+    не занимают слот устройства (бот, сайт), запасной путь не нужен: они и
+    основной ключ не получают.
+    """
+    if not device_id:
+        return None
+    try:
+        from .models import EndpointKind
+        from .services import xray
+
+        live = [
+            ep
+            for ep in server.endpoints
+            if ep.kind == EndpointKind.VLESS and ep.is_live and xray.is_on_node(ep)
+        ]
+        if not live:
+            return None
+        endpoint = sorted(live, key=lambda e: (e.priority, e.id))[0]
+
+        creds = xray.live_creds(db, user, server, device_id)
+        cred = next((c for c in creds if c.endpoint_id == endpoint.id), None)
+        if cred is None:
+            if not endpoint.accepts_new:
+                return None
+            cred = xray.issue_cred(db, user, server, endpoint, device_id)
+
+        identity = cred.identity
+        if not identity:
+            return None
+
+        params = endpoint.params or {}
+        extra = cred.extra or {}
+        names = params.get("server_names") or [""]
+        return VlessOut(
+            host=endpoint.public_host(server),
+            port=params.get("advertise_port") or endpoint.listen_port,
+            id=identity,
+            public_key=params.get("public_key", ""),
+            short_id=extra.get("short_id", ""),
+            server_name=names[0],
+            fingerprint=params.get("fingerprint", "chrome"),
+            flow=extra.get("flow", ""),
+            url=xray.share_link(endpoint, cred, server) or "",
+        )
+    except Exception:
+        log.exception("сервер «%s»: запасной путь Reality не собрался", server.name)
+        return None
 
 
 PORT_PROBE_SECONDS = 180

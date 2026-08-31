@@ -130,6 +130,31 @@ object PanelApi {
         )
     }
 
+    /**
+     * Запасной путь до узла. Панель присылает его не всегда: на узле может не
+     * быть точки Reality. Разбираем мягко — без ключа или адреса подключаться
+     * всё равно нечем, и лучше остаться с одним основным протоколом, чем
+     * уронить разбор всего списка серверов.
+     */
+    private fun parseVless(item: JSONObject?): XrayTunnel.Access? {
+        if (item == null) return null
+        val host = item.optString("host")
+        val port = item.optInt("port")
+        val id = item.optString("id")
+        val publicKey = item.optString("public_key")
+        if (host.isEmpty() || port !in 1..65535 || id.isEmpty() || publicKey.isEmpty()) return null
+        return XrayTunnel.Access(
+            host = host,
+            port = port,
+            id = id,
+            publicKey = publicKey,
+            shortId = item.optString("short_id"),
+            serverName = item.optString("server_name"),
+            fingerprint = item.optString("fingerprint").ifEmpty { "chrome" },
+            flow = item.optString("flow"),
+        )
+    }
+
     private fun parseServers(body: JSONObject): List<ServerInfo> {
         val array = body.optJSONArray("servers") ?: return emptyList()
         return (0 until array.length()).mapNotNull { i ->
@@ -150,6 +175,7 @@ object PanelApi {
                         ports.optInt(n).takeIf { it in 1..65535 }
                     }
                 } ?: emptyList(),
+                vless = parseVless(item.optJSONObject("vless")),
             )
         }
     }

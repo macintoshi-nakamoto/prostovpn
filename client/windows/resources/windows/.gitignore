@@ -1,6 +1,9 @@
-# Движок туннеля собирается задачей buildTunnel, wintun — fetchWintun
+# Движок туннеля собирается задачей buildTunnel, wintun — fetchWintun,
+# запасной протокол — fetchXray и fetchTun2socks
 prostovpn-tunnel.exe
 wintun.dll
+xray.exe
+tun2socks.exe
 # Движок Amnezia больше не используется — остаток прежних сборок
 amneziawg.exe
 tmp/

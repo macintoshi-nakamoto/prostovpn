@@ -195,6 +195,83 @@ tasks.register("fetchWintun") {
     }
 }
 
+/**
+ * Скачивает бинарник из zip-архива релиза и сверяет контрольную сумму.
+ *
+ * Оба запасных движка — xray и tun2socks — лежат на GitHub одинаково
+ * упакованными, поэтому качаем их одним кодом. Сумму проверяем обязательно:
+ * это исполняемый файл, который окажется у людей на машинах.
+ */
+fun Task.fetchFromZip(
+    url: String,
+    entrySuffix: String,
+    target: File,
+    expectedSha: String,
+) {
+    val outDir = target.parentFile
+    outDir.mkdirs()
+    val tmp = File(outDir, "tmp").apply { mkdirs() }
+    val archive = File(tmp, target.nameWithoutExtension + ".zip")
+
+    logger.lifecycle("Скачиваю $url")
+    URI(url).toURL().openStream().use { input ->
+        archive.outputStream().use { output -> input.copyTo(output) }
+    }
+
+    ZipFile(archive).use { zip ->
+        val entry = zip.entries().asSequence()
+            .firstOrNull { !it.isDirectory && it.name.replace('\\', '/').endsWith(entrySuffix) }
+            ?: error("В $archive нет $entrySuffix")
+        zip.getInputStream(entry).use { input ->
+            target.outputStream().use { output -> input.copyTo(output) }
+        }
+    }
+
+    val digest = MessageDigest.getInstance("SHA-256")
+        .digest(target.readBytes())
+        .joinToString("") { "%02x".format(it) }
+    check(digest == expectedSha) {
+        "Контрольная сумма ${target.name} не совпала:\n  ожидали $expectedSha\n  получили $digest"
+    }
+    logger.lifecycle("${target.name}: контрольная сумма совпала")
+
+    tmp.deleteRecursively()
+}
+
+tasks.register("fetchXray") {
+    group = "distribution"
+    description = "Скачивает xray.exe в resources/windows — движок запасного протокола"
+
+    val target = tunnelResourcesDir.file("xray.exe").asFile
+    outputs.file(target)
+
+    doLast {
+        fetchFromZip(
+            url = "https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-windows-64.zip",
+            entrySuffix = "xray.exe",
+            target = target,
+            expectedSha = "15c2d007954ac53ba69b80ec91242786b3c0b71d52649165b4ca1d5cc96ef8f1",
+        )
+    }
+}
+
+tasks.register("fetchTun2socks") {
+    group = "distribution"
+    description = "Скачивает tun2socks.exe — заворачивает трафик адаптера в прокси xray"
+
+    val target = tunnelResourcesDir.file("tun2socks.exe").asFile
+    outputs.file(target)
+
+    doLast {
+        fetchFromZip(
+            url = "https://github.com/xjasonlyu/tun2socks/releases/download/v2.7.0/tun2socks-windows-amd64.zip",
+            entrySuffix = "tun2socks-windows-amd64.exe",
+            target = target,
+            expectedSha = "076b3c3d6a372bae3f49f2b415a4105f70c30a3ed3caaed7979390e649892559",
+        )
+    }
+}
+
 listOf(
     "prepareAppResources",
     "packageMsi",
@@ -204,7 +281,7 @@ listOf(
     "runDistributable",
 ).forEach { name ->
     tasks.matching { it.name == name }.configureEach {
-        dependsOn("buildTunnel", "fetchWintun")
+        dependsOn("buildTunnel", "fetchWintun", "fetchXray", "fetchTun2socks")
     }
 }
 

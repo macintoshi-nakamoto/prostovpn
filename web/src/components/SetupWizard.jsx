@@ -199,20 +199,38 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
           </div>
         ) : (
           <>
+            {/* Список, а не сетка: устройств пять, и в двух колонках
+                последнее висело одиноким огрызком слева. Заодно рядом с
+                названием помещается, что там за приложение — iPhone и
+                телевизор отличаются, и знать это лучше до выбора. */}
             <span className="wz-h">{t("wizard.pickTitle")}</span>
-            <div className="wz-grid">
+            <div className="wz-list">
               {DEVICES.map((one) => (
                 <button
                   key={one.id}
                   type="button"
-                  className="wz-tile"
+                  className="wz-item"
                   onClick={() => pick(one.id)}
                 >
-                  <span className="wz-tile-ic">{icons[one.icon]}</span>
-                  <span className="wz-tile-t">{t(`wizard.device.${one.id}`)}</span>
+                  <span className="wz-item-ic">{icons[one.icon]}</span>
+                  <span className="wz-item-body">
+                    <span className="wz-item-t">{t(`wizard.device.${one.id}`)}</span>
+                    <span className="wz-item-s">{t(`wizard.hint.${one.id}`)}</span>
+                  </span>
+                  <span className="ap-chev">&rsaquo;</span>
                 </button>
               ))}
             </div>
+            {/* На сайте с этого списка иначе не вернуться: своей стрелки
+                тут не было, а системной кнопки, как в Telegram, нет. */}
+            {!inTelegram && guessed && (
+              <button type="button" className="wz-back wz-back-mid" onClick={back}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M15 5l-7 7 7 7" />
+                </svg>
+                {t("wizard.back")}
+              </button>
+            )}
           </>
         )}
 

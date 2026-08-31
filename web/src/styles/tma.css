@@ -2922,6 +2922,11 @@ html.app .wz {
 html.app .wz-first {
   min-height: calc(100dvh - 190px);
   justify-content: center;
+  /* Со списком из пяти устройств содержимое может перерасти экран, а
+     обычный center в таком случае срезает верх и доскроллить до него
+     нельзя. safe center прижимает к началу; там, где его не понимают,
+     остаётся строка выше. */
+  justify-content: safe center;
 }
 
 /* Плашка под плашкой под плашкой выглядела как склад коробок: серый квадрат
@@ -3032,30 +3037,40 @@ html.app .wz-h {
   color: var(--text-faint);
 }
 
-/* Плитки устройств: крупные цели, по две в ряд даже на узком экране. */
-html.app .wz-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
-}
-html.app .wz-tile {
+/* Список устройств: та же геометрия, что у строк кабинета (ap-row) —
+   40px значок, 14px до текста, разделитель от текста. */
+html.app .wz-list {
   display: flex;
   flex-direction: column;
+}
+html.app .wz-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
   align-items: center;
-  gap: 12px;
-  padding: 22px 12px;
-  border: 1px solid var(--wz-line);
-  border-radius: 20px;
+  gap: 14px;
+  padding: 14px 2px;
+  border: none;
   background: none;
   font: inherit;
+  text-align: left;
   cursor: pointer;
   transition: transform 0.16s var(--ease-out, ease);
 }
-html.app .wz-tile:active {
-  transform: scale(0.97);
+html.app .wz-item:active {
+  transform: scale(0.985);
   transition-duration: 0.06s;
 }
-html.app .wz-tile-ic {
+html.app .wz-item + .wz-item::before {
+  content: "";
+  position: absolute;
+  left: 54px;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: var(--wz-line);
+}
+html.app .wz-item-ic {
   display: grid;
   place-items: center;
   width: 40px;
@@ -3063,16 +3078,26 @@ html.app .wz-tile-ic {
   color: var(--accent);
 }
 /* Без плашки значку можно быть крупнее — он и опознаёт платформу. */
-html.app .wz-tile-ic svg {
-  width: 32px;
-  height: 32px;
+html.app .wz-item-ic svg {
+  width: 30px;
+  height: 30px;
 }
-html.app .wz-tile-t {
-  font-size: 14.5px;
+html.app .wz-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+html.app .wz-item-t {
+  font-size: 16px;
   font-weight: 600;
-  text-align: center;
   line-height: 1.25;
   color: var(--ink);
+}
+html.app .wz-item-s {
+  font-size: 13.5px;
+  line-height: 1.3;
+  color: var(--text-faint);
 }
 
 /* Шаг: крупная цифра слева, содержание справа. */
@@ -3305,6 +3330,16 @@ html.app .wz-back svg {
 }
 html.app .wz-back:active {
   background: var(--wz-line);
+}
+/* На списке устройств «назад» стоит под содержимым, а не над ним: сверху
+   уже есть заголовок экрана. И цветом приглушён — на экране выбора взгляд
+   должен цепляться за устройства, а не за путь обратно. */
+html.app .wz-back-mid {
+  align-self: center;
+  margin: 2px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-faint);
 }
 
 html.app .xk-lead {

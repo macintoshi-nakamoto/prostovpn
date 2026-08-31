@@ -1048,6 +1048,13 @@ export const en = {
       ios: "iPhone or iPad",
       tv: "TV",
     },
+    hint: {
+      windows: "Our app",
+      android: "Our app",
+      macos: "Our app",
+      ios: "Through AmneziaVPN",
+      tv: "Through the Android app",
+    },
     back: "Back",
     haveApp: "I already use Happ or Hiddify",
     otherTitle: "Open this page on that device",

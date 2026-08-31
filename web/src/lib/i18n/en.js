@@ -1049,7 +1049,7 @@ export const en = {
       tv: "TV",
     },
     back: "Back",
-    haveApp: "Already using Happ or Hiddify? Get a key for them",
+    haveApp: "I already use Happ or Hiddify",
     otherTitle: "Open this page on that device",
     otherLead: "Point its camera here — the page opens there and downloading gets easier.",
     getApp: "Install the app",

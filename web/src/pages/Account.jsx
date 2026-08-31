@@ -230,16 +230,20 @@ export function Account() {
               {shortAddress(tonAddress(wallet))}
             </button>
           ) : (
-            <button
-              type="button"
-              className="ac-wallet"
-              onClick={() => {
-                tmaHaptic("select");
-                ensureConnected();
-              }}
-            >
-              {t("profile.connectWallet")}
-            </button>
+            // На установке кошелёк прячем: там человек занят одним делом —
+            // подключиться, и вторая крупная кнопка сбивает с него.
+            shownTab !== "setup" && (
+              <button
+                type="button"
+                className="ac-wallet"
+                onClick={() => {
+                  tmaHaptic("select");
+                  ensureConnected();
+                }}
+              >
+                {t("profile.connectWallet")}
+              </button>
+            )
           )}
         </div>
       </header>
@@ -248,10 +252,12 @@ export function Account() {
         {/* key по вкладке: контент каждый раз входит мягким подъёмом,
             а не подменяется скачком. */}
         <div className="ac-view" key={shownTab}>
-        <div className="ac-title">
-          <h1>{title}</h1>
-          <p>{subtitle}</p>
-        </div>
+        {shownTab !== "setup" && (
+          <div className="ac-title">
+            <h1>{title}</h1>
+            <p>{subtitle}</p>
+          </div>
+        )}
 
         {error && <div className="ac-error">{error}</div>}
 

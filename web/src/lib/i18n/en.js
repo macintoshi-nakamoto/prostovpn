@@ -1054,7 +1054,7 @@ export const en = {
     otherLead: "Point its camera here — the page opens there and downloading gets easier.",
     getApp: "Install the app",
     signIn: "Sign in",
-    signInLead: "Tap a line to copy it. Countries appear on their own — nothing to type.",
+    signInLead: "Copy them with the button and paste into the app. Countries appear on their own — nothing to type.",
     ownPassword: "You set the password yourself, so we cannot show it. Forgot it — change it on the Account tab.",
     yourLogin: "Your login:",
     iosGet: "Install AmneziaVPN",
@@ -1067,6 +1067,9 @@ export const en = {
     waitFile: "Getting the file…",
     openGuide: "Open the guide with screenshots",
     copied: "Copied",
+    showPwd: "Show password",
+    hidePwd: "Hide password",
+    copyAria: "Copy",
     doneTitle: "How to tell it worked",
     doneLead: "A list of countries appears in the app. Pick any and press connect — the VPN icon lights up at the top of the screen.",
     plan: {

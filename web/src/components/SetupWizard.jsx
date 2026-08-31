@@ -41,6 +41,34 @@ function guessDevice() {
 
 const DOWNLOAD_KEY = { windows: "windows", android: "android", tv: "android", macos: "macos" };
 
+/* Значки для строк входа. Держим здесь, а не в общем наборе кабинета:
+   больше нигде глаз и листы не нужны. */
+const EYE = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
+    <circle cx="12" cy="12" r="2.7" />
+  </svg>
+);
+const EYE_OFF = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 4l16 16" />
+    <path d="M9.6 5.7A11 11 0 0 1 12 5.5c6.4 0 10 6.5 10 6.5a18 18 0 0 1-3.5 4.2" />
+    <path d="M6.4 7.7A18 18 0 0 0 2 12s3.6 6.5 10 6.5c1 0 1.9-.1 2.7-.4" />
+    <path d="M9.9 9.9a2.7 2.7 0 0 0 3.8 3.8" />
+  </svg>
+);
+const COPY = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="9" y="9" width="11" height="11" rx="2.5" />
+    <path d="M15 5.5A2.5 2.5 0 0 0 12.5 3h-7A2.5 2.5 0 0 0 3 5.5v7A2.5 2.5 0 0 0 5.5 15" />
+  </svg>
+);
+const CHECK = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4.5 12.5l5 5 10-11" />
+  </svg>
+);
+
 /**
  * Телевизор — исключение из правила «не показываем скачивание чужому
  * устройству». Кабинет на телевизоре никто не открывает, определить его
@@ -70,6 +98,9 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
   // он их ни разу не видел — а в приложении на компьютере спрашивают
   // именно их. Пароль приходит, только пока он выданный нами.
   const [creds, setCreds] = useState(null);
+  // Пароль под точками, пока не попросили показать: экран установки
+  // открывают при людях, а подглядеть его хватает одного взгляда.
+  const [shown, setShown] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -276,29 +307,43 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
                   именно их человек из Telegram никогда не видел. Пароля
                   нет, если он задал свой — тогда показать его нам нечем. */}
               <div className="wz-creds">
-                <button
-                  type="button"
-                  className="wz-cred"
-                  onClick={() => copy(creds?.login || login, "login")}
-                >
+                <div className="wz-cred">
                   <span className="wz-cred-k">{t("account.webLoginLogin")}</span>
                   <span className="wz-cred-v">{creds?.login || login}</span>
-                  <span className="wz-cred-c">
-                    {copied === "login" ? t("wizard.copied") : ""}
-                  </span>
-                </button>
-                {creds?.password ? (
                   <button
                     type="button"
-                    className="wz-cred"
-                    onClick={() => copy(creds.password, "password")}
+                    className="wz-cred-b"
+                    aria-label={t("wizard.copyAria")}
+                    onClick={() => copy(creds?.login || login, "login")}
                   >
-                    <span className="wz-cred-k">{t("account.webLoginPassword")}</span>
-                    <span className="wz-cred-v">{creds.password}</span>
-                    <span className="wz-cred-c">
-                      {copied === "password" ? t("wizard.copied") : ""}
-                    </span>
+                    {copied === "login" ? CHECK : COPY}
                   </button>
+                </div>
+                {creds?.password ? (
+                  <div className="wz-cred">
+                    <span className="wz-cred-k">{t("account.webLoginPassword")}</span>
+                    {/* Точек ровно столько, сколько символов: длина не
+                        секрет, зато строка не прыгает при раскрытии. */}
+                    <span className="wz-cred-v">
+                      {shown ? creds.password : "•".repeat(creds.password.length)}
+                    </span>
+                    <button
+                      type="button"
+                      className="wz-cred-b"
+                      aria-label={shown ? t("wizard.hidePwd") : t("wizard.showPwd")}
+                      onClick={() => setShown((on) => !on)}
+                    >
+                      {shown ? EYE_OFF : EYE}
+                    </button>
+                    <button
+                      type="button"
+                      className="wz-cred-b"
+                      aria-label={t("wizard.copyAria")}
+                      onClick={() => copy(creds.password, "password")}
+                    >
+                      {copied === "password" ? CHECK : COPY}
+                    </button>
+                  </div>
                 ) : creds?.is_generated === false ? (
                   // Именно этот флаг, а не «пароля в ответе нет»: при сбое
                   // сети мы бы иначе уверяли, что человек задал пароль сам.

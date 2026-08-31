@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { useI18n } from "../lib/i18n/index.jsx";
 import { starsPayUrl } from "../lib/contacts.js";
-import { CryptoIcon, SbpIcon, TelegramIcon } from "./PayIcons.jsx";
+import { tonPay } from "../lib/ton.js";
+import { CryptoIcon, SbpIcon, TelegramIcon, TonIcon } from "./PayIcons.jsx";
+import { introApplies, planAmountKopecks } from "../lib/plans.js";
 import "./payment-dialog.css";
 
 export function PaymentDialog({
@@ -28,7 +30,10 @@ export function PaymentDialog({
 
   if (!open || !plan) return null;
 
-  const price = f.moneyFromKopecks(plan.price_kopecks * quantity, plan.currency);
+  // Сумму берём тем же правилом, что и бэкенд: раньше здесь всегда стояла
+  // полная цена, и человек видел на кнопке 249 ₽, а счёт выставлялся на 50 ₽.
+  const intro = introApplies(plan, quantity);
+  const price = f.moneyFromKopecks(planAmountKopecks(plan, quantity), plan.currency);
   const term = f.days(plan.duration_days * quantity);
 
   return (
@@ -47,6 +52,15 @@ export function PaymentDialog({
           <span className="pay-plan">{t("pay.title", { plan: plan.title })}</span>
           <span className="pay-sum">{price}</span>
           <span className="pay-term">{t("pay.term", { term })}</span>
+          {intro && (
+            /* Цену продления показываем сразу: узнать о ней через месяц —
+               худший момент из возможных. */
+            <span className="pay-intro">
+              {t("pay.introThen", {
+                price: f.moneyFromKopecks(plan.price_kopecks, plan.currency),
+              })}
+            </span>
+          )}
         </div>
 
         {invoice ? (
@@ -59,6 +73,14 @@ export function PaymentDialog({
             icon={<SbpIcon />}
             name={t("pay.sbp")}
             sub={t("pay.sbpSub")}
+            busyMethod={busyMethod}
+            onPay={onPay}
+          />
+          <PayMethod
+            method="ton"
+            icon={<TonIcon />}
+            name={t("pay.ton")}
+            sub={t("pay.tonSub")}
             busyMethod={busyMethod}
             onPay={onPay}
           />
@@ -154,23 +176,38 @@ function PayInvoice({ invoice, onNewInvoice, onClose }) {
   }
 
   const isCrypto = invoice.method === "crypto";
+  const isTon = invoice.method === "ton";
   return (
     <div className="pay-invoice" role="status">
       <span className="pay-inv-pulse" aria-hidden="true" />
       <p className="pay-inv-title">{t("pay.invWaiting")}</p>
       <p className="pay-inv-sub">
-        {isCrypto ? t("pay.invWaitingSubCrypto") : t("pay.invWaitingSub")}
+        {isTon
+          ? t("pay.invWaitingSubTon")
+          : isCrypto
+            ? t("pay.invWaitingSubCrypto")
+            : t("pay.invWaitingSub")}
       </p>
-      <a
-        className="btn btn-primary pay-inv-btn"
-        href={invoice.url}
-        target="_blank"
-        rel="noreferrer"
-      >
-        {t("pay.invOpen")}
-      </a>
+      {isTon ? (
+        <button
+          className="btn btn-primary pay-inv-btn"
+          type="button"
+          onClick={() => tonPay(invoice.url).catch(() => {})}
+        >
+          {t("pay.invOpenTon")}
+        </button>
+      ) : (
+        <a
+          className="btn btn-primary pay-inv-btn"
+          href={invoice.url}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {t("pay.invOpen")}
+        </a>
+      )}
       <p className="pay-inv-hint">
-        {isCrypto ? t("pay.invHintCrypto") : t("pay.invHint")}
+        {isTon ? t("pay.invHintTon") : isCrypto ? t("pay.invHintCrypto") : t("pay.invHint")}
       </p>
       <button className="ac-link pay-inv-back" type="button" onClick={onNewInvoice}>
         {t("pay.invOther")}

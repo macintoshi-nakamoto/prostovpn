@@ -7,23 +7,11 @@
   display: none;
 }
 
+/* Шапка не липнет: скроллится вместе со страницей — она лишь вход
+   в профиль и кошелёк, а не постоянная панель. */
 .ac-header {
-  position: sticky;
-  top: 0;
-  z-index: 40;
   background: var(--bg);
   border-bottom: 1px solid var(--line);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
-}
-
-.ac-header.scrolled {
-  border-bottom-color: transparent;
-  box-shadow: 0 6px 24px rgba(15, 20, 30, 0.08);
-}
-
-[data-theme="dark"] .ac-header.scrolled {
-  border-bottom-color: var(--line);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 [data-theme="dark"] .ac-bottom {
   box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
@@ -58,6 +46,9 @@
   background: var(--accent-tint);
   transition: transform 0.2s var(--ease-out, ease), width 0.2s var(--ease-out, ease);
   pointer-events: none;
+  /* Свой слой: капелька едет на композиторе и не дёргается, пока главный
+     поток занят монтированием новой вкладки. */
+  will-change: transform;
 }
 @media (prefers-reduced-motion: reduce) {
   .ac-pill {
@@ -102,28 +93,86 @@
   outline-offset: 2px;
 }
 
-.ac-user {
-  position: relative;
-  flex: none;
-}
-.ac-user-btn {
+/* Чип «кто я»: ава + ник + шеврон, ведёт в профиль. */
+.ac-id {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   border: none;
   cursor: pointer;
+  min-height: 44px;
   font-size: 15px;
   font-weight: 600;
   color: var(--ink);
-  background: transparent;
-  padding: 7px 14px 7px 7px;
+  background: var(--bg-soft);
+  padding: 5px 12px 5px 5px;
   border-radius: 999px;
   transition: background 0.18s ease;
+  min-width: 0;
 }
-.ac-user-btn:hover,
-.ac-user-btn.open {
+.ac-id:hover {
+  background: var(--bg-field);
+}
+.ac-id,
+.ac-wallet {
+  transition: background 0.18s ease, transform 0.18s var(--ease-spring, ease);
+}
+.ac-id:active,
+.ac-wallet:active {
+  transform: scale(0.96);
+}
+.ac-id:focus-visible,
+.ac-wallet:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.ac-id-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ac-id-chev {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--text-dim);
+}
+
+/* Кошелёк: единственный акцент шапки. Подключён — тихий чип с адресом. */
+.ac-wallet {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  transition: background 0.18s ease;
+}
+.ac-wallet:hover {
+  background: var(--accent-hover);
+}
+.ac-wallet svg {
+  width: 18px;
+  height: 18px;
+}
+.ac-wallet-on {
+  color: var(--ink);
   background: var(--bg-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13.5px;
 }
+.ac-wallet-on:hover {
+  background: var(--bg-field);
+}
+
 .ac-avatar {
   width: 34px;
   height: 34px;
@@ -143,68 +192,6 @@
   object-fit: cover;
   display: block;
 }
-.ac-caret {
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.ac-user-btn.open .ac-caret {
-  transform: rotate(180deg);
-}
-.ac-menu {
-  position: absolute;
-  right: 0;
-  top: 54px;
-  min-width: 230px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  box-shadow: 0 18px 40px rgba(20, 25, 35, 0.14);
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  z-index: 50;
-}
-.ac-menu-head {
-  padding: 10px 14px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.ac-menu-login {
-  font-size: 15px;
-  font-weight: 600;
-}
-.ac-menu-status {
-  font-size: 13px;
-  color: var(--text-dim);
-}
-.ac-menu-sep {
-  height: 1px;
-  background: var(--line-2);
-  margin: 4px 0;
-}
-.ac-menu-item {
-  border: none;
-  background: none;
-  text-align: left;
-  cursor: pointer;
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--ink);
-  padding: 11px 14px;
-  border-radius: 12px;
-}
-.ac-menu-item:hover {
-  background: var(--bg-field);
-}
-.ac-menu-danger {
-  color: var(--accent-dark);
-}
-.ac-menu-danger:hover {
-  background: var(--accent-tint);
-}
-
 .ac-main {
   max-width: 1180px;
   padding-top: 44px;
@@ -212,6 +199,37 @@
   display: flex;
   flex-direction: column;
   gap: 26px;
+}
+
+/* Контент вкладки входит фейдом, заголовок — с подъёмом. transform на самой
+   обёртке НЕЛЬЗЯ: анимация трансформа делает её точкой отсчёта для
+   position: fixed, и липкая «Продолжить» в тарифах прибивается к контенту
+   вместо экрана. Подъём поэтому только у .ac-title — там fixed-детей нет. */
+.ac-view {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  animation: ac-view-fade 0.22s ease-out;
+}
+@keyframes ac-view-fade {
+  from {
+    opacity: 0;
+  }
+}
+.ac-view .ac-title {
+  animation: ac-title-in 0.26s var(--ease-out, ease) backwards;
+}
+@keyframes ac-title-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ac-view,
+  .ac-view .ac-title {
+    animation: none;
+  }
 }
 .ac-title h1 {
   font-size: 42px;
@@ -243,7 +261,7 @@
 
 /* Мини-приложение Telegram: свой логотип, навигация лендинга и лишний
    воздух не нужны — Telegram уже нарисовал шапку со своим названием и
-   кнопкой закрытия. Переключатели языка и темы остаются. */
+   кнопкой закрытия. Язык и тема живут в профиле. */
 .tma .ac-logo,
 .tma .sh-logo,
 .tma .sh-nav,
@@ -685,16 +703,17 @@
     height: 17px;
   }
 
-  .ac-user-btn {
-    font-size: 0;
-    gap: 0;
-    padding: 4px;
-  }
-  .ac-user-btn .ac-avatar {
+  .ac-id {
+    gap: 7px;
+    padding: 4px 10px 4px 4px;
     font-size: 14px;
   }
-  .ac-caret {
-    display: none;
+  .ac-id-name {
+    max-width: 96px;
+  }
+  .ac-wallet {
+    padding: 10px 14px;
+    font-size: 13.5px;
   }
 
   .ac-tabs {
@@ -847,9 +866,13 @@
   .ac-device {
     padding: 14px 16px;
   }
-  .ac-menu {
-    right: 0;
-    min-width: 200px;
+}
+
+@media (max-width: 560px) {
+  /* Логотип уступает место нику: на телефоне кабинет живёт как приложение,
+     а не как страница сайта. */
+  .ac-header .ac-logo {
+    display: none;
   }
 }
 

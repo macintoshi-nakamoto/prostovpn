@@ -1,15 +1,14 @@
 /*
-  Формат приложения — карточный вид кабинета.
+  Обличье мини-приложения Telegram.
 
-  Родился как обличье мини-аппа Telegram, теперь общий: класс `app` стоит
-  и в Telegram, и на сайте на маршрутах /account (ставится скриптом в
-  index.html и синхронизируется в Account.jsx). Лендинг и /login класс не
-  получают — на них не влияет ни одно правило. Класс `tma` остался тонким
-  слоем «мы внутри Telegram» (скрытие лого, safe-area под шапку клиента —
-  см. account.css) и в CSS здесь не используется.
+  Грузится последним и целиком живёт под html.tma — на обычный сайт не
+  влияет ни одним правилом. Логика и разметка кабинета общие; здесь только
+  «формат приложения»: карточная канва, плавающий стеклянный таб-бар,
+  крупные кнопки, компактная шапка. Ширина внутри Telegram ≤ ~430px, так
+  что мобильные @media кабинета уже активны — мы поверх них.
 */
 
-html.app {
+html.tma {
   --tma-canvas: #eef0f4;
   --tma-card: #ffffff;
   --tma-inset: #f2f3f7;
@@ -17,7 +16,7 @@ html.app {
   --tma-glass-line: rgba(255, 255, 255, 0.7);
   --tma-shadow: 0 14px 44px rgba(20, 25, 35, 0.16);
 }
-html.app[data-theme="dark"] {
+html.tma[data-theme="dark"] {
   --tma-canvas: #1a1a1c;
   --tma-card: #29292b;
   --tma-inset: #343437;
@@ -26,34 +25,34 @@ html.app[data-theme="dark"] {
   --tma-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
   --tma-sep: rgba(255, 255, 255, 0.07);
 }
-html.app {
+html.tma {
   --tma-sep: rgba(10, 14, 20, 0.07);
 }
 
 /* ---------- канва и общий тон приложения ---------- */
 
-html.app {
+html.tma {
   overscroll-behavior-y: none;
 }
-html.app body {
+html.tma body {
   background: var(--tma-canvas);
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
 }
 
-html.app .ac {
+html.tma .ac {
   background: var(--tma-canvas);
 }
 
 /* Крупный заголовок страницы — лишний: Telegram уже нарисовал свой. */
-html.app .ac-title h1 {
+html.tma .ac-title h1 {
   font-size: 21px;
   letter-spacing: -0.02em;
 }
-html.app .ac-title p {
+html.tma .ac-title p {
   display: none;
 }
-html.app .ac-main {
+html.tma .ac-main {
   padding-top: 12px;
   gap: 14px;
   padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px));
@@ -61,38 +60,38 @@ html.app .ac-main {
 
 /* ---------- шапка: тонкое стекло ---------- */
 
-html.app .ac-header {
+html.tma .ac-header {
   background: transparent;
   border-bottom: none;
 }
-html.app .ac-header.scrolled {
+html.tma .ac-header.scrolled {
   border-bottom: none;
   box-shadow: none;
 }
-html.app .ac-header-in {
+html.tma .ac-header-in {
   height: 52px;
   padding-top: max(4px, env(safe-area-inset-top, 0px));
 }
 
 /* Переключалки и профиль: у каждого — СВОЁ тело из жидкого стекла, одного
    роста (36px). Не общая подложка, а отдельные капсулы, парящие в шапке. */
-html.app .ctl-lang,
-html.app .ctl-theme,
-html.app .ac-user-btn {
+html.tma .ctl-lang,
+html.tma .ctl-theme,
+html.tma .ac-user-btn {
   height: 36px;
   background: var(--tma-card);
   border: none;
   box-shadow: 0 6px 20px rgba(15, 20, 30, 0.14);
 }
-html.app[data-theme="dark"] .ctl-lang,
-html.app[data-theme="dark"] .ctl-theme,
-html.app[data-theme="dark"] .ac-user-btn {
+html.tma[data-theme="dark"] .ctl-lang,
+html.tma[data-theme="dark"] .ctl-theme,
+html.tma[data-theme="dark"] .ac-user-btn {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 @supports ((backdrop-filter: blur(1px))) or ((-webkit-backdrop-filter: blur(1px))) {
-  html.app .ctl-lang,
-  html.app .ctl-theme,
-  html.app .ac-user-btn {
+  html.tma .ctl-lang,
+  html.tma .ctl-theme,
+  html.tma .ac-user-btn {
     /* Матовое: сильный блюр, приглушённый цвет, плотнее обычного стекла. */
     background: var(--tma-glass);
     -webkit-backdrop-filter: blur(28px) saturate(1.1);
@@ -100,53 +99,53 @@ html.app[data-theme="dark"] .ac-user-btn {
   }
 }
 
-html.app .ctl-lang {
+html.tma .ctl-lang {
   --ctl-cell: 36px;
   --ctl-pad: 3px;
   box-sizing: border-box;
 }
-html.app .ctl-lang button {
+html.tma .ctl-lang button {
   height: 28px;
   font-size: 12px;
 }
-html.app .ctl-theme {
+html.tma .ctl-theme {
   width: 36px;
 }
-html.app .ctl-theme:hover {
+html.tma .ctl-theme:hover {
   color: var(--accent);
   border-color: var(--tma-glass-line);
 }
 
-html.app .ac-user-btn {
+html.tma .ac-user-btn {
   font-size: 14px;
   gap: 8px;
   padding: 0 10px 0 3px;
 }
-html.app .ac-user-btn:hover,
-html.app .ac-user-btn.open {
+html.tma .ac-user-btn:hover,
+html.tma .ac-user-btn.open {
   color: var(--accent);
 }
-html.app .ac-user-btn .ac-avatar {
+html.tma .ac-user-btn .ac-avatar {
   width: 30px;
   height: 30px;
   font-size: 13px;
   /* Без оранжевой подложки: за фото и лого не должно ничего выглядывать. */
   background: transparent;
 }
-html.app .ac-user-btn .ac-avatar img {
+html.tma .ac-user-btn .ac-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
-html.app .ac-caret {
+html.tma .ac-caret {
   display: inline;
   font-size: 9px;
   opacity: 0.6;
 }
 /* Меню профиля: капсула жидкого стекла, выпрыгивающая из пилюли — как
    контекстное меню iOS. Появление пружиной из правого верхнего угла. */
-html.app .ac-menu {
+html.tma .ac-menu {
   border-radius: 20px;
   border: 1px solid var(--tma-glass-line);
   background: var(--tma-card);
@@ -157,7 +156,7 @@ html.app .ac-menu {
   animation: tma-menu-pop 0.42s var(--ease-spring);
 }
 @supports ((backdrop-filter: blur(1px))) or ((-webkit-backdrop-filter: blur(1px))) {
-  html.app .ac-menu {
+  html.tma .ac-menu {
     background: var(--tma-glass);
     -webkit-backdrop-filter: blur(24px) saturate(1.7);
     backdrop-filter: blur(24px) saturate(1.7);
@@ -170,86 +169,64 @@ html.app .ac-menu {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  html.app .ac-menu {
+  html.tma .ac-menu {
     animation: none;
   }
 }
 
-html.app .ac-menu-head {
+html.tma .ac-menu-head {
   padding: 10px 12px 8px;
 }
-html.app .ac-menu-sep {
+html.tma .ac-menu-sep {
   margin: 4px 6px;
   background: var(--tma-glass-line);
 }
-html.app .ac-menu-item {
+html.tma .ac-menu-item {
   border-radius: 14px;
   padding: 12px 12px;
   min-height: 44px;
   transition: background 0.15s ease, transform 0.15s var(--ease-out, ease);
 }
-html.app .ac-menu-item:active {
+html.tma .ac-menu-item:active {
   transform: scale(0.97);
   transition-duration: 0s;
 }
-html.app .ac-menu-item:hover {
+html.tma .ac-menu-item:hover {
   background: var(--tma-inset);
 }
-html.app .ac-menu-danger:hover {
+html.tma .ac-menu-danger:hover {
   background: var(--accent-tint);
 }
 
 /* Пилюля профиля отвечает на нажатие телом, не только вибрацией. */
-html.app .ac-user-btn {
+html.tma .ac-user-btn {
   transition: transform 0.16s var(--ease-out, ease), color 0.18s ease;
 }
-html.app .ac-user-btn:active {
+html.tma .ac-user-btn:active {
   transform: scale(0.95);
-}
-
-/* ---------- скроллбары: в Telegram их не бывает ---------- */
-
-/* Telegram Desktop рисует у мини-аппа обычный браузерный ползунок справа —
-   в нативном приложении такого нет. Прячем во всех прокрутках мини-аппа:
-   странице, пуш-экранах, шторках. Прокрутка колесом и жестами остаётся.
-   Только html.tma — сайт в обычном браузере ползунки сохраняет. */
-html.tma,
-html.tma * {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-html.tma::-webkit-scrollbar,
-html.tma *::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
 }
 
 /* ---------- нижний таб-бар: плавающее стекло ---------- */
 
-html.app .ac-bottom {
+html.tma .ac-bottom {
   position: fixed;
-  /* Капсула по содержимому, по центру: left/right 0 + auto-маргины,
-     потому что transform занят анимацией ухода под клавиатуру. */
-  left: 0;
-  right: 0;
-  margin-inline: auto;
-  width: max-content;
-  max-width: calc(100% - 24px);
+  left: 12px;
+  right: 12px;
   bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   z-index: 45;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(76px, auto);
+  grid-auto-columns: 1fr;
   gap: 2px;
-  padding: 4px;
+  padding: 6px;
   background: var(--tma-card);
   border: 1px solid var(--tma-glass-line);
-  border-radius: 999px;
+  border-top: 1px solid var(--tma-glass-line);
+  border-radius: 28px;
   box-shadow: var(--tma-shadow);
 }
 @supports ((backdrop-filter: blur(1px))) or ((-webkit-backdrop-filter: blur(1px))) {
-  html.app .ac-bottom {
+  html.tma .ac-bottom {
     background: var(--tma-glass);
     -webkit-backdrop-filter: blur(22px) saturate(1.6);
     backdrop-filter: blur(22px) saturate(1.6);
@@ -257,24 +234,24 @@ html.app .ac-bottom {
 }
 /* Открытая клавиатура: бар плавно ныряет вниз, а не исчезает рывком.
    Где :has не поддержан — остаётся как было. */
-html.app .ac-bottom {
+html.tma .ac-bottom {
   transition: transform 0.3s var(--ease-out, ease), opacity 0.25s ease;
 }
-html.app:has(input:focus, textarea:focus) .ac-bottom {
+html.tma:has(input:focus, textarea:focus) .ac-bottom {
   transform: translateY(140%);
   opacity: 0;
   pointer-events: none;
 }
-html.app .ac-bottom a {
+html.tma .ac-bottom a {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 60px;
-  padding: 8px 12px;
-  border-radius: 999px;
+  gap: 3px;
+  min-height: 52px;
+  padding: 6px 2px;
+  border-radius: 22px;
   text-decoration: none;
   color: var(--text-muted);
   font-size: 11px;
@@ -283,141 +260,19 @@ html.app .ac-bottom a {
   text-align: center;
   transition: color 0.16s ease, background 0.16s ease, transform 0.16s var(--ease-out, ease);
 }
-html.app .ac-bottom a svg {
-  width: 25px;
-  height: 25px;
+html.tma .ac-bottom a svg {
+  width: 22px;
+  height: 22px;
   flex: none;
-  stroke-width: 2.3;
 }
-/* У каждой вкладки своя мини-сценка при активации: класс active вешается
-   заново — анимации стартуют на каждом переключении. Части иконок
-   размечены в NavIcons.jsx, transform-box считает трансформы от глифа. */
-html.app .ac-bottom svg .ni-head,
-html.app .ac-bottom svg .ni-body,
-html.app .ac-bottom svg .ni-card-body,
-html.app .ac-bottom svg .ni-bolt,
-html.app .ac-bottom svg .ni-f1,
-html.app .ac-bottom svg .ni-f2 {
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-/* Аккаунт: человечек кивает — голова подпрыгивает, плечи пружинят следом. */
-html.app .ac-bottom a.active .ni-head {
-  animation: ni-head 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@keyframes ni-head {
-  30% {
-    transform: translateY(-2.4px);
-  }
-  60% {
-    transform: translateY(0.7px);
-  }
-}
-html.app .ac-bottom a.active .ni-body {
-  transform-origin: center bottom;
-  animation: ni-body 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@keyframes ni-body {
-  35% {
-    transform: scaleY(0.85);
-  }
-  65% {
-    transform: scaleY(1.06);
-  }
-}
-
-/* Подписка: карту «прикладывают к терминалу» — наклон и короткий свайп. */
-html.app .ac-bottom a.active .ni-card-body {
-  animation: ni-card 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
-}
-@keyframes ni-card {
-  25% {
-    transform: rotate(-11deg) translateX(-1.6px);
-  }
-  55% {
-    transform: rotate(7deg) translateX(1.2px);
-  }
-  80% {
-    transform: rotate(-2deg);
-  }
-}
-
-/* Установка: молния бьёт — замах назад, удар со вспышкой-заливкой
-   и короткая электрическая дрожь. */
-html.app .ac-bottom svg .ni-bolt {
-  fill: currentColor;
-  fill-opacity: 0;
-}
-html.app .ac-bottom a.active .ni-bolt {
-  animation: ni-bolt 0.6s cubic-bezier(0.34, 1.4, 0.64, 1);
-}
-@keyframes ni-bolt {
-  18% {
-    transform: rotate(-11deg) scale(0.86);
-    fill-opacity: 0;
-  }
-  40% {
-    transform: rotate(4deg) scale(1.24) translateY(0.6px);
-    fill-opacity: 1;
-  }
-  52% {
-    transform: scale(1.12) translateX(-0.7px);
-    fill-opacity: 0.25;
-  }
-  62% {
-    transform: scale(1.08) translateX(0.7px);
-    fill-opacity: 0.85;
-  }
-  78% {
-    transform: scale(1);
-    fill-opacity: 0;
-  }
-}
-
-/* Друзья: второй наклоняется поздороваться, первый чуть подаётся навстречу. */
-html.app .ac-bottom a.active .ni-f2 {
-  transform-origin: left bottom;
-  animation: ni-f2 0.6s cubic-bezier(0.34, 1.45, 0.64, 1);
-}
-@keyframes ni-f2 {
-  30% {
-    transform: rotate(16deg) translateX(-0.6px);
-  }
-  62% {
-    transform: rotate(-6deg);
-  }
-}
-html.app .ac-bottom a.active .ni-f1 {
-  animation: ni-f1 0.6s cubic-bezier(0.34, 1.45, 0.64, 1);
-}
-@keyframes ni-f1 {
-  35% {
-    transform: translateX(0.9px) rotate(3deg);
-  }
-  65% {
-    transform: translateX(-0.3px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html.app .ac-bottom a.active .ni-head,
-  html.app .ac-bottom a.active .ni-body,
-  html.app .ac-bottom a.active .ni-card-body,
-  html.app .ac-bottom a.active .ni-bolt,
-  html.app .ac-bottom a.active .ni-f1,
-  html.app .ac-bottom a.active .ni-f2 {
-    animation: none;
-  }
-}
-html.app .ac-bottom a.active {
+html.tma .ac-bottom a.active {
   color: var(--accent);
   font-weight: 700;
 }
-html.app .ac-bottom a.active::before {
+html.tma .ac-bottom a.active::before {
   display: none;
 }
-html.app .ac-bottom a:active {
+html.tma .ac-bottom a:active {
   transform: scale(0.94);
   transition-duration: 0.08s;
 }
@@ -427,13 +282,13 @@ html.app .ac-bottom a:active {
 .ac-bottom-pill {
   display: none;
 }
-html.app .ac-bottom-pill {
+html.tma .ac-bottom-pill {
   display: block;
   position: absolute;
-  top: 4px;
-  bottom: 4px;
+  top: 6px;
+  bottom: 6px;
   left: 0;
-  border-radius: 999px;
+  border-radius: 22px;
   background: rgba(255, 255, 255, 0.82);
   box-shadow:
     0 2px 10px rgba(15, 20, 30, 0.14),
@@ -443,57 +298,58 @@ html.app .ac-bottom-pill {
     width 0.5s var(--ease-spring);
   will-change: transform, width;
 }
-html.app[data-theme="dark"] .ac-bottom-pill {
-  /* Тёмный блоб на стеклянном баре — активный пункт «утоплен». */
-  background: rgba(0, 0, 0, 0.34);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+html.tma[data-theme="dark"] .ac-bottom-pill {
+  background: rgba(255, 255, 255, 0.13);
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09);
 }
-html.app .ac-bottom:active .ac-bottom-pill {
+html.tma .ac-bottom:active .ac-bottom-pill {
   transition-duration: 0.3s;
 }
 @media (prefers-reduced-motion: reduce) {
-  html.app .ac-bottom-pill {
+  html.tma .ac-bottom-pill {
     transition: none;
   }
 }
 
 /* ---------- герой ---------- */
 
-html.app .ac-hero {
+html.tma .ac-hero {
   border-radius: 26px;
   padding: 22px 20px 20px;
   box-shadow: 0 16px 40px rgba(250, 76, 22, 0.26);
 }
-html.app .ac-hero-plan {
+html.tma .ac-hero-plan {
   font-size: 25px;
 }
-html.app .ac-hero-btn {
+html.tma .ac-hero-btn {
   min-height: 50px;
   border-radius: 16px;
   font-size: 16px;
 }
-html.app .ac-hero-btn:active {
+html.tma .ac-hero-btn:active {
   transform: scale(0.97);
   transition-duration: 0.06s;
 }
 
 /* Пауза: герой гаснет в сталь, чтобы статус читался с первого взгляда. */
-html.app .ac-hero.frozen {
+html.tma .ac-hero.frozen {
   background: linear-gradient(130deg, #8b98ac 0%, #64718a 48%, #46516a 100%);
   box-shadow: 0 16px 40px rgba(70, 81, 106, 0.35);
 }
-html.app .ac-hero.frozen .ac-hero-btn {
+html.tma .ac-hero.frozen .ac-hero-btn {
   color: #46516a;
 }
 
 /* ---------- плитки статов: две в ряд, как в приложении ---------- */
 
-html.app .ac-stats {
+html.tma .ac-stats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-html.app .ac-stat {
+html.tma .ac-stat {
   background: var(--tma-card);
   border-radius: 22px;
   padding: 16px;
@@ -501,108 +357,108 @@ html.app .ac-stat {
   box-shadow: none;
   border: 1px solid var(--line-2);
 }
-html.app .ac-stat:nth-child(3) {
+html.tma .ac-stat:nth-child(3) {
   grid-column: 1 / -1;
 }
-html.app .ac-stat-l {
+html.tma .ac-stat-l {
   font-size: 12.5px;
 }
-html.app .ac-stat-v {
+html.tma .ac-stat-v {
   font-size: 22px;
 }
-html.app .ac-stat-mono {
+html.tma .ac-stat-mono {
   font-size: 16px;
 }
-html.app .ac-stat-s {
+html.tma .ac-stat-s {
   font-size: 12.5px;
 }
 
 /* ---------- карточки ---------- */
 
-html.app .ac-card {
+html.tma .ac-card {
   background: var(--tma-card);
   border: 1px solid var(--line-2);
   border-radius: 22px;
   padding: 18px 16px;
   box-shadow: none;
 }
-html.app .ac-card h2 {
+html.tma .ac-card h2 {
   font-size: 17px;
 }
 
 /* Строки внутри карточек — плотнее, «настроечный» ритм Telegram. */
-html.app .ac-device {
+html.tma .ac-device {
   border-radius: 16px;
   padding: 12px 14px;
   background: var(--tma-inset);
 }
-html.app .ac-devices {
+html.tma .ac-devices {
   gap: 8px;
 }
 
 /* ---------- тарифы: витрина 2×N с крупной ценой ---------- */
 
-html.app .ac-plan-grid {
+html.tma .ac-plan-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
-html.app .ac-plan-card {
+html.tma .ac-plan-card {
   background: var(--tma-inset);
   border-radius: 20px;
   padding: 14px 12px 12px;
   gap: 4px;
 }
-html.app .ac-plan-card:active {
+html.tma .ac-plan-card:active {
   transform: scale(0.98);
 }
-html.app .ac-plan-name {
+html.tma .ac-plan-name {
   font-size: 13.5px;
 }
-html.app .ac-plan-cost {
+html.tma .ac-plan-cost {
   font-size: 24px;
   font-weight: 800;
 }
-html.app .ac-plan-limits {
+html.tma .ac-plan-limits {
   font-size: 12px;
   margin: 6px 0 10px;
 }
-html.app .ac-plan-btn {
+html.tma .ac-plan-btn {
   min-height: 44px;
   border-radius: 14px;
   font-size: 14.5px;
 }
-html.app .ac-plan-summary {
+html.tma .ac-plan-summary {
   background: var(--tma-card);
   border-radius: 22px;
 }
 
 /* ---------- кнопки: крупные, с нажатием ---------- */
 
-html.app .btn {
+html.tma .btn {
   border-radius: 16px;
 }
-html.app .btn:active,
-html.app .ac-freeze-btn:active {
+html.tma .btn:active,
+html.tma .ac-freeze-btn:active {
   transform: scale(0.97);
 }
-html.app .ac-freeze-btn {
+html.tma .ac-freeze-btn {
   min-height: 48px;
   border-radius: 16px;
 }
 
 /* ---------- заморозка ---------- */
 
-html.app .ac-freeze {
+html.tma .ac-freeze {
   border-radius: 22px;
 }
 
 /* ---------- платёжная модалка — как системный лист снизу ---------- */
 
-html.app .pay-overlay {
+html.tma .pay-overlay {
   align-items: flex-end;
   padding: 0;
 }
-html.app .pay-overlay > * {
+html.tma .pay-overlay > * {
   width: 100%;
   max-width: none;
   border-radius: 26px 26px 0 0;
@@ -611,27 +467,27 @@ html.app .pay-overlay > * {
 
 /* ---------- вход: карточка без сайтовых декораций ---------- */
 
-html.app .lg-far,
-html.app .lg-glow,
-html.app .lg-ring,
-html.app .lg-ring-1,
-html.app .lg-ring-2 {
+html.tma .lg-far,
+html.tma .lg-glow,
+html.tma .lg-ring,
+html.tma .lg-ring-1,
+html.tma .lg-ring-2 {
   display: none;
 }
-html.app .lg-form {
+html.tma .lg-form {
   background: var(--tma-card);
   border-radius: 26px;
   padding: 24px 18px;
   box-shadow: var(--tma-shadow);
 }
-html.app .lg-submit {
+html.tma .lg-submit {
   min-height: 50px;
   border-radius: 16px;
 }
 
 /* ---------- сплэш авто-входа ---------- */
 
-html.app .tma-boot {
+html.tma .tma-boot {
   min-height: 100vh;
   min-height: var(--tg-viewport-stable-height, 100svh);
   display: flex;
@@ -639,7 +495,7 @@ html.app .tma-boot {
   justify-content: center;
   background: var(--tma-canvas);
 }
-html.app .tma-boot::after {
+html.tma .tma-boot::after {
   content: "";
   width: 46px;
   height: 46px;
@@ -663,17 +519,17 @@ html.app .tma-boot::after {
 /* ---------- мелочи формата приложения ---------- */
 
 /* Верхние табы не нужны ни при какой ширине: навигация живёт снизу. */
-html.app .ac-tabs {
+html.tma .ac-tabs {
   display: none;
 }
-html.app .ac-bottom {
+html.tma .ac-bottom {
   display: grid;
 }
 
 /* Списки-строки не должны выделяться как текст при тапах. */
-html.app .ac-bottom,
-html.app .ac-user-btn,
-html.app .btn {
+html.tma .ac-bottom,
+html.tma .ac-user-btn,
+html.tma .btn {
   user-select: none;
   -webkit-user-select: none;
 }
@@ -684,13 +540,13 @@ html.app .btn {
    иконка-текст-шеврон. Скругления 24, канва и карточки — палитра выше.
    ========================================================================== */
 
-html.app .ap {
+html.tma .ap {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
-html.app .ap-card {
+html.tma .ap-card {
   background: var(--tma-card);
   border-radius: 24px;
   padding: 20px 18px 18px;
@@ -700,12 +556,12 @@ html.app .ap-card {
 }
 
 /* Шапка карты: слоёный круг с иконкой + заголовок + подзаголовок */
-html.app .ap-head {
+html.tma .ap-head {
   display: flex;
   align-items: center;
   gap: 14px;
 }
-html.app .ap-ic {
+html.tma .ap-ic {
   flex: none;
   width: 64px;
   height: 64px;
@@ -716,30 +572,30 @@ html.app .ap-ic {
     radial-gradient(closest-side, var(--accent) 58%, rgba(250, 76, 22, 0.28) 59% 74%, rgba(250, 76, 22, 0.12) 75% 100%);
   color: #fff;
 }
-html.app .ap-ic svg {
+html.tma .ap-ic svg {
   width: 26px;
   height: 26px;
 }
-html.app .ap-head-body {
+html.tma .ap-head-body {
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
 }
-html.app .ap-title {
+html.tma .ap-title {
   font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--ink);
 }
-html.app .ap-sub {
+html.tma .ap-sub {
   font-size: 14.5px;
   line-height: 1.35;
   color: var(--text-dim);
 }
 
 /* Полностью круглая CTA, как системная */
-html.app .ap-cta {
+html.tma .ap-cta {
   border: none;
   cursor: pointer;
   min-height: 52px;
@@ -751,13 +607,13 @@ html.app .ap-cta {
   font-family: inherit;
   transition: transform 0.16s var(--ease-out, ease), background 0.2s ease;
 }
-html.app .ap-cta:active {
+html.tma .ap-cta:active {
   transform: scale(0.97);
   transition-duration: 0.06s;
 }
 
 /* Мини-статы под CTA — через тонкий разделитель */
-html.app .ap-mini {
+html.tma .ap-mini {
   display: flex;
   align-items: center;
   gap: 18px;
@@ -766,20 +622,20 @@ html.app .ap-mini {
   font-size: 13px;
   color: var(--text-dim);
 }
-html.app .ap-mini b {
+html.tma .ap-mini b {
   color: var(--ink);
   font-weight: 600;
 }
 
 /* Группа строк: иконка в кружке + текст + шеврон, разделители с отступом */
-html.app .ap-rows {
+html.tma .ap-rows {
   background: var(--tma-card);
   border-radius: 24px;
   padding: 6px;
   display: flex;
   flex-direction: column;
 }
-html.app .ap-row {
+html.tma .ap-row {
   display: grid;
   grid-template-columns: 40px 1fr auto;
   align-items: center;
@@ -796,11 +652,11 @@ html.app .ap-row {
   transition: background 0.35s ease;
   position: relative;
 }
-html.app .ap-row:active {
+html.tma .ap-row:active {
   background: var(--tma-inset);
   transition-duration: 0s;
 }
-html.app .ap-row + .ap-row::before {
+html.tma .ap-row + .ap-row::before {
   content: "";
   position: absolute;
   left: 66px;
@@ -810,17 +666,17 @@ html.app .ap-row + .ap-row::before {
   background: var(--tma-sep);
 }
 /* Нажатая строка не показывает разделители — как в системных списках */
-html.app .ap-row:active::before,
-html.app .ap-row:active + .ap-row::before {
+html.tma .ap-row:active::before,
+html.tma .ap-row:active + .ap-row::before {
   opacity: 0;
 }
-html.app .ap-row:focus {
+html.tma .ap-row:focus {
   outline: none;
 }
-html.app .ap-row:focus-visible {
+html.tma .ap-row:focus-visible {
   box-shadow: inset 0 0 0 2px var(--accent);
 }
-html.app .ap-row-ic {
+html.tma .ap-row-ic {
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -829,26 +685,26 @@ html.app .ap-row-ic {
   background: var(--accent);
   color: #fff;
 }
-html.app .ap-row-ic svg {
+html.tma .ap-row-ic svg {
   width: 19px;
   height: 19px;
 }
-html.app .ap-row-body {
+html.tma .ap-row-body {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
-html.app .ap-row-t {
+html.tma .ap-row-t {
   font-size: 16px;
   font-weight: 600;
 }
-html.app .ap-row-s {
+html.tma .ap-row-s {
   font-size: 13.5px;
   line-height: 1.35;
   color: var(--text-dim);
 }
-html.app .ap-row-v {
+html.tma .ap-row-v {
   font-size: 15px;
   color: var(--text-dim);
   max-width: 45vw;
@@ -856,23 +712,23 @@ html.app .ap-row-v {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-html.app .ap-chev {
+html.tma .ap-chev {
   color: var(--text-faint);
   font-size: 17px;
   line-height: 1;
 }
-html.app .ap-row[aria-disabled="true"] {
+html.tma .ap-row[aria-disabled="true"] {
   opacity: 0.55;
   pointer-events: none;
 }
 
 /* Заморозка на главной — в общий радиус */
-html.app .ac-freeze {
+html.tma .ac-freeze {
   border-radius: 24px;
 }
 
 /* Пауза подписки — компактный ряд с фирменным эмодзи */
-html.app .ap-freeze {
+html.tma .ap-freeze {
   background: var(--tma-card);
   border-radius: 24px;
   padding: 16px 18px;
@@ -881,7 +737,7 @@ html.app .ap-freeze {
   align-items: center;
   gap: 14px;
 }
-html.app .ap-freeze-btn {
+html.tma .ap-freeze-btn {
   border: none;
   cursor: pointer;
   border-radius: 999px;
@@ -894,18 +750,18 @@ html.app .ap-freeze-btn {
   min-height: 40px;
   transition: transform 0.16s var(--ease-out, ease);
 }
-html.app .ap-freeze-btn:active {
+html.tma .ap-freeze-btn:active {
   transform: scale(0.95);
   transition-duration: 0.06s;
 }
-html.app .ap-freeze-btn:disabled {
+html.tma .ap-freeze-btn:disabled {
   opacity: 0.6;
 }
-html.app .ap-freeze-err {
+html.tma .ap-freeze-err {
   font-size: 12.5px;
   color: var(--danger);
 }
-html.app .ap-ic-emoji {
+html.tma .ap-ic-emoji {
   background: none;
 }
 
@@ -928,13 +784,13 @@ html.app .ap-ic-emoji {
 }
 
 /* Карта статуса: тариф — чип, статус — точка со словом, дни — крупно */
-html.app .ap-title-row {
+html.tma .ap-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
-html.app .ap-chip {
+html.tma .ap-chip {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-dim);
@@ -943,49 +799,49 @@ html.app .ap-chip {
   padding: 4px 10px;
   white-space: nowrap;
 }
-html.app .ap-status {
+html.tma .ap-status {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   font-size: 14.5px;
   color: var(--text-dim);
 }
-html.app .ap-dot {
+html.tma .ap-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   flex: none;
 }
-html.app .ap-dot.is-on {
+html.tma .ap-dot.is-on {
   background: #34c759;
   box-shadow: 0 0 8px rgba(52, 199, 89, 0.55);
 }
-html.app .ap-dot.is-frozen {
+html.tma .ap-dot.is-frozen {
   background: #8b98ac;
 }
-html.app .ap-dot.is-off {
+html.tma .ap-dot.is-off {
   background: var(--text-faint);
 }
-html.app .ap-days {
+html.tma .ap-days {
   display: flex;
   align-items: baseline;
   gap: 10px;
   flex-wrap: wrap;
 }
-html.app .ap-days-n {
+html.tma .ap-days-n {
   font-size: 34px;
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--ink);
   line-height: 1;
 }
-html.app .ap-days-d {
+html.tma .ap-days-d {
   font-size: 13px;
   color: var(--text-faint);
 }
 
 /* Смена пароля: в мини-аппе — нижний лист, как системный */
-html.app .pd-overlay {
+html.tma .pd-overlay {
   align-items: flex-end;
   padding: 0;
   animation: none;
@@ -997,12 +853,12 @@ html.app .pd-overlay {
     -webkit-backdrop-filter 0.42s ease,
     backdrop-filter 0.42s ease;
 }
-html.app .pd-overlay.is-open {
+html.tma .pd-overlay.is-open {
   background: rgba(0, 0, 0, 0.45);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
-html.app .pd {
+html.tma .pd {
   max-width: none;
   border-radius: 26px 26px 0 0;
   padding: 12px 18px calc(20px + env(safe-area-inset-bottom, 0px));
@@ -1013,19 +869,19 @@ html.app .pd {
   transition: transform 0.46s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
-html.app .pd-overlay.is-open .pd {
+html.tma .pd-overlay.is-open .pd {
   transform: translateY(0);
 }
 @media (prefers-reduced-motion: reduce) {
-  html.app .pd,
-  html.app .pd-overlay {
+  html.tma .pd,
+  html.tma .pd-overlay {
     transition: none;
   }
-  html.app .pd {
+  html.tma .pd {
     transform: none;
   }
 }
-html.app .pd-grip {
+html.tma .pd-grip {
   display: block;
   width: 36px;
   height: 4px;
@@ -1034,16 +890,16 @@ html.app .pd-grip {
   opacity: 0.45;
   margin: 0 auto 6px;
 }
-html.app .pd h2 {
+html.tma .pd h2 {
   font-size: 20px;
 }
-html.app .pd-sub {
+html.tma .pd-sub {
   font-size: 14px;
 }
-html.app .pd-field span {
+html.tma .pd-field span {
   font-size: 13px;
 }
-html.app .pd-field input {
+html.tma .pd-field input {
   background: var(--tma-inset);
   border: 1.5px solid transparent;
   border-radius: 14px;
@@ -1052,29 +908,29 @@ html.app .pd-field input {
   box-shadow: 0 0 0 0 rgba(250, 76, 22, 0);
   transition: border-color 0.18s ease, box-shadow 0.3s ease;
 }
-html.app .pd-field input:focus {
+html.tma .pd-field input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 4px rgba(250, 76, 22, 0.16);
   outline: none;
 }
-html.app .pd-actions {
+html.tma .pd-actions {
   flex-direction: column-reverse;
   gap: 8px;
 }
-html.app .pd-actions .btn {
+html.tma .pd-actions .btn {
   width: 100%;
   min-height: 52px;
   border-radius: 999px;
   font-size: 16px;
 }
-html.app .pd-actions .btn-outline {
+html.tma .pd-actions .btn-outline {
   border: none;
   background: none;
   color: var(--text-dim);
   min-height: 44px;
   box-shadow: none;
 }
-html.app .pd-actions .btn:active {
+html.tma .pd-actions .btn:active {
   transform: scale(0.97);
 }
 
@@ -1082,28 +938,28 @@ html.app .pd-actions .btn:active {
 
 /* Любое поле ввода в мини-аппе — не меньше 16px: iOS иначе делает рывок
    зумом при фокусе, это главный источник «не плавно» на айфоне. */
-html.app input,
-html.app textarea,
-html.app select {
+html.tma input,
+html.tma textarea,
+html.tma select {
   font-size: 16px;
 }
 
 /* Тапы без задержек двойного тапа и синих вспышек */
-html.app a,
-html.app button,
-html.app input,
-html.app label {
+html.tma a,
+html.tma button,
+html.tma input,
+html.tma label {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
 /* Выделение текста — фирменное */
-html.app ::selection {
+html.tma ::selection {
   background: rgba(250, 76, 22, 0.28);
 }
 
 /* Ошибка в листе появляется мягко, а не вспыхивает */
-html.app .pd-error {
+html.tma .pd-error {
   animation: tma-err-in 0.25s ease;
 }
 @keyframes tma-err-in {
@@ -1114,28 +970,28 @@ html.app .pd-error {
 }
 
 /* Значение в строке (почта, ID) меняется мягким проявлением */
-html.app .ap-row-v {
+html.tma .ap-row-v {
   transition: color 0.25s ease, opacity 0.25s ease;
 }
 
 /* ---------- формат приложения: жесты ---------- */
 
 /* Только вертикальная прокрутка: щипок-зум и двойной тап не работают. */
-html.app,
-html.app body {
+html.tma,
+html.tma body {
   touch-action: pan-y;
 }
 
 /* Долгий тап не выделяет интерфейс и не зовёт системное меню — текст
    выделяется только там, где это осмысленно: поля ввода и коды. */
-html.app body {
+html.tma body {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
-html.app input,
-html.app textarea,
-html.app code {
+html.tma input,
+html.tma textarea,
+html.tma code {
   user-select: text;
   -webkit-user-select: text;
 }
@@ -1144,7 +1000,7 @@ html.app code {
    Страница «Подписка»: полоска дней, витрина тарифов, экраны историй
    ========================================================================== */
 
-html.app .tp-progress {
+html.tma .tp-progress {
   background: var(--tma-card);
   border-radius: 24px;
   padding: 16px 18px;
@@ -1152,34 +1008,34 @@ html.app .tp-progress {
   flex-direction: column;
   gap: 10px;
 }
-html.app .tp-progress-top {
+html.tma .tp-progress-top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
 }
-html.app .tp-progress-top b {
+html.tma .tp-progress-top b {
   font-size: 18px;
   font-weight: 700;
 }
-html.app .tp-progress-top span {
+html.tma .tp-progress-top span {
   font-size: 13px;
   color: var(--text-faint);
 }
-html.app .tp-track {
+html.tma .tp-track {
   height: 8px;
   border-radius: 999px;
   background: var(--tma-inset);
   overflow: hidden;
 }
-html.app .tp-track span {
+html.tma .tp-track span {
   display: block;
   height: 100%;
   border-radius: 999px;
   background: var(--brand-gradient);
   transition: width 0.6s var(--ease-out, ease);
 }
-html.app .tp-queue {
+html.tma .tp-queue {
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -1187,12 +1043,12 @@ html.app .tp-queue {
   color: var(--text-dim);
 }
 
-html.app .tp-grid {
+html.tma .tp-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-html.app .tp-card {
+html.tma .tp-card {
   position: relative;
   overflow: visible;
   border: 2px solid transparent;
@@ -1209,35 +1065,35 @@ html.app .tp-card {
   font-family: inherit;
   transition: border-color 0.18s ease, transform 0.16s var(--ease-out, ease);
 }
-html.app .tp-card:active {
+html.tma .tp-card:active {
   transform: scale(0.98);
   transition-duration: 0.06s;
 }
-html.app .tp-card.sel {
+html.tma .tp-card.sel {
   border-color: var(--accent);
 }
-html.app .tp-name {
+html.tma .tp-name {
   font-size: 19px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
-html.app .tp-save {
+html.tma .tp-save {
   font-size: 13.5px;
   font-weight: 600;
   color: var(--accent);
   min-height: 18px;
 }
-html.app .tp-save.off {
+html.tma .tp-save.off {
   color: var(--text-faint);
   font-weight: 500;
 }
-html.app .tp-price {
+html.tma .tp-price {
   margin-top: 14px;
   font-size: 25px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
-html.app .tp-month {
+html.tma .tp-month {
   font-size: 13.5px;
   color: var(--text-dim);
 }
@@ -1246,7 +1102,7 @@ html.app .tp-month {
    верхней кромке (чуть выше неё), правый — параллельно правой, углы
    скруглены, уголок карточки выглядывает из-за неё. Форма — SVG-путь,
    тень drop-shadow по фигуре, текст отдельным слоем по оси полосы. */
-html.app .tp-ribbon {
+html.tma .tp-ribbon {
   position: absolute;
   top: -8px;
   right: -8px;
@@ -1255,19 +1111,19 @@ html.app .tp-ribbon {
   color: var(--accent);
   pointer-events: none;
 }
-html.app .tp-ribbon svg {
+html.tma .tp-ribbon svg {
   display: block;
   width: 100%;
   height: 100%;
   overflow: visible;
 }
-html.app .tp-ribbon svg path {
+html.tma .tp-ribbon svg path {
   fill: currentColor;
 }
-html.app .tp-ribbon {
+html.tma .tp-ribbon {
   filter: drop-shadow(-2px 3px 5px rgba(0, 0, 0, 0.35));
 }
-html.app .tp-ribbon b {
+html.tma .tp-ribbon b {
   position: absolute;
   top: 18px;
   right: -6px;
@@ -1280,22 +1136,22 @@ html.app .tp-ribbon b {
   letter-spacing: 0.03em;
   white-space: nowrap;
 }
-html.app .tp-daily {
+html.tma .tp-daily {
   display: grid;
   grid-template-columns: 1fr auto auto;
   align-items: center;
   gap: 12px;
 }
-html.app .tp-daily-total {
+html.tma .tp-daily-total {
   margin-top: 0;
 }
 
-html.app .tps-stepper {
+html.tma .tps-stepper {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
-html.app .tps-stepper input {
+html.tma .tps-stepper input {
   width: 52px;
   text-align: center;
   background: var(--tma-inset);
@@ -1306,7 +1162,7 @@ html.app .tps-stepper input {
   font-size: 16px;
   font-weight: 600;
 }
-html.app .tps-step {
+html.tma .tps-step {
   width: 38px;
   height: 38px;
   border: none;
@@ -1317,23 +1173,19 @@ html.app .tps-step {
   cursor: pointer;
   transition: transform 0.16s var(--ease-out, ease), opacity 0.2s ease;
 }
-html.app .tps-step:active {
+html.tma .tps-step:active {
   transform: scale(0.9);
   transition-duration: 0.06s;
 }
-html.app .tps-step:disabled {
+html.tma .tps-step:disabled {
   opacity: 0.4;
 }
 
-html.app .tp-cta {
+html.tma .tp-cta {
   position: fixed;
-  /* Ровно та же ширина, что у капсулы таб-бара (меряет CabinetBottomNav). */
-  left: 0;
-  right: 0;
-  margin-inline: auto;
-  width: var(--ac-bottom-w, min(calc(100% - 48px), 340px));
-  max-width: calc(100% - 24px);
-  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  left: 16px;
+  right: 16px;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   z-index: 44;
   min-height: 54px;
   border: none;
@@ -1348,7 +1200,7 @@ html.app .tp-cta {
   transition: transform 0.16s var(--ease-out, ease);
   animation: tp-cta-in 0.35s var(--ease-spring);
 }
-html.app .tp-cta:active {
+html.tma .tp-cta:active {
   transform: scale(0.97);
   transition-duration: 0.06s;
 }
@@ -1358,11 +1210,11 @@ html.app .tp-cta:active {
     opacity: 0;
   }
 }
-html.app .tp {
+html.tma .tp {
   padding-bottom: 70px;
 }
 
-html.app .tps-methods {
+html.tma .tps-methods {
   display: flex;
   flex-direction: column;
   background: var(--tma-inset);
@@ -1370,7 +1222,7 @@ html.app .tps-methods {
   padding: 4px;
   gap: 2px;
 }
-html.app .tps-method {
+html.tma .tps-method {
   display: grid;
   grid-template-columns: 40px 1fr auto;
   align-items: center;
@@ -1385,40 +1237,40 @@ html.app .tps-method {
   font-family: inherit;
   transition: background 0.3s ease;
 }
-html.app .tps-method:active {
+html.tma .tps-method:active {
   background: var(--tma-card);
   transition-duration: 0s;
 }
-html.app .tps-method.sel {
+html.tma .tps-method.sel {
   background: var(--tma-card);
 }
-html.app .tps-mic {
+html.tma .tps-mic {
   width: 40px;
   height: 40px;
   display: grid;
   place-items: center;
   background: none;
 }
-html.app .tps-mic svg {
+html.tma .tps-mic svg {
   width: 32px;
   height: 32px;
 }
-html.app .tps-check {
+html.tma .tps-check {
   color: var(--accent);
   font-weight: 800;
   font-size: 17px;
 }
-html.app .tps-cta {
+html.tma .tps-cta {
   display: grid;
   place-items: center;
   text-decoration: none;
 }
-html.app .tps-hint {
+html.tma .tps-hint {
   font-size: 12.5px;
   color: var(--text-faint);
   text-align: center;
 }
-html.app .tps-alt {
+html.tma .tps-alt {
   border: none;
   background: none;
   color: var(--text-dim);
@@ -1427,10 +1279,10 @@ html.app .tps-alt {
   cursor: pointer;
   padding: 10px;
 }
-html.app .tps-center {
+html.tma .tps-center {
   text-align: center;
 }
-html.app .tps-state {
+html.tma .tps-state {
   width: 64px;
   height: 64px;
   margin: 6px auto 0;
@@ -1440,15 +1292,15 @@ html.app .tps-state {
   font-size: 30px;
   font-weight: 800;
 }
-html.app .tps-ok {
+html.tma .tps-ok {
   background: rgba(52, 199, 89, 0.16);
   color: #34c759;
 }
-html.app .tps-bad {
+html.tma .tps-bad {
   background: rgba(255, 92, 92, 0.14);
   color: var(--danger);
 }
-html.app .tps-wait {
+html.tma .tps-wait {
   background: conic-gradient(var(--accent) 0 25%, var(--tma-inset) 25% 100%);
   -webkit-mask: radial-gradient(farthest-side, transparent 62%, #000 64%);
   mask: radial-gradient(farthest-side, transparent 62%, #000 64%);
@@ -1460,7 +1312,7 @@ html.app .tps-wait {
   }
 }
 
-html.app .scr {
+html.tma .scr {
   position: fixed;
   inset: 0;
   z-index: 70;
@@ -1471,10 +1323,10 @@ html.app .scr {
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
-html.app .scr.is-open {
+html.tma .scr.is-open {
   transform: translateX(0);
 }
-html.app .scr-head {
+html.tma .scr-head {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1483,12 +1335,12 @@ html.app .scr-head {
   -webkit-backdrop-filter: blur(18px) saturate(1.4);
   backdrop-filter: blur(18px) saturate(1.4);
 }
-html.app .scr-head h2 {
+html.tma .scr-head h2 {
   font-size: 17px;
   font-weight: 700;
   padding: 6px 8px;
 }
-html.app .scr-back {
+html.tma .scr-back {
   width: 38px;
   height: 38px;
   border: none;
@@ -1499,26 +1351,22 @@ html.app .scr-back {
   line-height: 1;
   cursor: pointer;
 }
-html.app .scr-back:active {
+html.tma .scr-back:active {
   transform: scale(0.9);
 }
-html.app .scr-body {
+html.tma .scr-body {
   flex: 1;
   overflow-y: auto;
   padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
 }
-/* Экран без шапки: тело само отступает от чёлки. */
-html.app .scr-bare .scr-body {
-  padding-top: max(16px, env(safe-area-inset-top, 0px));
-}
-html.app .scr-rows {
+html.tma .scr-rows {
   background: var(--tma-card);
   border-radius: 24px;
   padding: 6px;
   display: flex;
   flex-direction: column;
 }
-html.app .scr-row {
+html.tma .scr-row {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
@@ -1535,15 +1383,15 @@ html.app .scr-row {
   cursor: pointer;
   transition: background 0.35s ease;
 }
-html.app .scr-row:active {
+html.tma .scr-row:active {
   background: var(--tma-inset);
   transition-duration: 0s;
 }
-html.app .scr-row:active::before,
-html.app .scr-row:active + .scr-row::before {
+html.tma .scr-row:active::before,
+html.tma .scr-row:active + .scr-row::before {
   opacity: 0;
 }
-html.app .scr-row + .scr-row::before {
+html.tma .scr-row + .scr-row::before {
   content: "";
   position: absolute;
   left: 12px;
@@ -1552,32 +1400,32 @@ html.app .scr-row + .scr-row::before {
   height: 1px;
   background: var(--tma-sep);
 }
-html.app .scr-in {
+html.tma .scr-in {
   color: #34c759;
 }
-html.app .scr-out {
+html.tma .scr-out {
   color: var(--accent);
 }
-html.app .scr-empty {
+html.tma .scr-empty {
   text-align: center;
   color: var(--text-dim);
   padding: 40px 0;
 }
 
-html.app .ac-rec-line {
+html.tma .ac-rec-line {
   background: var(--tma-card);
   border-radius: 18px;
   padding: 14px 16px;
 }
 
 /* Страница «Друзья» */
-html.app .rf-link-box {
+html.tma .rf-link-box {
   background: var(--tma-inset);
   border-radius: 16px;
   padding: 13px 14px;
   overflow: hidden;
 }
-html.app .rf-link-box code {
+html.tma .rf-link-box code {
   display: block;
   font-size: 13.5px;
   color: var(--text-dim);
@@ -1585,12 +1433,12 @@ html.app .rf-link-box code {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-html.app .rf-tiles {
+html.tma .rf-tiles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
-html.app .rf-tile {
+html.tma .rf-tile {
   background: var(--tma-card);
   border-radius: 22px;
   padding: 16px;
@@ -1598,32 +1446,32 @@ html.app .rf-tile {
   flex-direction: column;
   gap: 3px;
 }
-html.app .rf-tile b {
+html.tma .rf-tile b {
   font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.02em;
 }
-html.app .rf-tile span {
+html.tma .rf-tile span {
   font-size: 12.5px;
   color: var(--text-dim);
 }
-html.app .rf-friend {
+html.tma .rf-friend {
   cursor: default;
 }
-html.app .rf-fic {
+html.tma .rf-fic {
   background: var(--tma-inset);
   color: var(--text-dim);
   font-weight: 700;
   font-size: 15px;
 }
-html.app .rf-wait {
+html.tma .rf-wait {
   color: var(--text-faint);
   font-weight: 500;
   font-size: 13px;
 }
 
 /* «Как это работает»: баннер с персонажами пака и карточки-объяснения */
-html.app .hw-banner {
+html.tma .hw-banner {
   background: var(--brand-gradient);
   border-radius: 24px;
   padding: 22px 14px 18px;
@@ -1633,14 +1481,14 @@ html.app .hw-banner {
   gap: 6px;
   color: #fff;
 }
-html.app .hw-fig {
+html.tma .hw-fig {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
-html.app .hw-badge {
+html.tma .hw-badge {
   background: rgba(255, 255, 255, 0.92);
   color: var(--accent-deep);
   font-size: 11.5px;
@@ -1649,13 +1497,13 @@ html.app .hw-badge {
   padding: 3px 9px;
   white-space: nowrap;
 }
-html.app .hw-name {
+html.tma .hw-name {
   font-size: 13px;
   font-weight: 700;
   text-align: center;
   line-height: 1.2;
 }
-html.app .hw-line {
+html.tma .hw-line {
   height: 3px;
   width: 100%;
   min-width: 18px;
@@ -1663,16 +1511,16 @@ html.app .hw-line {
   background: rgba(255, 255, 255, 0.5);
   margin-top: 26px;
 }
-html.app .hw-card h2 {
+html.tma .hw-card h2 {
   font-size: 17px;
   margin-bottom: 4px;
 }
-html.app .hw-card p {
+html.tma .hw-card p {
   font-size: 14px;
   line-height: 1.45;
   color: var(--text-dim);
 }
-html.app .scr-cta {
+html.tma .scr-cta {
   position: sticky;
   bottom: calc(10px + env(safe-area-inset-bottom, 0px));
   margin-top: 16px;
@@ -1689,12 +1537,12 @@ html.app .scr-cta {
   box-shadow: 0 12px 32px rgba(250, 76, 22, 0.4);
   transition: transform 0.16s var(--ease-out, ease);
 }
-html.app .scr-cta:active {
+html.tma .scr-cta:active {
   transform: scale(0.97);
   transition-duration: 0.06s;
 }
 
-html.app .rf-how {
+html.tma .rf-how {
   border: none;
   background: none;
   padding: 2px 0 0;
@@ -1707,12 +1555,12 @@ html.app .rf-how {
 }
 
 /* Чипы-«рисунок» с днями на карточке друзей */
-html.app .rf-bonus {
+html.tma .rf-bonus {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
 }
-html.app .rf-chip {
+html.tma .rf-chip {
   background: rgba(250, 76, 22, 0.15);
   color: var(--accent);
   border-radius: 999px;
@@ -1726,7 +1574,7 @@ html.app .rf-chip {
    Страница «Установка»
    ========================================================================== */
 
-html.app .st-h {
+html.tma .st-h {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -1736,7 +1584,7 @@ html.app .st-h {
 }
 
 /* Логин для входа — плашка с копией */
-html.app .st-login {
+html.tma .st-login {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -1751,27 +1599,27 @@ html.app .st-login {
   color: var(--ink);
   transition: transform 0.16s var(--ease-out, ease);
 }
-html.app .st-login:active {
+html.tma .st-login:active {
   transform: scale(0.98);
   transition-duration: 0.06s;
 }
-html.app .st-login b {
+html.tma .st-login b {
   font-size: 16px;
   font-weight: 700;
 }
 
 /* Сессии */
-html.app .st-dev {
+html.tma .st-dev {
   cursor: default;
 }
-html.app .st-dev-off {
+html.tma .st-dev-off {
   cursor: pointer;
 }
-html.app .st-dev-ic {
+html.tma .st-dev-ic {
   background: var(--tma-inset);
   color: var(--text-dim);
 }
-html.app .st-live {
+html.tma .st-live {
   display: inline-block;
   width: 7px;
   height: 7px;
@@ -1781,7 +1629,7 @@ html.app .st-live {
   margin-left: 7px;
   vertical-align: 2px;
 }
-html.app .st-cur {
+html.tma .st-cur {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-dim);
@@ -1789,46 +1637,46 @@ html.app .st-cur {
   border-radius: 999px;
   padding: 4px 10px;
 }
-html.app .st-unlink {
+html.tma .st-unlink {
   font-size: 13.5px;
   font-weight: 600;
   color: var(--danger);
 }
 
 /* Лист ключа iPhone */
-html.app .st-qr {
+html.tma .st-qr {
   background: #fff;
   border-radius: 20px;
   padding: 14px;
   width: min(240px, 70vw);
   margin: 4px auto;
 }
-html.app .st-qr svg,
-html.app .st-qr canvas,
-html.app .st-qr img {
+html.tma .st-qr svg,
+html.tma .st-qr canvas,
+html.tma .st-qr img {
   display: block;
   width: 100%;
   height: auto;
 }
-html.app .st-open {
+html.tma .st-open {
   background: var(--tma-inset);
   color: var(--ink);
   box-shadow: none;
 }
-html.app .st-key-acts {
+html.tma .st-key-acts {
   display: flex;
   justify-content: center;
   gap: 4px;
 }
-html.app .st-danger {
+html.tma .st-danger {
   color: var(--danger);
 }
-html.app .st-servers {
+html.tma .st-servers {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
 }
-html.app .st-server {
+html.tma .st-server {
   border: none;
   cursor: pointer;
   font-family: inherit;
@@ -1839,30 +1687,30 @@ html.app .st-server {
   border-radius: 999px;
   padding: 8px 14px;
 }
-html.app .st-server.sel {
+html.tma .st-server.sel {
   background: rgba(250, 76, 22, 0.15);
   color: var(--accent);
 }
-html.app .st-flag {
+html.tma .st-flag {
   width: 40px;
   height: 40px;
   display: grid;
   place-items: center;
 }
-html.app .st-flag img,
-html.app .st-flag svg {
+html.tma .st-flag img,
+html.tma .st-flag svg {
   width: 30px;
   height: 30px;
   border-radius: 50%;
 }
 
 /* Гайды по устройствам */
-html.app .st-minutes {
+html.tma .st-minutes {
   font-size: 13.5px;
   color: var(--text-faint);
   margin: -2px 4px 0;
 }
-html.app .st-step {
+html.tma .st-step {
   background: var(--tma-card);
   border-radius: 22px;
   padding: 16px;
@@ -1871,23 +1719,23 @@ html.app .st-step {
   gap: 12px;
   align-items: start;
 }
-html.app .st-step-e {
+html.tma .st-step-e {
   padding-top: 2px;
 }
-html.app .st-step-body {
+html.tma .st-step-body {
   display: flex;
   flex-direction: column;
   gap: 5px;
   min-width: 0;
 }
-html.app .st-step-t {
+html.tma .st-step-t {
   font-size: 16.5px;
   font-weight: 700;
   display: flex;
   align-items: center;
   gap: 8px;
 }
-html.app .st-step-t i {
+html.tma .st-step-t i {
   font-style: normal;
   font-size: 12px;
   font-weight: 800;
@@ -1900,12 +1748,12 @@ html.app .st-step-t i {
   place-items: center;
   flex: none;
 }
-html.app .st-step-s {
+html.tma .st-step-s {
   font-size: 14px;
   line-height: 1.5;
   color: var(--text-dim);
 }
-html.app .st-g-cta {
+html.tma .st-g-cta {
   margin-top: 6px;
   min-height: 48px;
   font-size: 15.5px;
@@ -1914,34 +1762,34 @@ html.app .st-g-cta {
   text-decoration: none;
   text-align: center;
 }
-html.app .st-g-alt {
+html.tma .st-g-alt {
   padding: 8px;
 }
-html.app .st-g-login {
+html.tma .st-g-login {
   margin-top: 6px;
   align-self: stretch;
 }
-html.app .st-note {
+html.tma .st-note {
   font-size: 12.5px;
   color: var(--text-faint);
   margin-top: 2px;
 }
-html.app .st-note-link {
+html.tma .st-note-link {
   color: var(--accent);
   text-decoration: none;
   font-weight: 600;
 }
-html.app .st-guide-link {
+html.tma .st-guide-link {
   margin: -6px 0 2px;
 }
 
 /* Гайд-«путь»: линия квеста, узлы-эмодзи, отметки и празднование */
-html.app .gd2 {
+html.tma .gd2 {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
-html.app .gd2-hero {
+html.tma .gd2-hero {
   background: var(--tma-card);
   border-radius: 24px;
   padding: 18px;
@@ -1950,21 +1798,21 @@ html.app .gd2-hero {
   gap: 14px;
   animation: ap-slide-in 0.4s var(--ease-out, ease) backwards;
 }
-html.app .gd2-hero-b {
+html.tma .gd2-hero-b {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-html.app .gd2-hero-b b {
+html.tma .gd2-hero-b b {
   font-size: 17px;
   font-weight: 700;
 }
-html.app .gd2-chips {
+html.tma .gd2-chips {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
 }
-html.app .gd2-chip {
+html.tma .gd2-chip {
   background: var(--tma-inset);
   color: var(--text-dim);
   border-radius: 999px;
@@ -1972,17 +1820,17 @@ html.app .gd2-chip {
   font-size: 12.5px;
   font-weight: 600;
 }
-html.app .gd2-chip.on {
+html.tma .gd2-chip.on {
   background: rgba(250, 76, 22, 0.15);
   color: var(--accent);
 }
 
-html.app .gd2-path {
+html.tma .gd2-path {
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
-html.app .gd2-step {
+html.tma .gd2-step {
   display: grid;
   grid-template-columns: 48px 1fr;
   gap: 12px;
@@ -1996,7 +1844,7 @@ html.app .gd2-step {
   }
 }
 /* Линия пути между узлами */
-html.app .gd2-step::after {
+html.tma .gd2-step::after {
   content: "";
   position: absolute;
   left: 22.5px;
@@ -2007,13 +1855,13 @@ html.app .gd2-step::after {
   background: var(--tma-sep);
   transition: background 0.4s ease;
 }
-html.app .gd2-step:last-child::after {
+html.tma .gd2-step:last-child::after {
   display: none;
 }
-html.app .gd2-step.is-done::after {
+html.tma .gd2-step.is-done::after {
   background: linear-gradient(180deg, var(--accent), rgba(250, 76, 22, 0.35));
 }
-html.app .gd2-node {
+html.tma .gd2-node {
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -2025,11 +1873,11 @@ html.app .gd2-node {
   z-index: 1;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
-html.app .gd2-step.is-done .gd2-node {
+html.tma .gd2-step.is-done .gd2-node {
   border-color: var(--accent);
   box-shadow: 0 0 14px rgba(250, 76, 22, 0.35);
 }
-html.app .gd2-card {
+html.tma .gd2-card {
   background: var(--tma-card);
   border-radius: 22px;
   padding: 14px 16px 16px;
@@ -2039,16 +1887,16 @@ html.app .gd2-card {
   min-width: 0;
   transition: opacity 0.3s ease;
 }
-html.app .gd2-step.is-done .gd2-card {
+html.tma .gd2-step.is-done .gd2-card {
   opacity: 0.72;
 }
-html.app .gd2-head {
+html.tma .gd2-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
 }
-html.app .gd2-t {
+html.tma .gd2-t {
   font-size: 16.5px;
   font-weight: 700;
   display: flex;
@@ -2056,7 +1904,7 @@ html.app .gd2-t {
   gap: 8px;
   min-width: 0;
 }
-html.app .gd2-t i {
+html.tma .gd2-t i {
   font-style: normal;
   font-size: 12px;
   font-weight: 800;
@@ -2069,13 +1917,13 @@ html.app .gd2-t i {
   place-items: center;
   flex: none;
 }
-html.app .gd2-s {
+html.tma .gd2-s {
   font-size: 14px;
   line-height: 1.5;
   color: var(--text-dim);
 }
 /* Круглая отметка «сделал» */
-html.app .gd2-check {
+html.tma .gd2-check {
   flex: none;
   width: 30px;
   height: 30px;
@@ -2094,18 +1942,18 @@ html.app .gd2-check {
     color 0.2s ease,
     transform 0.25s var(--ease-spring);
 }
-html.app .gd2-check:active {
+html.tma .gd2-check:active {
   transform: scale(0.85);
   transition-duration: 0.06s;
 }
-html.app .gd2-step.is-done .gd2-check {
+html.tma .gd2-step.is-done .gd2-check {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
 }
 
 /* Празднование */
-html.app .gd2-done {
+html.tma .gd2-done {
   position: relative;
   overflow: hidden;
   background: var(--tma-card);
@@ -2124,24 +1972,24 @@ html.app .gd2-done {
     transform: scale(0.9) translateY(14px);
   }
 }
-html.app .gd2-done b {
+html.tma .gd2-done b {
   font-size: 19px;
   font-weight: 800;
 }
-html.app .gd2-done > span:not(.gd2-confetti):not(.tgs) {
+html.tma .gd2-done > span:not(.gd2-confetti):not(.tgs) {
   font-size: 14px;
   color: var(--text-dim);
 }
-html.app .gd2-done-cta {
+html.tma .gd2-done-cta {
   align-self: stretch;
   margin-top: 8px;
 }
-html.app .gd2-confetti {
+html.tma .gd2-confetti {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
-html.app .gd2-confetti i {
+html.tma .gd2-confetti i {
   position: absolute;
   top: 12%;
   left: calc(6% + var(--i) * 8%);
@@ -2152,13 +2000,13 @@ html.app .gd2-confetti i {
   opacity: 0;
   animation: gd2-confetti 1.6s ease-out calc(var(--i) * 90ms) 2;
 }
-html.app .gd2-confetti i:nth-child(3n) {
+html.tma .gd2-confetti i:nth-child(3n) {
   background: #34c759;
   width: 8px;
   height: 8px;
   border-radius: 50%;
 }
-html.app .gd2-confetti i:nth-child(4n) {
+html.tma .gd2-confetti i:nth-child(4n) {
   background: #f7c53d;
 }
 @keyframes gd2-confetti {
@@ -2175,15 +2023,15 @@ html.app .gd2-confetti i:nth-child(4n) {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  html.app .gd2-step,
-  html.app .gd2-hero,
-  html.app .gd2-done,
-  html.app .gd2-confetti i {
+  html.tma .gd2-step,
+  html.tma .gd2-hero,
+  html.tma .gd2-done,
+  html.tma .gd2-confetti i {
     animation: none;
   }
 }
 
-html.app .st-note-btn {
+html.tma .st-note-btn {
   border: none;
   background: none;
   padding: 0;
@@ -2193,7 +2041,7 @@ html.app .st-note-btn {
 }
 
 /* Скрин приложения внутри шага гайда */
-html.app .gd2-shot {
+html.tma .gd2-shot {
   display: block;
   width: 100%;
   max-width: 240px;
@@ -2202,21 +2050,21 @@ html.app .gd2-shot {
   overflow: hidden;
   border: 1px solid var(--tma-sep);
 }
-html.app .gd2-shot img {
+html.tma .gd2-shot img {
   display: block;
   width: 100%;
   height: auto;
 }
 
 /* Скелет загрузки: блоки-каркас с бегущим бликом */
-html.app .sk {
+html.tma .sk {
   display: block;
   position: relative;
   overflow: hidden;
   background: var(--tma-card);
   border-radius: 24px;
 }
-html.app .sk::after {
+html.tma .sk::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -2229,7 +2077,7 @@ html.app .sk::after {
   transform: translateX(-100%);
   animation: sk-shimmer 1.4s ease-in-out infinite;
 }
-html.app .sk-grid {
+html.tma .sk-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
@@ -2240,13 +2088,13 @@ html.app .sk-grid {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  html.app .sk::after {
+  html.tma .sk::after {
     animation: none;
   }
 }
 
 /* ===== Онбординг: полноэкранные слайды со снапом и параллаксом ===== */
-html.app .ob {
+html.tma .ob {
   position: fixed;
   inset: 0;
   z-index: 60;
@@ -2255,7 +2103,7 @@ html.app .ob {
   flex-direction: column;
   overflow: hidden;
 }
-html.app .ob-top {
+html.tma .ob-top {
   position: absolute;
   top: calc(14px + env(safe-area-inset-top));
   left: 20px;
@@ -2265,12 +2113,12 @@ html.app .ob-top {
   justify-content: space-between;
   z-index: 2;
 }
-html.app .ob-logo {
+html.tma .ob-logo {
   height: 22px;
   width: auto;
   opacity: 0.9;
 }
-html.app .ob-skip {
+html.tma .ob-skip {
   border: none;
   background: var(--tma-card);
   color: var(--text-dim);
@@ -2281,7 +2129,7 @@ html.app .ob-skip {
   border-radius: 999px;
   cursor: pointer;
 }
-html.app .ob-track {
+html.tma .ob-track {
   flex: 1;
   display: flex;
   overflow-x: auto;
@@ -2291,10 +2139,10 @@ html.app .ob-track {
   overscroll-behavior-x: contain;
   touch-action: pan-x;
 }
-html.app .ob-track::-webkit-scrollbar {
+html.tma .ob-track::-webkit-scrollbar {
   display: none;
 }
-html.app .ob-slide {
+html.tma .ob-slide {
   flex: 0 0 100%;
   scroll-snap-align: center;
   scroll-snap-stop: always;
@@ -2309,7 +2157,7 @@ html.app .ob-slide {
   min-width: 0;
 }
 /* Параллакс: --d = смещение слайда от центра (-1..1), --a = видимость */
-html.app .ob-hero {
+html.tma .ob-hero {
   position: relative;
   z-index: 1;
   width: 148px;
@@ -2326,7 +2174,7 @@ html.app .ob-hero {
     translate: 0 -10px;
   }
 }
-html.app .ob-slide h1 {
+html.tma .ob-slide h1 {
   position: relative;
   z-index: 1;
   font-size: 28px;
@@ -2336,7 +2184,7 @@ html.app .ob-slide h1 {
   transform: translateX(calc(var(--d, 0) * -80px));
   opacity: var(--a, 1);
 }
-html.app .ob-slide p {
+html.tma .ob-slide p {
   position: relative;
   z-index: 1;
   font-size: 15.5px;
@@ -2347,13 +2195,13 @@ html.app .ob-slide p {
   transform: translateX(calc(var(--d, 0) * -120px));
   opacity: var(--a, 1);
 }
-html.app .ob-blob {
+html.tma .ob-blob {
   position: absolute;
   border-radius: 50%;
   filter: blur(52px);
   pointer-events: none;
 }
-html.app .ob-blob-a {
+html.tma .ob-blob-a {
   width: 240px;
   height: 240px;
   top: 6%;
@@ -2361,7 +2209,7 @@ html.app .ob-blob-a {
   background: rgba(250, 76, 22, 0.22);
   transform: translateX(calc(var(--d, 0) * 90px));
 }
-html.app .ob-blob-b {
+html.tma .ob-blob-b {
   width: 200px;
   height: 200px;
   bottom: 4%;
@@ -2369,7 +2217,7 @@ html.app .ob-blob-b {
   background: rgba(250, 140, 40, 0.13);
   transform: translateX(calc(var(--d, 0) * 150px));
 }
-html.app .ob-ring {
+html.tma .ob-ring {
   position: absolute;
   width: 320px;
   height: 320px;
@@ -2378,18 +2226,18 @@ html.app .ob-ring {
   pointer-events: none;
   transform: translateX(calc(var(--d, 0) * 40px)) rotate(calc(var(--d, 0) * 40deg));
 }
-html.app .ob-foot {
+html.tma .ob-foot {
   padding: 8px 24px calc(20px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
 }
-html.app .ob-dots {
+html.tma .ob-dots {
   display: flex;
   gap: 7px;
 }
-html.app .ob-dot {
+html.tma .ob-dot {
   width: 7px;
   height: 7px;
   padding: 0;
@@ -2399,14 +2247,14 @@ html.app .ob-dot {
   cursor: pointer;
   transition: width 0.35s var(--ease-spring), background 0.25s ease;
 }
-html.app .ob-dot.on {
+html.tma .ob-dot.on {
   width: 24px;
   background: var(--accent);
 }
-html.app .ob-next {
+html.tma .ob-next {
   align-self: stretch;
 }
-html.app .ob-have {
+html.tma .ob-have {
   border: none;
   background: none;
   color: var(--text-dim);
@@ -2420,19 +2268,19 @@ html.app .ob-have {
   pointer-events: none;
   transition: opacity 0.3s ease, transform 0.3s var(--ease-spring);
 }
-html.app .ob-have.show {
+html.tma .ob-have.show {
   opacity: 1;
   transform: none;
   pointer-events: auto;
 }
 @media (prefers-reduced-motion: reduce) {
-  html.app .ob-hero {
+  html.tma .ob-hero {
     animation: none;
   }
 }
 
 /* ===== Вход и регистрация ===== */
-html.app .au {
+html.tma .au {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -2440,7 +2288,7 @@ html.app .au {
   padding: calc(40px + env(safe-area-inset-top)) 24px calc(28px + env(safe-area-inset-bottom));
   background: var(--tma-canvas);
 }
-html.app .au-hero {
+html.tma .au-hero {
   width: 116px;
   height: 116px;
   display: grid;
@@ -2449,7 +2297,7 @@ html.app .au-hero {
   background: radial-gradient(circle, rgba(250, 76, 22, 0.15), transparent 70%);
   animation: ap-slide-in 0.45s var(--ease-out, ease) backwards;
 }
-html.app .au-title {
+html.tma .au-title {
   font-size: 25px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -2457,7 +2305,7 @@ html.app .au-title {
   text-align: center;
   animation: ap-slide-in 0.45s var(--ease-out, ease) 0.05s backwards;
 }
-html.app .au-sub {
+html.tma .au-sub {
   font-size: 14.5px;
   line-height: 1.5;
   color: var(--text-dim);
@@ -2466,7 +2314,7 @@ html.app .au-sub {
   max-width: 300px;
   animation: ap-slide-in 0.45s var(--ease-out, ease) 0.1s backwards;
 }
-html.app .au-tabs {
+html.tma .au-tabs {
   position: relative;
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2477,7 +2325,7 @@ html.app .au-tabs {
   padding: 4px;
   animation: ap-slide-in 0.45s var(--ease-out, ease) 0.15s backwards;
 }
-html.app .au-pill {
+html.tma .au-pill {
   position: absolute;
   top: 4px;
   bottom: 4px;
@@ -2487,10 +2335,10 @@ html.app .au-pill {
   background: var(--tma-inset);
   transition: transform 0.35s var(--ease-spring);
 }
-html.app .au-pill.right {
+html.tma .au-pill.right {
   transform: translateX(100%);
 }
-html.app .au-tabs button {
+html.tma .au-tabs button {
   position: relative;
   border: none;
   background: none;
@@ -2503,10 +2351,10 @@ html.app .au-tabs button {
   cursor: pointer;
   transition: color 0.25s ease;
 }
-html.app .au-tabs button.on {
+html.tma .au-tabs button.on {
   color: var(--ink);
 }
-html.app .au-form {
+html.tma .au-form {
   align-self: stretch;
   display: flex;
   flex-direction: column;
@@ -2514,10 +2362,10 @@ html.app .au-form {
   margin-top: 18px;
   animation: ap-slide-in 0.45s var(--ease-out, ease) 0.2s backwards;
 }
-html.app .au-pass {
+html.tma .au-pass {
   position: relative;
 }
-html.app .au-eye {
+html.tma .au-eye {
   position: absolute;
   right: 12px;
   bottom: 11px;
@@ -2530,22 +2378,22 @@ html.app .au-eye {
   padding: 4px 6px;
   cursor: pointer;
 }
-html.app .au-pass input {
+html.tma .au-pass input {
   padding-right: 92px;
 }
-html.app .au-accept {
+html.tma .au-accept {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   cursor: pointer;
 }
-html.app .au-accept input {
+html.tma .au-accept input {
   position: absolute;
   opacity: 0;
   width: 0;
   height: 0;
 }
-html.app .au-box {
+html.tma .au-box {
   flex: none;
   width: 22px;
   height: 22px;
@@ -2556,7 +2404,7 @@ html.app .au-box {
   place-items: center;
   transition: background 0.2s var(--ease-spring), border-color 0.2s ease;
 }
-html.app .au-box::after {
+html.tma .au-box::after {
   content: "✓";
   font-size: 13px;
   font-weight: 800;
@@ -2565,20 +2413,20 @@ html.app .au-box::after {
   transform: scale(0.4);
   transition: opacity 0.15s ease, transform 0.2s var(--ease-spring);
 }
-html.app .au-accept input:checked + .au-box {
+html.tma .au-accept input:checked + .au-box {
   background: var(--accent);
   border-color: var(--accent);
 }
-html.app .au-accept input:checked + .au-box::after {
+html.tma .au-accept input:checked + .au-box::after {
   opacity: 1;
   transform: scale(1);
 }
-html.app .au-accept-text {
+html.tma .au-accept-text {
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--text-dim);
 }
-html.app .au-link {
+html.tma .au-link {
   border: none;
   background: none;
   padding: 0;
@@ -2587,10 +2435,10 @@ html.app .au-link {
   font-weight: 600;
   cursor: pointer;
 }
-html.app .au-submit {
+html.tma .au-submit {
   margin-top: 4px;
 }
-html.app .au-forgot {
+html.tma .au-forgot {
   border: none;
   background: none;
   align-self: center;
@@ -2610,28 +2458,28 @@ html.app .au-forgot {
    ========================================================================== */
 
 @media (min-width: 960px) {
-  html.app .ac-header-in,
-  html.app .ac-main {
+  html.tma .ac-header-in,
+  html.tma .ac-main {
     max-width: 944px; /* 880 контента + поля .wrap */
   }
-  html.app .ac-main {
+  html.tma .ac-main {
     padding-top: 18px;
   }
 
   /* Главная: две равные колонки; карта и заморозка — во всю ширину.
      Группы строк (по 4 в каждой) авторазмещением встают парой. */
-  html.app .ap-home {
+  html.tma .ap-home {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px;
   }
-  html.app .ap-home > .ap-card,
-  html.app .ap-home > .ap-freeze {
+  html.tma .ap-home > .ap-card,
+  html.tma .ap-home > .ap-freeze {
     grid-column: 1 / -1;
   }
 
   /* Карта статуса: шапка | дни, статы | CTA. Фокус — по-прежнему цифра. */
-  html.app .ap-home .ap-card {
+  html.tma .ap-home .ap-card {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -2639,11 +2487,11 @@ html.app .au-forgot {
     row-gap: 22px;
     padding: 24px 26px 22px;
   }
-  html.app .ap-home .ap-head {
+  html.tma .ap-home .ap-head {
     grid-column: 1;
     grid-row: 1;
   }
-  html.app .ap-home .ap-days {
+  html.tma .ap-home .ap-days {
     grid-column: 2;
     grid-row: 1;
     flex-direction: column;
@@ -2651,16 +2499,16 @@ html.app .au-forgot {
     gap: 5px;
     text-align: right;
   }
-  html.app .ap-home .ap-days-n {
+  html.tma .ap-home .ap-days-n {
     font-size: 42px;
   }
-  html.app .ap-home .ap-mini {
+  html.tma .ap-home .ap-mini {
     grid-column: 1;
     grid-row: 2;
     border-top: none;
     padding-top: 0;
   }
-  html.app .ap-home .ap-cta {
+  html.tma .ap-home .ap-cta {
     grid-column: 2;
     grid-row: 2;
     justify-self: end;
@@ -2669,76 +2517,81 @@ html.app .au-forgot {
   }
   /* Нет подписки: приглашение слева, CTA справа, статы третьей строкой.
      Без :has — по соседству, чтобы старые вебвью не получили наложение. */
-  html.app .ap-home .ap-sub {
+  html.tma .ap-home .ap-sub {
     grid-column: 1;
     grid-row: 2;
     max-width: 52ch;
   }
-  html.app .ap-home .ap-sub ~ .ap-mini {
+  html.tma .ap-home .ap-sub ~ .ap-mini {
     grid-column: 1 / -1;
     grid-row: 3;
   }
 
   /* Группы строк: чуть больше воздуха; разделитель — под новый отступ. */
-  html.app .ap-home .ap-rows {
+  html.tma .ap-home .ap-rows {
     padding: 8px;
   }
-  html.app .ap-home .ap-row {
+  html.tma .ap-home .ap-row {
     padding: 14px;
   }
-  html.app .ap-home .ap-row + .ap-row::before {
+  html.tma .ap-home .ap-row + .ap-row::before {
     left: 68px;
     right: 14px;
   }
 
-  /* Таб-бар: та же капсула по содержимому, чуть выше от края. */
-  html.app .ac-bottom {
+  /* Таб-бар: компактная капсула по центру. transform занят анимацией
+     клавиатуры, поэтому центр — margin-ом, а не translate. */
+  html.tma .ac-bottom {
+    left: 50%;
+    right: auto;
+    width: 480px;
+    margin-left: -240px;
     bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 }
 
 /* Мышь: hover-состояния. Тач под это медиа не попадает, телефон не тронут. */
 @media (hover: hover) and (pointer: fine) {
-  html.app .ap-row:hover {
+  html.tma .ap-row:hover {
     background: var(--tma-inset);
     transition-duration: 0.16s;
   }
-  html.app .ap-row:hover::before,
-  html.app .ap-row:hover + .ap-row::before {
+  html.tma .ap-row:hover::before,
+  html.tma .ap-row:hover + .ap-row::before {
     opacity: 0;
   }
-  html.app .ap-cta:hover {
+  html.tma .ap-cta:hover {
     background: var(--accent-hover);
   }
-  html.app .ap-freeze-btn {
+  html.tma .ap-freeze-btn {
     transition:
       transform 0.16s var(--ease-out, ease),
       background 0.2s ease;
   }
-  html.app .ap-freeze-btn:hover:not(:disabled) {
+  html.tma .ap-freeze-btn:hover:not(:disabled) {
     background: var(--accent-hover);
   }
-  html.app .ac-bottom a:hover {
+  html.tma .ac-bottom a:hover {
     color: var(--ink);
   }
-  html.app .ac-bottom a.active:hover {
+  html.tma .ac-bottom a.active:hover {
     color: var(--accent);
   }
 }
 
 /* ==========================================================================
    Десктоп, волна 2: остальные страницы и оверлеи. Всё так же — только под
-   html.app и только ≥960px (плюс hover-блок, куда тач не попадает).
+   html.tma и только ≥960px (плюс hover-блок, куда тач не попадает).
    ========================================================================== */
 
 @media (min-width: 960px) {
   /* --- Листы → модальные окна по центру. Грип — телефонный жест, прячем. --- */
-  html.app .pd-overlay {
+  html.tma .pd-overlay {
     align-items: center;
     justify-content: center;
     padding: 40px;
   }
-  html.app .pd {
+  html.tma .pd {
     max-width: 460px;
     width: 100%;
     border-radius: 26px;
@@ -2749,17 +2602,17 @@ html.app .au-forgot {
       transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
       opacity 0.28s ease;
   }
-  html.app .pd-overlay.is-open .pd {
+  html.tma .pd-overlay.is-open .pd {
     transform: none;
     opacity: 1;
   }
-  html.app .pd-grip {
+  html.tma .pd-grip {
     display: none;
   }
 
   /* --- Пуш-экраны → окно по центру: шапка-карта + прокручиваемое тело.
      Тень шапки прячется под телом (оно ниже по стеку), стык чистый. --- */
-  html.app .scr {
+  html.tma .scr {
     background: rgba(0, 0, 0, 0);
     align-items: center;
     justify-content: center;
@@ -2774,14 +2627,14 @@ html.app .au-forgot {
       -webkit-backdrop-filter 0.34s ease,
       backdrop-filter 0.34s ease;
   }
-  html.app .scr.is-open {
+  html.tma .scr.is-open {
     background: rgba(0, 0, 0, 0.45);
     -webkit-backdrop-filter: blur(10px);
     backdrop-filter: blur(10px);
     pointer-events: auto;
   }
-  html.app .scr-head,
-  html.app .scr-body {
+  html.tma .scr-head,
+  html.tma .scr-body {
     width: 100%;
     max-width: 640px;
     box-shadow: var(--tma-shadow);
@@ -2791,19 +2644,19 @@ html.app .au-forgot {
       transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
       opacity 0.28s ease;
   }
-  html.app .scr.is-open .scr-head,
-  html.app .scr.is-open .scr-body {
+  html.tma .scr.is-open .scr-head,
+  html.tma .scr.is-open .scr-body {
     opacity: 1;
     transform: none;
   }
-  html.app .scr-head {
+  html.tma .scr-head {
     border-radius: 26px 26px 0 0;
     background: var(--tma-card);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     padding: 14px 14px 10px;
   }
-  html.app .scr-body {
+  html.tma .scr-body {
     flex: none;
     max-height: min(64vh, 640px);
     border-radius: 0 0 26px 26px;
@@ -2812,39 +2665,41 @@ html.app .au-forgot {
   }
 
   /* --- Тарифы: витрина в ширину колонны, планы в ряд. --- */
-  html.app .tp-grid {
+  html.tma .tp-grid {
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 14px;
   }
-  /* Липкая «Продолжить» — ровно над капсулой, той же ширины. */
-  html.app .tp-cta {
-    width: var(--ac-bottom-w, 360px);
+  /* Липкая «Продолжить» — колонной над таб-баром, а не во весь экран. */
+  html.tma .tp-cta {
+    left: calc(50% - 240px);
+    right: auto;
+    width: 480px;
     bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
 
   /* --- Настройка: списки хороши узкой колонной — как настройки планшета. --- */
-  html.app .ap-setup {
+  html.tma .ap-setup {
     width: 100%;
     max-width: 640px;
     margin-inline: auto;
   }
 
   /* --- Друзья: карта-шаринг слева, тайлы и история справа. --- */
-  html.app .ap-friends {
+  html.tma .ap-friends {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px;
     align-items: start;
   }
-  html.app .ap-friends > .ap-card {
+  html.tma .ap-friends > .ap-card {
     grid-column: 1;
     grid-row: 1 / span 2;
   }
-  html.app .ap-friends > .rf-tiles {
+  html.tma .ap-friends > .rf-tiles {
     grid-column: 2;
     grid-row: 1;
   }
-  html.app .ap-friends > .ap-rows {
+  html.tma .ap-friends > .ap-rows {
     grid-column: 2;
     grid-row: 2;
     align-self: start;
@@ -2853,44 +2708,44 @@ html.app .au-forgot {
 
 /* Мышь, волна 2: hover для витрины, историй и окон. */
 @media (hover: hover) and (pointer: fine) {
-  html.app .scr-row:hover {
+  html.tma .scr-row:hover {
     background: var(--tma-inset);
     transition-duration: 0.16s;
   }
-  html.app .scr-row:hover::before,
-  html.app .scr-row:hover + .scr-row::before {
+  html.tma .scr-row:hover::before,
+  html.tma .scr-row:hover + .scr-row::before {
     opacity: 0;
   }
-  html.app .scr-back:hover {
+  html.tma .scr-back:hover {
     background: var(--tma-inset);
   }
-  html.app .tp-card:not(.sel):hover {
+  html.tma .tp-card:not(.sel):hover {
     border-color: var(--tma-sep);
     transform: translateY(-2px);
   }
-  html.app .tp-card:not(.sel):active {
+  html.tma .tp-card:not(.sel):active {
     transform: scale(0.98);
   }
-  html.app .tp-cta:hover {
+  html.tma .tp-cta:hover {
     filter: brightness(1.06);
   }
-  html.app .tps-alt:hover {
+  html.tma .tps-alt:hover {
     color: var(--ink);
   }
-  html.app .rf-how:hover {
+  html.tma .rf-how:hover {
     text-decoration: underline;
   }
 }
 
 /* Сниженная анимация: новые переходы окон отключаются, состояния мгновенны. */
 @media (prefers-reduced-motion: reduce) {
-  html.app .pd,
-  html.app .scr,
-  html.app .scr-head,
-  html.app .scr-body {
+  html.tma .pd,
+  html.tma .scr,
+  html.tma .scr-head,
+  html.tma .scr-body {
     transition: none;
   }
-  html.app .tp-card:not(.sel):hover {
+  html.tma .tp-card:not(.sel):hover {
     transform: none;
   }
 }
@@ -2898,275 +2753,9 @@ html.app .au-forgot {
 /* Заголовок вкладки «Установка» — в ту же узкую колонну, что и её контент.
    Без :has заголовок просто останется у края колонны, как раньше. */
 @media (min-width: 960px) {
-  html.app .ac-main:has(.ap-setup) .ac-title {
+  html.tma .ac-main:has(> .ap-setup) .ac-title {
     width: 100%;
     max-width: 640px;
     margin-inline: auto;
   }
-}
-
-/* ── Развилка установки и ключи для сторонних приложений ────────────────
-   Свою палитру не заводим: те же карточки, вставки и радиусы, что у всего
-   кабинета, — раздел должен читаться как его часть, а не как приклеенная
-   страница. */
-
-html.app .pk-head {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 2px 4px 4px;
-}
-html.app .pk-title {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-html.app .pk-lead {
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-
-html.app .pk-card-on {
-  box-shadow: inset 0 0 0 1.5px var(--accent);
-}
-html.app .pk-badge {
-  align-self: flex-start;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  margin-bottom: 2px;
-}
-html.app .pk-card-on .pk-badge {
-  color: var(--accent);
-}
-
-html.app .pk-points {
-  list-style: none;
-  margin: 14px 0 16px;
-  padding: 0;
-  display: grid;
-  gap: 9px;
-}
-html.app .pk-points li {
-  position: relative;
-  padding-left: 22px;
-  font-size: 14px;
-  line-height: 1.4;
-  color: var(--ink);
-}
-/* Галочку рисуем сами: списочные маркеры в разных браузерах встают
-   по-разному, а тут важно ровное левое поле. */
-html.app .pk-points li::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  top: 5px;
-  width: 10px;
-  height: 5px;
-  border-left: 2px solid var(--accent);
-  border-bottom: 2px solid var(--accent);
-  transform: rotate(-45deg);
-}
-
-html.app .pk-btn {
-  width: 100%;
-  padding: 13px 16px;
-  border: none;
-  border-radius: 14px;
-  background: var(--tma-inset);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
-  cursor: pointer;
-  transition: transform 0.16s var(--ease-out, ease);
-}
-html.app .pk-btn:active {
-  transform: scale(0.98);
-  transition-duration: 0.06s;
-}
-html.app .pk-btn-on {
-  background: var(--accent);
-  color: #fff;
-}
-html.app .pk-foot {
-  margin: 2px 4px 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-
-html.app .xk-lead {
-  margin: 0 4px 4px;
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-html.app .xk-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  padding: 0 2px;
-}
-html.app .xk-tab {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 999px;
-  background: var(--tma-inset);
-  font: inherit;
-  font-size: 13.5px;
-  color: var(--text-faint);
-  cursor: pointer;
-}
-html.app .xk-tab-on {
-  background: var(--accent);
-  color: #fff;
-}
-
-/* Строка приложения. Базовый ap-row — это грид «иконка / тело / шеврон», а
-   здесь иконки нет и действий два, поэтому колонки переопределяем: имя
-   тянется, кнопки прижаты вправо и не растягиваются. */
-html.app .xk-app,
-html.app .xk-item {
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  align-items: center;
-  cursor: default;
-}
-html.app .xk-get,
-html.app .xk-add,
-html.app .xk-revoke {
-  flex: none;
-  padding: 7px 12px;
-  border: none;
-  border-radius: 999px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-}
-html.app .xk-get,
-html.app .xk-revoke {
-  background: var(--tma-inset);
-  color: var(--text-faint);
-}
-html.app .xk-add {
-  background: var(--accent);
-  color: #fff;
-}
-
-html.app .xk-note {
-  margin: 0 4px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-html.app .xk-issue {
-  display: flex;
-  gap: 8px;
-  padding: 0 2px;
-}
-html.app .xk-input {
-  flex: 1;
-  min-width: 0;
-  padding: 12px 14px;
-  border: none;
-  border-radius: 14px;
-  background: var(--tma-inset);
-  font: inherit;
-  font-size: 15px;
-  color: var(--ink);
-}
-html.app .xk-btn {
-  flex: none;
-  padding: 12px 18px;
-  border: none;
-  border-radius: 14px;
-  background: var(--accent);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  cursor: pointer;
-}
-html.app .xk-btn:disabled {
-  opacity: 0.55;
-}
-html.app .xk-error {
-  margin: 0 4px;
-  font-size: 13.5px;
-  color: #ff6b6b;
-}
-
-html.app .xk-fresh {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 16px;
-  border-radius: 18px;
-  background: var(--tma-card);
-  box-shadow: inset 0 0 0 1.5px var(--accent);
-}
-html.app .xk-fresh-t {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
-}
-html.app .xk-fresh-w {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--accent);
-}
-html.app .xk-url {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 11px 13px;
-  border: none;
-  border-radius: 14px;
-  background: var(--tma-inset);
-  cursor: pointer;
-  text-align: left;
-}
-html.app .xk-url code {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12.5px;
-  color: var(--ink);
-}
-html.app .xk-copy {
-  flex: none;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--accent);
-}
-html.app .xk-qr {
-  align-self: center;
-  padding: 12px;
-  border-radius: 16px;
-  background: #fff;
-}
-html.app .xk-qr-note {
-  text-align: center;
-  font-size: 12.5px;
-  color: var(--text-faint);
-}
-
-html.app .xk-steps {
-  margin: 0 4px;
-  padding-left: 18px;
-  display: grid;
-  gap: 8px;
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--ink);
 }

@@ -10,6 +10,7 @@ import { useAnchorReveal } from "../lib/anchors";
 import { api } from "../lib/api";
 import { capitalize, useI18n } from "../lib/i18n/index.jsx";
 import "./landing.css";
+import { introApplies } from "../lib/plans.js";
 
 const FEATURES = [
   { icon: "ic-arc.png", key: "speed", plain: true },
@@ -50,20 +51,32 @@ function toCards(list, t, f) {
   const cards = paid.map((plan) => {
     const monthly = plan.duration_days >= 60;
     const months = Math.max(1, Math.round(plan.duration_days / 30));
-    const perMonth = monthly ? Math.round(plan.price_kopecks / months) : plan.price_kopecks;
+    // Вводная цена — это то, что человек заплатит сегодня, поэтому крупно
+    // стоит она, а обычная уходит в подпись. Раньше витрина называла 249 ₽,
+    // счёт выставлялся на 50 ₽, и цифры на экране не сходились ни с чем.
+    const intro = introApplies(plan);
+    const perMonth = intro
+      ? plan.intro_price_kopecks
+      : monthly
+        ? Math.round(plan.price_kopecks / months)
+        : plan.price_kopecks;
     const full = f.moneyFromKopecks(plan.price_kopecks, plan.currency);
     const term = termLabel(plan.duration_days, t);
     return {
       code: plan.code,
       term,
 
-      per: monthly
-        ? t("landing.plans.perMonth")
-        : t(plan.duration_days === 1 ? "landing.plans.perDay" : "landing.plans.perTerm"),
+      per: intro
+        ? t("landing.plans.introPer")
+        : monthly
+          ? t("landing.plans.perMonth")
+          : t(plan.duration_days === 1 ? "landing.plans.perDay" : "landing.plans.perTerm"),
       monthly,
       perMonth: f.moneyFromKopecks(perMonth, plan.currency),
       perMonthValue: perMonth,
-      note: plan.tagline || t("landing.plans.priceFor", { price: full, term }),
+      note: intro
+        ? t("landing.plans.introNote", { price: full })
+        : plan.tagline || t("landing.plans.priceFor", { price: full, term }),
       limits: limitsOf(plan, t, f),
       featured: false,
     };
@@ -100,11 +113,11 @@ function toCards(list, t, f) {
 
 const GB = 1024 * 1024 * 1024;
 const FALLBACK_PLANS = [
-  { code: "basic", duration_days: 30, price_kopecks: 19900, currency: "RUB", traffic_limit_bytes: 250 * GB, device_limit: 2, server_limit: 3 },
+  { code: "basic", duration_days: 30, price_kopecks: 24900, intro_price_kopecks: 5000, intro_applies: true, currency: "RUB", traffic_limit_bytes: 250 * GB, device_limit: 2, server_limit: 3 },
   { code: "3months", duration_days: 90, price_kopecks: 49900, currency: "RUB", traffic_limit_bytes: null, device_limit: 4, server_limit: 3 },
   { code: "preyear", duration_days: 180, price_kopecks: 89900, currency: "RUB", traffic_limit_bytes: null, device_limit: 6, server_limit: 3 },
   { code: "year", duration_days: 365, price_kopecks: 149900, currency: "RUB", traffic_limit_bytes: null, device_limit: 10, server_limit: 3 },
-  { code: "trial", duration_days: 2, price_kopecks: 0, currency: "RUB", traffic_limit_bytes: 10 * GB, device_limit: 1, server_limit: 3 },
+  { code: "trial", duration_days: 7, price_kopecks: 0, currency: "RUB", traffic_limit_bytes: 10 * GB, device_limit: 1, server_limit: 3 },
 ];
 
 function Feature({ icon, plain, title, text, delay }) {

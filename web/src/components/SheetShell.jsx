@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { isTma, pushBack } from "../lib/telegram.js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { isBackTop, pushBack } from "../lib/telegram.js";
 import "./password-dialog.css";
 
 /*
@@ -16,6 +16,17 @@ export function SheetShell({ open, onClose, onSubmit, children }) {
   const [shown, setShown] = useState(open);
   const [active, setActive] = useState(false);
 
+  // Родители передают inline-стрелки: их identity меняется каждый рендер,
+  // а перезапуск pushBack-эффекта дёргал бы историю (back+pushState) на
+  // каждом поллинге. Держим актуальный onClose в ref, наружу — стабильный.
+  const closeRef = useRef(onClose);
+  useEffect(() => {
+    closeRef.current = onClose;
+  });
+  const stableClose = useCallback(() => {
+    if (closeRef.current) closeRef.current();
+  }, []);
+
   useEffect(() => {
     if (open) {
       setShown(true);
@@ -27,7 +38,7 @@ export function SheetShell({ open, onClose, onSubmit, children }) {
     }
     if (shown) {
       setActive(false);
-      const wait = setTimeout(() => setShown(false), isTma() ? 460 : 0);
+      const wait = setTimeout(() => setShown(false), 460);
       return () => clearTimeout(wait);
     }
     return undefined;
@@ -36,16 +47,16 @@ export function SheetShell({ open, onClose, onSubmit, children }) {
   useEffect(() => {
     if (!shown) return undefined;
     const onKey = (e) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape" && isBackTop(stableClose)) stableClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [shown, onClose]);
+  }, [shown, stableClose]);
 
   useEffect(() => {
-    if (!shown || !open || !isTma()) return undefined;
-    return pushBack(onClose);
-  }, [shown, open, onClose]);
+    if (!shown || !open) return undefined;
+    return pushBack(stableClose);
+  }, [shown, open, stableClose]);
 
   if (!shown) return null;
 

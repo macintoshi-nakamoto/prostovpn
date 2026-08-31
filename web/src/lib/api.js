@@ -1,4 +1,5 @@
 import { takeRef } from "./referral.js";
+import { tmaInitData } from "./telegram.js";
 
 const TOKEN_KEY = "prosto_token";
 const DEVICE_KEY = "prosto_browser_id";
@@ -106,6 +107,9 @@ export const api = {
         platform: "web",
         device_id: browserId(),
         device_name: browserName(),
+        // Внутри Telegram отдаём подпись: панель привяжет этот аккаунт к
+        // Telegram, и следующий запуск мини-приложения откроется сразу.
+        init_data: tmaInitData() || null,
       },
     }),
 
@@ -120,10 +124,24 @@ export const api = {
         device_id: browserId(),
         device_name: browserName(),
         ref: takeRef(),
+        // Регистрация из мини-приложения сразу привязывает Telegram.
+        init_data: tmaInitData() || null,
       },
     }),
 
   account: () => request("/api/v1/account", { auth: true }),
+
+  // Данные для входа на сайт. В мини-приложении они не нужны — оно
+  // открывается по подписи Telegram, — но с компьютера зайти нечем, а
+  // выданный пароль человек ни разу не видел.
+  credentials: () => request("/api/v1/account/credentials", { auth: true }),
+
+  setCredentials: (login, password) =>
+    request("/api/v1/account/credentials", {
+      method: "POST",
+      auth: true,
+      body: { login: login || null, password: password || null },
+    }),
 
   changePassword: (currentPassword, newPassword) =>
     request("/api/v1/account/password", {
@@ -189,6 +207,21 @@ export const api = {
   // одним ответом.
   tgLogin: (initData) =>
     request("/api/v1/login/telegram", { method: "POST", body: { init_data: initData } }),
+
+  // Регистрация из мини-приложения: логин и пароль придумывает панель,
+  // человек не вводит ничего. Пароль приходит в ответе один раз — его
+  // показывает витрина, второй раз узнать будет неоткуда.
+  tgRegister: (initData) =>
+    request("/api/v1/register/telegram", {
+      method: "POST",
+      body: {
+        init_data: initData,
+        platform: "telegram",
+        device_id: browserId(),
+        device_name: browserName(),
+        ref: takeRef(),
+      },
+    }),
 
   freeze: () => request("/api/v1/account/freeze", { method: "POST", auth: true }),
 

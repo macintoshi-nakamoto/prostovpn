@@ -8,6 +8,18 @@ export function CryptoIcon({ className = "" }) {
   return <img className={className} src="/assets/pay/bitcoin.svg" width="24" height="24" alt="" />;
 }
 
+export function TonIcon({ className = "" }) {
+  return (
+    <svg {...BOX} className={className} fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="11" fill="#0098EA" />
+      <path
+        d="M8.2 7.4h7.6c.74 0 1.2.8.84 1.44l-3.94 7c-.3.54-1.1.54-1.4 0l-3.94-7c-.36-.64.1-1.44.84-1.44Zm3.1 1.36H8.94l2.56 4.56V8.76h-.2Zm1.4 0v4.56l2.56-4.56h-2.56Z"
+        fill="#fff"
+      />
+    </svg>
+  );
+}
+
 export function TelegramIcon({ className = "" }) {
   return (
     <svg {...BOX} className={className} fill="none" aria-hidden="true">

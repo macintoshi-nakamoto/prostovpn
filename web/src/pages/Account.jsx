@@ -2,31 +2,40 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useSession } from "../lib/session.jsx";
 import { api, ApiError } from "../lib/api";
-import { isTma, tmaHaptic, tmaOpenApp, tmaOpenLink, tmaUser } from "../lib/telegram.js";
+import { isTma, tmaHaptic, tmaOpenApp, tmaOpenLink, tmaUser, tmaAlert } from "../lib/telegram.js";
 import { EmailDialog } from "../components/EmailDialog.jsx";
 import { SheetShell } from "../components/SheetShell.jsx";
 import { ScreenShell } from "../components/ScreenShell.jsx";
-import { CryptoIcon, SbpIcon, TelegramIcon } from "../components/PayIcons.jsx";
+import { CryptoIcon, SbpIcon, TelegramIcon, TonIcon } from "../components/PayIcons.jsx";
 import { starsPayUrl } from "../lib/contacts.js";
 import { TgsEmoji } from "../components/TgsEmoji.jsx";
-import { useDismiss } from "../lib/hooks";
 import { SetupGuide } from "../components/SetupGuide.jsx";
+import { TmaSetupChooser } from "../components/TmaSetupChooser.jsx";
+import { TmaExternalKeys } from "../components/TmaExternalKeys.jsx";
 import { Referrals } from "../components/Referrals.jsx";
 import { Picture } from "../components/Picture.jsx";
-import { Controls } from "../components/Controls.jsx";
 import { PasswordDialog } from "../components/PasswordDialog.jsx";
 import { PaymentDialog } from "../components/PaymentDialog.jsx";
-import { CabinetBottomNav, CabinetNav, useScrolled } from "../components/CabinetNav.jsx";
+import { CabinetBottomNav, CabinetNav } from "../components/CabinetNav.jsx";
+import { ProfileTab, WalletSheet } from "../components/Profile.jsx";
+import { ensureConnected, shortAddress, tonAddress, tonPay, useTonWallet } from "../lib/ton.js";
 import { Sheet } from "../components/Sheet.jsx";
 import { Flag } from "../components/Flags.jsx";
 import { QrCode } from "../components/QrCode.jsx";
 import { useI18n } from "../lib/i18n/index.jsx";
 import "./account.css";
+import { introApplies, planAmountKopecks } from "../lib/plans.js";
 
 const TABS = ["account", "plan", "setup", "friends"];
 
-const SECTION_BY_TAB = { account: "", plan: "subscription", setup: "guide", friends: "friends" };
-const TAB_BY_SECTION = { subscription: "plan", guide: "setup", friends: "friends" };
+const SECTION_BY_TAB = {
+  account: "",
+  plan: "subscription",
+  setup: "guide",
+  friends: "friends",
+  profile: "profile",
+};
+const TAB_BY_SECTION = { subscription: "plan", guide: "setup", friends: "friends", profile: "profile" };
 
 const INVOICE_KEY = "prosto_invoice";
 
@@ -103,11 +112,9 @@ export function Account() {
   }, [wantedTab]);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
-  const [menuOpen, setMenuOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
-  const menuRef = useDismiss(menuOpen, () => setMenuOpen(false));
-
-  const scrolled = useScrolled();
+  const [walletOpen, setWalletOpen] = useState(false);
+  const wallet = useTonWallet();
 
   // Аватар из Telegram — только внутри мини-аппа; подпись проверяет сервер,
   // фото — чистая витрина.
@@ -156,62 +163,91 @@ export function Account() {
     navigate("/", { replace: true });
   };
 
-  const [title, subtitle] = raw(`account.heads.${tab}`);
+  // Профиль — не вкладка, а пуш-экран поверх «Аккаунта»: шапку и таббар
+  // он накрывает целиком, назад — системная кнопка Telegram (или стрелка).
+  const isProfile = tab === "profile";
+  const shownTab = isProfile ? "account" : tab;
+
+  const [title, subtitle] = raw(`account.heads.${shownTab}`);
 
   return (
     <div className="ac">
-      <header className={`ac-header${scrolled ? " scrolled" : ""}`}>
+      <header className="ac-header">
         <div className="wrap ac-header-in">
           <Link to="/" className="ac-logo">
             <Picture src="/assets/logo-v3.png" alt="PROSTO" />
           </Link>
-          <CabinetNav tabs={TABS} tab={tab} hrefOf={sectionPath} />
-          <Controls />
-          <div className="ac-user" ref={menuRef}>
-            <button
-              className={`ac-user-btn${menuOpen ? " open" : ""}`}
-              onClick={() => setMenuOpen((v) => !v)}
+          <CabinetNav tabs={TABS} tab={shownTab} hrefOf={sectionPath} />
+          <button
+            type="button"
+            className="ac-id"
+            onClick={() => {
+              tmaHaptic("select");
+              navigate(sectionPath("profile"));
+            }}
+          >
+            <span className="ac-avatar">
+              {tgPhoto ? (
+                <img src={tgPhoto} alt="" referrerPolicy="no-referrer" />
+              ) : isTma() ? (
+                <img src="/assets/guide/app-icon.webp" alt="" />
+              ) : (
+                (data?.login || "P").slice(0, 1).toUpperCase()
+              )}
+            </span>
+            <span className="ac-id-name">{data?.login || t("account.fallbackName")}</span>
+            <svg
+              className="ac-id-chev"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
             >
-              <span className="ac-avatar">
-                {tgPhoto ? (
-                  <img src={tgPhoto} alt="" referrerPolicy="no-referrer" />
-                ) : isTma() ? (
-                  <img src="/assets/guide/app-icon.webp" alt="" />
-                ) : (
-                  (data?.login || "P").slice(0, 1).toUpperCase()
-                )}
-              </span>
-              {data?.login || t("account.fallbackName")}
-              <span className="ac-caret">▼</span>
+              <path d="M9.6 6.4 15.2 12l-5.6 5.6" />
+            </svg>
+          </button>
+          {wallet ? (
+            <button
+              type="button"
+              className="ac-wallet ac-wallet-on"
+              onClick={() => setWalletOpen(true)}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M3.6 7.2A2.2 2.2 0 0 1 5.8 5h11a2.2 2.2 0 0 1 2.2 2.2v9.6A2.2 2.2 0 0 1 16.8 19H5.8a2.2 2.2 0 0 1-2.2-2.2V7.2Z" />
+                <path d="M19 10h1.4v4H19a2 2 0 1 1 0-4Z" />
+              </svg>
+              {shortAddress(tonAddress(wallet))}
             </button>
-            {menuOpen && (
-              <div className="ac-menu">
-                <span className="ac-menu-head">
-                  <span className="ac-menu-login">{data?.login}</span>
-                  <span className="ac-menu-status">
-                    {data?.active ? t("account.active") : t("account.inactive")}
-                  </span>
-                </span>
-                <span className="ac-menu-sep" />
-                <button
-                  className="ac-menu-item"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    setPwOpen(true);
-                  }}
-                >
-                  {t("account.changePassword")}
-                </button>
-                <button className="ac-menu-item ac-menu-danger" onClick={logout}>
-                  {t("account.signOut")}
-                </button>
-              </div>
-            )}
-          </div>
+          ) : (
+            <button
+              type="button"
+              className="ac-wallet"
+              onClick={() => {
+                tmaHaptic("select");
+                ensureConnected();
+              }}
+            >
+              {t("profile.connectWallet")}
+            </button>
+          )}
         </div>
       </header>
 
       <main className="wrap ac-main">
+        {/* key по вкладке: контент каждый раз входит мягким подъёмом,
+            а не подменяется скачком. */}
+        <div className="ac-view" key={shownTab}>
         <div className="ac-title">
           <h1>{title}</h1>
           <p>{subtitle}</p>
@@ -219,9 +255,9 @@ export function Account() {
 
         {error && <div className="ac-error">{error}</div>}
 
-        {!data && !error && isTma() && <TmaSkeleton variant={tab} />}
+        {!data && !error && <TmaSkeleton variant={shownTab} />}
 
-        {data && tab === "account" && (
+        {data && shownTab === "account" && (
           <AccountTab
             data={data}
             onManage={() => navigate(sectionPath("plan"))}
@@ -242,15 +278,35 @@ export function Account() {
             onApply={apply}
           />
         )}
-        {data && tab === "setup" &&
-          (isTma() ? (
-            <TmaSetup data={data} onChanged={load} onApply={apply} />
-          ) : (
-            <SetupGuide login={data.login} />
-          ))}
+        {data && tab === "setup" && (
+          <TmaSetup data={data} onChanged={load} onApply={apply} />
+        )}
 
-        {data && tab === "friends" && (isTma() ? <TmaFriends /> : <Referrals />)}
+        {data && tab === "friends" && <TmaFriends />}
+        </div>
       </main>
+
+      <ScreenShell
+        open={isProfile}
+        title={raw("account.heads.profile")[0]}
+        back={!isTma()}
+        headless={isTma()}
+        onClose={() => navigate(sectionPath("account"))}
+      >
+        {data ? (
+          <ProfileTab
+            data={data}
+            tgPhoto={tgPhoto}
+            onPassword={() => setPwOpen(true)}
+            onSignOut={logout}
+            onOpenWallet={() => setWalletOpen(true)}
+          />
+        ) : (
+          <TmaSkeleton variant="profile" />
+        )}
+      </ScreenShell>
+
+      <WalletSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
 
       <PasswordDialog
         open={pwOpen}
@@ -265,9 +321,7 @@ export function Account() {
             try {
               await signInTelegram();
               await load();
-              try {
-                window.Telegram?.WebApp?.showAlert?.(t("password.tmaDone"));
-              } catch {}
+              tmaAlert(t("password.tmaDone"));
               return;
             } catch {
               // не вышло — честная форма входа
@@ -277,7 +331,7 @@ export function Account() {
         }}
       />
 
-      <CabinetBottomNav tabs={TABS} tab={tab} hrefOf={sectionPath} />
+      <CabinetBottomNav tabs={TABS} tab={shownTab} hrefOf={sectionPath} />
     </div>
   );
 }
@@ -994,6 +1048,11 @@ function TmaBypassSheet({ open, file, onGuide, onClose }) {
 
 // «Установка»: скачал приложение → вошёл логином. iPhone — ключом.
 // Ниже — живые сессии и файл обхода. Всё строками, всё тапается.
+// Что человек выбрал в развилке установки: наш клиент или стороннее
+// приложение. Ответ переживает перезагрузку, но снимается кнопкой «другой
+// способ» — привычки и устройства меняются.
+const SETUP_PATH_KEY = "prosto_setup_path";
+
 function TmaSetup({ data, onChanged, onApply }) {
   const { t, f } = useI18n();
   const [downloads, setDownloads] = useState(null);
@@ -1002,6 +1061,42 @@ function TmaSetup({ data, onChanged, onApply }) {
   const [copiedLogin, setCopiedLogin] = useState(false);
   const [guide, setGuide] = useState(null); // {platform, link?}
   const [bypassOpen, setBypassOpen] = useState(false);
+  const [extOpen, setExtOpen] = useState(false);
+
+  // Путь установки: наш клиент или стороннее приложение. Пока не выбран,
+  // показываем развилку — но не запираем выбор, вернуться можно всегда.
+  const [path, setPath] = useState(null);
+  const [pathReady, setPathReady] = useState(false);
+
+  useEffect(() => {
+    let saved = null;
+    try {
+      saved = window.localStorage.getItem(SETUP_PATH_KEY);
+    } catch {
+      // Приватное окно или запрет на хранилище — просто спросим заново.
+    }
+    if (saved === "app" || saved === "external") setPath(saved);
+    setPathReady(true);
+  }, []);
+
+  const choosePath = (next) => {
+    setPath(next);
+    try {
+      window.localStorage.setItem(SETUP_PATH_KEY, next);
+    } catch {
+      // Не сохранилось — в этот раз всё равно откроется выбранное.
+    }
+    if (next === "external") setExtOpen(true);
+  };
+
+  const forgetPath = () => {
+    setPath(null);
+    try {
+      window.localStorage.removeItem(SETUP_PATH_KEY);
+    } catch {
+      // см. выше
+    }
+  };
 
   useEffect(() => {
     let alive = true;
@@ -1055,8 +1150,14 @@ function TmaSetup({ data, onChanged, onApply }) {
   const file = data.tunnel_file;
   const apps = (downloads || []).filter((row) => TMA_PLATFORMS[row.platform]);
 
+  // Пока хранилище не прочитано, не рисуем ничего: иначе развилка мигнёт
+  // тем, кто давно всё выбрал.
+  if (!pathReady) return <div className="ap ap-setup" />;
+
+  if (!path) return <TmaSetupChooser onPick={choosePath} />;
+
   return (
-    <div className="ap">
+    <div className="ap ap-setup">
       <div className="ap-card">
         <div className="ap-head">
           <span className="ap-ic ap-ic-emoji">
@@ -1168,6 +1269,22 @@ function TmaSetup({ data, onChanged, onApply }) {
         )}
       </div>
 
+      <h3 className="st-h">{t("setup.ext.sectionH")}</h3>
+      <div className="ap-rows">
+        <ApRow
+          icon="key"
+          title={t("setup.ext.title")}
+          sub={t("setup.ext.rowSub")}
+          onClick={() => setExtOpen(true)}
+        />
+        <ApRow
+          icon="plug"
+          title={t("setup.ext.switch")}
+          sub={t("setup.ext.switchSub")}
+          onClick={forgetPath}
+        />
+      </div>
+
       <div className="ap-rows">
         <ApRow
           icon="file"
@@ -1177,6 +1294,8 @@ function TmaSetup({ data, onChanged, onApply }) {
           disabled={!file?.available}
         />
       </div>
+
+      <TmaExternalKeys open={extOpen} onClose={() => setExtOpen(false)} />
 
       <TmaBypassSheet
         open={bypassOpen}
@@ -1248,7 +1367,7 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
   };
 
   return (
-    <div className="ap">
+    <div className="ap ap-home">
       <div className="ap-card">
         <div className="ap-head">
           <span className="ap-ic ap-ic-emoji">
@@ -1500,7 +1619,10 @@ function TmaFriends() {
       return "";
     }
   })();
-  const appLink = code && data.bot_url ? `${data.bot_url}?startapp=${code}` : data.site_url;
+  // В Telegram зовём в мини-апп (реферал ловится через start_param), на
+  // сайте раздаём обычную ссылку с ?ref= — как делал старый веб-кабинет.
+  const appLink =
+    isTma() && code && data.bot_url ? `${data.bot_url}?startapp=${code}` : data.site_url;
 
   const share = () => {
     const url =
@@ -1510,7 +1632,9 @@ function TmaFriends() {
       encodeURIComponent(t("account.refShareText"));
     try {
       const wa = window.Telegram?.WebApp;
-      if (wa?.openTelegramLink) {
+      // Метод существует и в браузере (заменил бы вкладку на t.me) —
+      // пользуемся им только внутри Telegram.
+      if (isTma() && wa?.openTelegramLink) {
         wa.openTelegramLink(url);
         return;
       }
@@ -1528,7 +1652,7 @@ function TmaFriends() {
   };
 
   return (
-    <div className="ap">
+    <div className="ap ap-friends">
       <div className="ap-card">
         <div className="ap-head">
           <span className="ap-ic ap-ic-emoji">
@@ -1633,7 +1757,9 @@ function AccountTab({ data, onManage, onSetup, onFriends, onPassword, onChanged,
   const used = data.devices.length;
   const free = Math.max(0, data.device_limit - used);
 
-  if (isTma()) {
+  // Карточный формат — один для сайта и Telegram; старый веб-вид ниже
+  // недостижим и ждёт выпиливания.
+  {
     return (
       <TmaHome
         data={data}
@@ -2494,6 +2620,7 @@ function FreezeCard({ freeze, onApply }) {
 
 const PAY_METHODS = [
   { id: "sbp", Icon: SbpIcon, title: "tmaMethSbp", sub: "tmaMethSbpSub" },
+  { id: "ton", Icon: TonIcon, title: "tmaMethTon", sub: "tmaMethTonSub" },
   { id: "stars", Icon: TelegramIcon, title: "tmaMethStars", sub: "tmaMethStarsSub" },
   { id: "crypto", Icon: CryptoIcon, title: "tmaMethCrypto", sub: "tmaMethCryptoSub" },
 ];
@@ -2509,8 +2636,17 @@ function TmaPaySheet({ open, plan, quantity, busyMethod, invoice, onPay, onNewIn
   }, [open]);
 
   if (!plan) return null;
-  const price = f.moneyFromKopecks(plan.price_kopecks * quantity, plan.currency);
+  // Столько спишут сейчас — то же правило, что и на бэкенде.
+  const price = f.moneyFromKopecks(planAmountKopecks(plan, quantity), plan.currency);
+  const introHint = introApplies(plan, quantity)
+    ? t("pay.introThen", { price: f.moneyFromKopecks(plan.price_kopecks, plan.currency) })
+    : null;
   const openInvoice = () => {
+    // TON-счёт открывается не ссылкой, а повторным запросом подписи в кошельке.
+    if (invoice.method === "ton") {
+      tonPay(invoice.url).catch(() => {});
+      return;
+    }
     try {
       const wa = window.Telegram?.WebApp;
       if (wa?.openLink) wa.openLink(invoice.url);
@@ -2560,6 +2696,7 @@ function TmaPaySheet({ open, plan, quantity, busyMethod, invoice, onPay, onNewIn
         <h2>{t("account.tmaPayTitle")}</h2>
         <p className="pd-sub">
           {plan.title} · {price}
+          {introHint && <span className="pay-intro"> · {introHint}</span>}
         </p>
         <div className="tps-methods">
           {PAY_METHODS.map(({ id, Icon, title, sub }) => (
@@ -2581,7 +2718,7 @@ function TmaPaySheet({ open, plan, quantity, busyMethod, invoice, onPay, onNewIn
           ))}
         </div>
         {method === "stars" ? (
-          <a className="ap-cta tps-cta" href={starsPayUrl(plan.code)}>
+          <a className="ap-cta tps-cta" href={starsPayUrl(plan.code)} target="_blank" rel="noopener">
             {t("account.tmaStarsGo")}
           </a>
         ) : (
@@ -2639,9 +2776,7 @@ function TmaTransferSheet({ open, data, onClose, onChanged, onHistory }) {
       tmaHaptic("medium");
       onClose();
       onChanged();
-      try {
-        window.Telegram?.WebApp?.showAlert?.(t("account.trSent", { days: f.days(amount) }));
-      } catch {}
+      tmaAlert(t("account.trSent", { days: f.days(amount) }));
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("account.trFailed"));
       setBusy(false);
@@ -2890,7 +3025,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
   }, []);
 
   useEffect(() => {
-    if (!isTma() || !plans || !plans.length) return;
+    if (!plans || !plans.length) return;
     setSelected((cur) => {
       if (cur && plans.some((p) => p.code === cur)) return cur;
       const nonDaily = plans.filter((p) => !isDaily(p));
@@ -2928,12 +3063,32 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
     if (!paying || busyMethod) return;
     const days = isDaily(paying) ? dailyDays : 1;
     const tma = isTma();
-    const win = tma ? null : window.open("about:blank", "_blank");
+    // TON подписывается в кошельке через TON Connect — внешняя вкладка не нужна.
+    const win = tma || method === "ton" ? null : window.open("about:blank", "_blank");
     setBusyMethod(method);
     setNotice("");
     try {
       const order = await api.renew(paying.code, days, method);
       if (order && order.redirect_url) {
+        if (method === "ton") {
+          setInvoice({
+            planCode: paying.code,
+            orderId: order.id,
+            url: order.redirect_url,
+            quantity: days,
+            status: "pending",
+            method: "ton",
+          });
+          setBusyMethod(null);
+          try {
+            await tonPay(order.redirect_url);
+          } catch (err) {
+            // Человек передумал в кошельке — счёт остаётся ждать, вдруг
+            // оплатит по кнопке «Открыть» ещё раз.
+            if (err?.message) setNotice("");
+          }
+          return;
+        }
         if (tma) {
           // Внутри Telegram страницу оплаты открывает сам клиент — во
           // внешнем браузере; window.open в вебвью ненадёжен.
@@ -3006,7 +3161,8 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
     };
   }, [invoice && invoice.orderId, invoice && invoice.status]);
 
-  if (isTma()) {
+  // Витрина одна для всех — карточный формат.
+  {
     const nonDaily = ordered.filter((plan) => !isDaily(plan));
     const daily = ordered.find(isDaily) || null;
     const perDay = (plan) => plan.price_kopecks / plan.duration_days;
@@ -3128,17 +3284,29 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
                           : "\u00a0"}
                     </span>
                     <span className="tp-price">
-                      {f.moneyFromKopecks(plan.price_kopecks, plan.currency)}
+                      {plan.intro_applies
+                        ? f.moneyFromKopecks(plan.intro_price_kopecks, plan.currency)
+                        : f.moneyFromKopecks(plan.price_kopecks, plan.currency)}
                     </span>
                     <span className="tp-month">
-                      {months >= 2
-                        ? t("account.tmaPerMonth", {
-                            price: f.moneyFromKopecks(
-                              Math.round(plan.price_kopecks / months),
-                              plan.currency,
-                            ),
-                          })
-                        : f.days(plan.duration_days)}
+                      {plan.intro_applies ? (
+                        /* Обычную цену показываем зачёркнутой рядом: человек
+                           должен видеть, во сколько обойдётся продление, а не
+                           узнавать об этом через месяц. */
+                        <>
+                          <s>{f.moneyFromKopecks(plan.price_kopecks, plan.currency)}</s>{" "}
+                          {t("account.introThen")}
+                        </>
+                      ) : months >= 2 ? (
+                        t("account.tmaPerMonth", {
+                          price: f.moneyFromKopecks(
+                            Math.round(plan.price_kopecks / months),
+                            plan.currency,
+                          ),
+                        })
+                      ) : (
+                        f.days(plan.duration_days)
+                      )}
                     </span>
                   </button>
                 );
@@ -3226,7 +3394,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
             onClick={startPay}
           >
             {t("account.tmaContinue", {
-              price: f.moneyFromKopecks(selPlan.price_kopecks * qty, selPlan.currency),
+              price: f.moneyFromKopecks(planAmountKopecks(selPlan, qty), selPlan.currency),
             })}
           </button>
         )}
@@ -3346,7 +3514,7 @@ function PlanTab({ data, preselected, returnOrder, payFailed, onChanged, onApply
                   <span className="ac-plan-name">{plan.title}</span>
                   <span className="ac-plan-cost">
                     {f.moneyFromKopecks(
-                      plan.price_kopecks * (isDaily(plan) ? dailyDays : 1),
+                      planAmountKopecks(plan, isDaily(plan) ? dailyDays : 1),
                       plan.currency,
                     )}
                   </span>

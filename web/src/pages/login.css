@@ -641,3 +641,174 @@
   text-align: center;
   text-decoration: none;
 }
+
+/* ==========================================================================
+   Тёмная тема входа и регистрации.
+
+   Страница держит фирменный оранжевый жёстко в разметке (.lg красит холст
+   и текст, .lg-page — мобильную подложку), поэтому переключатель темы её
+   не трогал. Здесь оранжевый не выключается, а уходит в угли: холст —
+   канва кабинета с тёплым отливом, свечение за ключом становится тлеющим
+   оранжевым и остаётся единственным ярким пятном экрана. Поля и лист
+   формы берут те же тона, что карточки кабинета (#29292b / #343437).
+   ========================================================================== */
+
+[data-theme="dark"] .lg-page {
+  background: #1a1a1c;
+}
+
+[data-theme="dark"] .lg {
+  color-scheme: dark;
+  /* Тёплый уголь у ключа → нейтральная канва кабинета к краю. */
+  background: linear-gradient(118deg, #2a1a12 0%, #221a18 42%, #1a1a1c 100%);
+  color: var(--ink);
+  --accent-dark: #ff8a63;
+}
+
+/* Свечение — теперь тлеющее оранжевое: единственный акцент фона. */
+[data-theme="dark"] .lg-glow {
+  background: radial-gradient(
+    58% 68% at 74% 44%,
+    rgba(250, 76, 22, 0.26) 0%,
+    rgba(250, 76, 22, 0) 62%
+  );
+}
+/* Диагональная тень поверх градиента на тёмном только грязнит — снимаем. */
+[data-theme="dark"] .lg::before {
+  background: none;
+}
+
+/* Орбиты вокруг ключа: белые линии слишком звонкие на угле. */
+[data-theme="dark"] .lg-ring-1 {
+  border-color: rgba(255, 255, 255, 0.14);
+}
+[data-theme="dark"] .lg-ring-2 {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="dark"] .lg-sub {
+  color: var(--text-dim);
+}
+[data-theme="dark"] .lg-field > span {
+  color: var(--ink);
+}
+
+/* Поля — вложенный тон кабинета, а не белые пластины на цвете. */
+[data-theme="dark"] .lg-field input {
+  background: var(--field);
+  color: var(--ink);
+  border-color: transparent;
+  box-shadow: none;
+}
+[data-theme="dark"] .lg-field input::placeholder {
+  /* --text-faint на поле даёт 3.1:1 — берём тон светлее, ровно 4.55:1. */
+  color: var(--text-dim);
+}
+[data-theme="dark"] .lg-field input:hover {
+  background: #3b3b3e;
+}
+[data-theme="dark"] .lg-field input:focus-visible {
+  background: var(--field);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(250, 76, 22, 0.2);
+}
+
+[data-theme="dark"] .lg-pass button {
+  color: var(--accent-soft);
+}
+[data-theme="dark"] .lg-pass button:hover {
+  color: var(--accent-dark);
+}
+
+[data-theme="dark"] .lg-remember,
+[data-theme="dark"] .lg-check {
+  color: var(--text-dim);
+}
+[data-theme="dark"] .lg-remember input,
+[data-theme="dark"] .lg-check input {
+  accent-color: var(--accent);
+}
+[data-theme="dark"] .lg-remember input:focus-visible,
+[data-theme="dark"] .lg-check input:focus-visible {
+  outline-color: var(--accent);
+}
+[data-theme="dark"] .lg-forgot,
+[data-theme="dark"] .lg-check a,
+[data-theme="dark"] .lg-switch,
+[data-theme="dark"] .lg-help a {
+  color: var(--accent-soft);
+}
+[data-theme="dark"] .lg-forgot:hover,
+[data-theme="dark"] .lg-switch:hover,
+[data-theme="dark"] .lg-check a:hover {
+  color: var(--accent-dark);
+  opacity: 1;
+}
+[data-theme="dark"] .lg-forgot:focus-visible,
+[data-theme="dark"] .lg-switch:focus-visible,
+[data-theme="dark"] .lg-remember input:focus-visible {
+  outline-color: var(--accent);
+}
+[data-theme="dark"] .lg-help {
+  color: var(--text-faint);
+}
+
+/* Ошибка: тёплая подложка вместо белой плашки, текст читается сам. */
+[data-theme="dark"] .lg-error {
+  background: var(--accent-tint);
+  color: #ffb9a0;
+  box-shadow: none;
+}
+
+/* Кнопка становится оранжевой: белая плашка на угле спорила бы со
+   свечением за ключом, а ярким на экране должно быть одно. */
+[data-theme="dark"] .lg-submit {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 12px 28px rgba(250, 76, 22, 0.28);
+}
+[data-theme="dark"] .lg-submit:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 16px 34px rgba(250, 76, 22, 0.34);
+}
+[data-theme="dark"] .lg-submit:disabled {
+  background: #5a3527;
+  color: rgba(255, 255, 255, 0.62);
+  box-shadow: none;
+}
+[data-theme="dark"] .lg-submit:focus-visible {
+  outline-color: var(--accent-soft);
+}
+
+/* Мобильная раскладка: герой сверху, форма — листом снизу. Лист берёт
+   тон карточки кабинета; светлые правила ниже 900px иначе перебили бы
+   тёмные (у них та же специфичность класса). */
+@media (max-width: 900px) {
+  [data-theme="dark"] .lg-page {
+    background: linear-gradient(180deg, #2a1a12 0 52%, #29292b 52%);
+  }
+  [data-theme="dark"] .lg-form {
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 -18px 44px rgba(0, 0, 0, 0.5);
+  }
+  [data-theme="dark"] .lg-sub,
+  [data-theme="dark"] .lg-field > span,
+  [data-theme="dark"] .lg-remember,
+  [data-theme="dark"] .lg-check,
+  [data-theme="dark"] .lg-help {
+    color: var(--text-dim);
+  }
+  [data-theme="dark"] .lg-field input {
+    background: var(--field);
+    border-color: transparent;
+  }
+  [data-theme="dark"] .lg-field input:hover,
+  [data-theme="dark"] .lg-field input:focus-visible {
+    background: var(--field);
+  }
+  [data-theme="dark"] .lg-error {
+    background: var(--accent-tint);
+  }
+}
+

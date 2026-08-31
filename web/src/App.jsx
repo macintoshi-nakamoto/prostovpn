@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { tmaSignedOut, useSession } from "./lib/session.jsx";
 import { initTma, isTma, tmaStartParam } from "./lib/telegram.js";
@@ -11,6 +11,19 @@ import { Guide } from "./pages/Guide.jsx";
 import { Legal } from "./pages/Legal.jsx";
 import { LegalDoc } from "./pages/LegalDoc.jsx";
 import { NotFound } from "./pages/NotFound.jsx";
+
+// Формат приложения: класс app на корне — в Telegram всегда, на сайте на
+// маршрутах кабинета. useLayoutEffect — до отрисовки, чтобы вид не мигал.
+// Первичную установку до рендера делает скрипт в index.html, но снять
+// класс (например, редирект /account -> /login без токена) может только он.
+function AppFormat() {
+  const { pathname } = useLocation();
+  useLayoutEffect(() => {
+    const app = isTma() || pathname === "/account" || pathname.startsWith("/account/");
+    document.documentElement.classList.toggle("app", app);
+  }, [pathname]);
+  return null;
+}
 
 function CatchReferral() {
   useEffect(() => {
@@ -85,6 +98,7 @@ function Private({ children }) {
 export function App() {
   return (
     <>
+      <AppFormat />
       <CatchReferral />
       <ScrollToTop />
       <TmaGate>

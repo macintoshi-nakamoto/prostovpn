@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../lib/api";
-import { isTma, tmaHaptic } from "../lib/telegram.js";
+import { tmaHaptic } from "../lib/telegram.js";
 import { useT } from "../lib/i18n/index.jsx";
 import { SheetShell } from "./SheetShell.jsx";
 import "./password-dialog.css";
@@ -58,7 +58,6 @@ export function PasswordDialog({ open, onClose, onDone }) {
             value={current}
             onChange={(e) => setCurrent(e.target.value)}
             autoComplete="current-password"
-            autoFocus={!isTma()}
           />
         </label>
         <label className="pd-field">

@@ -281,3 +281,11 @@
   margin-top: 2px;
   font-size: 13px;
 }
+
+
+/* Цена продления под суммой: тихо, но до оплаты, а не после. */
+.pay-intro {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--muted, #8b8b95);
+}

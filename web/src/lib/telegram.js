@@ -181,9 +181,85 @@ function backDispatch() {
   if (top) top();
 }
 
+// Веб без Telegram: та же семантика «назад» на History API — системная
+// кнопка закрывает верхний открытый лист или экран, а не уводит из
+// кабинета. Устройство:
+//   - каждый оверлей кладёт запись с собственным id ({ pvOverlay: id });
+//   - «назад» СНАЧАЛА возвращает запись на место и лишь потом зовёт
+//     закрытие — если хендлер отказался (busy-лист посреди оплаты), шаг
+//     истории не потрачен и следующий «назад» снова достанется листу;
+//   - закрытие любым способом снимает запись в cleanup, но только пока
+//     история ещё стоит на ней: после навигации роутера (переход по табу,
+//     401 → /login) state уже чужой, и back() отсюда откатил бы настоящий
+//     переход. Осиротевшая запись стоит одного лишнего «назад» — терпимо.
+let webBackBound = false;
+let webBackSuppress = 0;
+let webBackSeq = 0;
+const webBackStack = [];
+function bindWebBack() {
+  if (webBackBound) return;
+  webBackBound = true;
+  window.addEventListener("popstate", () => {
+    if (webBackSuppress > 0) {
+      webBackSuppress -= 1;
+      return;
+    }
+    const top = webBackStack[webBackStack.length - 1];
+    if (!top) return;
+    try {
+      history.pushState({ pvOverlay: top.id }, "");
+    } catch {}
+    top.handler();
+  });
+}
+function pushBackWeb(handler) {
+  bindWebBack();
+  webBackSeq += 1;
+  const entry = { handler, id: webBackSeq };
+  webBackStack.push(entry);
+  try {
+    history.pushState({ pvOverlay: entry.id }, "");
+  } catch {}
+  return () => {
+    const i = webBackStack.lastIndexOf(entry);
+    if (i >= 0) webBackStack.splice(i, 1);
+    if (history.state && history.state.pvOverlay === entry.id) {
+      webBackSuppress += 1;
+      try {
+        history.back();
+      } catch {
+        webBackSuppress -= 1;
+      }
+    }
+  };
+}
+
+// Верхний ли это оверлей: Esc и клик по фону должны закрывать только его,
+// а не весь стек разом.
+export function isBackTop(handler) {
+  if (isTma()) return backStack[backStack.length - 1] === handler;
+  const top = webBackStack[webBackStack.length - 1];
+  return top ? top.handler === handler : true;
+}
+
+// Подтверждение-алерт: в Telegram — системный, на сайте — браузерный.
+export function tmaAlert(text) {
+  if (isTma()) {
+    try {
+      webApp()?.showAlert?.(text);
+      return;
+    } catch {}
+  }
+  try {
+    window.alert(text);
+  } catch {}
+}
+
 export function pushBack(handler) {
   const wa = webApp();
-  if (!wa?.BackButton) return () => {};
+  // Скрипт telegram-web-app.js создаёт BackButton и в обычном браузере —
+  // ориентируемся на сам факт «мы внутри Telegram», а не на объект.
+  if (!isTma() || !wa?.BackButton) return pushBackWeb(handler);
   if (!backBound) {
     try {
       wa.BackButton.onClick(backDispatch);
@@ -233,7 +309,7 @@ export function tmaOpenApp(url) {
     return;
   }
   const wa = webApp();
-  if (wa?.openLink) {
+  if (isTma() && wa?.openLink) {
     try {
       let lang = "ru";
       try {
@@ -252,7 +328,9 @@ export function tmaOpenApp(url) {
 export function tmaOpenTg(url) {
   try {
     const wa = webApp();
-    if (wa?.openTelegramLink) {
+    // Скрипт Telegram создаёт openTelegramLink и в обычном браузере, где
+    // тот заменяет вкладку на t.me — гейт по факту «мы внутри Telegram».
+    if (isTma() && wa?.openTelegramLink) {
       wa.openTelegramLink(url);
       return;
     }

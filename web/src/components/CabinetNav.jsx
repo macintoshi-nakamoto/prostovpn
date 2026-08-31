@@ -75,6 +75,28 @@ export function CabinetBottomNav({ tabs, tab, hrefOf }) {
   // на iOS. Вне мини-аппа Telegram капля скрыта стилями, механика общая.
   const [ref, pill] = usePill(tab);
 
+  // Ширина капсулы уходит в CSS-переменную: липкая «Продолжить» в тарифах
+  // повторяет её точь-в-точь, какой бы язык ни растянул подписи.
+  useEffect(() => {
+    const nav = ref.current;
+    if (!nav) return undefined;
+    const root = document.documentElement;
+    const sync = () => root.style.setProperty("--ac-bottom-w", `${nav.offsetWidth}px`);
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(nav);
+    for (const child of nav.children) observer.observe(child);
+    // Подгрузка шрифта меняет ширину подписей — капсула ужимается,
+    // переменная должна ужаться следом.
+    if (document.fonts?.ready) document.fonts.ready.then(sync).catch(() => {});
+    window.addEventListener("resize", sync);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", sync);
+      root.style.removeProperty("--ac-bottom-w");
+    };
+  }, [ref]);
+
   return (
     <nav className="ac-bottom" ref={ref} aria-label={t("account.navLabel")}>
       {pill && (

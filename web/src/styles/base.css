@@ -59,6 +59,8 @@
   --font: "ProstoDisplay", "Onest", system-ui, -apple-system, sans-serif;
 }
 
+/* Тёмная тема — нейтральная гамма кабинета (см. tma.css: канва #1a1a1c,
+   карточка #29292b, вложенное поле #343437), без прежней синевы. */
 [data-theme="dark"] {
   color-scheme: dark;
 
@@ -68,36 +70,36 @@
   --accent-soft: #ff8354;
   --accent-tint: #2b1610;
 
-  --ink: #f3f5f8;
-  --ink-2: #dfe4ea;
-  --text-muted: #a4adba;
-  --text-dim: #99a3b0;
-  --text-faint: #7c8695;
-  --line: #262b34;
-  --line-2: #20242c;
-  --border: #2d333e;
+  --ink: #f5f5f7;
+  --ink-2: #e3e3e6;
+  --text-muted: #a8a8b0;
+  --text-dim: #9c9ca4;
+  --text-faint: #7f7f88;
+  --line: #2f2f31;
+  --line-2: #29292b;
+  --border: #38383b;
 
-  --bg: #101318;
-  --bg-soft: #171b21;
-  --bg-softer: #14171d;
-  --bg-field: #1b1f26;
+  --bg: #1a1a1c;
+  --bg-soft: #232325;
+  --bg-softer: #1e1e20;
+  --bg-field: #343437;
 
-  --surface: #191d24;
-  --surface-2: #21262f;
+  --surface: #29292b;
+  --surface-2: #2e2e30;
 
-  --field: #131820;
+  --field: #343437;
 
-  --invert-bg: #07090c;
-  --invert-fg: #f3f5f8;
+  --invert-bg: #0a0a0b;
+  --invert-fg: #f5f5f7;
 
   --tint-fg: #ff9873;
 
   --danger: #ff7b72;
 
-  --on-ink: #101318;
+  --on-ink: #1a1a1c;
   --sheen-ink: rgba(255, 255, 255, 0.16);
-  --glass: rgba(23, 27, 33, 0.72);
-  --glass-line: rgba(255, 255, 255, 0.12);
+  --glass: rgba(41, 41, 43, 0.72);
+  --glass-line: rgba(255, 255, 255, 0.1);
 
   --shadow-card: 0 24px 60px rgba(0, 0, 0, 0.5);
   --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.42);
@@ -445,4 +447,34 @@ img {
   opacity: 0.55;
   cursor: default;
   transform: none;
+}
+
+
+/* --- Плавность --- */
+
+/* Смена темы: на 450мс включаем переходы цвета на всём дереве (класс
+   вешает theme.jsx). Постоянно держать transition на * нельзя — жрёт
+   перерисовку; поэтому только на момент переключения. */
+html.theme-anim,
+html.theme-anim *,
+html.theme-anim *::before,
+html.theme-anim *::after {
+  transition:
+    background-color 0.4s ease,
+    color 0.4s ease,
+    border-color 0.4s ease,
+    fill 0.4s ease,
+    stroke 0.4s ease,
+    box-shadow 0.4s ease !important;
+}
+
+/* Глобального scroll-behavior: smooth здесь намеренно НЕТ: App.jsx сбрасывает
+   скролл в ноль на каждой навигации, и плавный сброс превращал смену вкладки
+   в вязкую прокрутку. Якоря просят smooth сами (lib/anchors.js). */
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-anim,
+  html.theme-anim * {
+    transition: none !important;
+  }
 }

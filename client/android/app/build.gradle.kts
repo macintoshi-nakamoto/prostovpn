@@ -28,8 +28,8 @@ android {
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        versionCode = 28
-        versionName = "1.1.8"
+        versionCode = 29
+        versionName = "1.1.9"
 
         val explicitPanelUrl = (project.findProperty("panelUrl") as String?)
             ?: System.getenv("PANEL_URL")

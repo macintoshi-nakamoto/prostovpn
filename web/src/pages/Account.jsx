@@ -10,7 +10,7 @@ import { CryptoIcon, SbpIcon, TelegramIcon, TonIcon } from "../components/PayIco
 import { starsPayUrl } from "../lib/contacts.js";
 import { TgsEmoji } from "../components/TgsEmoji.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
-import { SetupWizard } from "../components/SetupWizard.jsx";
+import { SetupScreen } from "../components/SetupScreen.jsx";
 import { TmaExternalKeys } from "../components/TmaExternalKeys.jsx";
 import { Referrals } from "../components/Referrals.jsx";
 import { Picture } from "../components/Picture.jsx";
@@ -26,7 +26,10 @@ import { useI18n } from "../lib/i18n/index.jsx";
 import "./account.css";
 import { introApplies, planAmountKopecks } from "../lib/plans.js";
 
-const TABS = ["account", "plan", "setup", "friends"];
+// Установки среди вкладок больше нет: она открывается кнопкой с карточки
+// подписки и живёт экраном поверх. Держать её вкладкой значило звать туда
+// каждый день, хотя заходят один раз — при подключении устройства.
+const TABS = ["account", "plan", "friends"];
 
 const SECTION_BY_TAB = {
   account: "",
@@ -94,6 +97,9 @@ export function Account() {
     : TAB_BY_SECTION[section] || (TABS.includes(legacyTab) ? legacyTab : "account");
   const wantedPlan = params.get("plan") || "";
   const [tab, setTab] = useState(wantedTab);
+  // Установка и список ключей — экраны поверх кабинета, а не вкладки.
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [keysOpen, setKeysOpen] = useState(false);
 
   useEffect(() => {
     const known = section === undefined || TAB_BY_SECTION[section] !== undefined;
@@ -267,7 +273,7 @@ export function Account() {
           <AccountTab
             data={data}
             onManage={() => navigate(sectionPath("plan"))}
-            onSetup={() => navigate(sectionPath("setup"))}
+            onSetup={() => setSetupOpen(true)}
             onFriends={() => navigate(sectionPath("friends"))}
             onPassword={() => setPwOpen(true)}
             onChanged={load}
@@ -284,10 +290,6 @@ export function Account() {
             onApply={apply}
           />
         )}
-        {data && tab === "setup" && (
-          <TmaSetup data={data} onChanged={load} onApply={apply} />
-        )}
-
         {data && tab === "friends" && <TmaFriends />}
         </div>
       </main>
@@ -311,6 +313,13 @@ export function Account() {
           <TmaSkeleton variant="profile" />
         )}
       </ScreenShell>
+
+      <SetupScreen
+        open={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        onKeys={() => setKeysOpen(true)}
+      />
+      <TmaExternalKeys open={keysOpen} onClose={() => setKeysOpen(false)} />
 
       <WalletSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
 
@@ -1061,312 +1070,6 @@ function TmaBypassSheet({ open, file, onGuide, onClose }) {
   );
 }
 
-// «Установка»: скачал приложение → вошёл логином. iPhone — ключом.
-// Ниже — живые сессии и файл обхода. Всё строками, всё тапается.
-// Что человек выбрал в развилке установки: наш клиент или стороннее
-// приложение. Ответ переживает перезагрузку, но снимается кнопкой «другой
-// способ» — привычки и устройства меняются.
-const SETUP_PATH_KEY = "prosto_setup_path";
-
-function TmaSetup({ data, onChanged, onApply }) {
-  const { t, f } = useI18n();
-  const [downloads, setDownloads] = useState(null);
-  const [keyOpen, setKeyOpen] = useState(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [copiedLogin, setCopiedLogin] = useState(false);
-  const [guide, setGuide] = useState(null); // {platform, link?}
-  const [bypassOpen, setBypassOpen] = useState(false);
-  const [extOpen, setExtOpen] = useState(false);
-
-  // Путь установки: наш клиент или стороннее приложение. Пока не выбран,
-  // показываем развилку — но не запираем выбор, вернуться можно всегда.
-  const [path, setPath] = useState(null);
-  const [pathReady, setPathReady] = useState(false);
-
-  useEffect(() => {
-    let saved = null;
-    try {
-      saved = window.localStorage.getItem(SETUP_PATH_KEY);
-    } catch {
-      // Приватное окно или запрет на хранилище — просто спросим заново.
-    }
-    if (saved === "app" || saved === "external") setPath(saved);
-    setPathReady(true);
-  }, []);
-
-  const choosePath = (next) => {
-    setPath(next);
-    try {
-      window.localStorage.setItem(SETUP_PATH_KEY, next);
-    } catch {
-      // Не сохранилось — в этот раз всё равно откроется выбранное.
-    }
-    if (next === "external") setExtOpen(true);
-  };
-
-  const forgetPath = () => {
-    setPath(null);
-    try {
-      window.localStorage.removeItem(SETUP_PATH_KEY);
-    } catch {
-      // см. выше
-    }
-  };
-
-  useEffect(() => {
-    let alive = true;
-    api
-      .downloads()
-      .then((list) => alive && setDownloads(Array.isArray(list) ? list : []))
-      .catch(() => alive && setDownloads([]));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const ios = data.ios || {};
-  const groups = (() => {
-    const bySlot = new Map();
-    for (const key of ios.keys || []) {
-      if (!bySlot.has(key.slot)) bySlot.set(key.slot, { slot: key.slot, links: [] });
-      bySlot.get(key.slot).links.push(key);
-    }
-    return [...bySlot.values()];
-  })();
-  const offGroups = (() => {
-    const seen = new Set();
-    const rows = [];
-    for (const key of ios.disconnected_keys || []) {
-      if (seen.has(key.slot)) continue;
-      seen.add(key.slot);
-      rows.push(key);
-    }
-    return rows;
-  })();
-
-  const copyLogin = async () => {
-    try {
-      await navigator.clipboard.writeText(data.login);
-      tmaHaptic("light");
-      setCopiedLogin(true);
-      setTimeout(() => setCopiedLogin(false), 1400);
-    } catch {}
-  };
-
-  const unlink = (device) =>
-    tmaConfirm(t("account.tmaUnlinkAsk", { name: device.name || device.platform || "" }), async () => {
-      try {
-        await api.unlinkDevice(device.id);
-        tmaHaptic("medium");
-        onChanged();
-      } catch {}
-    });
-
-  const file = data.tunnel_file;
-  const apps = (downloads || []).filter((row) => TMA_PLATFORMS[row.platform]);
-
-  // Пока хранилище не прочитано, не рисуем ничего: иначе развилка мигнёт
-  // тем, кто давно всё выбрал.
-  if (!pathReady) return <div className="ap ap-setup" />;
-
-  // Пока человек не прошёл мастер, показываем его: он спрашивает, куда
-  // ставим, и ведёт до работающего приложения. Пройденный шаг помним, но
-  // вернуться можно строкой «показать заново».
-  if (!path) {
-    return (
-      <SetupWizard
-        icons={AP_ICONS}
-        login={data.login}
-        onExternal={() => {
-          choosePath("external");
-          setExtOpen(true);
-        }}
-        onDone={() => choosePath("app")}
-      />
-    );
-  }
-
-  return (
-    <div className="ap ap-setup">
-      <div className="ap-card">
-        <div className="ap-head">
-          <span className="ap-ic ap-ic-emoji">
-            <TgsEmoji name="nerd" size={62} />
-          </span>
-          <span className="ap-head-body">
-            <span className="ap-title">{t("account.tmaSetupTitle")}</span>
-            <span className="ap-sub">{t("account.tmaSetupSub")}</span>
-          </span>
-        </div>
-        <button type="button" className="st-login" onClick={copyLogin}>
-          <span className="ap-row-s">{t("account.tmaSetupLogin")}</span>
-          <b>{copiedLogin ? t("account.tmaCopied") : data.login}</b>
-        </button>
-      </div>
-
-      <h3 className="st-h">{t("account.tmaAppsH")}</h3>
-      <div className="ap-rows">
-        {downloads === null ? (
-          <p className="scr-empty">{t("account.plansLoading")}</p>
-        ) : (
-          apps.map((row) => (
-            <ApRow
-              key={row.platform}
-              icon={TMA_PLATFORMS[row.platform].icon}
-              title={TMA_PLATFORMS[row.platform].title}
-              sub={t("account.tmaAppRowSub", { v: row.version })}
-              onClick={() => setGuide({ platform: row.platform })}
-            />
-          ))
-        )}
-      </div>
-
-      <h3 className="st-h">{t("account.tmaIosH")}</h3>
-      <div className="ap-rows">
-        {groups.map((group) => {
-          const live = group.links.some((one) => one.is_connected);
-          const where = [...new Set(group.links.map((one) => one.country || one.server))].join(" · ");
-          return (
-            <ApRow
-              key={group.slot}
-              icon="key"
-              title={t("account.tmaKeyN", { n: group.slot })}
-              sub={`${where}${live ? " · " + t("account.deviceConnected") : ""}`}
-              onClick={() => setKeyOpen(group)}
-            />
-          );
-        })}
-        {offGroups.map((key) => (
-          <ApRow
-            key={"off-" + key.slot}
-            icon="key"
-            title={t("account.tmaKeyN", { n: key.slot })}
-            sub={t("account.tmaKeyOffSub")}
-            disabled={false}
-            onClick={() =>
-              tmaConfirm(t("account.tmaKeyOnAsk"), async () => {
-                try {
-                  onApply(await api.enableIosKey(key.slot));
-                  tmaHaptic("medium");
-                } catch {}
-              })
-            }
-          />
-        ))}
-        {!ios.blocked && (ios.available ? ios.can_add : true) && (
-          <ApRow
-            icon="plug"
-            title={groups.length ? t("account.tmaKeyMore") : t("account.tmaKeyGet")}
-            sub={t("account.tmaKeyWorks")}
-            onClick={() => setAddOpen(true)}
-          />
-        )}
-      </div>
-
-      <h3 className="st-h">{t("account.tmaSessionsH")}</h3>
-      <div className="ap-rows">
-        {data.devices.length === 0 ? (
-          <p className="scr-empty">{t("account.devicesEmpty")}</p>
-        ) : (
-          data.devices.map((device) => (
-            <div
-              className={`ap-row rf-friend st-dev${device.is_current ? "" : " st-dev-off"}`}
-              key={`${device.kind || "app"}-${device.id}`}
-              onClick={device.is_current ? undefined : () => unlink(device)}
-              role={device.is_current ? undefined : "button"}
-            >
-              <span className="ap-row-ic st-dev-ic">
-                {AP_ICONS[TMA_PLATFORMS[device.platform]?.icon || "plug"]}
-              </span>
-              <span className="ap-row-body">
-                <span className="ap-row-t">
-                  {device.name || TMA_PLATFORMS[device.platform]?.title || device.platform}
-                  {device.is_connected && <span className="st-live" aria-hidden="true" />}
-                </span>
-                <span className="ap-row-s">
-                  {device.is_current
-                    ? t("account.thisDevice")
-                    : f.ago(device.last_seen_at)}
-                </span>
-              </span>
-              {device.is_current ? (
-                <span className="st-cur">{t("account.tmaYou")}</span>
-              ) : (
-                <span className="st-unlink">{t("account.tmaUnlink")}</span>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      <h3 className="st-h">{t("setup.ext.sectionH")}</h3>
-      <div className="ap-rows">
-        <ApRow
-          icon="key"
-          title={t("setup.ext.title")}
-          sub={t("setup.ext.rowSub")}
-          onClick={() => setExtOpen(true)}
-        />
-        <ApRow
-          icon="plug"
-          title={t("setup.ext.switch")}
-          sub={t("setup.ext.switchSub")}
-          onClick={forgetPath}
-        />
-      </div>
-
-      <div className="ap-rows">
-        <ApRow
-          icon="file"
-          title={t("account.tmaBypassTitle")}
-          sub={t("account.tmaBypassSub")}
-          onClick={() => setBypassOpen(true)}
-          disabled={!file?.available}
-        />
-      </div>
-
-      <TmaExternalKeys open={extOpen} onClose={() => setExtOpen(false)} />
-
-      <TmaBypassSheet
-        open={bypassOpen}
-        file={file}
-        onGuide={() => {
-          setBypassOpen(false);
-          setGuide({ platform: "bypass" });
-        }}
-        onClose={() => setBypassOpen(false)}
-      />
-
-      <TmaIosKeySheet
-        open={Boolean(keyOpen)}
-        group={keyOpen}
-        onClose={() => setKeyOpen(null)}
-        onApply={onApply}
-        onGuide={(link) => {
-          setKeyOpen(null);
-          setGuide({ platform: "ios", link });
-        }}
-      />
-      <TmaGuideScreen
-        open={Boolean(guide)}
-        platform={guide?.platform}
-        link={guide?.link}
-        login={data.login}
-        downloads={downloads}
-        file={file}
-        onClose={() => setGuide(null)}
-      />
-      <TmaAddKeySheet
-        open={addOpen}
-        servers={ios.servers || []}
-        exists={Boolean(ios.available)}
-        onClose={() => setAddOpen(false)}
-        onApply={onApply}
-      />
-    </div>
-  );
-}
-
 // Главная мини-аппа: карта статуса с круглой CTA, пауза, действия и
 // аккаунт — группами строк. Стиль нативных мини-аппов, наш цвет.
 function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChanged, onApply }) {
@@ -1428,9 +1131,17 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         ) : (
           !data.active && !frozen && <p className="ap-sub">{t("account.subscribePrompt")}</p>
         )}
-        <button className="ap-cta" onClick={onManage}>
-          {t("account.manage")}
-        </button>
+        {/* Два действия вместо одного: продлить и подключить устройство —
+            разные задачи, и раньше вторая пряталась во вкладке, куда никто
+            не заходил. Продление слева и залито: за ним приходят чаще. */}
+        <div className="ap-duo">
+          <button className="ap-cta" onClick={onManage}>
+            {t("account.renew")}
+          </button>
+          <button className="ap-cta ap-cta-alt" onClick={onSetup}>
+            {t("account.setupBtn")}
+          </button>
+        </div>
         <div className="ap-mini">
           <span>
             {t("account.statDevices")}{" "}

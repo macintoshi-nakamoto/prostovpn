@@ -824,6 +824,12 @@ class SubscriptionToken(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     device_id: Mapped[str] = mapped_column(String(64), default="", server_default="", index=True)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # Сам токен, зашифрованный AES-GCM. Хэша хватало, пока ссылку показывали
+    # один раз при выпуске; теперь она живёт на экране установки постоянно,
+    # а восстановить её из хэша нельзя. Хранение то же, что у пароля
+    # (password_enc): без PANEL_SECRETS_KEY поле остаётся пустым, и тогда
+    # ссылка просто не показывается — выпустить новую человек всегда может.
+    token_enc: Mapped[str | None] = mapped_column(Text, default=None)
     label: Mapped[str | None] = mapped_column(String(96), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     last_used_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)

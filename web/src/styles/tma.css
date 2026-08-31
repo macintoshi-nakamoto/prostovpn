@@ -2913,442 +2913,11 @@ html.app .au-forgot {
   }
 }
 
-/* ── Мастер установки и ключи для сторонних приложений ─────────────────
+/* ── Ключи для сторонних приложений ────────────────────────────────────
    Крупно и спокойно: одна мысль на экран, большие цели для пальца, никакого
    мелкого текста. Палитра общая с кабинетом — раздел должен читаться как его
    часть, а не как отдельная страница. */
 
-html.app .wz {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-/* Первый экран короткий: без этого он липнет к шапке, а внизу зияет половина
-   телефона. Занимаем всю свободную высоту и ставим содержимое по центру —
-   190px это шапка с плашкой имени и нижние вкладки. Со второго шага
-   содержимого много, там центрировать нечего. */
-html.app .wz-first {
-  min-height: calc(100dvh - 190px);
-  justify-content: center;
-  /* Со списком из пяти устройств содержимое может перерасти экран, а
-     обычный center в таком случае срезает верх и доскроллить до него
-     нельзя. safe center прижимает к началу; там, где его не понимают,
-     остаётся строка выше. */
-  justify-content: safe center;
-}
-
-
-html.app .wz-hi {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 2px 8px 4px;
-  text-align: center;
-}
-html.app .wz-hi-t {
-  font-size: 24px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  color: var(--ink);
-}
-html.app .wz-hi-s {
-  max-width: 34ch;
-  font-size: 15px;
-  line-height: 1.5;
-  text-wrap: balance;
-  color: var(--text-faint);
-}
-
-html.app .wz-ic {
-  display: grid;
-  place-items: center;
-  width: 104px;
-  height: 104px;
-  /* Не коробка, а мягкое свечение: оно не спорит с формой логотипа —
-     у яблока и у окон Windows силуэт узнаваемый, обводить его незачем.
-     Цвет вписан числом: color-mix понимают не все вебвью Telegram. */
-  background: radial-gradient(closest-side, rgba(250, 76, 22, 0.15), rgba(250, 76, 22, 0));
-  color: var(--accent);
-}
-html.app .wz-ic svg {
-  width: 54px;
-  height: 54px;
-}
-/* На втором экране значок — только подтверждение «да, это про мой
-   телефон». Крупный съедал треть экрана, и первый шаг уходил под сгиб. */
-html.app .wz-ic-lg {
-  width: 64px;
-  height: 64px;
-}
-html.app .wz-ic-lg svg {
-  width: 34px;
-  height: 34px;
-}
-
-/* Карточка вопроса «ставим сюда?» — главный экран мастера. */
-html.app .wz-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* Зазор здесь — только между двумя кнопками; воздух вокруг вопроса
-     набирается его собственными полями. */
-  gap: 12px;
-  padding: 0;
-}
-html.app .wz-q {
-  margin: 12px 0 14px;
-  font-size: 21px;
-  font-weight: 700;
-  text-align: center;
-  text-wrap: balance;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-/* Кнопки мастера — это ap-cta кабинета: круглая пилюля, та же высота и тот
-   же кегль. Здесь только то, чего в ap-cta нет: ширина (карточка мастера
-   центрирует детей) и тень. */
-html.app .wz-go {
-  width: 100%;
-  /* Отрицательный разброс держит тень строго под кнопкой: обычная
-     дотягивалась до соседней и подсвечивала её, будто выбраны обе. */
-  box-shadow: 0 8px 18px -8px rgba(250, 76, 22, 0.55);
-}
-/* Второй вариант ответа: та же форма, но обводкой — цветом на экране
-   выделено ровно одно действие. */
-html.app .wz-go-alt {
-  border: 1px solid var(--tma-hair);
-  background: none;
-  color: var(--ink);
-  box-shadow: none;
-}
-
-html.app .wz-h {
-  padding: 0 4px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-/* Список устройств: та же геометрия, что у строк кабинета (ap-row) —
-   40px значок, 14px до текста, разделитель от текста. */
-html.app .wz-list {
-  display: flex;
-  flex-direction: column;
-}
-html.app .wz-item {
-  position: relative;
-  display: grid;
-  grid-template-columns: 40px 1fr auto;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 2px;
-  border: none;
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: transform 0.16s var(--ease-out, ease);
-}
-html.app .wz-item:active {
-  transform: scale(0.985);
-  transition-duration: 0.06s;
-}
-html.app .wz-item + .wz-item::before {
-  content: "";
-  position: absolute;
-  left: 54px;
-  right: 0;
-  top: 0;
-  height: 1px;
-  background: var(--tma-hair);
-}
-html.app .wz-item-ic {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  color: var(--accent);
-}
-/* Без плашки значку можно быть крупнее — он и опознаёт платформу. */
-html.app .wz-item-ic svg {
-  width: 30px;
-  height: 30px;
-}
-html.app .wz-item-body {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-html.app .wz-item-t {
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--ink);
-}
-html.app .wz-item-s {
-  font-size: 13.5px;
-  line-height: 1.3;
-  color: var(--text-faint);
-}
-
-/* Шаг: крупная цифра слева, содержание справа. */
-/* Кружок и колонка — как у строк кабинета (ap-row): 40px значок, 14px до
-   текста. Экран должен читаться как его продолжение, а не как вставка. */
-html.app .wz-step {
-  position: relative;
-  display: grid;
-  grid-template-columns: 40px 1fr;
-  gap: 14px;
-  padding: 0;
-}
-/* Линия у соседа снизу — ровно между шагами, ни одной лишней по краям
-   списка. Начинается от текста, а не от края: так же разделены строки
-   в списках кабинета. */
-html.app .wz-step + .wz-step {
-  margin-top: 8px;
-  padding-top: 26px;
-}
-html.app .wz-step + .wz-step::before {
-  content: "";
-  position: absolute;
-  left: 54px;
-  right: 0;
-  top: 0;
-  height: 1px;
-  background: var(--tma-hair);
-}
-html.app .wz-num {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--accent);
-  font-size: 17px;
-  font-weight: 800;
-  color: #fff;
-  box-shadow: 0 6px 14px -6px rgba(250, 76, 22, 0.6);
-}
-html.app .wz-step-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-html.app .wz-step-t {
-  font-size: 16.5px;
-  font-weight: 700;
-  line-height: 1.3;
-  color: var(--ink);
-}
-html.app .wz-step-s {
-  font-size: 14.5px;
-  line-height: 1.5;
-  color: var(--text-faint);
-}
-
-/* Кнопка внутри шага — ap-cta + st-g-cta, ровно как на старой странице
-   установки. Своего правила у мастера нет нарочно: две одинаковые с виду
-   кнопки с разными значениями разъезжаются при первой же правке. */
-html.app .wz-step .ap-cta {
-  box-shadow: 0 8px 18px -8px rgba(250, 76, 22, 0.55);
-}
-
-/* Логин и пароль: две строки, каждая нажимается и копируется — их
-   переносят в другое приложение, а выделить текст в вебвью Telegram почти
-   невозможно. Подпись слева, значение справа, чтобы взгляд не искал. */
-html.app .wz-creds {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-html.app .wz-cred {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 8px 8px 16px;
-  border: 1px solid var(--tma-hair);
-  border-radius: 16px;
-}
-/* Глаз и листы: цель под палец 40px, а рисунок внутри мелкий — строка
-   не должна распухать ради двух значков. */
-html.app .wz-cred-b {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 12px;
-  background: none;
-  color: var(--text-faint);
-  cursor: pointer;
-  transition: transform 0.16s var(--ease-out, ease), color 0.2s ease;
-}
-html.app .wz-cred-b svg {
-  width: 19px;
-  height: 19px;
-}
-html.app .wz-cred-b:active {
-  transform: scale(0.9);
-  transition-duration: 0.06s;
-  background: var(--tma-hair);
-}
-html.app .wz-cred-k {
-  font-size: 14px;
-  color: var(--text-faint);
-}
-/* Выданный пароль читают по одному символу: без моноширинного набора
-   единица и латинская l в нём неразличимы. */
-html.app .wz-cred-v {
-  flex: 1;
-  min-width: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-html.app .wz-cred-note {
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-
-/* Пока список файлов едет с сервера и если он не доехал — на месте кнопки
-   должно быть слово, а не пустота: иначе шаг выглядит сломанным. */
-html.app .wz-wait {
-  margin-top: 10px;
-  font-size: 14.5px;
-  color: var(--text-faint);
-}
-html.app .wz-fallback {
-  align-self: flex-start;
-  margin-top: 10px;
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--accent);
-  text-decoration: none;
-}
-
-/* Код и ссылка под ним — по центру колонки шага. Прижатый влево квадрат
-   выглядел обрезком, а не картинкой, которую предлагают снять. */
-html.app .wz-qr-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  margin-top: 12px;
-}
-html.app .wz-qr {
-  padding: 13px;
-  border-radius: 18px;
-  background: #fff;
-  /* Ширина фиксированная, но не любой ценой: на узком экране колонка шага
-     уже кода, и без потолка белый квадрат вылезал бы за край. */
-  width: 190px;
-  max-width: 100%;
-}
-html.app .wz-qr-copy {
-  color: var(--accent);
-  font-size: 14.5px;
-  font-weight: 600;
-}
-html.app .wz-qr svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-html.app .wz-done {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 8px;
-  padding-top: 26px;
-  border-top: 1px solid var(--tma-hair);
-}
-html.app .wz-done-t {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--ink);
-}
-html.app .wz-done-s {
-  font-size: 14.5px;
-  line-height: 1.5;
-  color: var(--text-faint);
-}
-
-html.app .wz-quiet {
-  max-width: 30ch;
-  text-align: center;
-  text-wrap: balance;
-}
-html.app .wz-quiet {
-  align-self: center;
-  padding: 10px 14px;
-  border: none;
-  background: none;
-  font: inherit;
-  font-size: 14px;
-  color: var(--text-faint);
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-/* Серая надпись под шапкой Telegram терялась, а другого пути назад с
-   этого экрана нет. Стрелка, цвет действия, палец попадает. */
-html.app .wz-back {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: -4px 0 -2px -8px;
-  padding: 8px 12px 8px 8px;
-  border: none;
-  border-radius: 999px;
-  background: none;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--accent);
-  cursor: pointer;
-}
-html.app .wz-back svg {
-  width: 18px;
-  height: 18px;
-}
-html.app .wz-back:active {
-  background: var(--tma-hair);
-}
-/* На списке устройств «назад» стоит под содержимым, а не над ним: сверху
-   уже есть заголовок экрана. И цветом приглушён — на экране выбора взгляд
-   должен цепляться за устройства, а не за путь обратно. */
-html.app .wz-back-mid {
-  align-self: center;
-  margin: 2px 0 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-faint);
-}
-
-/* Колонка с общим зазором — та же, что у вкладок кабинета (.ap). Раньше
-   блоки стояли на собственных полях, а отрицательный нижний отступ у st-h
-   затягивал следующий поверх заголовка: плашки чипов и абзацы закрашивали
-   его собой. Зазор гасит эту отрицательность и заодно задаёт ритм. */
-html.app .xk {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
 html.app .xk-lead {
   margin: 0 4px;
   font-size: 14px;
@@ -3548,4 +3117,299 @@ html.app .xk-steps {
   font-size: 14px;
   line-height: 1.45;
   color: var(--ink);
+}
+
+/* ── Экран установки ───────────────────────────────────────────────────
+   Один экран вместо мастера: переключатель наверху, под ним ровно то,
+   что нужно выбранному способу. Ни шагов, ни инструкций. */
+
+html.app .su {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+html.app .su-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 2px;
+  text-align: center;
+}
+/* Шестерёнка в дышащих кольцах. Кольца — тени, а не элементы: так они не
+   занимают места и не двигают вёрстку, когда расходятся. */
+html.app .su-gear {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  box-shadow:
+    0 0 0 10px rgba(250, 76, 22, 0.22),
+    0 0 0 20px rgba(250, 76, 22, 0.1),
+    0 10px 30px -10px rgba(250, 76, 22, 0.9);
+  animation: su-breathe 3.4s ease-in-out infinite;
+}
+html.app .su-gear svg {
+  width: 34px;
+  height: 34px;
+}
+@keyframes su-breathe {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 10px rgba(250, 76, 22, 0.22),
+      0 0 0 20px rgba(250, 76, 22, 0.1),
+      0 10px 30px -10px rgba(250, 76, 22, 0.9);
+  }
+  50% {
+    box-shadow:
+      0 0 0 14px rgba(250, 76, 22, 0.14),
+      0 0 0 26px rgba(250, 76, 22, 0.05),
+      0 10px 34px -10px rgba(250, 76, 22, 0.7);
+  }
+}
+/* Тем, кому анимация мешает, — неподвижный значок. */
+@media (prefers-reduced-motion: reduce) {
+  html.app .su-gear {
+    animation: none;
+  }
+}
+html.app .su-hero-t {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+html.app .su-hero-s {
+  font-size: 14.5px;
+  color: var(--text-faint);
+}
+
+/* Переключатель: стеклянная подложка, бегунок едет за выбором. Ширина
+   бегунка ровно в треть, поэтому transform считается в процентах его
+   собственной ширины — от числа положений вёрстка не зависит. */
+html.app .su-seg {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--tma-glass);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  backdrop-filter: blur(18px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px var(--tma-glass-line);
+}
+/* Место бегунку считает не CSS, а замер выбранной кнопки в пикселях.
+   Через проценты он приезжал мимо (в calc для left они резолвятся не от
+   контейнера), а анимация left не шла вовсе — поэтому сдвиг задаётся
+   трансформацией. Замер точен по определению и не требует, чтобы
+   сегменты были одинаковой ширины. */
+html.app .su-seg-pill {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 6px 16px -6px rgba(250, 76, 22, 0.9);
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+    width 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+}
+html.app .su-seg-b {
+  position: relative;
+  white-space: nowrap;
+  z-index: 1;
+  min-height: 38px;
+  padding: 0 6px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+html.app .su-seg-b.is-on {
+  color: #fff;
+}
+
+/* Платформы и наши сборки — теми же пилюлями, что и везде в кабинете. */
+html.app .su-os {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+html.app .su-os-b {
+  padding: 8px 14px;
+  border: 1px solid var(--tma-hair);
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+html.app .su-os-b.is-on {
+  border-color: transparent;
+  background: var(--accent);
+  color: #fff;
+}
+
+html.app .su-cta {
+  display: grid;
+  place-items: center;
+  min-height: 50px;
+  padding: 0 18px;
+  text-decoration: none;
+  text-align: center;
+  box-shadow: 0 8px 18px -8px rgba(250, 76, 22, 0.55);
+}
+
+html.app .su-note {
+  margin: 0 4px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+html.app .su-wait {
+  margin: 0 4px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+
+/* Строка со значением: подпись, само значение, кнопки справа. Одинаково
+   для логина, пароля и ключа — человеку не надо каждый раз разбираться. */
+html.app .su-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--tma-hair);
+  border-radius: 16px;
+}
+html.app .su-field-k {
+  flex: none;
+  font-size: 14px;
+  color: var(--text-faint);
+}
+html.app .su-field-v {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Ключ и пароль читают по одному символу: без моноширинного набора
+   единица и латинская l в них неразличимы. */
+html.app .su-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+html.app .su-field-b {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: none;
+  border-radius: 12px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: transform 0.16s var(--ease-out, ease);
+}
+html.app .su-field-b svg {
+  width: 19px;
+  height: 19px;
+}
+html.app .su-field-b:active {
+  transform: scale(0.9);
+  transition-duration: 0.06s;
+  background: var(--tma-hair);
+}
+
+/* Список программ: имя слева, действия справа. */
+html.app .su-apps {
+  display: flex;
+  flex-direction: column;
+}
+html.app .su-app {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 2px;
+}
+html.app .su-app + .su-app::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 0;
+  height: 1px;
+  background: var(--tma-hair);
+}
+html.app .su-app-n {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+}
+html.app .su-app-get,
+html.app .su-app-add {
+  flex: none;
+  padding: 7px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+html.app .su-app-get {
+  color: var(--accent);
+}
+html.app .su-app-add {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Пара кнопок на карточке подписки: продлить и подключить устройство.
+   Ровно пополам — обе нужны, и ни одна не важнее настолько, чтобы
+   занимать всю ширину. */
+html.app .ap-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+/* Второе действие той же формы, но без заливки: цветом на карточке
+   выделено одно. */
+html.app .ap-cta-alt {
+  border: 1px solid var(--tma-hair);
+  background: none;
+  color: var(--ink);
+}
+html.app .ap-cta-alt:hover {
+  background: var(--tma-inset);
+}
+html.app .su-more {
+  align-self: center;
+  margin-top: 2px;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-faint);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

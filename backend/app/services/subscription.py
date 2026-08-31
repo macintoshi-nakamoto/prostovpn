@@ -6,6 +6,7 @@ import logging
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session as OrmSession
 
+from .. import crypto
 from ..config import settings
 from ..models import Session, SubscriptionToken, utcnow
 from ..security import new_token, token_hash
@@ -43,12 +44,29 @@ def mint(db: OrmSession, user_id: int, device_id: str = "", label: str | None = 
             user_id=user_id,
             device_id=device_id,
             token_hash=token_hash(raw),
+            token_enc=crypto.encrypt_or_none(raw),
             label=(label or None),
             expires_at=now + _ttl(),
         )
     )
     db.commit()
     return raw
+
+
+def reveal(tok: SubscriptionToken) -> str | None:
+    """Сам токен, если он был зашифрован при выпуске.
+
+    Пусто у всех ссылок, выпущенных до появления token_enc, и когда ключ
+    шифрования недоступен. Звать только там, где пустой ответ не ломает
+    экран: показать нечего — предложим выпустить заново.
+    """
+    if not tok.token_enc:
+        return None
+    try:
+        return crypto.decrypt(tok.token_enc)
+    except Exception:
+        log.warning("ссылка подписки %s не расшифровалась", tok.id)
+        return None
 
 
 def mint_for_session(db: OrmSession, session: Session) -> str:

@@ -952,16 +952,35 @@ class SubscriptionKeyOut(BaseModel):
     id: int
     label: str | None = None
     url: str | None = None
+    # Одна и та же ссылка отдаёт оба формата — приложение выбирает себя по
+    # User-Agent. Но когда её вставляют руками, угадывать нечем, поэтому
+    # рядом лежат две с явным параметром: какая куда, видно по названию.
+    url_amnezia: str | None = None
+    url_vless: str | None = None
     created_at: dt.datetime
     last_used_at: dt.datetime | None = None
     expires_at: dt.datetime | None = None
-    # Сама ссылка возвращается ровно один раз — в ответ на выпуск. Дальше
-    # её знает только человек: в базе лежит хэш, восстановить нечего.
     is_secret_shown: bool = False
 
 
 class SubscriptionKeyIn(BaseModel):
     label: str | None = Field(default=None, max_length=64)
+
+
+def _key_out(tok, raw: str | None) -> SubscriptionKeyOut:
+    """Одна ссылка в ответе. raw пуст — значит показать нечего."""
+    base = services.subscription.url_for(raw) if raw else None
+    return SubscriptionKeyOut(
+        id=tok.id,
+        label=tok.label,
+        url=base,
+        url_amnezia=(f"{base}?format=amnezia" if base else None),
+        url_vless=(f"{base}?format=vless" if base else None),
+        created_at=tok.created_at,
+        last_used_at=tok.last_used_at,
+        expires_at=tok.expires_at,
+        is_secret_shown=bool(base),
+    )
 
 
 class CredentialsOut(BaseModel):
@@ -999,23 +1018,32 @@ def subscription_keys(
     db: OrmSession = Depends(get_db),
 ) -> list[SubscriptionKeyOut]:
     """
-    Выпущенные ссылки-подписки. Самих ссылок здесь нет — только их следы.
+    Ссылки-подписки для сторонних приложений — вместе с самими ссылками.
 
-    В базе лежит хэш, поэтому показать ссылку второй раз невозможно. Это не
-    неудобство, а защита: утёкший список из кабинета не даст доступа к ключам.
+    Раньше ссылка показывалась один раз: в базе лежал только хэш. Экран
+    установки теперь держит её на виду постоянно, поэтому рядом с хэшем
+    хранится шифротекст (token_enc). У ссылок, выпущенных до этого, его нет
+    — они вернутся без url, и человеку останется выпустить новую.
+
+    Первую ссылку заводим сами: человек пришёл на экран установки не для
+    того, чтобы нажать «создать», а чтобы взять ключ.
     """
     user, _session = who
-    return [
-        SubscriptionKeyOut(
-            id=tok.id,
-            label=tok.label,
-            created_at=tok.created_at,
-            last_used_at=tok.last_used_at,
-            expires_at=tok.expires_at,
-        )
+
+    mine = [
+        tok
         for tok in services.subscription.active_for_user(db, user.id)
         if (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
     ]
+    if not mine:
+        services.subscription.mint(db, user.id, f"{EXTERNAL_SLOT_PREFIX}1", label=None)
+        mine = [
+            tok
+            for tok in services.subscription.active_for_user(db, user.id)
+            if (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
+        ]
+
+    return [_key_out(tok, services.subscription.reveal(tok)) for tok in mine]
 
 
 @router.post("/account/subscriptions", response_model=SubscriptionKeyOut, status_code=status.HTTP_201_CREATED)
@@ -1065,15 +1093,7 @@ def issue_subscription_key(
 
     tok = services.subscription.resolve(db, raw)
     assert tok is not None
-    return SubscriptionKeyOut(
-        id=tok.id,
-        label=tok.label,
-        url=services.subscription.url_for(raw),
-        created_at=tok.created_at,
-        last_used_at=tok.last_used_at,
-        expires_at=tok.expires_at,
-        is_secret_shown=True,
-    )
+    return _key_out(tok, raw)
 
 
 @router.delete("/account/subscriptions/{key_id}", status_code=status.HTTP_204_NO_CONTENT)

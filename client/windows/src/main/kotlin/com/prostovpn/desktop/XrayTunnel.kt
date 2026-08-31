@@ -256,7 +256,9 @@ object XrayTunnel {
         // трафик уйдёт в прокси, которого ещё нет, и первые секунды человек
         // проведёт без сети.
         if (!waitForSocks()) {
-            disconnect()
+            // Сюда доходим до всякой возни с правами: поднялся только xray,
+            // маршруты не трогали — хватит обычной остановки процесса.
+            stopXray()
             val detail = runCatching { log.readText().lines().lastOrNull { it.isNotBlank() } }
                 .getOrNull().orEmpty()
             return Result.Failure(Reason.ProxyFailed, detail.take(200))
@@ -264,15 +266,31 @@ object XrayTunnel {
 
         return when (runElevated(upScript(access.host, tun2socks, SOCKS_PORT), waitSeconds = 60)) {
             ElevationResult.Denied -> {
-                disconnect()
+                // Прав не дали — значит ни адаптера, ни маршрутов не появилось,
+                // и убирать нечего. Гасим только свой процесс: второе окно UAC
+                // сразу после «нет» — издевательство над человеком.
+                stopXray()
                 Result.Failure(Reason.ElevationDenied)
             }
             ElevationResult.Error -> {
-                disconnect()
+                // А здесь права дали, и скрипт мог успеть наполовину: маршрут
+                // до узла есть, адаптера нет. Прибираем по-настоящему.
+                disconnect(access.host)
                 Result.Failure(Reason.TunnelFailed, "адаптер не поднялся")
             }
             ElevationResult.Ok -> Result.Success
         }
+    }
+
+    /** Гасит только xray — без прав и без окон. */
+    private fun stopXray() {
+        xrayProcess?.let { process ->
+            runCatching {
+                process.destroy()
+                if (!process.waitFor(5, TimeUnit.SECONDS)) process.destroyForcibly()
+            }
+        }
+        xrayProcess = null
     }
 
     private fun waitForSocks(): Boolean {
@@ -296,13 +314,7 @@ object XrayTunnel {
         if (serverHost.isNotBlank() || isUp()) {
             runElevated(downScript(serverHost.ifBlank { "0.0.0.0" }), waitSeconds = 30)
         }
-        xrayProcess?.let { process ->
-            runCatching {
-                process.destroy()
-                if (!process.waitFor(5, TimeUnit.SECONDS)) process.destroyForcibly()
-            }
-        }
-        xrayProcess = null
+        stopXray()
     }
 
     fun isUp(): Boolean = xrayProcess?.isAlive == true

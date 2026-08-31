@@ -23,7 +23,7 @@ const DEVICES = [
   { id: "windows", icon: "windows", ours: true },
   { id: "android", icon: "android", ours: true },
   { id: "macos", icon: "laptop", ours: true },
-  { id: "ios", icon: "phone", ours: false },
+  { id: "ios", icon: "apple", ours: false },
   { id: "tv", icon: "tv", ours: true },
 ];
 
@@ -81,7 +81,7 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
   // ── шаг 1: куда ставим ────────────────────────────────────────────────
   if (!device) {
     return (
-      <div className="wz">
+      <div className="wz wz-first">
         <div className="wz-hi">
           <span className="wz-hi-t">{t("wizard.hiTitle")}</span>
           <span className="wz-hi-s">{t("wizard.hiLead")}</span>

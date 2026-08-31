@@ -69,6 +69,11 @@ def create_awg_endpoint(
     spare = _clean_ports(alt_ports, listen_port)
     wanted = {listen_port} | {int(p) for p in spare.split(",") if p}
 
+    # Заняты порты только своего транспорта: заводим AWG, то есть UDP, а
+    # VLESS Reality сидит на TCP. Пока считали общим списком, 443/UDP —
+    # самый живучий порт на мобильных сетях, потому что неотличим от QUIC —
+    # был недоступен только из-за того, что 443/TCP занят Reality. На узле
+    # они не конфликтуют: xray слушает TCP, iptables заворачивает UDP на awg.
     taken: dict[int, str] = {}
     if handle != provisioning.INTERFACE:
         taken[server.port] = "узла"
@@ -77,16 +82,17 @@ def create_awg_endpoint(
     for ep in server.endpoints:
         if ep.handle == handle:
             raise PanelError(f"точка входа {handle} на этом узле уже есть")
-        taken[ep.listen_port] = ep.handle
-        for port in ep.alt_port_list():
-            taken[port] = ep.handle
+        if (ep.transport or "udp") == "udp":
+            taken[ep.listen_port] = ep.handle
+            for port in ep.alt_port_list():
+                taken[port] = ep.handle
         if ep.subnet and ipaddress.ip_network(ep.subnet, strict=False).overlaps(network):
             raise PanelError(f"подсеть {subnet} пересекается с {ep.subnet}")
 
     for port in sorted(wanted):
         owner = taken.get(port)
         if owner is not None:
-            raise PanelError(f"порт {port} уже занят ({owner})")
+            raise PanelError(f"порт {port} уже занят по UDP ({owner})")
 
     values = obfuscation_set or obf.generate()
     endpoint = NodeEndpoint(

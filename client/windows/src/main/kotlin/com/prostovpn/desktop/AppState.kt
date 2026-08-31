@@ -69,6 +69,16 @@ enum class UpdateStage { CHECKING, IDLE, DOWNLOADING, INSTALLING }
 
 private const val ACCOUNT_POLL_MS = 60 * 1000L
 
+// Пороги «односторонней связи»: мы шлём, в ответ тишина. Проверка идёт раз в
+// пять секунд, поэтому три подряд — это пятнадцать секунд молчания при живой
+// отправке. Меньше брать нельзя: короткая заминка бывает и на здоровой сети.
+// 64 КБ отправленного отсекают keepalive и одиночные запросы — столько уходит,
+// только когда человек чего-то ждёт от сети; 4 КБ принятого — порог шума,
+// чтобы редкие служебные ответы не выглядели полноценным обменом.
+private const val ONE_WAY_TX_BYTES = 64 * 1024L
+private const val ONE_WAY_RX_BYTES = 4 * 1024L
+private const val ONE_WAY_CHECKS = 3
+
 class AppState(private val scope: CoroutineScope) {
     private val prefs = Preferences.userRoot().node("com/prostovpn/desktop")
 
@@ -881,6 +891,18 @@ class AppState(private val scope: CoroutineScope) {
         prefs.putInt("port." + (server?.country ?: "default"), port)
     }
 
+    /**
+     * Забывает порт, на котором только что оборвалось.
+     *
+     * Сеть душит порты не навсегда и не одинаково: то, что работало утром,
+     * вечером может встать. Если не забыть, перебор снова начнётся с этого
+     * порта и снова упрётся в него же — а именно порт чаще всего и виноват,
+     * потому что канонический 51820 узнаёт любой фильтр.
+     */
+    private fun forgetPort() {
+        prefs.remove("port." + (server?.country ?: "default"))
+    }
+
     private fun startConnect() {
         val config = server?.config
         connectionError = null
@@ -1027,6 +1049,8 @@ class AppState(private val scope: CoroutineScope) {
             var misses = 0
             var nextCheck = 5
             var lastRx = -1L
+            var lastTx = -1L
+            var oneWay = 0
             while (true) {
                 delay(500)
                 val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
@@ -1046,7 +1070,19 @@ class AppState(private val scope: CoroutineScope) {
                             // а на простое может и вовсе не повторяться — поэтому
                             // растущий приём считаем доказательством связи.
                             val moving = live.rx > lastRx
+
+                            // Односторонняя связь: мы шлём, в ответ тишина.
+                            // Так выглядит задушенный порт — туннель формально
+                            // жив, рукопожатие было, а страницы не открываются.
+                            // Обрыв этого не ловит: там ждут полной тишины, а
+                            // здесь трафик идёт — просто впустую.
+                            val sending = lastTx >= 0 && live.tx - lastTx > ONE_WAY_TX_BYTES
+                            val silent = lastRx >= 0 && live.rx - lastRx < ONE_WAY_RX_BYTES
+                            oneWay = if (sending && silent) oneWay + 1 else 0
+
                             lastRx = live.rx
+                            lastTx = live.tx
+                            if (oneWay >= ONE_WAY_CHECKS) return@runCatching false
                             live.isHealthy(staleSeconds = 300) || moving
                         }.getOrDefault(true)
                     }
@@ -1091,6 +1127,9 @@ class AppState(private val scope: CoroutineScope) {
      */
     private suspend fun reconnectAfterDrop(): Boolean {
         if (!autoReconnect) return false
+        // Порт, на котором оборвалось, больше не считаем удачным: пусть
+        // перебор ищет заново, а не долбится в тот же самый.
+        forgetPort()
         for (delaySeconds in listOf(1L, 3L, 8L, 15L, 30L)) {
             delay(delaySeconds * 1000)
             // Человек мог сам нажать «Подключить» или выйти — тогда наша
@@ -1102,6 +1141,37 @@ class AppState(private val scope: CoroutineScope) {
             connectJob?.join()
             if (phase == Phase.ON) return true
         }
+        return failoverToAnotherServer()
+    }
+
+    /**
+     * Последняя надежда: уводит на соседнюю страну.
+     *
+     * Если ни один порт этой страны не поднялся за минуту с лишним, дело уже
+     * не в порте — узел могли перекрыть целиком, и ждать у закрытой двери
+     * бессмысленно. Соседний узел стоит в другой сети, у него свой адрес и
+     * своя обфускация, поэтому шанс реальный.
+     *
+     * По одной попытке на страну и ни одного круга: пройти список дважды —
+     * это минуты «подключение…» вместо честного «не вышло», после которого
+     * человек хотя бы сменит сеть.
+     */
+    private suspend fun failoverToAnotherServer(): Boolean {
+        val count = displayServers().size
+        if (count < 2) return false
+
+        val started = selectedServerIndex
+        for (step in 1 until count) {
+            if (phase != Phase.OFF) return true
+            val candidate = (started + step) % count
+            selectServer(candidate)
+            startConnect()
+            connectJob?.join()
+            if (phase == Phase.ON) return true
+        }
+        // Не помогло — возвращаем выбор человека, чтобы в списке не осталась
+        // страна, которую он не выбирал и которая всё равно не работает.
+        selectServer(started)
         return false
     }
 

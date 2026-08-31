@@ -239,6 +239,9 @@ class TunnelManager(context: Context) {
     fun receivedBytes(): Long =
         runCatching { backend.getStatistics(tunnel).totalRx() }.getOrDefault(-1L)
 
+    fun sentBytes(): Long =
+        runCatching { backend.getStatistics(tunnel).totalTx() }.getOrDefault(-1L)
+
     suspend fun disconnect(): Boolean {
         wanted = null
         superviseJob?.cancel()
@@ -286,6 +289,8 @@ class TunnelManager(context: Context) {
         superviseJob = watchScope.launch {
             var misses = 0
             var lastRx = -1L
+            var lastTx = -1L
+            var oneWay = 0
             var sincePanelCheck = 0L
             var backoff = 0
 
@@ -309,13 +314,33 @@ class TunnelManager(context: Context) {
                 }
 
                 val rx = receivedBytes()
-                val alive = aliveNow(previousRx = lastRx, rx = rx)
+                val tx = sentBytes()
+
+                // Односторонняя связь: мы шлём, в ответ тишина. Так выглядит
+                // задушенный порт — туннель формально жив и рукопожатие было,
+                // а страницы не открываются. Проверка на «мёртв» этого не
+                // видит: там ждут полного молчания, здесь же трафик идёт,
+                // просто впустую.
+                val sending = lastTx >= 0 && tx - lastTx > ONE_WAY_TX_BYTES
+                val silent = lastRx >= 0 && rx - lastRx < ONE_WAY_RX_BYTES
+                oneWay = if (sending && silent) oneWay + 1 else 0
+
+                val alive = oneWay < ONE_WAY_CHECKS && aliveNow(previousRx = lastRx, rx = rx)
                 lastRx = rx
+                lastTx = tx
                 if (alive) {
                     misses = 0
                     backoff = 0
                     if (_status.value != Status.ON) _status.value = Status.ON
                     continue
+                }
+                if (oneWay >= ONE_WAY_CHECKS) {
+                    Log.i(TAG, "связь односторонняя — уходим с этого порта")
+                    oneWay = 0
+                    // Порт, на котором это случилось, удачным больше не
+                    // считаем: пусть перебор ищет заново, а не возвращается
+                    // к нему первым же заходом.
+                    rememberedPort = 0
                 }
 
                 val afterNetChange = networkChangedAt > 0 &&
@@ -401,6 +426,18 @@ class TunnelManager(context: Context) {
         private const val PANEL_CHECK_MS = 60_000L
 
         private const val MISSES_BEFORE_RECONNECT = 2
+
+        // Пороги «односторонней связи»: мы шлём, в ответ тишина. Проверка идёт
+        // раз в пять секунд, поэтому три подряд — пятнадцать секунд молчания
+        // при живой отправке. Меньше брать нельзя: короткая заминка бывает и
+        // на здоровой сети. 64 КБ отправленного отсекают keepalive и одиночные
+        // запросы; 4 КБ принятого — порог шума, чтобы редкие служебные ответы
+        // не сходили за полноценный обмен.
+        private const val ONE_WAY_TX_BYTES = 64 * 1024L
+
+        private const val ONE_WAY_RX_BYTES = 4 * 1024L
+
+        private const val ONE_WAY_CHECKS = 3
 
         private const val NET_GRACE_MS = 8_000L
 

@@ -774,9 +774,15 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     startTimer()
                 }
                 TunnelManager.Result.NO_HANDSHAKE -> {
-                    phase = Phase.OFF
-                    connectionError = s.errNoHandshake
-                    stopForegroundNotice()
+                    // Ни один порт этой страны не отозвался — значит дело уже
+                    // не в порте: узел могли перекрыть целиком. Соседняя
+                    // страна стоит в другой сети, с другим адресом и своей
+                    // обфускацией, поэтому пробовать её осмысленно.
+                    if (!failoverToAnotherServer()) {
+                        phase = Phase.OFF
+                        connectionError = s.errNoHandshake
+                        stopForegroundNotice()
+                    }
                 }
                 TunnelManager.Result.FAILED -> {
                     phase = Phase.OFF
@@ -790,6 +796,43 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    /**
+     * Уводит на соседнюю страну, когда текущая молчит на всех портах.
+     *
+     * По одной попытке на страну и ни одного круга: пройти список дважды —
+     * это минуты «подключение…» вместо честного «не вышло», после которого
+     * человек хотя бы сменит сеть. Не помогло — возвращаем его выбор, чтобы
+     * в списке не осталась страна, которую он не выбирал.
+     */
+    private suspend fun failoverToAnotherServer(): Boolean {
+        val list = panelServers
+        if (list.size < 2) return false
+
+        val started = selectedServerIndex
+        for (step in 1 until list.size) {
+            val candidate = (started + step) % list.size
+            val info = list.getOrNull(candidate) ?: continue
+            val config = info.config
+            if (config.isNullOrBlank()) continue
+
+            server = info
+            selectedServerIndex = candidate
+            val prepared = buildConfigForConnect(config)
+            if (tunnel.connect(prepared, info.altPorts) == TunnelManager.Result.CONNECTED) {
+                prefs.edit().putInt("selectedServer", candidate).apply()
+                persistServer()
+                phase = Phase.ON
+                startForegroundNotice()
+                startTimer()
+                return true
+            }
+        }
+
+        list.getOrNull(started)?.let { server = it }
+        selectedServerIndex = started
+        return false
     }
 
     private fun startSimulated() {

@@ -82,11 +82,15 @@ def create_vless_endpoint(
     listen_port = int(listen_port)
     if not (0 < listen_port < 65536):
         raise PanelError("порт вне диапазона")
+    # Считаем занятыми только точки своего транспорта: Reality живёт на TCP,
+    # а AWG — на UDP, и 443 у них общий лишь по номеру. Пока проверка была
+    # общей, объявленный у AWG запасной 443/UDP закрывал дорогу Reality на
+    # 443/TCP, хотя на узле они спокойно уживаются.
     for ep in server.endpoints:
+        if (ep.transport or "udp") != "tcp":
+            continue
         if ep.listen_port == listen_port or listen_port in ep.alt_port_list():
-            raise PanelError(f"порт {listen_port} на этом узле уже занят")
-    if listen_port == server.port or listen_port in server.alt_port_list():
-        raise PanelError(f"порт {listen_port} уже объявлен у самого узла")
+            raise PanelError(f"порт {listen_port} на этом узле уже занят по TCP")
 
     handle = handle or f"vless-reality-{listen_port}"
     if any(ep.handle == handle for ep in server.endpoints):

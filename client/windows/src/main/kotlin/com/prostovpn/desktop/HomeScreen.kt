@@ -235,7 +235,12 @@ private fun StatusBlock(state: AppState) {
     val subText = when (state.phase) {
         Phase.OFF -> s.tapToConnect
         Phase.CONNECTING, Phase.DISCONNECTING -> ""
-        Phase.ON -> state.formattedDuration
+        Phase.ON ->
+            if (state.activeProtocol == Protocol.VLESS) {
+                state.formattedDuration + " · " + s.viaBackup
+            } else {
+                state.formattedDuration
+            }
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {

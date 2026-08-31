@@ -98,10 +98,25 @@ def test_stale_init_data_is_rejected(client):
     assert r.headers.get("X-Error-Code") == "tg_stale"
 
 
-def test_unlinked_telegram_gets_not_linked(client):
+def test_unlinked_telegram_gets_fresh_account(client):
+    """
+    Незнакомый Telegram больше не упирается в 404, а получает свою учётку.
+
+    Подпись initData уже удостоверила личность — спрашивать логин с паролем
+    не за чем, панель их выдаёт сама. Прежний ответ «этот Telegram не
+    привязан» отправлял человека искать бота, хотя бот и мини-приложение —
+    один и тот же вход.
+    """
     r = client.post("/api/v1/login/telegram", json={"init_data": _init_data(999_999_999)})
-    assert r.status_code == 404
-    assert r.headers.get("X-Error-Code") == "tg_not_linked"
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["account"]["login"]
+    assert body["token"]
+
+    # Второй заход тем же Telegram попадает в ту же учётку, а не плодит новую.
+    again = client.post("/api/v1/login/telegram", json={"init_data": _init_data(999_999_999)})
+    assert again.status_code == 200, again.text
+    assert again.json()["account"]["public_id"] == body["account"]["public_id"]
 
 
 def test_without_bot_token_login_is_disabled(client, monkeypatch):

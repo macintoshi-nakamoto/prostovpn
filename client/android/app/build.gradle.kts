@@ -28,6 +28,20 @@ android {
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // Ядро запасного протокола везёт по 35 МБ нативного кода на каждую
+        // архитектуру, и x86 из него раздувал общий apk впятеро — при том, что
+        // ни одного x86-телефона или приставки в природе нет. Оставляем ARM;
+        // -PemulatorAbi добавляет x86_64 обратно, когда нужно проверить на
+        // эмуляторе.
+        ndk {
+            abiFilters.clear()
+            if (project.hasProperty("emulatorAbi")) {
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64")
+            } else {
+                abiFilters += listOf("armeabi-v7a", "arm64-v8a")
+            }
+        }
+
         versionCode = 29
         versionName = "1.1.9"
 

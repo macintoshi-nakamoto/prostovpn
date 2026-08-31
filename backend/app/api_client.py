@@ -744,6 +744,14 @@ def register(
             status.HTTP_400_BAD_REQUEST, str(exc), headers=_error_code_header(exc)
         ) from exc
 
+    # Пароль человек придумал сам — значит это уже его секрет, а не наша
+    # выдача, и обратно мы его не показываем. Флаг ставит только
+    # POST /account/credentials, а create_user — нет; без этой строки
+    # GET /account/credentials отдавал бы придуманный пароль открытым
+    # текстом наравне с выданным.
+    user.credentials_set_at = utcnow()
+    db.commit()
+
     if body.ref:
         try:
             services.referrals.register_from_site(db, body.ref, user)

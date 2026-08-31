@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QrCode } from "./QrCode.jsx";
 import { api } from "../lib/api";
-import { tmaHaptic, tmaOpenLink } from "../lib/telegram.js";
+import { isTma, pushBack, tmaHaptic, tmaOpenLink } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 
 /**
@@ -53,6 +53,7 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
   const { t } = useI18n();
 
   const guessed = useMemo(guessDevice, []);
+  const inTelegram = useMemo(isTma, []);
   // null — ещё не ответили; строка — выбранное устройство.
   const [device, setDevice] = useState(null);
   // Ставим сюда же или на другое: от этого зависит, кнопка или код.
@@ -63,7 +64,12 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
   // вопроса «ставим сюда?» — на вопрос. Иначе смена устройства стоит
   // двух лишних нажатий каждый раз.
   const [fromGrid, setFromGrid] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // Что именно скопировали: логин или пароль.
+  const [copied, setCopied] = useState("");
+  // Логин с паролем человеку выдали при регистрации, и в мини-приложении
+  // он их ни разу не видел — а в приложении на компьютере спрашивают
+  // именно их. Пароль приходит, только пока он выданный нами.
+  const [creds, setCreds] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -71,6 +77,10 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
       .downloads()
       .then((list) => alive && setDownloads(Array.isArray(list) ? list : []))
       .catch(() => alive && setDownloads([]));
+    api
+      .credentials()
+      .then((res) => alive && setCreds(res))
+      .catch(() => alive && setCreds({}));
     return () => {
       alive = false;
     };
@@ -89,19 +99,46 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
     setPicking(false);
   };
 
+  // Один шаг назад, какой бы экран ни был открыт. Дальше первого экрана
+  // не отступаем: там мастер кончается, а из вкладки уводит таб-бар.
   const back = () => {
-    setDevice(null);
-    setPicking(fromGrid || !guessed);
+    if (device) {
+      setDevice(null);
+      setPicking(fromGrid || !guessed);
+      return;
+    }
+    if (picking && guessed) setPicking(false);
   };
 
-  // Логин нужно перенести в другое приложение, а выделить текст в вебвью
-  // Telegram почти невозможно — поэтому строка нажимается.
-  const copyLogin = async () => {
+  // Системная кнопка «назад» Telegram и кнопка браузера — через общий стек
+  // приложения (pushBack). Обработчик наружу отдаём стабильный: back
+  // пересоздаётся каждый рендер, а перезапуск эффекта дёргал бы историю
+  // на каждом из них — та же оговорка, что в ScreenShell.
+  const backRef = useRef(back);
+  useEffect(() => {
+    backRef.current = back;
+  });
+  const stableBack = useCallback(() => backRef.current(), []);
+
+  // Одна запись на весь мастер, а не по одной на экран: стек сам
+  // возвращает её на место на каждом нажатии (bindWebBack, backDispatch),
+  // поэтому её хватает на сколько угодно шагов. Перерегистрация на каждом
+  // экране устраивала гонку pop и push в истории.
+  const needsBack = Boolean(device) || (picking && Boolean(guessed));
+  useEffect(() => {
+    if (!needsBack) return undefined;
+    return pushBack(stableBack);
+  }, [needsBack, stableBack]);
+
+  // Данные надо перенести в другое приложение, а выделить текст в вебвью
+  // Telegram почти невозможно — поэтому строки нажимаются.
+  const copy = async (value, key) => {
+    if (!value) return;
     try {
-      await navigator.clipboard.writeText(login);
+      await navigator.clipboard.writeText(value);
       tmaHaptic("light");
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1400);
+      setCopied(key);
+      setTimeout(() => setCopied((cur) => (cur === key ? "" : cur)), 1400);
     } catch {}
   };
 
@@ -168,12 +205,17 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
 
   return (
     <div className="wz">
-      <button type="button" className="wz-back" onClick={back}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M15 5l-7 7 7 7" />
-        </svg>
-        {t("wizard.back")}
-      </button>
+      {/* В Telegram назад ведёт системная стрелка в шапке — своя рядом с
+          ней была бы второй кнопкой об одном и том же. На сайте она нужна:
+          там кроме кнопки браузера ткнуть некуда. */}
+      {!inTelegram && (
+        <button type="button" className="wz-back" onClick={back}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 5l-7 7 7 7" />
+          </svg>
+          {t("wizard.back")}
+        </button>
+      )}
 
       <div className="wz-hi">
         <span className="wz-ic wz-ic-lg">{icons[meta.icon]}</span>
@@ -230,11 +272,39 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
             <div className="wz-step-body">
               <span className="wz-step-t">{t("wizard.signIn")}</span>
               <span className="wz-step-s">{t("wizard.signInLead")}</span>
-              {login && (
-                <button type="button" className="wz-login" onClick={copyLogin}>
-                  {t("wizard.yourLogin")} <b>{copied ? t("wizard.copied") : login}</b>
+              {/* Логин и пароль рядом: именно их спрашивает приложение, и
+                  именно их человек из Telegram никогда не видел. Пароля
+                  нет, если он задал свой — тогда показать его нам нечем. */}
+              <div className="wz-creds">
+                <button
+                  type="button"
+                  className="wz-cred"
+                  onClick={() => copy(creds?.login || login, "login")}
+                >
+                  <span className="wz-cred-k">{t("account.webLoginLogin")}</span>
+                  <span className="wz-cred-v">{creds?.login || login}</span>
+                  <span className="wz-cred-c">
+                    {copied === "login" ? t("wizard.copied") : ""}
+                  </span>
                 </button>
-              )}
+                {creds?.password ? (
+                  <button
+                    type="button"
+                    className="wz-cred"
+                    onClick={() => copy(creds.password, "password")}
+                  >
+                    <span className="wz-cred-k">{t("account.webLoginPassword")}</span>
+                    <span className="wz-cred-v">{creds.password}</span>
+                    <span className="wz-cred-c">
+                      {copied === "password" ? t("wizard.copied") : ""}
+                    </span>
+                  </button>
+                ) : creds?.is_generated === false ? (
+                  // Именно этот флаг, а не «пароля в ответе нет»: при сбое
+                  // сети мы бы иначе уверяли, что человек задал пароль сам.
+                  <span className="wz-cred-note">{t("wizard.ownPassword")}</span>
+                ) : null}
+              </div>
             </div>
           </div>
         </>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ScreenShell } from "./ScreenShell.jsx";
 import { QrCode } from "./QrCode.jsx";
 import { api } from "../lib/api";
+import { isTma } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 
 /**
@@ -145,7 +146,10 @@ export function TmaExternalKeys({ open, onClose }) {
   const url = fresh?.url || "";
 
   return (
-    <ScreenShell open={open} title={t("setup.ext.title")} back onClose={onClose}>
+    // Стрелка — только вне Telegram: внутри назад ведёт системная кнопка,
+    // её показывает ScreenShell через pushBack. Та же запись, что у экрана
+    // профиля в Account.jsx.
+    <ScreenShell open={open} title={t("setup.ext.title")} back={!isTma()} onClose={onClose}>
       <p className="xk-lead">{t("setup.ext.lead")}</p>
 
       <h3 className="st-h">{t("setup.ext.step1")}</h3>

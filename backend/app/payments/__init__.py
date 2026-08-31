@@ -18,6 +18,7 @@ from .base import (
 from .cryptocloud import CryptoCloudProvider
 from .mock import MockProvider
 from .platega import PlategaProvider
+from .ton import TonProvider
 from .yookassa import YooKassaProvider
 
 _FACTORIES = {
@@ -25,6 +26,7 @@ _FACTORIES = {
     YooKassaProvider.name: YooKassaProvider,
     CryptoCloudProvider.name: CryptoCloudProvider,
     PlategaProvider.name: PlategaProvider,
+    TonProvider.name: TonProvider,
 }
 
 KNOWN = tuple(_FACTORIES)

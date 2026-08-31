@@ -21,6 +21,7 @@ from .models import (
     UserKey,
     is_ios_slot,
     utcnow,
+    Order,
 )
 from .provisioning import serving_config
 from .security import client_ip, ip_tag
@@ -327,6 +328,28 @@ def _with_chosen_port(
     return provisioning.with_endpoint_port(config, chosen)
 
 
+def _adopt_by_orders(db: OrmSession, telegram_id: int) -> User | None:
+    """
+    Ищет учётку, заведённую когда-то по заказу с этого же Telegram.
+
+    Берём только однозначный случай: все заказы этого telegram_id ведут в одну
+    учётку, и та ещё ни к какому Telegram не привязана. Любая неоднозначность —
+    отказ: молча подключить человека к чужому аккаунту хуже, чем завести новый.
+    """
+    rows = db.scalars(
+        select(Order.user_id)
+        .where(Order.telegram_id == telegram_id, Order.user_id.is_not(None))
+        .distinct()
+    ).all()
+    ids = {row for row in rows if row}
+    if len(ids) != 1:
+        return None
+    candidate = db.get(User, ids.pop())
+    if candidate is None or candidate.telegram_id is not None:
+        return None
+    return candidate
+
+
 def _link_telegram(db: OrmSession, user: User, init_data: str | None) -> None:
     """
     Привязывает Telegram к учётке по подписи из мини-приложения.
@@ -515,11 +538,50 @@ def login_telegram(
         if telegram_id
         else None
     )
+    created = False
+    if user is None and telegram_id:
+        # Учётка могла остаться от покупки через бота: заказ помнит telegram_id,
+        # даже если на самом пользователе привязки нет. Такую подхватываем, а не
+        # плодим человеку второй аккаунт с чужой подпиской.
+        user = _adopt_by_orders(db, telegram_id)
+        if user is not None:
+            user.telegram_id = telegram_id
+            db.commit()
+            log.info("Telegram %s подхватил учётку %s по заказу", telegram_id, user.login)
+
+    if user is None and telegram_id:
+        if not config.signup_enabled:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "регистрация сейчас закрыта",
+                headers={"X-Error-Code": "signup_closed"},
+            )
+        # Подпись Telegram уже удостоверила личность — спрашивать логин с
+        # паролем не за чем. Их выдаём сами: они понадобятся только тем, кто
+        # захочет зайти с сайта, и лежат в профиле.
+        tg_user = data.get("user") or {}
+        display = (tg_user.get("first_name") or tg_user.get("username") or "").strip()[:128]
+        try:
+            user, _password, _warnings = services.create_user(
+                db,
+                plan_code=config.signup_plan_code,
+                name=display or None,
+                note="регистрация из Telegram",
+            )
+        except services.PanelError as exc:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, str(exc), headers=_error_code_header(exc)
+            ) from exc
+        user.telegram_id = telegram_id
+        db.commit()
+        created = True
+        log.info("Telegram %s: заведена учётка %s", telegram_id, user.login)
+
     if user is None:
         raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            "этот Telegram не привязан к учётной записи — войдите логином или зайдите в бота",
-            headers={"X-Error-Code": "tg_not_linked"},
+            status.HTTP_401_UNAUTHORIZED,
+            "не удалось определить пользователя Telegram",
+            headers={"X-Error-Code": "tg_invalid"},
         )
     if user.is_blocked:
         raise HTTPException(
@@ -543,6 +605,7 @@ def login_telegram(
     session = services.session_for_token(db, token)
     assert session is not None
     servers = _servers_out(db, user, session, background)
+    log.info("вход из Telegram: %s (новая учётка: %s)", user.login, created)
     return LoginResponse(
         token=token,
         expires_at=session.expires_at,

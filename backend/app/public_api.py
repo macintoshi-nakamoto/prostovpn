@@ -51,6 +51,10 @@ class PlanOut(BaseModel):
     allowed_regions: list[str] | None = None
     traffic_limit_bytes: int | None = None
     purchasable: bool = True
+    # Цена первой покупки. intro_applies говорит витрине, показывать её этому
+    # человеку или обычную: вернувшемуся покупателю вводная уже не положена.
+    intro_price_kopecks: int | None = None
+    intro_applies: bool = False
 
 
 def _plan_out(plan: Plan) -> PlanOut:
@@ -70,11 +74,40 @@ def _plan_out(plan: Plan) -> PlanOut:
 
 
 @router.get("/plans", response_model=list[PlanOut])
-def list_plans(db: OrmSession = Depends(get_db)) -> list[PlanOut]:
-    return [_plan_out(plan) for plan in services.site_plans(db)]
+def list_plans(
+    request: Request,
+    db: OrmSession = Depends(get_db),
+) -> list[PlanOut]:
+    # Кто спрашивает — знаем не всегда: страница тарифов открыта и гостю.
+    # Гостю показываем вводную цену как есть: он ещё точно ничего не покупал.
+    user = _optional_user(db, request)
+    intro_ok = services.orders.intro_available(db, user, user.email_plain if user else None)
+
+    out: list[PlanOut] = []
+    for plan in services.site_plans(db):
+        item = _plan_out(plan)
+        if plan.intro_price_kopecks > 0:
+            item.intro_price_kopecks = plan.intro_price_kopecks
+            item.intro_applies = intro_ok
+        out.append(item)
+    return out
 
 
-PaymentMethodIn = Literal["sbp", "card", "crypto", "sberpay"] | None
+def _optional_user(db: OrmSession, request: Request) -> User | None:
+    """Пользователь по токену, если он вообще прислан. Ошибку не поднимаем:
+    список тарифов обязан открываться и без входа."""
+    header = request.headers.get("authorization") or ""
+    token = header[7:].strip() if header.lower().startswith("bearer ") else ""
+    if not token:
+        return None
+    try:
+        session = services.session_for_token(db, token)
+    except Exception:
+        return None
+    return session.user if session is not None else None
+
+
+PaymentMethodIn = Literal["sbp", "card", "crypto", "sberpay", "ton"] | None
 
 
 class OrderIn(BaseModel):
@@ -888,6 +921,107 @@ def password_reset(body: ResetIn, db: OrmSession = Depends(get_db)) -> dict[str,
             status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": "reset_failed"}
         ) from exc
     return {"ok": True, "login": user.login}
+
+
+def _issued_password(user: User) -> str | None:
+    """Выданный пароль в открытом виде — или ничего, если ключ шифрования
+    недоступен. Молчим, а не роняем профиль: без пароля экран всё равно
+    полезен, там есть логин и кнопка «задать свои»."""
+    if not user.password_enc:
+        return None
+    try:
+        return services.delivery._password(user)
+    except Exception:
+        return None
+
+
+class CredentialsOut(BaseModel):
+    login: str
+    # Пароль отдаём, только пока он выданный: человек его не видел, а другого
+    # способа узнать у него нет. Свой пароль обратно не показываем никогда.
+    password: str | None = None
+    is_generated: bool = True
+
+
+class CredentialsIn(BaseModel):
+    login: str | None = Field(default=None, min_length=3, max_length=64)
+    password: str | None = Field(default=None, min_length=8, max_length=128)
+
+
+@router.get("/account/credentials", response_model=CredentialsOut)
+def account_credentials(
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> CredentialsOut:
+    """Данные для входа на сайт. В мини-приложении они не нужны — оно
+    открывается по подписи Telegram, — но с компьютера зайти нечем."""
+    user, _session = who
+    generated = user.credentials_set_at is None
+    return CredentialsOut(
+        login=user.login,
+        password=(_issued_password(user) if generated else None),
+        is_generated=generated,
+    )
+
+
+@router.post("/account/credentials", response_model=CredentialsOut)
+def account_credentials_set(
+    body: CredentialsIn,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> CredentialsOut:
+    """
+    Задать свои логин и пароль.
+
+    Текущий пароль не спрашиваем, пока он выданный: человек его не выбирал и
+    может не знать. Как только свои данные заданы, смена пароля идёт обычным
+    путём — через /account/password с подтверждением старого.
+    """
+    user, _session = who
+    if user.credentials_set_at is not None and body.password:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "пароль уже задан — меняйте его в разделе смены пароля",
+            headers={"X-Error-Code": "password_already_set"},
+        )
+    if not body.login and not body.password:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "нечего менять",
+            headers={"X-Error-Code": "empty"},
+        )
+
+    if body.login:
+        login = body.login.strip()
+        if not all(ch.isascii() and (ch.isalnum() or ch in "-_.") for ch in login):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "в логине допустимы латинские буквы, цифры, дефис, точка и подчёркивание",
+                headers={"X-Error-Code": "login_invalid"},
+            )
+        taken = db.scalar(select(User).where(User.login == login, User.id != user.id).limit(1))
+        if taken is not None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "такой логин уже занят",
+                headers={"X-Error-Code": "login_taken"},
+            )
+        user.login = login
+
+    if body.password:
+        # set_password гасит остальные сессии; текущую оставляем — человек
+        # только что был здесь, выкидывать его из приложения незачем.
+        services.set_password(db, user, body.password)
+        user.credentials_set_at = utcnow()
+
+    db.commit()
+    db.refresh(user)
+    generated = user.credentials_set_at is None
+    return CredentialsOut(
+        login=user.login,
+        password=(_issued_password(user) if generated else None),
+        is_generated=generated,
+    )
 
 
 class PasswordChangeIn(BaseModel):

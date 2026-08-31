@@ -21,7 +21,14 @@ def generate_keypair() -> tuple[str, str]:
     return base64.b64encode(private_raw).decode(), base64.b64encode(public_raw).decode()
 
 
-AWG_PARAMS = ("Jc", "Jmin", "Jmax", "S1", "S2", "H1", "H2", "H3", "H4")
+# S3/S4 и I1–I5 — параметры AWG 1.5 (amneziawg v3): I1 маскирует первый пакет
+# под DNS-ответ, без него мобильные операторы местами режут рукопожатие.
+AWG_PARAMS = (
+    "Jc", "Jmin", "Jmax",
+    "S1", "S2", "S3", "S4",
+    "H1", "H2", "H3", "H4",
+    "I1", "I2", "I3", "I4", "I5",
+)
 
 
 def config_sections(config_ini: str) -> tuple[dict[str, str], dict[str, str]]:

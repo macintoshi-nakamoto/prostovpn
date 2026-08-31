@@ -14,6 +14,7 @@ from ..config import settings
 from ..models import (
     AuditLog,
     Order,
+    Payment,
     OrderStatus,
     Plan,
     Subscription,
@@ -41,7 +42,8 @@ def normalize_payment_method(name: str | None) -> str | None:
     cleaned = (name or "").strip().lower()
     if not cleaned:
         return None
-    if cleaned not in platega.METHODS:
+    # "ton" — не подкод Platega, а отдельный провайдер (payments/ton.py).
+    if cleaned != "ton" and cleaned not in platega.METHODS:
         log.warning("незнакомый способ оплаты %r — заказ пойдёт способом по умолчанию", cleaned)
         return None
     return cleaned
@@ -128,6 +130,39 @@ def _clamp_quantity(plan: Plan, quantity: int) -> int:
     return value
 
 
+def intro_available(db: OrmSession, user: User | None, email: str | None = None) -> bool:
+    """
+    Правда ли, что человек ещё ни разу не платил.
+
+    Смотрим и по учётке, и по адресу почты: заказ с сайта делают до того, как
+    учётка появилась, и без второй проверки один и тот же человек брал бы
+    вводную цену снова и снова, просто заходя заново.
+    """
+    if user is not None:
+        paid = db.scalar(select(Payment.id).where(Payment.user_id == user.id).limit(1))
+        if paid is not None:
+            return False
+    address = normalize_email(email) if email else None
+    if address:
+        seen = db.scalar(
+            select(Order.id)
+            .where(Order.email == address, Order.status == OrderStatus.PAID.value)
+            .limit(1)
+        )
+        if seen is not None:
+            return False
+    return True
+
+
+def order_amount(db: OrmSession, plan: Plan, count: int, user: User | None,
+                 email: str | None = None) -> int:
+    """Сумма заказа: вводная цена — только первой покупке и только на одну
+    штуку. Пять месяцев вперёд по цене первого — это не акция, а дыра."""
+    if plan.intro_price_kopecks > 0 and count == 1 and intro_available(db, user, email):
+        return plan.intro_price_kopecks
+    return plan.price_kopecks * count
+
+
 def create_order(
     db: OrmSession,
     plan_code: str,
@@ -152,6 +187,8 @@ def create_order(
     count = _clamp_quantity(plan, quantity)
     name = provider_name or payments.active_name()
     method = normalize_payment_method(payment_method)
+    if method == "ton":
+        name = "ton"
     existing = _reusable_order(
         db, plan, name, origin="site", email=address, quantity=count, payment_method=method
     )
@@ -163,7 +200,7 @@ def create_order(
         email=address,
         telegram_id=telegram_id,
         quantity=count,
-        amount_kopecks=plan.price_kopecks * count,
+        amount_kopecks=order_amount(db, plan, count, None, address),
         currency=plan.currency,
         status=OrderStatus.PENDING.value,
         provider=name,
@@ -195,6 +232,8 @@ def create_order_for_user(
     count = _clamp_quantity(plan, quantity)
     name = provider_name or payments.active_name()
     method = normalize_payment_method(payment_method)
+    if method == "ton":
+        name = "ton"
     existing = _reusable_order(
         db, plan, name, origin=origin, user_id=user.id, quantity=count, payment_method=method
     )
@@ -206,7 +245,7 @@ def create_order_for_user(
         email=user.email_plain or "",
         telegram_id=user.telegram_id,
         quantity=count,
-        amount_kopecks=plan.price_kopecks * count,
+        amount_kopecks=order_amount(db, plan, count, user, user.email_plain),
         currency=plan.currency,
         status=OrderStatus.PENDING.value,
         provider=name,

@@ -69,6 +69,23 @@ def handle(
     return result
 
 
+def apply_event(db: OrmSession, event: WebhookEvent) -> WebhookResult:
+    """Провести событие, собранное нами самими (вотчер TON), минуя verify."""
+    if not _claim(db, event):
+        return WebhookResult(DUPLICATE, order_id=event.order_id)
+
+    try:
+        result = _process(db, event)
+    except Exception as exc:
+        db.rollback()
+        log.exception("обработка события %s провалилась", event.event_id)
+        _mark_failure(db, event.event_id, exc)
+        return WebhookResult(ERROR, order_id=event.order_id, detail=str(exc))
+
+    _mark(db, event.event_id, result.result, result.detail)
+    return result
+
+
 def _claim(db: OrmSession, event: WebhookEvent) -> bool:
     payload = dict(event.raw or {})
     payload[CHECKED_KEY] = {

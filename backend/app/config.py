@@ -75,6 +75,13 @@ class Settings(BaseSettings):
     cryptocloud_shop_id: str = ""
     cryptocloud_secret: str = ""
 
+    # TON: адрес кошелька-кассы, читаем только входящие через toncenter.
+    ton_wallet_address: str = ""
+    ton_api_url: str = "https://toncenter.com/api/v2"
+    ton_api_key: str = ""
+    ton_rate_spread: float = 0.02
+    ton_poll_seconds: int = 15
+
     platega_merchant_id: str = ""
     platega_secret: str = ""
     platega_api_url: str = "https://app.platega.io"

@@ -152,6 +152,10 @@ class Plan(Base):
     allowed_regions: Mapped[list[str] | None] = mapped_column(JSON, default=None)
 
     tagline: Mapped[str | None] = mapped_column(String(160), default=None)
+    # Цена первой покупки в копейках. 0 — вводной цены нет. Действует один раз
+    # на человека: следующие списания идут по price_kopecks, поэтому
+    # автопродление трогать не пришлось.
+    intro_price_kopecks: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_public: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -399,6 +403,10 @@ class User(Base):
     telegram_username: Mapped[str | None] = mapped_column(String(32), default=None)
 
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    # Когда человек сам задал логин/пароль. Пусто — данные выданы автоматически
+    # (регистрация из Telegram или покупка через бота), и их можно показать
+    # владельцу в профиле: он их ни разу не видел.
+    credentials_set_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)

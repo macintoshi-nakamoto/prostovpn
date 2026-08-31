@@ -94,6 +94,20 @@ def _delivery_once(tick: int) -> None:
             services.ratelimit.sweep(db)
 
 
+async def _ton_loop(seconds: int) -> None:
+    while True:
+        await asyncio.sleep(seconds)
+        try:
+            await asyncio.to_thread(_ton_once)
+        except Exception:
+            log.exception("сверка TON-платежей не удалась")
+
+
+def _ton_once() -> None:
+    with SessionLocal() as db:
+        services.ton_watcher.run_once(db)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
@@ -121,6 +135,8 @@ async def lifespan(_app: FastAPI):
         tasks.append(asyncio.create_task(_traffic_loop(config.traffic_interval_seconds)))
     if config.delivery_poll_seconds > 0:
         tasks.append(asyncio.create_task(_delivery_loop(config.delivery_poll_seconds)))
+    if config.ton_wallet_address.strip() and config.ton_poll_seconds > 0:
+        tasks.append(asyncio.create_task(_ton_loop(config.ton_poll_seconds)))
 
     yield
 
@@ -190,8 +206,10 @@ def _csp_for(path: str) -> str:
     # WebView, а в Telegram Web — iframe с web.telegram.org, поэтому сайту
     # (но не админке) нужны их скрипт и право показываться в этом iframe.
     script_src = "script-src 'self' " + ("" if admin else "https://telegram.org ") + hashes
-    # Аватар пользователя в мини-аппе приходит с t.me (initDataUnsafe.user.photo_url).
-    img_src = "img-src 'self' data: blob:" + ("" if admin else " https://t.me")
+    # Аватар пользователя в мини-аппе приходит с t.me (initDataUnsafe.user.photo_url),
+    # а логотипы кошельков в модалке TON Connect — с CDN самих кошельков,
+    # список которых живёт своей жизнью. Сайту разрешаем любые https-картинки.
+    img_src = "img-src 'self' data: blob:" + ("" if admin else " https:")
     ancestors = "frame-ancestors 'none'" if admin else (
         "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
     )
@@ -202,7 +220,10 @@ def _csp_for(path: str) -> str:
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
             img_src,
-            "connect-src 'self'",
+            # TON Connect ходит на мосты кошельков (SSE) и за списком
+            # кошельков — адреса меняются вместе со списком, поэтому сайту
+            # открываем https/wss. Админка остаётся на 'self'.
+            "connect-src 'self'" if admin else "connect-src 'self' https: wss:",
             "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",

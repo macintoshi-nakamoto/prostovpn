@@ -51,7 +51,6 @@ object XrayTunnel {
     // встречается, и наш адаптер не подерётся с чужой подсетью.
     private const val TUN_ADDRESS = "172.19.0.2"
     private const val TUN_GATEWAY = "172.19.0.1"
-    private const val TUN_MASK = "255.255.255.0"
 
     // Порт SOCKS выбран из «частного» диапазона и заведомо не занят службами.
     private const val SOCKS_PORT = 10808
@@ -151,14 +150,27 @@ object XrayTunnel {
     private fun upScript(serverHost: String, tun2socks: File, socksPort: Int): String = """
         ${'$'}ErrorActionPreference = 'Stop'
 
-        ${'$'}route = Find-NetRoute -RemoteIPAddress '$serverHost' -ErrorAction Stop | Select-Object -First 1
+        # Шлюз запоминаем ДО того, как появится наш адаптер: после он сам
+        # станет маршрутом по умолчанию, и «нынешний шлюз» будет уже нашим.
         ${'$'}gateway = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction Stop |
             Sort-Object -Property RouteMetric | Select-Object -First 1).NextHop
+        if (-not ${'$'}gateway) { throw 'не нашёлся шлюз по умолчанию' }
 
+        # Дорога до узла — первым делом и через физический шлюз. Иначе трафик
+        # xray до сервера уйдёт в туннель, которым xray сам и является, и всё
+        # встанет намертво. Ставим её прежде, чем поднимется адаптер: между
+        # его появлением и этой строкой не должно быть ни одного мгновения.
+        route delete $serverHost mask 255.255.255.255 2>${'$'}null | Out-Null
+        route add $serverHost mask 255.255.255.255 ${'$'}gateway metric 5 | Out-Null
+
+        # Флаги только в длинной форме и с двумя дефисами: разбор здесь на
+        # pflag, и '-device' он молча не понимает — печатает справку и выходит,
+        # то есть запасной протокол просто не поднимется. Драйвер задаётся как
+        # tun://имя: 'wintun://' эта сборка не знает.
         Start-Process -FilePath '${tun2socks.absolutePath}' -WindowStyle Hidden -ArgumentList @(
-            '-device', 'wintun://$ADAPTER',
-            '-proxy', 'socks5://127.0.0.1:$socksPort',
-            '-loglevel', 'warning'
+            '--device', 'tun://$ADAPTER',
+            '--proxy', 'socks5://127.0.0.1:$socksPort',
+            '--loglevel', 'warn'
         )
 
         ${'$'}deadline = (Get-Date).AddSeconds(15)
@@ -166,14 +178,19 @@ object XrayTunnel {
             Start-Sleep -Milliseconds 400
             ${'$'}iface = Get-NetAdapter -Name '$ADAPTER' -ErrorAction SilentlyContinue
         } while (-not ${'$'}iface -and (Get-Date) -lt ${'$'}deadline)
-        if (-not ${'$'}iface) { throw 'адаптер $ADAPTER не появился' }
+        if (-not ${'$'}iface) {
+            route delete $serverHost mask 255.255.255.255 2>${'$'}null | Out-Null
+            throw 'адаптер $ADAPTER не появился'
+        }
 
+        # Адрес без -DefaultGateway: иначе Windows заведёт маршрут по
+        # умолчанию сама, со своей метрикой и в свой момент — а нам важно
+        # поставить его последним и с известной метрикой.
         New-NetIPAddress -InterfaceAlias '$ADAPTER' -IPAddress '$TUN_ADDRESS' `
-            -PrefixLength 24 -DefaultGateway '$TUN_GATEWAY' -ErrorAction SilentlyContinue | Out-Null
+            -PrefixLength 24 -ErrorAction SilentlyContinue | Out-Null
         Set-DnsClientServerAddress -InterfaceAlias '$ADAPTER' -ServerAddresses ('1.1.1.1','1.0.0.1')
 
-        route add $serverHost mask 255.255.255.255 ${'$'}gateway metric 5 | Out-Null
-        route add 0.0.0.0 mask 0.0.0.0 $TUN_GATEWAY metric 6 | Out-Null
+        route add 0.0.0.0 mask 0.0.0.0 $TUN_GATEWAY metric 6 if ${'$'}(${'$'}iface.ifIndex) | Out-Null
         exit 0
     """.trimIndent()
 

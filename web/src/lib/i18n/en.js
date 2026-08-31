@@ -1067,6 +1067,7 @@ export const en = {
     waitFile: "Getting the file…",
     openGuide: "Open the guide with screenshots",
     copied: "Copied",
+    copyLink: "Copy the link",
     showPwd: "Show password",
     hidePwd: "Hide password",
     copyAria: "Copy",

@@ -3216,16 +3216,28 @@ html.app .wz-fallback {
   text-decoration: none;
 }
 
+/* Код и ссылка под ним — по центру колонки шага. Прижатый влево квадрат
+   выглядел обрезком, а не картинкой, которую предлагают снять. */
+html.app .wz-qr-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 12px;
+}
 html.app .wz-qr {
-  align-self: flex-start;
-  margin-top: 8px;
-  padding: 12px;
-  border-radius: 16px;
+  padding: 13px;
+  border-radius: 18px;
   background: #fff;
   /* Ширина фиксированная, но не любой ценой: на узком экране колонка шага
      уже кода, и без потолка белый квадрат вылезал бы за край. */
-  width: 168px;
+  width: 190px;
   max-width: 100%;
+}
+html.app .wz-qr-copy {
+  color: var(--accent);
+  font-size: 14.5px;
+  font-weight: 600;
 }
 html.app .wz-qr svg {
   display: block;

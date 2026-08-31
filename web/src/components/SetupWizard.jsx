@@ -260,8 +260,19 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
           <div className="wz-step-body">
             <span className="wz-step-t">{t("wizard.otherTitle")}</span>
             <span className="wz-step-s">{t("wizard.otherLead")}</span>
-            <div className="wz-qr">
-              <QrCode value={pageUrl} />
+            {/* Код по центру колонки, под ним — ссылка текстом: камера
+                есть не у всякого, а на телевизоре её нет вовсе. */}
+            <div className="wz-qr-box">
+              <div className="wz-qr">
+                <QrCode value={pageUrl} />
+              </div>
+              <button
+                type="button"
+                className="tps-alt wz-qr-copy"
+                onClick={() => copy(pageUrl, "link")}
+              >
+                {copied === "link" ? t("wizard.copied") : t("wizard.copyLink")}
+              </button>
             </div>
           </div>
         </div>

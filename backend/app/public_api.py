@@ -22,6 +22,7 @@ from .models import (
     OrderStatus,
     Plan,
     Session,
+    SubscriptionToken,
     User,
     ios_slot_number,
     normalize_email,
@@ -935,6 +936,34 @@ def _issued_password(user: User) -> str | None:
         return None
 
 
+# Сколько ссылок-подписок человек может держать разом. Пять — это телефон,
+# планшет, ноутбук, телевизор и запас; больше обычно значит, что ссылку
+# раздали, а не расставили по своим устройствам.
+MAX_SUBSCRIPTION_KEYS = 5
+
+# Слот ссылки, выпущенной руками. Отличает её от подписок, которые наши
+# приложения заводят себе сами по идентификатору устройства.
+EXTERNAL_SLOT_PREFIX = "ext-"
+
+
+class SubscriptionKeyOut(BaseModel):
+    """Одна выпущенная ссылка-подписка."""
+
+    id: int
+    label: str | None = None
+    url: str | None = None
+    created_at: dt.datetime
+    last_used_at: dt.datetime | None = None
+    expires_at: dt.datetime | None = None
+    # Сама ссылка возвращается ровно один раз — в ответ на выпуск. Дальше
+    # её знает только человек: в базе лежит хэш, восстановить нечего.
+    is_secret_shown: bool = False
+
+
+class SubscriptionKeyIn(BaseModel):
+    label: str | None = Field(default=None, max_length=64)
+
+
 class CredentialsOut(BaseModel):
     login: str
     # Пароль отдаём, только пока он выданный: человек его не видел, а другого
@@ -962,6 +991,115 @@ def account_credentials(
         password=(_issued_password(user) if generated else None),
         is_generated=generated,
     )
+
+
+@router.get("/account/subscriptions", response_model=list[SubscriptionKeyOut])
+def subscription_keys(
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> list[SubscriptionKeyOut]:
+    """
+    Выпущенные ссылки-подписки. Самих ссылок здесь нет — только их следы.
+
+    В базе лежит хэш, поэтому показать ссылку второй раз невозможно. Это не
+    неудобство, а защита: утёкший список из кабинета не даст доступа к ключам.
+    """
+    user, _session = who
+    return [
+        SubscriptionKeyOut(
+            id=tok.id,
+            label=tok.label,
+            created_at=tok.created_at,
+            last_used_at=tok.last_used_at,
+            expires_at=tok.expires_at,
+        )
+        for tok in services.subscription.active_for_user(db, user.id)
+        if (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
+    ]
+
+
+@router.post("/account/subscriptions", response_model=SubscriptionKeyOut, status_code=status.HTTP_201_CREATED)
+def issue_subscription_key(
+    body: SubscriptionKeyIn,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> SubscriptionKeyOut:
+    """
+    Выпускает ссылку под одно устройство.
+
+    Слот занимает не настоящий идентификатор устройства, а свой — «ext-N»:
+    стороннее приложение о себе ничего не сообщает, и связать ссылку с
+    железкой нельзя. Человек сам подписывает, куда её поставил.
+    """
+    user, _session = who
+
+    # Считаем только свои слоты. Наши приложения выпускают подписку каждому
+    # устройству само, и если мешать их в общий счёт, человек упрётся в предел,
+    # не создав ни одной ссылки руками.
+    existing = [
+        tok
+        for tok in services.subscription.active_for_user(db, user.id)
+        if (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
+    ]
+    if len(existing) >= MAX_SUBSCRIPTION_KEYS:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"уже выпущено {len(existing)} ссылок — отзовите ненужную",
+            headers={"X-Error-Code": "too_many_keys"},
+        )
+
+    taken = {tok.device_id for tok in existing}
+    slot = next(
+        (
+            f"{EXTERNAL_SLOT_PREFIX}{n}"
+            for n in range(1, MAX_SUBSCRIPTION_KEYS + 1)
+            if f"{EXTERNAL_SLOT_PREFIX}{n}" not in taken
+        ),
+        None,
+    )
+    if slot is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "свободных слотов не осталось")
+
+    label = (body.label or "").strip()[:64] or None
+    raw = services.subscription.mint(db, user.id, slot, label=label)
+
+    tok = services.subscription.resolve(db, raw)
+    assert tok is not None
+    return SubscriptionKeyOut(
+        id=tok.id,
+        label=tok.label,
+        url=services.subscription.url_for(raw),
+        created_at=tok.created_at,
+        last_used_at=tok.last_used_at,
+        expires_at=tok.expires_at,
+        is_secret_shown=True,
+    )
+
+
+@router.delete("/account/subscriptions/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_subscription_key(
+    key_id: int,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> Response:
+    """
+    Отзывает ссылку. Приложения, куда её вставили, перестанут получать ключи.
+    """
+    user, _session = who
+    tok = db.get(SubscriptionToken, key_id)
+    if (
+        tok is None
+        or tok.user_id != user.id
+        or tok.revoked_at is not None
+        or not (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
+    ):
+        # Чужую и служебную не трогаем: подписку своего приложения человек
+        # отзывает отвязкой устройства, а не отсюда.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "ссылка не найдена")
+
+    tok.revoked_at = utcnow()
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/account/credentials", response_model=CredentialsOut)

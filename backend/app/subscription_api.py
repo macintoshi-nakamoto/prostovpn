@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import logging
@@ -16,6 +17,7 @@ from .api_client import (
     _subscription_out,
     _with_chosen_port,
 )
+from .config import settings
 from .db import get_db
 from .models import Provisioning, Server, SubscriptionToken, UserKey
 from .security import client_ip, ip_tag, token_hash
@@ -248,6 +250,107 @@ def _amnezia_body(db: OrmSession, tok: SubscriptionToken, background: Background
     return base64.b64encode("\n".join(links).encode()).decode()
 
 
+def _vless_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTasks | None) -> str:
+    """
+    Список `vless://` строк для сторонних приложений, как принято у всех:
+    ссылки через перевод строки, всё вместе в base64.
+
+    Отдаём все узлы разом. В стороннем клиенте они станут списком, между
+    которыми человек переключается сам — своего перебора протоколов там нет,
+    и запасной путь ему приходится выбирать руками.
+    """
+    import base64
+    from .models import EndpointKind
+    from .services import xray
+
+    user = tok.user
+    links: list[str] = []
+    for server, _key in _serve_targets(db, user, tok.device_id, background):
+        if server.provisioning != Provisioning.SSH:
+            continue
+        live = [
+            ep
+            for ep in server.endpoints
+            if ep.kind == EndpointKind.VLESS and ep.is_live and xray.is_on_node(ep)
+        ]
+        if not live:
+            continue
+        endpoint = sorted(live, key=lambda e: (e.priority, e.id))[0]
+        try:
+            creds = xray.live_creds(db, user, server, tok.device_id)
+            cred = next((c for c in creds if c.endpoint_id == endpoint.id), None)
+            if cred is None:
+                if not endpoint.accepts_new:
+                    continue
+                cred = xray.issue_cred(db, user, server, endpoint, tok.device_id)
+            link = xray.share_link(endpoint, cred, server)
+            if link:
+                links.append(link)
+        except Exception:
+            log.exception("сервер «%s» пропущен: не собралась ссылка vless://", server.name)
+    return base64.b64encode("\n".join(links).encode()).decode()
+
+
+# Приложения представляются в User-Agent, и по нему видно, что человеку
+# отдавать. Список неполон намеренно: неизвестный клиент получит JSON, а он
+# разберётся или спросит формат явно.
+_VLESS_AGENTS = ("happ", "hiddify", "v2rayng", "nekobox", "streisand", "sing-box", "clash", "v2box", "shadowrocket")
+
+_AMNEZIA_AGENTS = ("amnezia",)
+
+
+def _wanted_format(explicit: str | None, agent: str | None, accept: str | None) -> str:
+    """
+    Какой формат отдать. Явный параметр сильнее всего остального.
+
+    Без параметра смотрим, кто пришёл: приложение честно называет себя в
+    User-Agent, и человеку не приходится разбираться, какую ссылку куда
+    вставлять — он копирует одну и ту же.
+    """
+    if explicit:
+        return explicit.strip().lower()
+
+    ua = (agent or "").lower()
+    if any(name in ua for name in _VLESS_AGENTS):
+        return "vless"
+    if any(name in ua for name in _AMNEZIA_AGENTS):
+        return "amnezia"
+
+    # Старое поведение: text/plain без json просил AmneziaVPN до того, как
+    # начал представляться.
+    if accept is not None and "text/plain" in accept and "json" not in accept:
+        return "amnezia"
+    return "json"
+
+
+def _profile_headers(db: OrmSession, tok: SubscriptionToken) -> dict[str, str]:
+    """
+    Заголовки, по которым приложение показывает остаток и само обновляется.
+
+    Формат общий для всех клиентов, понимающих подписки: трафик в байтах,
+    срок — секундами эпохи. Ноль в `total` означает «без лимита», и клиенты
+    это понимают правильно — полосу не рисуют.
+    """
+    import base64
+
+    user = tok.user
+    limit = user.effective_traffic_limit()
+    used = user.traffic_used_bytes
+    ends = user.access_ends_if_resumed()
+
+    parts = [f"upload=0", f"download={used}", f"total={limit or 0}"]
+    if ends is not None:
+        parts.append(f"expire={int(ends.replace(tzinfo=dt.timezone.utc).timestamp())}")
+
+    title = base64.b64encode("ProstoVPN".encode()).decode()
+    return {
+        "Subscription-Userinfo": "; ".join(parts),
+        "Profile-Title": f"base64:{title}",
+        "Profile-Update-Interval": "12",
+        "Profile-Web-Page-Url": settings().site_url.rstrip("/") + "/account",
+    }
+
+
 @router.get("/s/{token}")
 def subscription(
     token: str,
@@ -256,6 +359,7 @@ def subscription(
     format: str | None = None,
     if_none_match: str | None = Header(default=None, alias="If-None-Match"),
     accept: str | None = Header(default=None),
+    user_agent: str | None = Header(default=None, alias="User-Agent"),
     db: OrmSession = Depends(get_db),
 ) -> Response:
     _rate_ok(db, token, client_ip(request))
@@ -265,19 +369,31 @@ def subscription(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "подписка не найдена")
     services.subscription.touch(db, tok)
 
-    wants_amnezia = format == "amnezia" or (
-        format is None and accept is not None and "text/plain" in accept and "json" not in accept
-    )
+    wanted = _wanted_format(format, user_agent, accept)
 
-    if wants_amnezia:
-        body = _amnezia_body(db, tok, background)
+    # Заголовки профиля идут со всеми ответами: приложение берёт из них
+    # остаток трафика, срок и то, как часто перечитывать подписку.
+    try:
+        profile = _profile_headers(db, tok)
+    except Exception:
+        log.exception("заголовки профиля не собрались")
+        profile = {}
+
+    if wanted in ("amnezia", "vless"):
+        body = (
+            _amnezia_body(db, tok, background)
+            if wanted == "amnezia"
+            else _vless_body(db, tok, background)
+        )
         etag = _etag(body.encode())
+        headers = {**_CACHE, **profile, "ETag": etag}
         if _if_none_match(if_none_match, etag):
-            return Response(status_code=304, headers={**_CACHE, "ETag": etag})
-        return PlainTextResponse(body, headers={**_CACHE, "ETag": etag})
+            return Response(status_code=304, headers=headers)
+        return PlainTextResponse(body, headers=headers)
 
     raw = json.dumps(_payload(db, tok, background), ensure_ascii=False, sort_keys=True).encode()
     etag = _etag(raw)
+    headers = {**_CACHE, **profile, "ETag": etag}
     if _if_none_match(if_none_match, etag):
-        return Response(status_code=304, headers={**_CACHE, "ETag": etag})
-    return Response(raw, media_type="application/json", headers={**_CACHE, "ETag": etag})
+        return Response(status_code=304, headers=headers)
+    return Response(raw, media_type="application/json", headers=headers)

@@ -150,114 +150,119 @@ export function TmaExternalKeys({ open, onClose }) {
     // её показывает ScreenShell через pushBack. Та же запись, что у экрана
     // профиля в Account.jsx.
     <ScreenShell open={open} title={t("setup.ext.title")} back={!isTma()} onClose={onClose}>
-      <p className="xk-lead">{t("setup.ext.lead")}</p>
+      {/* Колонка с зазором, как .ap в кабинете. Без неё дети экрана стоят
+          на голых полях, а у st-h нижний отступ отрицательный — он затягивал
+          следующий блок ПОВЕРХ заголовка, и плашки закрашивали его собой. */}
+      <div className="xk">
+        <p className="xk-lead">{t("setup.ext.lead")}</p>
 
-      <h3 className="st-h">{t("setup.ext.step1")}</h3>
-      <div className="xk-tabs">
-        {PLATFORMS.map((id) => (
-          <button
-            key={id}
-            type="button"
-            className={"xk-tab" + (platform === id ? " xk-tab-on" : "")}
-            onClick={() => setPlatform(id)}
-          >
-            {t(`setup.ext.os.${id}`)}
-          </button>
-        ))}
-      </div>
-
-      <div className="ap-rows">
-        {apps.map((app) => (
-          <div className="ap-row xk-app" key={app.id}>
-            <span className="ap-row-body">
-              <span className="ap-row-t">{app.name}</span>
-              <span className="ap-row-s">{t("setup.ext.appSub")}</span>
-            </span>
-            <a
-              className="xk-get"
-              href={app.store[platform]}
-              target="_blank"
-              rel="noreferrer noopener"
+        <h3 className="st-h">{t("setup.ext.step1")}</h3>
+        <div className="xk-tabs">
+          {PLATFORMS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={"xk-tab" + (platform === id ? " xk-tab-on" : "")}
+              onClick={() => setPlatform(id)}
             >
-              {t("setup.ext.install")}
-            </a>
-            {url && app.deep && (
-              <a className="xk-add" href={app.deep(url)}>
-                {t("setup.ext.add")}
-              </a>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <h3 className="st-h">{t("setup.ext.step2")}</h3>
-      <p className="xk-note">{t("setup.ext.step2note")}</p>
-
-      <div className="xk-issue">
-        <input
-          className="xk-input"
-          value={label}
-          onChange={(event) => setLabel(event.target.value)}
-          placeholder={t("setup.ext.labelHint")}
-          maxLength={64}
-        />
-        <button type="button" className="xk-btn" onClick={issue} disabled={busy}>
-          {t("setup.ext.issue")}
-        </button>
-      </div>
-
-      {error && <p className="xk-error">{error}</p>}
-
-      {url && (
-        <div className="xk-fresh">
-          <span className="xk-fresh-t">{t("setup.ext.freshTitle")}</span>
-          <span className="xk-fresh-w">{t("setup.ext.freshWarn")}</span>
-
-          <button type="button" className="xk-url" onClick={() => copy(url)}>
-            <code>{url}</code>
-            <span className="xk-copy">{copied ? t("setup.ext.copied") : t("setup.ext.copy")}</span>
-          </button>
-
-          <div className="xk-qr">
-            <QrCode value={url} size={190} />
-          </div>
-          <span className="xk-qr-note">{t("setup.ext.qrNote")}</span>
+              {t(`setup.ext.os.${id}`)}
+            </button>
+          ))}
         </div>
-      )}
 
-      {Array.isArray(keys) && keys.length > 0 && (
-        <>
-          <h3 className="st-h">{t("setup.ext.listTitle")}</h3>
-          <div className="ap-rows">
-            {keys.map((key) => (
-              <div className="ap-row xk-item" key={key.id}>
-                <span className="ap-row-body">
-                  <span className="ap-row-t">{key.label || t("setup.ext.noLabel")}</span>
-                  <span className="ap-row-s">
-                    {key.last_used_at ? t("setup.ext.used") : t("setup.ext.neverUsed")}
-                  </span>
-                </span>
-                <button
-                  type="button"
-                  className="xk-revoke"
-                  onClick={() => revoke(key.id)}
-                  disabled={busy}
-                >
-                  {t("setup.ext.revoke")}
-                </button>
-              </div>
-            ))}
+        <div className="ap-rows">
+          {apps.map((app) => (
+            <div className="ap-row xk-app" key={app.id}>
+              <span className="ap-row-body">
+                <span className="ap-row-t">{app.name}</span>
+                <span className="ap-row-s">{t("setup.ext.appSub")}</span>
+              </span>
+              <a
+                className="xk-get"
+                href={app.store[platform]}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                {t("setup.ext.install")}
+              </a>
+              {url && app.deep && (
+                <a className="xk-add" href={app.deep(url)}>
+                  {t("setup.ext.add")}
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <h3 className="st-h">{t("setup.ext.step2")}</h3>
+        <p className="xk-note">{t("setup.ext.step2note")}</p>
+
+        <div className="xk-issue">
+          <input
+            className="xk-input"
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+            placeholder={t("setup.ext.labelHint")}
+            maxLength={64}
+          />
+          <button type="button" className="xk-btn" onClick={issue} disabled={busy}>
+            {t("setup.ext.issue")}
+          </button>
+        </div>
+
+        {error && <p className="xk-error">{error}</p>}
+
+        {url && (
+          <div className="xk-fresh">
+            <span className="xk-fresh-t">{t("setup.ext.freshTitle")}</span>
+            <span className="xk-fresh-w">{t("setup.ext.freshWarn")}</span>
+
+            <button type="button" className="xk-url" onClick={() => copy(url)}>
+              <code>{url}</code>
+              <span className="xk-copy">{copied ? t("setup.ext.copied") : t("setup.ext.copy")}</span>
+            </button>
+
+            <div className="xk-qr">
+              <QrCode value={url} size={190} />
+            </div>
+            <span className="xk-qr-note">{t("setup.ext.qrNote")}</span>
           </div>
-        </>
-      )}
+        )}
 
-      <h3 className="st-h">{t("setup.ext.step3")}</h3>
-      <ol className="xk-steps">
-        <li>{t("setup.ext.s1")}</li>
-        <li>{t("setup.ext.s2")}</li>
-        <li>{t("setup.ext.s3")}</li>
-      </ol>
-      <p className="xk-note">{t("setup.ext.tail")}</p>
+        {Array.isArray(keys) && keys.length > 0 && (
+          <>
+            <h3 className="st-h">{t("setup.ext.listTitle")}</h3>
+            <div className="ap-rows">
+              {keys.map((key) => (
+                <div className="ap-row xk-item" key={key.id}>
+                  <span className="ap-row-body">
+                    <span className="ap-row-t">{key.label || t("setup.ext.noLabel")}</span>
+                    <span className="ap-row-s">
+                      {key.last_used_at ? t("setup.ext.used") : t("setup.ext.neverUsed")}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="xk-revoke"
+                    onClick={() => revoke(key.id)}
+                    disabled={busy}
+                  >
+                    {t("setup.ext.revoke")}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        <h3 className="st-h">{t("setup.ext.step3")}</h3>
+        <ol className="xk-steps">
+          <li>{t("setup.ext.s1")}</li>
+          <li>{t("setup.ext.s2")}</li>
+          <li>{t("setup.ext.s3")}</li>
+        </ol>
+        <p className="xk-note">{t("setup.ext.tail")}</p>
+      </div>
     </ScreenShell>
   );
 }

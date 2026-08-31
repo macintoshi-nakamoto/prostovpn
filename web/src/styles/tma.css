@@ -25,9 +25,14 @@ html.app[data-theme="dark"] {
   --tma-glass-line: rgba(255, 255, 255, 0.09);
   --tma-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
   --tma-sep: rgba(255, 255, 255, 0.07);
+  --tma-hair: rgba(255, 255, 255, 0.13);
 }
 html.app {
   --tma-sep: rgba(10, 14, 20, 0.07);
+  /* Волосяная линия для разделов без заливки: разделители в списках,
+     обводка кнопок и полей. Заметнее --tma-sep — тот рассчитан на линии
+     внутри карточки, а эти лежат прямо на канве. */
+  --tma-hair: rgba(10, 14, 20, 0.14);
 }
 
 /* ---------- канва и общий тон приложения ---------- */
@@ -1487,6 +1492,9 @@ html.app .scr-head h2 {
   font-size: 17px;
   font-weight: 700;
   padding: 6px 8px;
+  /* Свой цвет: без него заголовок наследовал светло-серый текст сайта —
+     на тёмной теме сходило, на светлой он почти пропадал. */
+  color: var(--ink);
 }
 html.app .scr-back {
   width: 38px;
@@ -2929,16 +2937,6 @@ html.app .wz-first {
   justify-content: safe center;
 }
 
-/* Плашка под плашкой под плашкой выглядела как склад коробок: серый квадрат
-   под значком, карточка под кнопками, заливка у самой кнопки. Здесь фона нет
-   ни у чего — форму держат волосяная линия и заливка только там, где надо
-   нажать. Линия одна на обе темы, чтобы не заводить её в каждом правиле. */
-html.app .wz {
-  --wz-line: rgba(10, 14, 20, 0.14);
-}
-html.app[data-theme="dark"] .wz {
-  --wz-line: rgba(255, 255, 255, 0.13);
-}
 
 html.app .wz-hi {
   display: flex;
@@ -3022,7 +3020,7 @@ html.app .wz-go {
 /* Второй вариант ответа: та же форма, но обводкой — цветом на экране
    выделено ровно одно действие. */
 html.app .wz-go-alt {
-  border: 1px solid var(--wz-line);
+  border: 1px solid var(--tma-hair);
   background: none;
   color: var(--ink);
   box-shadow: none;
@@ -3068,7 +3066,7 @@ html.app .wz-item + .wz-item::before {
   right: 0;
   top: 0;
   height: 1px;
-  background: var(--wz-line);
+  background: var(--tma-hair);
 }
 html.app .wz-item-ic {
   display: grid;
@@ -3124,7 +3122,7 @@ html.app .wz-step + .wz-step::before {
   right: 0;
   top: 0;
   height: 1px;
-  background: var(--wz-line);
+  background: var(--tma-hair);
 }
 html.app .wz-num {
   display: grid;
@@ -3177,7 +3175,7 @@ html.app .wz-cred {
   align-items: center;
   gap: 10px;
   padding: 8px 8px 8px 16px;
-  border: 1px solid var(--wz-line);
+  border: 1px solid var(--tma-hair);
   border-radius: 16px;
 }
 /* Глаз и листы: цель под палец 40px, а рисунок внутри мелкий — строка
@@ -3202,7 +3200,7 @@ html.app .wz-cred-b svg {
 html.app .wz-cred-b:active {
   transform: scale(0.9);
   transition-duration: 0.06s;
-  background: var(--wz-line);
+  background: var(--tma-hair);
 }
 html.app .wz-cred-k {
   font-size: 14px;
@@ -3276,7 +3274,7 @@ html.app .wz-done {
   gap: 6px;
   margin-top: 8px;
   padding-top: 26px;
-  border-top: 1px solid var(--wz-line);
+  border-top: 1px solid var(--tma-hair);
 }
 html.app .wz-done-t {
   font-size: 16px;
@@ -3329,7 +3327,7 @@ html.app .wz-back svg {
   height: 18px;
 }
 html.app .wz-back:active {
-  background: var(--wz-line);
+  background: var(--tma-hair);
 }
 /* На списке устройств «назад» стоит под содержимым, а не над ним: сверху
    уже есть заголовок экрана. И цветом приглушён — на экране выбора взгляд
@@ -3342,8 +3340,17 @@ html.app .wz-back-mid {
   color: var(--text-faint);
 }
 
+/* Колонка с общим зазором — та же, что у вкладок кабинета (.ap). Раньше
+   блоки стояли на собственных полях, а отрицательный нижний отступ у st-h
+   затягивал следующий поверх заголовка: плашки чипов и абзацы закрашивали
+   его собой. Зазор гасит эту отрицательность и заодно задаёт ритм. */
+html.app .xk {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 html.app .xk-lead {
-  margin: 0 4px 4px;
+  margin: 0 4px;
   font-size: 14px;
   line-height: 1.45;
   color: var(--text-faint);
@@ -3354,17 +3361,21 @@ html.app .xk-tabs {
   gap: 7px;
   padding: 0 2px;
 }
+/* Невыбранные — обводкой: серая плашка на сером фоне читалась как
+   «недоступно», хотя нажимается любая. */
 html.app .xk-tab {
   padding: 8px 14px;
-  border: none;
+  border: 1px solid var(--tma-hair);
   border-radius: 999px;
-  background: var(--tma-inset);
+  background: none;
   font: inherit;
   font-size: 13.5px;
-  color: var(--text-faint);
+  font-weight: 600;
+  color: var(--text-dim);
   cursor: pointer;
 }
 html.app .xk-tab-on {
+  border-color: transparent;
   background: var(--accent);
   color: #fff;
 }
@@ -3372,12 +3383,25 @@ html.app .xk-tab-on {
 /* Строка приложения. Базовый ap-row — это грид «иконка / тело / шеврон», а
    здесь иконки нет и действий два, поэтому колонки переопределяем: имя
    тянется, кнопки прижаты вправо и не растягиваются. */
+/* Список приложений и ключей — без карточки, как всё в разделе установки.
+   Базовый ap-row — грид «значок / тело / шеврон», здесь значка нет и
+   действий два: имя тянется, кнопки прижаты вправо. */
+html.app .xk .ap-rows {
+  padding: 0;
+  background: none;
+}
 html.app .xk-app,
 html.app .xk-item {
   grid-template-columns: 1fr auto auto;
   gap: 8px;
+  padding: 13px 2px;
   align-items: center;
   cursor: default;
+}
+/* Значка нет — и линии незачем начинаться там, где он был бы. */
+html.app .xk .ap-row + .ap-row::before {
+  left: 2px;
+  right: 2px;
 }
 html.app .xk-get,
 html.app .xk-add,
@@ -3393,9 +3417,15 @@ html.app .xk-revoke {
   white-space: nowrap;
   cursor: pointer;
 }
-html.app .xk-get,
+/* «Установить» серым по серому выглядело выключенным, хотя это главное
+   действие строки. Цвет действия, без заливки — рядом стоит «Добавить
+   ключ», и залитой должна быть только она. */
+html.app .xk-get {
+  background: none;
+  color: var(--accent);
+}
 html.app .xk-revoke {
-  background: var(--tma-inset);
+  background: none;
   color: var(--text-faint);
 }
 html.app .xk-add {
@@ -3404,7 +3434,7 @@ html.app .xk-add {
 }
 
 html.app .xk-note {
-  margin: 0 4px;
+  margin: -4px 4px 0;
   font-size: 13px;
   line-height: 1.45;
   color: var(--text-faint);
@@ -3418,12 +3448,16 @@ html.app .xk-input {
   flex: 1;
   min-width: 0;
   padding: 12px 14px;
-  border: none;
+  border: 1px solid var(--tma-hair);
   border-radius: 14px;
-  background: var(--tma-inset);
+  background: none;
   font: inherit;
   font-size: 15px;
   color: var(--ink);
+}
+html.app .xk-input:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 html.app .xk-btn {
   flex: none;
@@ -3446,13 +3480,16 @@ html.app .xk-error {
   color: #ff6b6b;
 }
 
+/* Единственный блок, которому фон положен: ключ показывают один раз, и
+   он должен выделяться. Но тёплым, а не серым — серая коробка читалась бы
+   как ещё одна секция. */
 html.app .xk-fresh {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 16px;
   border-radius: 18px;
-  background: var(--tma-card);
+  background: rgba(250, 76, 22, 0.07);
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 html.app .xk-fresh-t {
@@ -3471,9 +3508,9 @@ html.app .xk-url {
   gap: 10px;
   width: 100%;
   padding: 11px 13px;
-  border: none;
+  border: 1px solid var(--tma-hair);
   border-radius: 14px;
-  background: var(--tma-inset);
+  background: none;
   cursor: pointer;
   text-align: left;
 }
@@ -3504,7 +3541,7 @@ html.app .xk-qr-note {
 }
 
 html.app .xk-steps {
-  margin: 0 4px;
+  margin: -2px 4px 0;
   padding-left: 18px;
   display: grid;
   gap: 8px;

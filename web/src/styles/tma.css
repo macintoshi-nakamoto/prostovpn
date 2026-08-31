@@ -2905,99 +2905,267 @@ html.app .au-forgot {
   }
 }
 
-/* ── Развилка установки и ключи для сторонних приложений ────────────────
-   Свою палитру не заводим: те же карточки, вставки и радиусы, что у всего
-   кабинета, — раздел должен читаться как его часть, а не как приклеенная
-   страница. */
+/* ── Мастер установки и ключи для сторонних приложений ─────────────────
+   Крупно и спокойно: одна мысль на экран, большие цели для пальца, никакого
+   мелкого текста. Палитра общая с кабинетом — раздел должен читаться как его
+   часть, а не как отдельная страница. */
 
-html.app .pk-head {
+html.app .wz {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 2px 4px 4px;
+  gap: 14px;
 }
-html.app .pk-title {
-  font-size: 22px;
+
+html.app .wz-hi {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px 6px;
+  text-align: center;
+}
+html.app .wz-hi-t {
+  font-size: 24px;
   font-weight: 800;
   letter-spacing: -0.02em;
+  line-height: 1.2;
   color: var(--ink);
 }
-html.app .pk-lead {
-  font-size: 14px;
-  line-height: 1.45;
+html.app .wz-hi-s {
+  max-width: 34ch;
+  font-size: 15px;
+  line-height: 1.5;
   color: var(--text-faint);
 }
 
-html.app .pk-card-on {
-  box-shadow: inset 0 0 0 1.5px var(--accent);
-}
-html.app .pk-badge {
-  align-self: flex-start;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  margin-bottom: 2px;
-}
-html.app .pk-card-on .pk-badge {
+html.app .wz-ic {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: var(--tma-inset);
   color: var(--accent);
 }
-
-html.app .pk-points {
-  list-style: none;
-  margin: 14px 0 16px;
-  padding: 0;
-  display: grid;
-  gap: 9px;
+html.app .wz-ic svg {
+  width: 28px;
+  height: 28px;
 }
-html.app .pk-points li {
-  position: relative;
-  padding-left: 22px;
-  font-size: 14px;
-  line-height: 1.4;
+html.app .wz-ic-lg {
+  width: 64px;
+  height: 64px;
+}
+html.app .wz-ic-lg svg {
+  width: 32px;
+  height: 32px;
+}
+
+/* Карточка вопроса «ставим сюда?» — главный экран мастера. */
+html.app .wz-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 26px 20px 20px;
+  border-radius: 22px;
+  background: var(--tma-card);
+}
+html.app .wz-q {
+  font-size: 19px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.3;
   color: var(--ink);
 }
-/* Галочку рисуем сами: списочные маркеры в разных браузерах встают
-   по-разному, а тут важно ровное левое поле. */
-html.app .pk-points li::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  top: 5px;
-  width: 10px;
-  height: 5px;
-  border-left: 2px solid var(--accent);
-  border-bottom: 2px solid var(--accent);
-  transform: rotate(-45deg);
-}
 
-html.app .pk-btn {
+html.app .wz-btn {
   width: 100%;
-  padding: 13px 16px;
+  padding: 15px 18px;
   border: none;
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--tma-inset);
   font: inherit;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--ink);
   cursor: pointer;
   transition: transform 0.16s var(--ease-out, ease);
 }
-html.app .pk-btn:active {
+html.app .wz-btn:active {
   transform: scale(0.98);
   transition-duration: 0.06s;
 }
-html.app .pk-btn-on {
+html.app .wz-btn-on {
   background: var(--accent);
   color: #fff;
 }
-html.app .pk-foot {
-  margin: 2px 4px 0;
+
+html.app .wz-h {
+  padding: 0 4px;
   font-size: 13px;
-  line-height: 1.45;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-faint);
+}
+
+/* Плитки устройств: крупные цели, по две в ряд даже на узком экране. */
+html.app .wz-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+html.app .wz-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 12px;
+  border: none;
+  border-radius: 20px;
+  background: var(--tma-card);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.16s var(--ease-out, ease);
+}
+html.app .wz-tile:active {
+  transform: scale(0.97);
+  transition-duration: 0.06s;
+}
+html.app .wz-tile-ic {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 15px;
+  background: var(--tma-inset);
+  color: var(--accent);
+}
+html.app .wz-tile-ic svg {
+  width: 24px;
+  height: 24px;
+}
+html.app .wz-tile-t {
+  font-size: 14.5px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+/* Шаг: крупная цифра слева, содержание справа. */
+html.app .wz-step {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 20px;
+  background: var(--tma-card);
+}
+html.app .wz-num {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent);
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+html.app .wz-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+html.app .wz-step-t {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+}
+html.app .wz-step-s {
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+html.app .wz-cta {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 13px 20px;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent);
+  font: inherit;
+  font-size: 15.5px;
+  font-weight: 700;
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+html.app .wz-login {
+  margin-top: 4px;
+  padding: 10px 13px;
+  border-radius: 13px;
+  background: var(--tma-inset);
+  font-size: 14.5px;
+  color: var(--text-faint);
+}
+html.app .wz-login b {
+  color: var(--ink);
+}
+
+html.app .wz-qr {
+  align-self: flex-start;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #fff;
+  width: 168px;
+}
+html.app .wz-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+html.app .wz-done {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 18px;
+  border-radius: 20px;
+  background: var(--tma-inset);
+}
+html.app .wz-done-t {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+html.app .wz-done-s {
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+html.app .wz-back,
+html.app .wz-quiet {
+  align-self: center;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-faint);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+html.app .wz-back {
+  align-self: flex-start;
+  text-decoration: none;
 }
 
 html.app .xk-lead {

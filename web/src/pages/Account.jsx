@@ -10,7 +10,7 @@ import { CryptoIcon, SbpIcon, TelegramIcon, TonIcon } from "../components/PayIco
 import { starsPayUrl } from "../lib/contacts.js";
 import { TgsEmoji } from "../components/TgsEmoji.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
-import { TmaSetupChooser } from "../components/TmaSetupChooser.jsx";
+import { SetupWizard } from "../components/SetupWizard.jsx";
 import { TmaExternalKeys } from "../components/TmaExternalKeys.jsx";
 import { Referrals } from "../components/Referrals.jsx";
 import { Picture } from "../components/Picture.jsx";
@@ -1154,7 +1154,22 @@ function TmaSetup({ data, onChanged, onApply }) {
   // тем, кто давно всё выбрал.
   if (!pathReady) return <div className="ap ap-setup" />;
 
-  if (!path) return <TmaSetupChooser onPick={choosePath} />;
+  // Пока человек не прошёл мастер, показываем его: он спрашивает, куда
+  // ставим, и ведёт до работающего приложения. Пройденный шаг помним, но
+  // вернуться можно строкой «показать заново».
+  if (!path) {
+    return (
+      <SetupWizard
+        icons={AP_ICONS}
+        login={data.login}
+        onExternal={() => {
+          choosePath("external");
+          setExtOpen(true);
+        }}
+        onDone={() => choosePath("app")}
+      />
+    );
+  }
 
   return (
     <div className="ap ap-setup">

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { QrCode } from "./QrCode.jsx";
 import { api } from "../lib/api";
+import { tmaHaptic, tmaOpenLink } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 
 /**
@@ -40,6 +41,14 @@ function guessDevice() {
 
 const DOWNLOAD_KEY = { windows: "windows", android: "android", tv: "android", macos: "macos" };
 
+/**
+ * Телевизор — исключение из правила «не показываем скачивание чужому
+ * устройству». Кабинет на телевизоре никто не открывает, определить его
+ * по браузеру нельзя, а инструкция прямо говорит: скачайте файл на телефон
+ * и передайте. Без кнопки шаг некуда выполнять.
+ */
+const TV = "tv";
+
 export function SetupWizard({ icons, login, onExternal, onDone }) {
   const { t } = useI18n();
 
@@ -50,6 +59,11 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
   const [sameDevice, setSameDevice] = useState(true);
   const [picking, setPicking] = useState(!guessed);
   const [downloads, setDownloads] = useState(null);
+  // «Назад» должен вернуть туда, откуда ушли: с сетки — на сетку, с
+  // вопроса «ставим сюда?» — на вопрос. Иначе смена устройства стоит
+  // двух лишних нажатий каждый раз.
+  const [fromGrid, setFromGrid] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -65,17 +79,30 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
   const answerHere = () => {
     setDevice(guessed);
     setSameDevice(true);
+    setFromGrid(false);
   };
 
   const pick = (id) => {
     setDevice(id);
     setSameDevice(id === guessed);
+    setFromGrid(true);
     setPicking(false);
   };
 
   const back = () => {
     setDevice(null);
-    setPicking(!guessed);
+    setPicking(fromGrid || !guessed);
+  };
+
+  // Логин нужно перенести в другое приложение, а выделить текст в вебвью
+  // Telegram почти невозможно — поэтому строка нажимается.
+  const copyLogin = async () => {
+    try {
+      await navigator.clipboard.writeText(login);
+      tmaHaptic("light");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {}
   };
 
   // ── шаг 1: куда ставим ────────────────────────────────────────────────
@@ -91,10 +118,14 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
           <div className="wz-card">
             <span className="wz-ic">{icons[DEVICES.find((d) => d.id === guessed).icon]}</span>
             <span className="wz-q">{t(`wizard.here.${guessed}`)}</span>
-            <button type="button" className="wz-btn wz-btn-on" onClick={answerHere}>
+            <button type="button" className="ap-cta wz-go" onClick={answerHere}>
               {t("wizard.yesHere")}
             </button>
-            <button type="button" className="wz-btn" onClick={() => setPicking(true)}>
+            <button
+              type="button"
+              className="ap-cta wz-go wz-go-alt"
+              onClick={() => setPicking(true)}
+            >
               {t("wizard.noOther")}
             </button>
           </div>
@@ -127,12 +158,20 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
   // ── шаг 2: что делать с выбранным устройством ─────────────────────────
   const meta = DEVICES.find((one) => one.id === device);
   const file = (downloads || []).find((row) => row.platform === DOWNLOAD_KEY[device]);
-  const pageUrl =
-    typeof window !== "undefined" ? window.location.origin + "/account/guide" : "";
+  // Именно /guide, а не /account/guide: код наводят на устройство, где
+  // сессии заведомо нет, а кабинет за паролем — там открылась бы форма
+  // входа вместо инструкции. /guide открыт всем.
+  const pageUrl = typeof window !== "undefined" ? window.location.origin + "/guide" : "";
+  // У телевизора нет камеры — предлагать навести её на код бессмысленно.
+  const showQr = !sameDevice && device !== TV;
+  const firstStep = showQr ? 2 : 1;
 
   return (
     <div className="wz">
       <button type="button" className="wz-back" onClick={back}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M15 5l-7 7 7 7" />
+        </svg>
         {t("wizard.back")}
       </button>
 
@@ -142,7 +181,7 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
         <span className="wz-hi-s">{t(`wizard.plan.${device}.lead`)}</span>
       </div>
 
-      {!sameDevice && (
+      {showQr && (
         <div className="wz-step">
           <span className="wz-num">1</span>
           <div className="wz-step-body">
@@ -158,27 +197,43 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
       {meta.ours ? (
         <>
           <div className="wz-step">
-            <span className="wz-num">{sameDevice ? 1 : 2}</span>
+            <span className="wz-num">{firstStep}</span>
             <div className="wz-step-body">
               <span className="wz-step-t">{t("wizard.getApp")}</span>
               <span className="wz-step-s">{t(`wizard.plan.${device}.get`)}</span>
-              {sameDevice && file?.url && (
-                <a className="wz-cta" href={file.url}>
-                  {t(`wizard.plan.${device}.button`)}
-                </a>
-              )}
+              {(sameDevice || device === TV) &&
+                (downloads === null ? (
+                  <span className="wz-wait">{t("wizard.waitFile")}</span>
+                ) : file?.url ? (
+                  // Не ссылка: в вебвью Telegram файл открылся бы просмотром
+                  // вместо скачивания. tmaOpenLink уводит во внешний браузер.
+                  <button
+                    type="button"
+                    className="ap-cta st-g-cta"
+                    onClick={() => {
+                      tmaHaptic("light");
+                      tmaOpenLink(file.url);
+                    }}
+                  >
+                    {t(`wizard.plan.${device}.button`)}
+                  </button>
+                ) : (
+                  <a className="wz-fallback" href="/guide" target="_blank" rel="noreferrer noopener">
+                    {t("wizard.openGuide")}
+                  </a>
+                ))}
             </div>
           </div>
 
           <div className="wz-step">
-            <span className="wz-num">{sameDevice ? 2 : 3}</span>
+            <span className="wz-num">{firstStep + 1}</span>
             <div className="wz-step-body">
               <span className="wz-step-t">{t("wizard.signIn")}</span>
               <span className="wz-step-s">{t("wizard.signInLead")}</span>
               {login && (
-                <span className="wz-login">
-                  {t("wizard.yourLogin")} <b>{login}</b>
-                </span>
+                <button type="button" className="wz-login" onClick={copyLogin}>
+                  {t("wizard.yourLogin")} <b>{copied ? t("wizard.copied") : login}</b>
+                </button>
               )}
             </div>
           </div>
@@ -186,12 +241,12 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
       ) : (
         <>
           <div className="wz-step">
-            <span className="wz-num">{sameDevice ? 1 : 2}</span>
+            <span className="wz-num">{firstStep}</span>
             <div className="wz-step-body">
               <span className="wz-step-t">{t("wizard.iosGet")}</span>
               <span className="wz-step-s">{t("wizard.iosGetLead")}</span>
               <a
-                className="wz-cta"
+                className="ap-cta st-g-cta"
                 href="https://apps.apple.com/app/amneziavpn/id1600529900"
                 target="_blank"
                 rel="noreferrer noopener"
@@ -202,11 +257,11 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
           </div>
 
           <div className="wz-step">
-            <span className="wz-num">{sameDevice ? 2 : 3}</span>
+            <span className="wz-num">{firstStep + 1}</span>
             <div className="wz-step-body">
               <span className="wz-step-t">{t("wizard.iosKey")}</span>
               <span className="wz-step-s">{t("wizard.iosKeyLead")}</span>
-              <button type="button" className="wz-cta" onClick={onDone}>
+              <button type="button" className="ap-cta st-g-cta" onClick={onDone}>
                 {t("wizard.iosKeyBtn")}
               </button>
             </div>
@@ -217,6 +272,14 @@ export function SetupWizard({ icons, login, onExternal, onDone }) {
       <div className="wz-done">
         <span className="wz-done-t">{t("wizard.doneTitle")}</span>
         <span className="wz-done-s">{t("wizard.doneLead")}</span>
+        {/* Без этой кнопки из мастера некуда деться: onDone зовёт только
+            ветка iPhone, а остальные оставались в нём навсегда — и раздел
+            установки с логином, гайдами и ключами был недостижим. */}
+        {meta.ours && (
+          <button type="button" className="ap-cta st-g-cta" onClick={onDone}>
+            {t("wizard.doneBtn")}
+          </button>
+        )}
       </div>
 
       <button type="button" className="wz-quiet" onClick={onExternal}>

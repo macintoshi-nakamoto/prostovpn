@@ -1062,6 +1062,10 @@ export const en = {
     iosKey: "Add a key",
     iosKeyLead: "Tap the key — it opens in AmneziaVPN by itself. Nothing to copy.",
     iosKeyBtn: "Show my keys",
+    doneBtn: "Done, it works",
+    waitFile: "Getting the file…",
+    openGuide: "Open the guide with screenshots",
+    copied: "Copied",
     doneTitle: "How to tell it worked",
     doneLead: "A list of countries appears in the app. Pick any and press connect — the VPN icon lights up at the top of the screen.",
     plan: {

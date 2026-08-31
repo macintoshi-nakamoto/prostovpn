@@ -6,7 +6,7 @@ import socket
 from dataclasses import dataclass, field
 
 from .. import provisioning
-from ..models import Provisioning, Server
+from ..models import EndpointKind, Provisioning, Server
 from . import traffic
 
 log = logging.getLogger("panel.diagnostics")
@@ -54,7 +54,17 @@ def can_serve(server: Server) -> bool:
         return False
     if server.provisioning == Provisioning.SHARED:
         return bool(server.shared_config)
-    return bool(server.awg_template and server.ssh_host and (server.ssh_key or server.ssh_password))
+    if not (server.ssh_host and (server.ssh_key or server.ssh_password)):
+        return False
+    # Шаблон конфига — наследие времён, когда точек входа не было и параметры
+    # обфускации лежали прямо на узле. Узел, заведённый через точки входа,
+    # шаблона не имеет вовсе, и конфиг ему собирают из endpoint.params —
+    # требовать шаблон значит объявить исправный узел неработоспособным.
+    if server.awg_template:
+        return True
+    return any(
+        ep.kind == EndpointKind.AWG and ep.is_live for ep in server.endpoints
+    )
 
 
 def check(server: Server) -> Report:
@@ -85,13 +95,27 @@ def check(server: Server) -> Report:
                 "режим «общий ключ», но сам ключ не вставлен — выдавать клиенту нечего",
             )
     else:
+        live_awg = [
+            ep for ep in server.endpoints if ep.kind == EndpointKind.AWG and ep.is_live
+        ]
         if server.awg_template:
             report.add("Шаблон конфига", True, "задан")
+        elif live_awg:
+            # Узлу с точками входа шаблон не нужен: конфиг собирается из их
+            # параметров. Ругаться на его отсутствие значит объявлять
+            # исправный узел сломанным.
+            report.add(
+                "Шаблон конфига",
+                True,
+                "не нужен: конфиг собирается из точек входа ("
+                + ", ".join(ep.handle for ep in live_awg)
+                + ")",
+            )
         else:
             report.add(
                 "Шаблон конфига",
                 False,
-                "не задан — панель не сможет собрать конфиг для клиента",
+                "не задан, и живых точек входа нет — собрать конфиг клиенту не из чего",
             )
 
     if server.host and not is_documentation_address(server.host):

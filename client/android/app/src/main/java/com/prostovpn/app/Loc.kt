@@ -15,6 +15,9 @@ data class Strings(
     val termsLink: String,
 
     val connected: String,
+    // Подпись под таймером, когда работает запасной протокол: человеку важно
+    // знать, что он идёт другим путём — скорость и поведение отличаются.
+    val viaBackup: String,
     val connectingTxt: String,
     val disconnectingTxt: String,
     val disconnected: String,
@@ -101,6 +104,7 @@ private val RU = Strings(
     termsPrefix = "Продолжая, вы принимаете ",
     termsLink = "условия сервиса",
     connected = "Подключено",
+    viaBackup = "запасной протокол",
     connectingTxt = "Подключение…",
     disconnectingTxt = "Отключение…",
     disconnected = "Отключено",
@@ -181,6 +185,7 @@ private val EN = Strings(
     termsPrefix = "By continuing you accept the ",
     termsLink = "terms of service",
     connected = "Connected",
+    viaBackup = "backup protocol",
     connectingTxt = "Connecting…",
     disconnectingTxt = "Disconnecting…",
     disconnected = "Disconnected",

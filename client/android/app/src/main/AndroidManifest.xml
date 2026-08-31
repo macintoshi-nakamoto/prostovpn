@@ -81,6 +81,21 @@
         </service>
 
         <!--
+        Туннель запасного протокола. Служба своя, потому что чужой дескриптор
+        библиотека AmneziaWG наружу не отдаёт, а ядру Reality он нужен. Работают
+        по очереди: Android держит один туннель на приложение, да и смысла в
+        двух нет — это два пути до одного узла.
+        -->
+        <service
+            android:name=".VlessVpnService"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
+        <!--
         Туннель wg-go живёт внутри процесса приложения: умирает процесс — рвётся VPN.
         Голого VpnService для выживания недостаточно, оболочки Huawei/Honor (PowerGenie),
         Xiaomi и Oppo убивают фоновые процессы по собственным правилам и штатный

@@ -250,7 +250,7 @@ private fun StatusBlock(state: AppState) {
     val subText = when (state.phase) {
         Phase.OFF -> state.connectionError ?: s.tapToConnect
         Phase.CONNECTING, Phase.DISCONNECTING -> ""
-        Phase.ON -> state.formattedDuration
+        Phase.ON -> state.durationWithProtocol
     }
 
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -297,7 +297,7 @@ private fun StatusBlock(state: AppState) {
                     )
                     Phase.CONNECTING, Phase.DISCONNECTING -> Text(text = "", style = subStyle)
 
-                    Phase.ON -> RollingText(text = state.formattedDuration, style = subStyle)
+                    Phase.ON -> RollingText(text = state.durationWithProtocol, style = subStyle)
                 }
             }
         }

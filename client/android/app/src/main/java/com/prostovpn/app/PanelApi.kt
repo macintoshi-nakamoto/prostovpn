@@ -54,6 +54,9 @@ object PanelApi {
         val config: String,
 
         val altPorts: List<Int> = emptyList(),
+
+        // Запасной путь до узла: Reality. Пусто, если панель его не дала.
+        val vless: XrayTunnel.Access? = null,
     )
 
     data class UpdateInfo(
@@ -150,6 +153,31 @@ object PanelApi {
         renewUrl = subscription.optStringOrNull("renew_url"),
     )
 
+    /**
+     * Запасной путь до узла. Панель присылает его не всегда: на узле может не
+     * быть точки Reality. Разбираем мягко — без ключа или адреса подключаться
+     * всё равно нечем, и лучше остаться с одним протоколом, чем уронить разбор
+     * всего списка серверов.
+     */
+    private fun parseVless(item: JSONObject?): XrayTunnel.Access? {
+        if (item == null) return null
+        val host = item.optString("host")
+        val port = item.optInt("port")
+        val id = item.optString("id")
+        val publicKey = item.optString("public_key")
+        if (host.isEmpty() || port !in 1..65535 || id.isEmpty() || publicKey.isEmpty()) return null
+        return XrayTunnel.Access(
+            host = host,
+            port = port,
+            id = id,
+            publicKey = publicKey,
+            shortId = item.optString("short_id"),
+            serverName = item.optString("server_name"),
+            fingerprint = item.optString("fingerprint").ifEmpty { "chrome" },
+            flow = item.optString("flow"),
+        )
+    }
+
     private fun parseServers(body: JSONObject): List<PanelServer> {
         val array = body.optJSONArray("servers") ?: return emptyList()
         return (0 until array.length()).mapNotNull { i ->
@@ -166,6 +194,7 @@ object PanelApi {
                 altPorts = item.optJSONArray("alt_ports")?.let { ports ->
                     (0 until ports.length()).mapNotNull { n -> ports.optInt(n).takeIf { it > 0 } }
                 } ?: emptyList(),
+                vless = parseVless(item.optJSONObject("vless")),
             )
         }
     }
@@ -229,4 +258,5 @@ fun PanelApi.PanelServer.toServerInfo(): ServerInfo = ServerInfo(
     countryCode = countryCode,
     config = config,
     altPorts = altPorts,
+    vless = vless,
 )

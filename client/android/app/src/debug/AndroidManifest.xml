@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+    Только для отладочной сборки: открывает службу запасного протокола, чтобы
+    её можно было поднять с эмулятора через adb и проверить ядро отдельно от
+    интерфейса. В релизе служба закрыта — снаружи её дёргать незачем.
+    -->
+    <application>
+        <service
+            android:name=".VlessVpnService"
+            android:exported="true"
+            tools:replace="android:exported" />
+    </application>
+</manifest>

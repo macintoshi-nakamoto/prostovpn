@@ -34,6 +34,10 @@ data class ServerInfo(
     val config: String? = null,
 
     val altPorts: List<Int> = emptyList(),
+
+    // Запасной путь до того же узла. Пусто — значит панель его не дала:
+    // на узле нет живой точки Reality либо доступ не выдался.
+    val vless: XrayTunnel.Access? = null,
 ) {
     fun countryFor(lang: String): String? =
         if (lang == "en") countryEn ?: country else country ?: countryEn
@@ -65,6 +69,9 @@ data class TunnelFile(
 )
 
 enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
+
+/** Чем поднят туннель: основным AmneziaWG или запасным VLESS поверх Reality. */
+enum class Protocol { AWG, VLESS }
 
 private const val ACCOUNT_POLL_MS = 60 * 1000L
 
@@ -176,6 +183,11 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     private var connectJob: Job? = null
     private var timerJob: Job? = null
+
+    // Каким протоколом стоим сейчас: нужно и чтобы снимать именно поднятое, и
+    // чтобы показать это человеку — запасной путь заметно отличается на глаз.
+    var activeProtocol by mutableStateOf(Protocol.AWG)
+        private set
 
     var pendingPermissionIntent by mutableStateOf<android.content.Intent?>(null)
         private set
@@ -761,6 +773,9 @@ class AppState(application: Application) : AndroidViewModel(application) {
     private fun startTunnel(config: String) {
         phase = Phase.CONNECTING
         connectionError = null
+        // Запасной протокол — ответ на неудачу, а не постоянный режим: иначе
+        // тот, у кого однажды не прошёл UDP, навсегда остался бы на нём.
+        activeProtocol = Protocol.AWG
 
         startConnectingNotice()
         connectJob = viewModelScope.launch {
@@ -774,11 +789,13 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     startTimer()
                 }
                 TunnelManager.Result.NO_HANDSHAKE -> {
-                    // Ни один порт этой страны не отозвался — значит дело уже
-                    // не в порте: узел могли перекрыть целиком. Соседняя
-                    // страна стоит в другой сети, с другим адресом и своей
-                    // обфускацией, поэтому пробовать её осмысленно.
-                    if (!failoverToAnotherServer()) {
+                    // Порты этой страны молчат. Сперва второй протокол на том
+                    // же узле: Reality идёт по TCP и переживает сети, где UDP
+                    // не проходит вовсе — сколько портов ни перебирай. Смена
+                    // протокола дешевле смены страны, человек остаётся там,
+                    // где выбрал. Не вышло — тогда уже соседняя страна: у неё
+                    // другая сеть, другой адрес и своя обфускация.
+                    if (!tryVless() && !failoverToAnotherServer()) {
                         phase = Phase.OFF
                         connectionError = s.errNoHandshake
                         stopForegroundNotice()
@@ -796,6 +813,45 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+    }
+
+    /**
+     * Поднимает запасной протокол на нынешнем узле. `true` — получилось.
+     *
+     * Доступ к Reality панель присылает вместе с обычным конфигом, ходить за
+     * ним отдельно не нужно. Узел его не дал — тихо уходим: отсутствие
+     * запасного пути не ошибка, просто пробовать нечего.
+     */
+    private suspend fun tryVless(): Boolean {
+        val access = server?.vless ?: return false
+
+        // Снимаем недоподнятый AmneziaWG: Android держит один туннель на
+        // приложение, и вторая служба просто не получит дескриптор.
+        withContext(tunnelDispatcher) { runCatching { tunnel.disconnect() } }
+
+        VlessVpnService.start(getApplication(), access)
+
+        // Ждём, пока служба доложит. Пятнадцати секунд хватает с запасом:
+        // рукопожатие Reality — это одно TLS-соединение, не перебор портов.
+        val deadline = System.currentTimeMillis() + 15_000
+        while (System.currentTimeMillis() < deadline) {
+            when (VlessVpnService.state) {
+                VlessVpnService.State.RUNNING -> {
+                    activeProtocol = Protocol.VLESS
+                    phase = Phase.ON
+                    startForegroundNotice()
+                    startTimer()
+                    return true
+                }
+                VlessVpnService.State.FAILED -> {
+                    connectionError = null
+                    return false
+                }
+                else -> delay(250)
+            }
+        }
+        VlessVpnService.stop(getApplication())
+        return false
     }
 
     /**
@@ -848,10 +904,25 @@ class AppState(application: Application) : AndroidViewModel(application) {
         seconds = 0
         val startedAt = System.currentTimeMillis()
         timerJob = viewModelScope.launch {
+            var nextWatch = 5
             while (true) {
                 delay(500)
                 val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
                 if (elapsed != seconds) seconds = elapsed
+
+                // За основным протоколом следит supervision внутри
+                // TunnelManager, а запасной там не виден вовсе: его туннель
+                // держит другая служба. Присматриваем сами — иначе упавший
+                // Reality остался бы на экране «подключено».
+                if (activeProtocol == Protocol.VLESS && elapsed >= nextWatch) {
+                    nextWatch = elapsed + 5
+                    if (VlessVpnService.state != VlessVpnService.State.RUNNING) {
+                        timerJob = null
+                        connectionError = s.errTunnelDropped
+                        disconnect()
+                        return@launch
+                    }
+                }
             }
         }
     }
@@ -865,13 +936,31 @@ class AppState(application: Application) : AndroidViewModel(application) {
         phase = Phase.DISCONNECTING
 
         connectJob = viewModelScope.launch {
+            // Снимаем оба: какой бы ни был поднят, второй в это время должен
+            // молчать. Служба запасного протокола на «стоп» при незапущенной
+            // ничего не делает, поэтому звать её безопасно всегда.
             runCatching { tunnel.disconnect() }
+            runCatching { VlessVpnService.stop(getApplication()) }
 
+            activeProtocol = Protocol.AWG
             stopForegroundNotice()
             phase = Phase.OFF
             connectJob = null
         }
     }
+
+    /**
+     * Время работы, а рядом — пометка, если путь запасной.
+     *
+     * Без неё человек видит только изменившееся поведение сети и не понимает,
+     * почему: Reality идёт через прокси и отличается от прямого туннеля.
+     */
+    val durationWithProtocol: String
+        get() = if (activeProtocol == Protocol.VLESS) {
+            formattedDuration + " · " + s.viaBackup
+        } else {
+            formattedDuration
+        }
 
     val formattedDuration: String
         get() {

@@ -7,8 +7,12 @@ export default defineConfig({
     port: 5174,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8000",
+        // Локальной панели обычно нет под рукой, поэтому по умолчанию
+        // ходим в боевую — так кабинет открывается с настоящими данными.
+        // Свой бэкенд подставляется через PANEL_PROXY.
+        target: process.env.PANEL_PROXY || "https://prostovpn.cc",
         changeOrigin: true,
+        secure: true,
       },
     },
   },

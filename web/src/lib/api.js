@@ -140,6 +140,20 @@ export const api = {
 
   referrals: () => request("/api/v1/account/referrals", { auth: true }),
 
+  // Ссылки-подписки для сторонних приложений. Сама ссылка приходит один раз,
+  // в ответе на выпуск: дальше её знает только человек.
+  subscriptionKeys: () => request("/api/v1/account/subscriptions", { auth: true }),
+
+  issueSubscriptionKey: (label) =>
+    request("/api/v1/account/subscriptions", {
+      method: "POST",
+      auth: true,
+      body: { label: label || null },
+    }),
+
+  revokeSubscriptionKey: (id) =>
+    request(`/api/v1/account/subscriptions/${id}`, { method: "DELETE", auth: true }),
+
   enableIos: (serverId) =>
     request("/api/v1/account/ios", {
       method: "POST",

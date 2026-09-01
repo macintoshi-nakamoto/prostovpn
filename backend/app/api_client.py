@@ -643,9 +643,15 @@ def login_telegram(
         # захочет зайти с сайта, и лежат в профиле.
         tg_user = data.get("user") or {}
         display = (tg_user.get("first_name") or tg_user.get("username") or "").strip()[:128]
+        # Логин берём из юзернейма: человек его помнит, а выданный
+        # «имя-a3k9x2» — нет, и на компьютере ему потом этот логин вводить.
+        # Юзернейма в Telegram может не быть — тогда прежний путь: транслит
+        # имени со случайным хвостом.
+        wanted = services.login_from_hint(db, services.telegram.clean_username(tg_user.get("username")))
         try:
             user, _password, _warnings = services.create_user(
                 db,
+                login=wanted,
                 plan_code=config.signup_plan_code,
                 name=display or None,
                 note="регистрация из Telegram",

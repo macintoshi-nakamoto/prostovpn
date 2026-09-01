@@ -30,6 +30,36 @@ def generate_credentials(db: OrmSession, prefix: str = "user") -> tuple[str, str
     raise PanelError("не удалось подобрать свободный логин")
 
 
+def login_from_hint(db: OrmSession, wanted: str | None) -> str | None:
+    """
+    Свободный логин по подсказке — юзернейму из Telegram.
+
+    Человек знает себя по юзернейму, и логин «vanzero» он помнит наизусть,
+    а выданный «vanzero-a3k9x2» — нет. Символы у юзернейма те же, что мы
+    разрешаем в логине, так что берём его как есть; строчными, потому что
+    логины сравниваются посимвольно, а Telegram регистра не различает.
+
+    Пусто на выходе — значит подсказки не было или она не годится: зовущий
+    оставляет прежний путь, транслит имени со случайным хвостом. Занятый
+    юзернейм не повод отказываться: человек мог его сменить, а прежняя
+    учётка с этим логином осталась — тогда добавляем короткий хвост.
+    """
+    clean = (wanted or "").strip().lstrip("@").lower()
+    if not 3 <= len(clean) <= 60:
+        return None
+    if not all(ch.isascii() and (ch.isalnum() or ch in "-_.") for ch in clean):
+        return None
+
+    if db.scalar(select(User).where(User.login == clean)) is None:
+        return clean
+    for _ in range(20):
+        tail = "".join(secrets.choice(_LOGIN_ALPHABET) for _ in range(4))
+        candidate = f"{clean}-{tail}"
+        if db.scalar(select(User).where(User.login == candidate)) is None:
+            return candidate
+    return None
+
+
 def generate_password(length: int | None = None) -> str:
     if length is None:
         return credentials.gen_password()

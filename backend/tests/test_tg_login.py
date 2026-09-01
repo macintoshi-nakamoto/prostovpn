@@ -57,11 +57,21 @@ def _bot_token(monkeypatch):
     settings.cache_clear()
 
 
-def _init_data(telegram_id: int, *, token: str = BOT_TOKEN, age: int = 0) -> str:
+def _init_data(
+    telegram_id: int,
+    *,
+    token: str = BOT_TOKEN,
+    age: int = 0,
+    username: str | None = None,
+    first_name: str = "Тест",
+) -> str:
+    profile: dict[str, object] = {"id": telegram_id, "first_name": first_name}
+    if username:
+        profile["username"] = username
     pairs = {
         "auth_date": str(int(time.time()) - age),
         "query_id": "AAF-test",
-        "user": json.dumps({"id": telegram_id, "first_name": "Тест"}, ensure_ascii=False),
+        "user": json.dumps(profile, ensure_ascii=False),
     }
     check = "\n".join(f"{k}={v}" for k, v in sorted(pairs.items()))
     secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
@@ -125,3 +135,57 @@ def test_without_bot_token_login_is_disabled(client, monkeypatch):
     r = client.post("/api/v1/login/telegram", json={"init_data": _init_data(777_000_111)})
     assert r.status_code == 503
     assert r.headers.get("X-Error-Code") == "tg_disabled"
+
+
+def test_signup_takes_login_from_telegram_username(client):
+    r = client.post(
+        "/api/v1/login/telegram",
+        json={"init_data": _init_data(555_000_001, username="VanZero")},
+    )
+    assert r.status_code == 200, r.text
+    # Юзернейм человек помнит наизусть — логин должен совпасть с ним,
+    # только строчными: Telegram регистра не различает, а логин различает.
+    assert r.json()["account"]["login"] == "vanzero"
+
+
+def test_signup_without_username_falls_back_to_the_name(client):
+    r = client.post(
+        "/api/v1/login/telegram",
+        json={"init_data": _init_data(555_000_002, first_name="Пётр")},
+    )
+    assert r.status_code == 200, r.text
+    login = r.json()["account"]["login"]
+    # Юзернейм в Telegram не обязателен: тогда прежний путь — транслит
+    # имени со случайным хвостом, потому что имена не уникальны.
+    assert login.startswith("petr-")
+    assert login != "petr"
+
+
+def test_taken_username_does_not_collide(client):
+    with SessionLocal() as db:
+        if db.scalar(select(User).where(User.login == "busy")) is None:
+            db.add(User(login="busy", password_hash=hash_password("irrelevant-2")))
+            db.commit()
+
+    r = client.post(
+        "/api/v1/login/telegram",
+        json={"init_data": _init_data(555_000_003, username="busy")},
+    )
+    assert r.status_code == 200, r.text
+    login = r.json()["account"]["login"]
+    # Юзернейм могли сменить, а учётка с этим логином осталась: занятый
+    # логин не повод отказать в регистрации.
+    assert login != "busy"
+    assert login.startswith("busy-")
+
+
+def test_username_is_remembered_for_the_admin_panel(client):
+    client.post(
+        "/api/v1/login/telegram",
+        json={"init_data": _init_data(555_000_004, username="marker_one")},
+    )
+    with SessionLocal() as db:
+        user = db.scalar(select(User).where(User.telegram_id == 555_000_004))
+        assert user is not None
+        assert user.login == "marker_one"
+        assert user.telegram_username == "marker_one"

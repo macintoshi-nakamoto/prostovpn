@@ -205,6 +205,11 @@ def render_endpoint_config(endpoint, server: Server, private_key: str, address: 
     keepalive = params.get("keepalive") or 25
     server_public_key = params.get("server_public_key") or ""
     host = endpoint.public_host(server)
+    # Порт, который видит клиент, может отличаться от того, что слушает awg:
+    # на узлах уже стоят редиректы с запасных портов. 51820 — эталонный порт
+    # WireGuard, и у сотовых операторов он под шейпом: рукопожатие проходит,
+    # а дальше растут потери. Отдаём тот, что назначен точке входа.
+    port = params.get("advertise_port") or endpoint.listen_port
 
     return (
         "[Interface]\n"
@@ -217,7 +222,7 @@ def render_endpoint_config(endpoint, server: Server, private_key: str, address: 
         "[Peer]\n"
         f"PublicKey = {server_public_key}\n"
         f"AllowedIPs = {allowed}\n"
-        f"Endpoint = {host}:{endpoint.listen_port}\n"
+        f"Endpoint = {host}:{port}\n"
         f"PersistentKeepalive = {keepalive}\n"
     )
 
@@ -234,6 +239,10 @@ def create_awg_interface(server: Server, endpoint) -> dict[str, str]:
     if not (0 < port < 65536):
         raise ValueError(f"недопустимый порт {endpoint.listen_port}")
 
+    # Тот же источник, что и у клиентского конфига, — чтобы стороны не
+    # разъезжались: параметры точки входа, иначе безопасные 1280.
+    mtu = (endpoint.params or {}).get("mtu") or 1280
+
     conf = config_path(interface)
     lock = lock_path(interface)
     script = f"""set -e
@@ -247,10 +256,18 @@ cat > {conf} <<CONF
 Address = {gateway}/{network.prefixlen}
 ListenPort = {port}
 PrivateKey = $(cat {AWG_DIR}/{interface}_private.key)
+# Тот же MTU, что и в клиентском конфиге. Без этой строки awg-quick берёт
+# свои 1420, и получается перекос: клиент шлёт пакеты по 1280 и они
+# доходят, а сервер отвечает по 1420 — на сотовой сети, где путь у́же,
+# крупные ответы теряются. Рукопожатие проходит, страницы не грузятся.
+MTU = {mtu}
 {obfuscation.config_lines()}
 
-PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -s {network} -o $EGRESS -j MASQUERADE
-PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -s {network} -o $EGRESS -j MASQUERADE
+# Клампинг MSS: у сотовых операторов ICMP часто режут, и определение
+# размера пути не работает — тогда TCP шлёт сегменты больше туннеля и
+# соединение встаёт. Пришиваем размер к MTU туннеля прямо в SYN.
+PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -A FORWARD -o %i -j ACCEPT; iptables -t nat -A POSTROUTING -s {network} -o $EGRESS -j MASQUERADE; iptables -t mangle -A FORWARD -o %i -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu; iptables -t mangle -A FORWARD -i %i -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACCEPT; iptables -t nat -D POSTROUTING -s {network} -o $EGRESS -j MASQUERADE; iptables -t mangle -D FORWARD -o %i -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu; iptables -t mangle -D FORWARD -i %i -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 
 # Пиры дописывает панель — руками ниже ничего не добавляйте.
 CONF

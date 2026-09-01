@@ -329,7 +329,16 @@ export function SetupScreen({ open, onClose, onKeys }) {
   const vpn = vpnSet[Math.min(country, Math.max(vpnSet.length - 1, 0))] || null;
 
   return (
-    <ScreenShell open={open} title={t("su.title")} back={!isTma()} onClose={onClose}>
+    // Внутри Telegram своя шапка не нужна: сверху уже стоит шапка клиента
+    // с системной стрелкой, и вторая полоска с названием только съедает экран.
+    // На сайте она остаётся — там в ней живёт кнопка «назад».
+    <ScreenShell
+      open={open}
+      title={t("su.title")}
+      back={!isTma()}
+      headless={isTma()}
+      onClose={onClose}
+    >
       <div className="su">
         <div className="ap-card su-head">
           <span className="su-gear">{GEAR}</span>

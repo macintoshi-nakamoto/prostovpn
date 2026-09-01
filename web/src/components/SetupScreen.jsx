@@ -509,7 +509,11 @@ export function SetupScreen({ open, onClose, onKeys }) {
         )}
 
         {/* ── шаг 3: подключиться ─────────────────────────────────────── */}
-        <Step icon={IC_LINK} title={t("su.stepConnect")} text={t("su.connectLead")} />
+        <Step
+          icon={IC_LINK}
+          title={t("su.stepConnect")}
+          text={t(meta.kind === "sub" ? "su.connectLeadSub" : "su.connectLead")}
+        />
 
         <button type="button" className="su-more" onClick={onKeys}>
           {t("su.moreKeys")}

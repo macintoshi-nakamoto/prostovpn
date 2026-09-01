@@ -1067,6 +1067,8 @@ export const en = {
     stepKey: "2. Add the key",
     stepConnect: "3. Connect",
     connectLead: "In the app pick a country and press connect — the VPN icon lights up at the top of the screen.",
+    connectLeadSub:
+      "The list shows two entries per country: a regular one and one marked “Hysteria2”. On mobile data pick Hysteria2 — it gets through where the rest is throttled. Press connect — the VPN icon lights up at the top of the screen.",
     dev: { android: "Android", ios: "iPhone", win: "Windows", mac: "Mac", tv: "TV" },
     openIn: "Open in {app}",
     noVpnKey: "No keys yet — they appear once the subscription is active.",

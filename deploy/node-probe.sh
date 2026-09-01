@@ -176,7 +176,7 @@ for row in "${NODES[@]}"; do
         subject="$(timeout 12 openssl s_client -connect "$host:$vless_port" -servername "$sni" -tls1_3 </dev/null 2>/dev/null | sed -nE 's/^subject=.*CN *= *([^,]+).*/\1/p' | head -1)"
         if [[ -z "$subject" ]]; then
             problems+=("Reality снаружи не отвечает на ${vless_port}/tcp")
-        elif [[ "$subject" != "$sni" ]]; then
+        elif [[ "$subject" != "$sni" && ( "$subject" != \*.* || "${sni#*.}" != "${subject#\*.}" ) ]]; then
             problems+=("Reality отдал чужой сертификат: $subject")
         fi
     fi

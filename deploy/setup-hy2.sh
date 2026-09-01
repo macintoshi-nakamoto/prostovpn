@@ -97,6 +97,14 @@ else
     ok "поставлен, sha256 $got"
 fi
 
+TLS_DIR=/opt/prosto-tls
+CERT="$DIR/cert.pem"; KEY="$DIR/key.pem"; REAL_CERT=0
+if [[ -s "$TLS_DIR/fullchain.pem" && -s "$TLS_DIR/privkey.pem" ]]; then
+    # Настоящий сертификат своего домена разложен с веб-сервера
+    # (deploy/server/certbot-deploy-nodes.sh) — берём его, клиенту insecure не нужен.
+    CERT="$TLS_DIR/fullchain.pem"; KEY="$TLS_DIR/privkey.pem"; REAL_CERT=1
+    log "Сертификат: настоящий, $TLS_DIR ($(openssl x509 -in "$CERT" -noout -subject 2>/dev/null | sed 's/subject=//'))"
+else
 log "Сертификат (самоподписанный, CN=$SNI)"
 if [[ ! -s "$DIR/cert.pem" || ! -s "$DIR/key.pem" ]]; then
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -days 3650 -nodes \
@@ -107,6 +115,7 @@ else
 fi
 chown root:"$SERVICE_USER" "$DIR/cert.pem" "$DIR/key.pem"
 chmod 0640 "$DIR/cert.pem" "$DIR/key.pem"
+fi
 
 if [[ ! -s "$DIR/stats.secret" ]]; then
     head -c 24 /dev/urandom | base64 | tr -d '/+=' > "$DIR/stats.secret"
@@ -120,8 +129,8 @@ cat > "$CFG" <<YAML
 listen: :${HY2_PORT}
 
 tls:
-  cert: ${DIR}/cert.pem
-  key: ${DIR}/key.pem
+  cert: ${CERT}
+  key: ${KEY}
 
 # Клиент шлёт SNI из ссылки; сертификат под него и выпущен, но строгая
 # сверка ни к чему — доступ решает панель, а не имя.
@@ -230,7 +239,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadOnlyPaths=${DIR}
+ReadOnlyPaths=${DIR} ${TLS_DIR}
 ReadWritePaths=${CACHE_DIR}
 LimitNOFILE=65536
 
@@ -251,7 +260,7 @@ fi
 log "Дальше — в панели"
 cat <<NEXT
 1. У VLESS-точки узла в params добавить
-     "hy2": {"port": ${HY2_PORT}, "hop": "${HY2_HOP}", "sni": "${SNI}"}
+     "hy2": {"port": ${HY2_PORT}, "hop": "${HY2_HOP}", "sni": "${SNI}"$( [[ $REAL_CERT -eq 1 ]] && printf ', "tls": "real"' )}
    — после этого подписка отдаст ссылку hysteria2:// рядом с vless://.
 2. Убрать ${HY2_PORT} из запасных портов AWG (servers.alt_ports и
    node_endpoints.alt_ports) и перевести ключи с endpoint_port=${HY2_PORT}

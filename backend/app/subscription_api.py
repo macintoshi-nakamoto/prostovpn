@@ -309,6 +309,7 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
     from . import happ
 
     reality: list[tuple] = []
+    tls_ways: list[tuple] = []
     hysteria: list[tuple] = []
     for server, endpoint, cred in _vless_targets(db, tok, background):
         params = endpoint.params or {}
@@ -317,6 +318,43 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
         host = endpoint.public_host(server)
         port = params.get("advertise_port") or endpoint.listen_port
         identity = cred.identity
+
+        tls = params.get("tls") or {}
+        if tls.get("host"):
+            xhttp = params.get("xhttp") or {}
+            if xhttp.get("port"):
+
+                def build_xhttp(
+                    tag: str, _host=host, _identity=identity, _sni=tls["host"], _x=xhttp, _lp=endpoint.listen_port
+                ) -> dict:
+                    return happ.tls_outbound(
+                        tag,
+                        _host,
+                        _x.get("advertise_port") or _lp,
+                        _identity,
+                        network="xhttp",
+                        server_name=_sni,
+                        path=_x.get("path") or "/",
+                        alpn=["h2", "http/1.1"],
+                    )
+
+                tls_ways.append((server, "XHTTP", build_xhttp))
+            ws = params.get("ws") or {}
+            if ws.get("port"):
+
+                def build_ws(tag: str, _host=host, _identity=identity, _sni=tls["host"], _w=ws) -> dict:
+                    return happ.tls_outbound(
+                        tag,
+                        _host,
+                        _w["port"],
+                        _identity,
+                        network="ws",
+                        server_name=_sni,
+                        path=_w.get("path") or "/",
+                        alpn=["http/1.1"],
+                    )
+
+                tls_ways.append((server, "WS", build_ws))
 
         def build_reality(
             tag: str,
@@ -346,15 +384,23 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
 
             def build_hysteria(tag: str, _host=host, _identity=identity, _hy2=hy2) -> dict:
                 return happ.hysteria_outbound(
-                    tag, _host, _hy2["port"], _identity, server_name=_hy2.get("sni") or ""
+                    tag,
+                    _host,
+                    _hy2["port"],
+                    _identity,
+                    server_name=_hy2.get("sni") or "",
+                    allow_insecure=_hy2.get("tls") != "real",
                 )
 
             hysteria.append((server, build_hysteria))
 
     configs: list[dict] = []
-    if len(reality) + len(hysteria) > 1:
+    if len(reality) + len(tls_ways) + len(hysteria) > 1:
         outbounds = []
-        for index, (_server, build) in enumerate([*reality, *hysteria]):
+        # Порядок в балансировщике не важен — он меряет всех; но первым идёт
+        # обычный TLS на свой домен: на сотовой сети это самый надёжный путь.
+        everyone = [*[(s, b) for s, _kind, b in tls_ways], *reality, *hysteria]
+        for index, (_server, build) in enumerate(everyone):
             outbounds.append(build("proxy" if index == 0 else f"proxy-{index + 1}"))
         configs.append(
             happ.config(
@@ -369,6 +415,14 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
                 happ.name(server.country_code, server.country or server.name),
                 [build("proxy")],
                 description="Reality",
+            )
+        )
+    for server, kind, build in tls_ways:
+        configs.append(
+            happ.config(
+                happ.name(server.country_code, f"{server.country or server.name} · {kind}"),
+                [build("proxy")],
+                description=f"{kind} + TLS — для мобильной сети",
             )
         )
     for server, build in hysteria:
@@ -418,8 +472,9 @@ def _vless_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTa
             link = xray.share_link(endpoint, cred, server)
             if link:
                 links.append(link)
-            # Тот же узел по Hysteria2 — для сотовых сетей, где Reality
-            # душат по повадкам трафика, а QUIC не трогают.
+            # Обычный TLS на свой домен (XHTTP через 443, WS на своём порту)
+            # и Hysteria2 — для сотовых сетей.
+            links.extend(xray.tls_links(endpoint, cred, server))
             hy2 = xray.hy2_link(endpoint, cred, server)
             if hy2:
                 links.append(hy2)

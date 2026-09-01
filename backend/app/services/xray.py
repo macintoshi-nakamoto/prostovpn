@@ -187,7 +187,7 @@ def build_config(db: OrmSession, server: Server) -> dict:
                 log.error("точка входа %s: приватный ключ Reality не читается", endpoint.handle)
                 continue
 
-        clients = []
+        base_clients = []
         for cred in db.scalars(
             select(UserEndpointCred).where(
                 UserEndpointCred.endpoint_id == endpoint.id,
@@ -197,35 +197,56 @@ def build_config(db: OrmSession, server: Server) -> dict:
             identity = cred.identity
             if not identity:
                 continue
-            clients.append(
-                {"id": identity, "flow": params.get("flow", FLOW), "email": cred.label}
+            base_clients.append({"id": identity, "email": cred.label})
+
+        for spec in inbound_specs(endpoint):
+            clients = [{**c, "flow": spec["flow"]} for c in base_clients]
+            if spec["network"] == "tcp":
+                stream_settings = {
+                    "network": "tcp",
+                    "security": "reality",
+                    "realitySettings": {
+                        "show": False,
+                        "dest": params.get("dest", ""),
+                        "serverNames": params.get("server_names", []),
+                        "privateKey": private_key,
+                        "shortIds": params.get("short_ids", []),
+                    },
+                }
+                if params.get("accept_proxy"):
+                    stream_settings["tcpSettings"] = {"acceptProxyProtocol": True}
+            else:
+                # Обычный TLS с настоящим сертификатом своего домена — то, чем
+                # отвечает Reality всем, кто пришёл без его ключа, и что
+                # видит DPI: сайт, чьё имя совпадает с адресом.
+                tls = params.get("tls") or {}
+                stream_settings = {
+                    "network": spec["network"],
+                    "security": "tls",
+                    "tlsSettings": {
+                        "certificates": [
+                            {"certificateFile": tls.get("cert", ""), "keyFile": tls.get("key", "")}
+                        ],
+                        "alpn": spec["alpn"],
+                        "minVersion": "1.2",
+                    },
+                }
+                if spec["network"] == "xhttp":
+                    stream_settings["xhttpSettings"] = {"path": spec["path"]}
+                else:
+                    stream_settings["wsSettings"] = {"path": spec["path"]}
+
+            inbounds.append(
+                {
+                    "tag": spec["tag"],
+                    "listen": spec["listen"],
+                    "port": spec["port"],
+                    "protocol": "vless",
+                    "settings": {"clients": clients, "decryption": "none"},
+                    "streamSettings": stream_settings,
+                    "sniffing": {"enabled": True, "destOverride": ["http", "tls"]},
+                }
             )
-
-        stream_settings = {
-            "network": "tcp",
-            "security": "reality",
-            "realitySettings": {
-                "show": False,
-                "dest": params.get("dest", ""),
-                "serverNames": params.get("server_names", []),
-                "privateKey": private_key,
-                "shortIds": params.get("short_ids", []),
-            },
-        }
-        if params.get("accept_proxy"):
-            stream_settings["tcpSettings"] = {"acceptProxyProtocol": True}
-
-        inbounds.append(
-            {
-                "tag": f"in-{endpoint.handle}",
-                "listen": params.get("listen_addr") or "0.0.0.0",
-                "port": endpoint.listen_port,
-                "protocol": "vless",
-                "settings": {"clients": clients, "decryption": "none"},
-                "streamSettings": stream_settings,
-                "sniffing": {"enabled": True, "destOverride": ["http", "tls"]},
-            }
-        )
 
     return {
         "log": {"loglevel": "warning"},
@@ -300,12 +321,62 @@ def _inbound_tag(endpoint: NodeEndpoint) -> str:
     return f"in-{endpoint.handle}"
 
 
+def inbound_specs(endpoint: NodeEndpoint) -> list[dict]:
+    """
+    Все входы xray одной точки VLESS: Reality на её порту и, если у точки
+    есть настоящий сертификат (params.tls), ещё XHTTP+TLS на loopback (в него
+    Reality отдаёт всех, кто пришёл без ключа, — так один 443 обслуживает и
+    Reality, и обычный TLS) и WS+TLS на своём порту. Учётки во всех входах
+    одни и те же, различается только flow: vision живёт лишь на TCP-Reality.
+    """
+    params = endpoint.params or {}
+    specs = [
+        {
+            "tag": _inbound_tag(endpoint),
+            "listen": params.get("listen_addr") or "0.0.0.0",
+            "port": int(endpoint.listen_port),
+            "network": "tcp",
+            "flow": params.get("flow", FLOW),
+            "path": "",
+            "alpn": [],
+        }
+    ]
+    tls = params.get("tls") or {}
+    if tls.get("cert") and tls.get("key"):
+        xhttp = params.get("xhttp") or {}
+        if xhttp.get("port"):
+            specs.append(
+                {
+                    "tag": f"{_inbound_tag(endpoint)}-xhttp",
+                    "listen": xhttp.get("listen") or "127.0.0.1",
+                    "port": int(xhttp["port"]),
+                    "network": "xhttp",
+                    "flow": "",
+                    "path": xhttp.get("path") or "/",
+                    "alpn": ["h2", "http/1.1"],
+                }
+            )
+        ws = params.get("ws") or {}
+        if ws.get("port"):
+            specs.append(
+                {
+                    "tag": f"{_inbound_tag(endpoint)}-ws",
+                    "listen": ws.get("listen") or "0.0.0.0",
+                    "port": int(ws["port"]),
+                    "network": "ws",
+                    "flow": "",
+                    "path": ws.get("path") or "/",
+                    "alpn": ["http/1.1"],
+                }
+            )
+    return specs
+
+
 def _client_of(cred: UserEndpointCred, endpoint: NodeEndpoint) -> dict | None:
     identity = cred.identity
     if not identity:
         return None
-    params = endpoint.params or {}
-    return {"id": identity, "flow": params.get("flow", FLOW), "email": cred.label}
+    return {"id": identity, "email": cred.label}
 
 
 _TOTAL = re.compile(r"(Added|Removed) (\d+) user\(s\) in total")
@@ -334,17 +405,21 @@ def hot_add(server: Server, endpoint: NodeEndpoint, clients: list[dict]) -> bool
     """
     if not clients:
         return True
-    params = endpoint.params or {}
+    specs = inbound_specs(endpoint)
     payload = json.dumps(
         {
             "inbounds": [
                 {
-                    "tag": _inbound_tag(endpoint),
-                    "listen": params.get("listen_addr") or "0.0.0.0",
-                    "port": endpoint.listen_port,
+                    "tag": spec["tag"],
+                    "listen": spec["listen"],
+                    "port": spec["port"],
                     "protocol": "vless",
-                    "settings": {"clients": clients, "decryption": "none"},
+                    "settings": {
+                        "clients": [{**c, "flow": spec["flow"]} for c in clients],
+                        "decryption": "none",
+                    },
                 }
+                for spec in specs
             ]
         },
         ensure_ascii=False,
@@ -359,7 +434,7 @@ cat > "$tmp"
     out = provisioning.run_over_ssh_with_input(server, script, payload)
     added = _count(out, "Added")
     present = (out or "").count("already exists")
-    ok = added >= 0 and added + present >= len(clients)
+    ok = added >= 0 and added + present >= len(clients) * len(specs)
     if not ok:
         log.warning(
             "узел %s: xray не принял учётки через API: %s", server.name, (out or "").strip()[-400:]
@@ -373,14 +448,15 @@ def hot_remove(server: Server, endpoint: NodeEndpoint, emails: list[str]) -> boo
     if not emails:
         return True
     args = " ".join(provisioning._quote(e) for e in emails)
-    command = (
+    command = " ; ".join(
         f"{XRAY_BIN} api rmu -s {_api_addr(endpoint)} -t 5 "
-        f"-tag={provisioning._quote(_inbound_tag(endpoint))} {args} 2>&1 || true"
-    )
+        f"-tag={provisioning._quote(spec['tag'])} {args} 2>&1"
+        for spec in inbound_specs(endpoint)
+    ) + " ; true"
     out = provisioning.run_over_ssh(server, command)
-    removed = _count(out, "Removed")
+    removed = sum(int(m.group(2)) for m in _TOTAL.finditer(out or "") if m.group(1) == "Removed")
     missing = (out or "").count("not found")
-    ok = removed >= 0 and removed + missing >= len(emails)
+    ok = removed + missing >= len(emails) * len(inbound_specs(endpoint))
     if not ok:
         log.warning(
             "узел %s: xray не снял учётки через API: %s", server.name, (out or "").strip()[-400:]
@@ -748,6 +824,57 @@ def share_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -
     return f"vless://{identity}@{host}:{port}?{tail}#{name}"
 
 
+def tls_links(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -> list[str]:
+    """
+    Ссылки vless:// обычного TLS на свой домен: XHTTP (через 443 — Reality
+    пропускает к нему всех без своего ключа) и WebSocket на отдельном порту.
+    Для сотовых сетей это главный путь: DPI видит HTTPS к сайту, чьё имя
+    совпадает с адресом и сертификат настоящий.
+    """
+    params = endpoint.params or {}
+    tls = params.get("tls") or {}
+    identity = cred.identity
+    if not identity or not tls.get("host"):
+        return []
+    from urllib.parse import quote, urlencode
+
+    from .. import geo
+
+    host = endpoint.public_host(server)
+    sni = tls["host"]
+    label = f"{geo.flag(server.country_code)} {server.country or server.name}"
+    out: list[str] = []
+    xhttp = params.get("xhttp") or {}
+    if xhttp.get("port"):
+        port = xhttp.get("advertise_port") or endpoint.listen_port
+        query = {
+            "type": "xhttp",
+            "security": "tls",
+            "sni": sni,
+            "host": sni,
+            "fp": "chrome",
+            "path": xhttp.get("path") or "/",
+            "mode": "auto",
+            "alpn": "h2,http/1.1",
+        }
+        out.append(f"vless://{identity}@{host}:{port}?{urlencode(query)}#{quote(label + ' · XHTTP')}")
+    ws = params.get("ws") or {}
+    if ws.get("port"):
+        query = {
+            "type": "ws",
+            "security": "tls",
+            "sni": sni,
+            "host": sni,
+            "fp": "chrome",
+            "path": ws.get("path") or "/",
+            "alpn": "http/1.1",
+        }
+        out.append(
+            f"vless://{identity}@{host}:{int(ws['port'])}?{urlencode(query)}#{quote(label + ' · WS')}"
+        )
+    return out
+
+
 def hy2_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -> str | None:
     """
     Ссылка hysteria2:// для того же узла и той же учётки.
@@ -771,7 +898,9 @@ def hy2_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -> 
     ports = str(hy2["port"])
     if hy2.get("hop"):
         ports += f",{hy2['hop']}"
-    query = {"sni": hy2.get("sni") or "", "insecure": "1"}
+    query = {"sni": hy2.get("sni") or ""}
+    if hy2.get("tls") != "real":
+        query["insecure"] = "1"
     if hy2.get("obfs"):
         query["obfs"] = "salamander"
         query["obfs-password"] = str(hy2["obfs"])

@@ -102,8 +102,53 @@ def reality_outbound(
     }
 
 
-def hysteria_outbound(tag: str, host: str, port: int, identity: str, *, server_name: str) -> dict:
-    """Выход Hysteria2 в записи Happ. Сертификат узла самоподписанный — allowInsecure."""
+def tls_outbound(
+    tag: str,
+    host: str,
+    port: int,
+    identity: str,
+    *,
+    network: str,
+    server_name: str,
+    path: str,
+    alpn: list[str],
+    fingerprint: str = "chrome",
+) -> dict:
+    """VLESS поверх обычного TLS на свой домен: network — «xhttp» или «ws»."""
+    stream = {
+        "network": network,
+        "security": "tls",
+        "tlsSettings": {
+            "serverName": server_name,
+            "fingerprint": fingerprint,
+            "alpn": list(alpn),
+            "enableSessionResumption": False,
+        },
+    }
+    if network == "xhttp":
+        stream["xhttpSettings"] = {"host": server_name, "path": path, "mode": "auto"}
+    else:
+        stream["wsSettings"] = {"host": server_name, "path": path, "headers": {}}
+    return {
+        "tag": tag,
+        "protocol": "vless",
+        "settings": {
+            "vnext": [
+                {
+                    "address": host,
+                    "port": int(port),
+                    "users": [{"id": identity, "encryption": "none", "flow": ""}],
+                }
+            ]
+        },
+        "streamSettings": stream,
+    }
+
+
+def hysteria_outbound(
+    tag: str, host: str, port: int, identity: str, *, server_name: str, allow_insecure: bool = True
+) -> dict:
+    """Выход Hysteria2 в записи Happ; allow_insecure — пока сертификат самоподписанный."""
     return {
         "tag": tag,
         "protocol": "hysteria",
@@ -116,7 +161,7 @@ def hysteria_outbound(tag: str, host: str, port: int, identity: str, *, server_n
                 "serverName": server_name,
                 "fingerprint": "chrome",
                 "enableSessionResumption": False,
-                "allowInsecure": True,
+                "allowInsecure": bool(allow_insecure),
             },
             "hysteriaSettings": {"auth": identity, "version": 2},
             "finalmask": {"quicParams": {"congestion": "bbr", "debug": False}},

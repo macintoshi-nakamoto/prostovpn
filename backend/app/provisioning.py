@@ -273,6 +273,25 @@ PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -D FORWARD -o %i -j ACC
 CONF
 chmod 600 {conf}
 touch {lock}; chmod 600 {lock}
+# Сетевые настройки узла. Умолчания ядра рассчитаны на рабочую станцию, а
+# здесь сотни туннелей, и каждый промах стоит потерянных пакетов:
+#  fq считает весь туннель одного клиента единственным потоком и режет его
+#    по flow_limit — на одном из узлов так потерялось 415 тысяч пакетов;
+#  буфер сокета в 208 КБ переполняется на всплеске;
+#  probing нужен там, где оператор режет ICMP и размер пути не определяется;
+#  запасные порты работают через NAT-редирект, живущий записью conntrack.
+cat > /etc/sysctl.d/99-prosto-net.conf <<'SYSCTL'
+net.core.default_qdisc = fq_codel
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.core.netdev_max_backlog = 4096
+net.ipv4.tcp_mtu_probing = 1
+net.ipv4.tcp_base_mss = 1024
+net.netfilter.nf_conntrack_udp_timeout_stream = 180
+SYSCTL
+sysctl -p /etc/sysctl.d/99-prosto-net.conf >/dev/null 2>&1 || true
+EGRESS_Q=$(ip route show default | awk '/default/{{print $5; exit}}')
+[ -n "$EGRESS_Q" ] && tc qdisc replace dev $EGRESS_Q root fq_codel 2>/dev/null || true
 systemctl enable --now awg-quick@{interface}
 if command -v ufw >/dev/null && ufw status | grep -q '^Status: active'; then
   ufw allow {port}/udp >/dev/null || true

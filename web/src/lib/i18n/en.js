@@ -1032,7 +1032,10 @@ export const en = {
 
   keys: {
     title: "Keys for devices",
-    lead: "One key per device — delete the one you do not need, the rest keep working.",
+    lead: "A key for every device. Delete the one you do not need — the rest keep working.",
+    tabSub: "Happ etc.",
+    online: "connected",
+    pickCountry: "Pick a country",
     issue: "Issue a key",
     autoName: "Device {n}",
     noLabel: "No name",

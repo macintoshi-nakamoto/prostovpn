@@ -2946,6 +2946,89 @@ html.app .kx {
   flex-direction: column;
   gap: 10px;
 }
+
+/* Две вкладки: ссылка-подписка и ключ Amnezia. Они не взаимозаменяемы,
+   и держать их в общем списке значило бы объяснять в каждой строке, что
+   это за ключ. Бегунок едет по замеру — надписи разной длины. */
+html.app .kx-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--tma-inset);
+}
+html.app .kx-pill {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1),
+    width 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+}
+html.app .kx-tab {
+  position: relative;
+  z-index: 1;
+  min-height: 36px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+html.app .kx-tab.is-on {
+  color: #fff;
+}
+
+/* Флаг слева в строке ключа: он же переключает страну, если их несколько. */
+html.app .kx-flag {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+html.app .kx-flag svg.sheet-flag,
+html.app .kx-flag .sheet-flag-code {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-faint);
+}
+html.app .kx-flag-ic {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+}
+html.app .kx-flag-ic svg {
+  width: 13px;
+  height: 13px;
+}
+/* Настоящий select поверх: в Telegram он открывает системный список. */
+html.app .kx-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
 html.app .kx-row {
   display: flex;
   flex-direction: column;
@@ -3078,10 +3161,19 @@ html.app .kx-add {
   color: var(--accent);
   cursor: pointer;
 }
-html.app .kx-add:disabled {
+html.app .kx-add:disabled,
+html.app .kx-add.is-off {
   opacity: 0.5;
   cursor: default;
   color: var(--text-faint);
+}
+/* У вкладки Amnezia кнопка — label со скрытым списком стран внутри. */
+html.app .kx-add {
+  position: relative;
+}
+/* Имя ключа Amnezia не редактируется: там страна, менять нечего. */
+html.app .kx-name-flat {
+  cursor: default;
 }
 html.app .kx-add-ic {
   display: grid;

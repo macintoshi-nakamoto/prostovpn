@@ -1,22 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Sheet } from "./Sheet.jsx";
-import { api } from "../lib/api";
+import { Flag } from "./Flags.jsx";
+import { api, ApiError } from "../lib/api";
 import { tmaHaptic } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 
 /**
  * Ключи для устройств.
  *
- * Всё про установку живёт на своём экране, поэтому здесь осталась одна
- * задача: посмотреть, какие ключи выпущены, выпустить ещё и убрать
- * ненужный. Отсюда и лист снизу вместо полноэкранной страницы — заходят
- * сюда на полминуты.
+ * Всё про установку живёт на своём экране, поэтому здесь одна задача:
+ * посмотреть выпущенное, добавить ещё, убрать лишнее. Заходят на
+ * полминуты — отсюда лист снизу, а не страница.
  *
- * Ключ выпускается сразу, с именем по умолчанию: придумывать название до
- * выпуска незачем, подписать можно потом и не обязательно.
+ * Ключи двух видов, и они не взаимозаменяемы: Happ и подобные берут
+ * ссылку-подписку (одна на все страны, обновляется сама), AmneziaVPN —
+ * готовый ключ vpn:// на одну страну. Отсюда вкладки: в общем списке
+ * пришлось бы в каждой строке объяснять, что это за ключ.
  */
-
-const MAX_KEYS = 5;
 
 const COPY = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -47,9 +47,28 @@ const PLUS = (
     <path d="M12 5v14M5 12h14" />
   </svg>
 );
+const CHEV = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M8 10l4-4 4 4" />
+    <path d="M16 14l-4 4-4-4" />
+  </svg>
+);
 
-/** Одна выпущенная ссылка. */
-function Row({ item, busy, copied, onCopy, onRename, onRevoke, t }) {
+/** Строка со ссылкой и копированием. Слева может стоять выбор страны. */
+function Link({ value, lead, copied, onCopy, t }) {
+  return (
+    <div className="kx-link">
+      {lead}
+      <span className="kx-link-v">{value}</span>
+      <button type="button" className="kx-icon" aria-label={t("su.copyAria")} onClick={onCopy}>
+        {copied ? CHECK : COPY}
+      </button>
+    </div>
+  );
+}
+
+/** Ссылка-подписка: имя своё, ключ один на все страны. */
+function SubRow({ item, busy, copied, onCopy, onRename, onRevoke, t }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(item.label || "");
 
@@ -103,15 +122,8 @@ function Row({ item, busy, copied, onCopy, onRename, onRevoke, t }) {
       </div>
 
       {item.url_vless ? (
-        <div className="kx-link">
-          <span className="kx-link-v">{item.url_vless}</span>
-          <button type="button" className="kx-icon" aria-label={t("su.copyAria")} onClick={onCopy}>
-            {copied ? CHECK : COPY}
-          </button>
-        </div>
+        <Link value={item.url_vless} copied={copied} onCopy={onCopy} t={t} />
       ) : (
-        // Ссылки нет у тех, что выпущены до того, как мы стали хранить её
-        // обратимо. Восстановить нечего — только выпустить новую.
         <span className="kx-gone">{t("keys.gone")}</span>
       )}
 
@@ -120,75 +132,256 @@ function Row({ item, busy, copied, onCopy, onRename, onRevoke, t }) {
   );
 }
 
+/**
+ * Ключ Amnezia. Имени у него нет — есть страна, менять нечего. Внутри
+ * одного ключа стран бывает несколько (наследие прежней выдачи), поэтому
+ * страна переключается флагом, как на экране установки.
+ */
+function VpnRow({ group, busy, copied, onCopy, onRevoke, t }) {
+  const [at, setAt] = useState(0);
+  const link = group.links[Math.min(at, group.links.length - 1)];
+
+  return (
+    <div className="kx-row">
+      <div className="kx-top">
+        <span className="kx-name kx-name-flat">{t("account.tmaKeyN", { n: group.slot })}</span>
+        <button
+          type="button"
+          className="kx-icon kx-danger"
+          aria-label={t("keys.revoke")}
+          disabled={busy}
+          onClick={onRevoke}
+        >
+          {TRASH}
+        </button>
+      </div>
+
+      <Link
+        value={link.vpn_url}
+        copied={copied}
+        onCopy={() => onCopy(link.vpn_url)}
+        t={t}
+        lead={
+          <label className="kx-flag" title={link.country || link.server}>
+            <Flag code={link.country_code} title={link.country || link.server} />
+            {group.links.length > 1 && <span className="kx-flag-ic">{CHEV}</span>}
+            {group.links.length > 1 && (
+              <select
+                className="kx-native"
+                value={String(at)}
+                onChange={(e) => {
+                  tmaHaptic("light");
+                  setAt(Number(e.target.value));
+                }}
+              >
+                {group.links.map((one, i) => (
+                  <option key={one.server_id} value={String(i)}>
+                    {one.country || one.server}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+        }
+      />
+
+      <span className="kx-when">
+        {(link.country || link.server) +
+          " · " +
+          (link.is_connected ? t("keys.online") : t("keys.neverUsed"))}
+      </span>
+    </div>
+  );
+}
+
 export function TmaExternalKeys({ open, onClose }) {
   const { t } = useI18n();
 
+  const [tab, setTab] = useState("sub");
   const [keys, setKeys] = useState(null);
+  const [ios, setIos] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(0);
+  const [copied, setCopied] = useState("");
 
-  const load = () =>
+  // Бегунок вкладок ставим по замеру кнопки: надписи разной длины, а доли
+  // ширины здесь дают промах.
+  const [tabsEl, setTabsEl] = useState(null);
+  const [pill, setPill] = useState(null);
+
+  const loadSubs = () =>
     api
       .subscriptionKeys()
       .then((r) => setKeys(Array.isArray(r) ? r : []))
       .catch(() => setKeys([]));
 
+  const loadIos = () =>
+    api
+      .account()
+      .then((r) => setIos(r?.ios || {}))
+      .catch(() => setIos({}));
+
   useEffect(() => {
-    if (open) load();
+    if (!open) return;
+    loadSubs();
+    loadIos();
   }, [open]);
 
-  const list = keys || [];
-  const left = Math.max(MAX_KEYS - list.length, 0);
+  useLayoutEffect(() => {
+    if (!tabsEl) return undefined;
+    const place = () => {
+      const on = tabsEl.querySelector(".kx-tab.is-on");
+      if (!on) return;
+      const c = tabsEl.getBoundingClientRect();
+      const b = on.getBoundingClientRect();
+      if (!b.width) return;
+      setPill({ left: Math.round(b.left - c.left), width: Math.round(b.width) });
+    };
+    place();
+    const ro = new ResizeObserver(place);
+    ro.observe(tabsEl);
+    return () => ro.disconnect();
+  }, [tabsEl, tab]);
 
-  const issue = () => {
+  const copy = async (value, mark) => {
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      tmaHaptic("light");
+      setCopied(mark);
+      setTimeout(() => setCopied((cur) => (cur === mark ? "" : cur)), 1400);
+    } catch {}
+  };
+
+  const fail = (err) => {
+    const code = err instanceof ApiError ? err.code : "";
+    setError(
+      code === "no_subscription"
+        ? t("account.iosNoSubscription")
+        : err instanceof ApiError
+          ? err.message
+          : t("keys.failed"),
+    );
+  };
+
+  const limit = ios?.max_keys || 5;
+
+  // ── ссылки-подписки ───────────────────────────────────────────────────
+  const subs = keys || [];
+  const subLeft = Math.max(limit - subs.length, 0);
+
+  const issueSub = () => {
     setBusy(true);
     setError("");
     tmaHaptic("light");
     api
-      .issueSubscriptionKey(t("keys.autoName", { n: list.length + 1 }))
-      .then(load)
-      .catch((problem) => setError(problem?.message || t("keys.failed")))
+      .issueSubscriptionKey(t("keys.autoName", { n: subs.length + 1 }))
+      .then(loadSubs)
+      .catch(fail)
       .finally(() => setBusy(false));
   };
 
-  const rename = (id, label) => {
-    api.renameSubscriptionKey(id, label).then(load).catch(() => {});
-  };
+  // ── ключи Amnezia ─────────────────────────────────────────────────────
+  const groups = [];
+  for (const key of ios?.keys || []) {
+    const found = groups.find((g) => g.slot === key.slot);
+    if (found) found.links.push(key);
+    else groups.push({ slot: key.slot, links: [key] });
+  }
+  const servers = ios?.servers || [];
+  const vpnLeft = Math.max(limit - groups.length, 0);
 
-  const revoke = (id) => {
+  const issueVpn = (serverId) => {
     setBusy(true);
-    api
-      .revokeSubscriptionKey(id)
-      .then(load)
-      .catch(() => {})
+    setError("");
+    tmaHaptic("light");
+    const call = ios?.available ? api.addIosKey(serverId) : api.enableIos(serverId);
+    call
+      .then(loadIos)
+      .catch(fail)
       .finally(() => setBusy(false));
   };
 
-  const copy = async (item) => {
-    try {
-      await navigator.clipboard.writeText(item.url_vless);
-      tmaHaptic("light");
-      setCopied(item.id);
-      setTimeout(() => setCopied((cur) => (cur === item.id ? 0 : cur)), 1400);
-    } catch {}
+  const revokeVpn = (slot) => {
+    setBusy(true);
+    setError("");
+    api
+      .deleteIosKey(slot)
+      .then(loadIos)
+      .catch(fail)
+      .finally(() => setBusy(false));
   };
+
+  const TABS = [
+    { id: "sub", title: t("keys.tabSub") },
+    { id: "vpn", title: "AmneziaVPN" },
+  ];
+  const loading = tab === "sub" ? keys === null : ios === null;
+  const left = tab === "sub" ? subLeft : vpnLeft;
+  const canAddVpn = vpnLeft > 0 && servers.length > 0 && !busy;
 
   return (
     <Sheet open={open} title={t("keys.title")} sub={t("keys.lead")} onClose={onClose}>
       <div className="kx">
-        {keys === null ? (
+        <div className="kx-tabs" role="tablist" ref={setTabsEl}>
+          {pill && (
+            <span
+              className="kx-pill"
+              style={{ transform: `translateX(${pill.left}px)`, width: pill.width }}
+            />
+          )}
+          {TABS.map((one) => (
+            <button
+              key={one.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === one.id}
+              className={"kx-tab" + (tab === one.id ? " is-on" : "")}
+              onClick={() => {
+                if (one.id === tab) return;
+                tmaHaptic("light");
+                setError("");
+                setTab(one.id);
+              }}
+            >
+              {one.title}
+            </button>
+          ))}
+        </div>
+
+        {loading ? (
           <p className="kx-gone">{t("su.waitFile")}</p>
-        ) : (
-          list.map((item) => (
-            <Row
+        ) : tab === "sub" ? (
+          subs.map((item) => (
+            <SubRow
               key={item.id}
               item={item}
               busy={busy}
-              copied={copied === item.id}
-              onCopy={() => copy(item)}
-              onRename={(label) => rename(item.id, label)}
-              onRevoke={() => revoke(item.id)}
+              copied={copied === "s" + item.id}
+              onCopy={() => copy(item.url_vless, "s" + item.id)}
+              onRename={(label) =>
+                api.renameSubscriptionKey(item.id, label).then(loadSubs).catch(() => {})
+              }
+              onRevoke={() => {
+                setBusy(true);
+                api
+                  .revokeSubscriptionKey(item.id)
+                  .then(loadSubs)
+                  .catch(() => {})
+                  .finally(() => setBusy(false));
+              }}
+              t={t}
+            />
+          ))
+        ) : (
+          groups.map((group) => (
+            <VpnRow
+              key={group.slot}
+              group={group}
+              busy={busy}
+              copied={copied === "v" + group.slot}
+              onCopy={(url) => copy(url, "v" + group.slot)}
+              onRevoke={() => revokeVpn(group.slot)}
               t={t}
             />
           ))
@@ -196,11 +389,44 @@ export function TmaExternalKeys({ open, onClose }) {
 
         {error && <p className="kx-error">{error}</p>}
 
-        <button type="button" className="kx-add" disabled={busy || left === 0} onClick={issue}>
-          <span className="kx-add-ic">{PLUS}</span>
-          {t("keys.issue")}
-          <span className="kx-left">{left > 0 ? t("keys.left", { n: left }) : t("keys.full")}</span>
-        </button>
+        {tab === "sub" ? (
+          <button
+            type="button"
+            className="kx-add"
+            disabled={busy || subLeft === 0}
+            onClick={issueSub}
+          >
+            <span className="kx-add-ic">{PLUS}</span>
+            {t("keys.issue")}
+            <span className="kx-left">
+              {left > 0 ? t("keys.left", { n: left }) : t("keys.full")}
+            </span>
+          </button>
+        ) : (
+          // Ключ Amnezia выдаётся на одну страну, поэтому кнопка сразу
+          // спрашивает какую — системным списком, как везде на установке.
+          <label className={"kx-add" + (canAddVpn ? "" : " is-off")}>
+            <span className="kx-add-ic">{PLUS}</span>
+            {t("keys.issue")}
+            <span className="kx-left">
+              {left > 0 ? t("keys.left", { n: left }) : t("keys.full")}
+            </span>
+            {canAddVpn && (
+              <select
+                className="kx-native"
+                value=""
+                onChange={(e) => e.target.value && issueVpn(Number(e.target.value))}
+              >
+                <option value="">{t("keys.pickCountry")}</option>
+                {servers.map((one) => (
+                  <option key={one.id} value={String(one.id)}>
+                    {one.country || one.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+        )}
       </div>
     </Sheet>
   );

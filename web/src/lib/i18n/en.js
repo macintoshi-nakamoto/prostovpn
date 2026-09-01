@@ -1080,80 +1080,12 @@ export const en = {
     noKey: "This link was issued long ago and is no longer shown. Issue a new one in the keys section.",
     noFile: "The file is not available yet — open the guide on the site.",
   },
+  // Из прежнего раздела установки живёт одна эта подпись. Остальное
+  // описывало приложение для iPhone, которого у нас нет, и страницу
+  // в Google Play, которой тоже нет: экран установки давно
+  // рассказывает всё сам, а мёртвый текст ждал, пока его оживят.
   setup: {
-    pick: {
-      title: "How would you like to connect?",
-      lead: "Two ways to the same VPN. The choice isn't final — you can switch at any time.",
-      app: {
-        badge: "We recommend",
-        title: "Our app",
-        lead: "One tap to install, and it handles the network on its own.",
-        p1: "Switches protocol by itself when the provider starts interfering",
-        p2: "Moves to another country by itself if a node stops answering",
-        p3: "Keys refresh quietly — nothing to paste",
-        action: "Show setup",
-      },
-      ext: {
-        badge: "For your own apps",
-        title: "Another app",
-        lead: "Happ, Hiddify, v2rayNG and the like — if you already use something of your own.",
-        p1: "One link adds all our countries at once",
-        p2: "Traffic left and expiry show right in the app",
-        p3: "Protocol and country you switch by hand",
-        action: "Get a key",
-      },
-      foot: "Both work fine together: the apps don't interfere, and keys are issued separately for each device.",
-    },
-    app: {
-      hint: "Installing our app",
-    },
-    moreGuide: "Full setup guide with screenshots",
     noteLabel: "Signing in to the app",
-    note:
-      "Signing in is the same on every platform: login {login} and the password for this " +
-      "account. No keys and no config files — the app pulls the country list itself.",
-    soon: "Soon",
-    helpText: "Something won't connect? Telegram support replies fast.",
-    windows: {
-      title: "Installing on Windows",
-      button: "Download for Windows",
-      steps: [
-        ["Download the installer", "Windows 10 and 11 are supported. The .msi takes under a minute."],
-        ["Run the file", "The tunnel driver installs automatically and the app appears in the Start menu."],
-        ["Sign in", "Use the same login and password as here, in your account."],
-        ["Press the connect button", "A server is picked for you, or choose a country by hand."],
-      ],
-    },
-    ios: {
-      title: "Installing on iPhone and iPad",
-      button: "Open the App Store",
-      steps: [
-        ["Download the app", "Find Prosto VPN in the App Store on the device itself."],
-        ["Sign in", "The login and password are the same as here, in your account."],
-        ["Allow the VPN configuration", "iOS asks you to confirm adding the profile — tap “Allow”."],
-        ["Press the connect button", "A server is picked automatically."],
-      ],
-    },
-    android: {
-      title: "Installing on Android",
-      button: "Open Google Play",
-      steps: [
-        ["Download the app", "Prosto VPN is on Google Play; for devices without Google services there's an APK on the site."],
-        ["Sign in", "Use the login and password from your account."],
-        ["Confirm the system prompt", "Android asks permission to create a VPN connection — tap “OK”."],
-        ["Turn on autostart", "In the app settings, enable connecting when the system starts."],
-      ],
-    },
-    macos: {
-      title: "Installing on macOS",
-      button: "Download for macOS",
-      steps: [
-        ["Download the installer", "The .dmg works on both Apple Silicon and Intel."],
-        ["Move it to Applications", "Open the image and drag Prosto VPN into the Applications folder."],
-        ["Sign in and allow the profile", "On first launch macOS asks for an administrator password."],
-        ["Pin it to the menu bar", "The menu bar icon connects in one click."],
-      ],
-    },
   },
 
   password: {

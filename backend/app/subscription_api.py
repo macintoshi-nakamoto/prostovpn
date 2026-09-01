@@ -346,6 +346,12 @@ def _wanted_format(explicit: str | None, agent: str | None, accept: str | None) 
     return "json"
 
 
+ANNOUNCE = (
+    "На мобильном интернете выбирайте сервер с пометкой Hysteria2 — "
+    "он проходит там, где остальное режут."
+)
+
+
 def _profile_headers(db: OrmSession, tok: SubscriptionToken) -> dict[str, str]:
     """
     Заголовки, по которым приложение показывает остаток и само обновляется.
@@ -366,11 +372,18 @@ def _profile_headers(db: OrmSession, tok: SubscriptionToken) -> dict[str, str]:
         parts.append(f"expire={int(ends.replace(tzinfo=dt.timezone.utc).timestamp())}")
 
     title = base64.b64encode("ProstoVPN".encode()).decode()
+    # Объявление Happ показывает прямо в приложении (до 200 знаков) — так
+    # люди, которые в кабинет больше не заходят, узнают про Hysteria2.
+    announce = base64.b64encode(ANNOUNCE.encode()).decode()
     return {
         "Subscription-Userinfo": "; ".join(parts),
         "Profile-Title": f"base64:{title}",
-        "Profile-Update-Interval": "12",
+        # Два часа, а не двенадцать: новые узлы и протоколы доходят до
+        # приложений в тот же день, а ответ по ETag почти ничего не стоит.
+        "Profile-Update-Interval": "2",
         "Profile-Web-Page-Url": settings().site_url.rstrip("/") + "/account",
+        "Support-Url": settings().support_telegram,
+        "Announce": f"base64:{announce}",
     }
 
 

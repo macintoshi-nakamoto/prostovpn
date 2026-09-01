@@ -1055,6 +1055,9 @@ export const en = {
     tabOther: "Happ etc.",
     ourLead: "The same login and password. Countries load by themselves.",
     amneziaLead: "Tap «Open in AmneziaVPN» — the key adds itself. Or copy it and paste manually.",
+    amneziaVlessHint:
+      "Not connecting on mobile data? Add the second link to AmneziaVPN — same server over Reality: paste it as a regular key.",
+    amneziaVlessLabel: "Reality link (backup)",
     vlessLead: "Tap the button below — the app opens and picks the key up itself. Or copy it and paste manually.",
     install: "Install {app}",
     key: "Key",

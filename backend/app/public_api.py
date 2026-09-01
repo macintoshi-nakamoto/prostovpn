@@ -352,6 +352,9 @@ class IosKeyOut(BaseModel):
     city: str | None = None
     vpn_url: str
     qr_payload: str | None = None
+    # Тот же узел по Reality — на случай, когда AmneziaWG не проходит:
+    # AmneziaVPN понимает ссылку vless:// как обычный импорт.
+    vless_url: str | None = None
     traffic_bytes: int = 0
     last_handshake_at: dt.datetime | None = None
     created_at: dt.datetime | None = None
@@ -476,6 +479,44 @@ def _device_connected(user: User, device_id: str, now: dt.datetime) -> bool:
     return False
 
 
+def _amnezia_vless_url(db: OrmSession, user: User, key: "services.ios.IosKey") -> str | None:
+    """
+    Ссылка Reality того же узла для ключа AmneziaVPN.
+
+    Учётка VLESS заводится на устройство ключа (слот iOS) и досылается на
+    узел через API xray без перезапуска; повторный запрос отдаёт ту же.
+    Любая неудача — просто без ссылки: ключ AmneziaWG важнее.
+    """
+    if not key.is_active:
+        return None
+    from .models import EndpointKind, Server, ios_slot
+    from .services import xray
+
+    try:
+        server = db.get(Server, key.server_id)
+        if server is None:
+            return None
+        live = [
+            ep
+            for ep in server.endpoints
+            if ep.kind == EndpointKind.VLESS and ep.is_live and xray.is_on_node(ep)
+        ]
+        if not live:
+            return None
+        endpoint = sorted(live, key=lambda e: (e.priority, e.id))[0]
+        device_id = ios_slot(key.slot)
+        creds = xray.live_creds(db, user, server, device_id)
+        cred = next((c for c in creds if c.endpoint_id == endpoint.id), None)
+        if cred is None:
+            if not endpoint.accepts_new:
+                return None
+            cred = xray.issue_cred(db, user, server, endpoint, device_id)
+        return xray.share_link(endpoint, cred, server)
+    except Exception:
+        log.exception("ключ AmneziaVPN %s: ссылка Reality не собралась", key.id)
+        return None
+
+
 def _ios_out(db: OrmSession, user: User, now: dt.datetime) -> IosOut:
     servers = [
         IosServerOut(
@@ -510,6 +551,7 @@ def _ios_out(db: OrmSession, user: User, now: dt.datetime) -> IosOut:
             city=key.city,
             vpn_url=key.vpn_url,
             qr_payload=key.qr_payload,
+            vless_url=_amnezia_vless_url(db, user, key),
             traffic_bytes=key.traffic_bytes,
             last_handshake_at=key.last_handshake_at,
             created_at=key.created_at,

@@ -476,6 +476,18 @@ export function SetupScreen({ open, onClose, onKeys }) {
                 >
                   {t("su.openIn", { app: meta.name })}
                 </button>
+                {vpn.vless_url && (
+                  <>
+                    <span className="su-step-s">{t("su.amneziaVlessHint")}</span>
+                    <Field
+                      label={t("su.amneziaVlessLabel")}
+                      value={vpn.vless_url}
+                      copied={copied === "vless"}
+                      onCopy={() => copy(vpn.vless_url, "vless")}
+                      t={t}
+                    />
+                  </>
+                )}
               </>
             ) : (
               <span className="su-wait">{t("su.noVpnKey")}</span>

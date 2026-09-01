@@ -51,7 +51,7 @@ const APPS = {
     name: "Happ",
     kind: "sub",
     on: { ios: 1, android: 1, mac: 1, win: 1 },
-    deep: (url) => `happ://add/${encodeURIComponent(url)}`,
+    deep: (url) => `happ://add/${url}`,
     store: {
       ios: "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
       mac: "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
@@ -314,7 +314,15 @@ export function SetupScreen({ open, onClose, onKeys }) {
 
   const meta = APPS[app] || APPS[DEFAULT_APP[device]];
   const file = (downloads || []).find((r) => r.platform === OUR_BUILD[device]);
-  const subUrl = (keys || []).find((k) => k.url)?.url_vless || "";
+  const key = (keys || []).find((k) => k.url) || null;
+  // Копируют — отдаём с явным форматом: вставить могут во что угодно, а
+  // угадывать по User-Agent там будет нечего.
+  const subUrl = key?.url_vless || "";
+  // По ссылке-переходу — голый адрес, без «?format». Приложение известно и
+  // само назовётся в User-Agent, а знак вопроса внутри deep link разберётся
+  // как его собственный параметр и отрежет хвост. У Happ адрес идёт сырым
+  // (так в его документации), поэтому и кодировать его нельзя.
+  const deepUrl = key?.url || "";
 
   // По одному ключу на страну, а не по набору.
   //
@@ -489,7 +497,7 @@ export function SetupScreen({ open, onClose, onKeys }) {
                   t={t}
                 />
                 {meta.deep && (
-                  <a className="ap-cta su-cta su-cta-alt" href={meta.deep(subUrl)}>
+                  <a className="ap-cta su-cta su-cta-alt" href={meta.deep(deepUrl)}>
                     {t("su.openIn", { app: meta.name })}
                   </a>
                 )}

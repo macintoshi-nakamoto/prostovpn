@@ -2698,6 +2698,22 @@ html.app .au-forgot {
     min-width: 230px;
     padding: 0 32px;
   }
+  /* Кнопок на карточке две, и ячейку сетки они занимают вместе. Правило
+     выше писалось на одну: с двумя обе получали одну и ту же ячейку и
+     ложились друг на друга. Место отдаём паре, а кнопкам внутри
+     размещение сбрасываем — они делят свою колонку сами. */
+  html.app .ap-home .ap-duo {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+  html.app .ap-home .ap-duo .ap-cta {
+    grid-column: auto;
+    grid-row: auto;
+    justify-self: stretch;
+    min-width: 150px;
+    padding: 0 22px;
+  }
   /* Нет подписки: приглашение слева, CTA справа, статы третьей строкой.
      Без :has — по соседству, чтобы старые вебвью не получили наложение. */
   html.app .ap-home .ap-sub {

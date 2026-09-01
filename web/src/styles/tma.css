@@ -761,6 +761,26 @@ html.app .ap-cta:active {
   transition-duration: 0.06s;
 }
 
+/* Пара кнопок на карточке подписки: продлить и подключить устройство.
+   Ровно пополам — обе нужны, и ни одна не важнее настолько, чтобы занимать
+   всю ширину. Живёт здесь, рядом с ap-cta, а не в хвосте файла: там эти
+   правила однажды уже попали под замену соседнего блока. */
+html.app .ap-duo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+/* Второе действие той же формы, но без заливки: цветом на карточке
+   выделено одно. */
+html.app .ap-cta-alt {
+  border: 1px solid var(--tma-hair);
+  background: none;
+  color: var(--ink);
+}
+html.app .ap-cta-alt:hover {
+  background: var(--tma-inset);
+}
+
 /* Мини-статы под CTA — через тонкий разделитель */
 html.app .ap-mini {
   display: flex;

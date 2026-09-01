@@ -1513,7 +1513,10 @@ html.app .scr-back:active {
 html.app .scr-body {
   flex: 1;
   overflow-y: auto;
-  padding: 14px 16px calc(24px + env(safe-area-inset-bottom, 0px));
+  /* Боковые поля ровно как у страниц кабинета (.wrap на узком экране —
+     20px). Было 16, и экран поверх стоял на четыре пикселя шире всего
+     остального — глазом это читается как «сделано отдельно». */
+  padding: 14px 20px calc(24px + env(safe-area-inset-bottom, 0px));
 }
 /* Экран без шапки: тело само отступает от чёлки. */
 html.app .scr-bare .scr-body {
@@ -3412,4 +3415,12 @@ html.app .su-more {
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+/* Второе действие на экране установки: та же пилюля, но обводкой —
+   цветом выделено одно, «скачать» или «установить». */
+html.app .su-cta-alt {
+  border: 1px solid var(--tma-hair);
+  background: none;
+  color: var(--ink);
+  box-shadow: none;
 }

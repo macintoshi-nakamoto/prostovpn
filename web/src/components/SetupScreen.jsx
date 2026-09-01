@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { ScreenShell } from "./ScreenShell.jsx";
 import { api } from "../lib/api";
-import { isTma, tmaHaptic, tmaOpenLink } from "../lib/telegram.js";
+import { isTma, tmaHaptic, tmaOpenApp, tmaOpenLink } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 
 /**
@@ -180,6 +180,11 @@ export function SetupScreen({ open, onClose, onKeys }) {
   const [downloads, setDownloads] = useState(null);
   const [creds, setCreds] = useState(null);
   const [keys, setKeys] = useState(null);
+  // Ключи для AmneziaVPN — это не ссылка-подписка, а готовые vpn://
+  // по одному на страну. Ссылку она не принимает: в неё вставляют сам
+  // ключ. Берём те же, что кабинет отдаёт для iPhone.
+  const [vpnKeys, setVpnKeys] = useState(null);
+  const [country, setCountry] = useState(0);
   const [copied, setCopied] = useState("");
 
   // Бегунок переключателя ставим по измеренной кнопке, а не по доле
@@ -199,6 +204,10 @@ export function SetupScreen({ open, onClose, onKeys }) {
     api.downloads().then((r) => alive && setDownloads(Array.isArray(r) ? r : [])).catch(() => alive && setDownloads([]));
     api.credentials().then((r) => alive && setCreds(r)).catch(() => alive && setCreds({}));
     api.subscriptionKeys().then((r) => alive && setKeys(Array.isArray(r) ? r : [])).catch(() => alive && setKeys([]));
+    api
+      .account()
+      .then((r) => alive && setVpnKeys(r?.ios?.keys || []))
+      .catch(() => alive && setVpnKeys([]));
     return () => {
       alive = false;
     };
@@ -245,6 +254,18 @@ export function SetupScreen({ open, onClose, onKeys }) {
   const ourPlatform = OUR_PLATFORM[platform] || "windows";
   const file = (downloads || []).find((r) => r.platform === ourPlatform);
   const vlessApps = VLESS_APPS.filter((a) => a.on.includes(platform));
+
+  // Ключи выдаются наборами на устройство (слот), внутри набора — по
+  // одному на страну. Здесь настраивают одно устройство, поэтому берём
+  // первый набор: иначе в выборе стран лежала бы каша из всех слотов с
+  // повторяющимися названиями.
+  const vpnSet = useMemo(() => {
+    const all = vpnKeys || [];
+    if (!all.length) return [];
+    const slot = all[0].slot;
+    return all.filter((k) => k.slot === slot);
+  }, [vpnKeys]);
+  const vpn = vpnSet[Math.min(country, Math.max(vpnSet.length - 1, 0))] || null;
 
   const TABS = [
     { id: "ours", title: t("su.tabOurs") },
@@ -387,7 +408,52 @@ export function SetupScreen({ open, onClose, onKeys }) {
               {t("su.install", { app: "AmneziaVPN" })}
             </a>
             <p className="su-note">{t("su.amneziaLead")}</p>
-            {keyLine("amnezia")}
+
+            {vpnKeys === null ? (
+              <p className="su-wait">{t("su.waitFile")}</p>
+            ) : vpn ? (
+              <>
+                {/* Ключ у каждой страны свой — выбор нужен здесь, а не
+                    где-то в настройках приложения. */}
+                {vpnSet.length > 1 && (
+                  <div className="su-os">
+                    {vpnSet.map((one, i) => (
+                      <button
+                        key={one.slot + "-" + one.server_id}
+                        type="button"
+                        className={"su-os-b" + (i === country ? " is-on" : "")}
+                        onClick={() => {
+                          tmaHaptic("light");
+                          setCountry(i);
+                        }}
+                      >
+                        {one.country || one.server}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <Field
+                  label={t("su.key")}
+                  value={vpn.vpn_url}
+                  mono
+                  copied={copied === "vpn"}
+                  onCopy={() => copy(vpn.vpn_url, "vpn")}
+                  t={t}
+                />
+                <button
+                  type="button"
+                  className="ap-cta su-cta su-cta-alt"
+                  onClick={() => {
+                    tmaHaptic("light");
+                    tmaOpenApp(vpn.vpn_url);
+                  }}
+                >
+                  {t("su.openIn", { app: "AmneziaVPN" })}
+                </button>
+              </>
+            ) : (
+              <p className="su-wait">{t("su.noVpnKey")}</p>
+            )}
           </>
         )}
 

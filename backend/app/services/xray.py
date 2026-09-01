@@ -553,6 +553,11 @@ def revoke_cred(db: OrmSession, cred: UserEndpointCred) -> None:
             push_to_node(db, endpoint.server, remove=[(endpoint, cred.label)])
         else:
             push_to_node(db, endpoint.server)
+        # Hysteria2 спрашивает панель только при подключении — живую сессию
+        # отозванного надо выкинуть отдельно.
+        from . import hy2
+
+        hy2.kick(endpoint.server, [cred.label or ""])
 
 
 def revoke_for_user(db: OrmSession, user_id: int, device_id: str | None = None) -> int:
@@ -597,6 +602,9 @@ def revoke_for_user(db: OrmSession, user_id: int, device_id: str | None = None) 
             push_to_node(db, server, remove=removals[server_id])
         else:
             push_to_node(db, server)
+        from . import hy2
+
+        hy2.kick(server, [label for _endpoint, label in removals[server_id]])
     return len(rows)
 
 

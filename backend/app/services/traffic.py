@@ -181,6 +181,12 @@ def sync_all_traffic(db: OrmSession) -> list[dict[str, object]]:
             out.append(xray.sync_traffic(db, server))
         except Exception as exc:
             log.warning("узел %s: обход VLESS не удался: %s", server.name, exc)
+        from . import hy2
+
+        try:
+            out.append(hy2.sync_traffic(db, server))
+        except Exception as exc:
+            log.warning("узел %s: обход Hysteria2 не удался: %s", server.name, exc)
     return out
 
 

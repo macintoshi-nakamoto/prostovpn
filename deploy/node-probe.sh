@@ -125,6 +125,9 @@ else
 fi
 echo "redirects=$(iptables -t nat -S PREROUTING 2>/dev/null | grep -c REDIRECT)"
 echo "load=$(cut -d' ' -f1 /proc/loadavg)"
+echo "kernel=$(uname -r)"
+echo "pending_kernel=$(ls /boot/vmlinuz-* 2>/dev/null | sed 's#.*/vmlinuz-##' | sort -V | tail -1)"
+echo "reboot_required=$([ -f /var/run/reboot-required ] && echo yes || echo no)"
 REMOTE_EOF
 
 report=()
@@ -155,6 +158,17 @@ for row in "${NODES[@]}"; do
         fi
         [[ "${v[redirects]:-0}" -ge 1 ]] || problems+=("нет редиректов запасных портов")
         info+=("нагрузка ${v[load]:-?}")
+
+        # Обновление ядра ставится само (unattended-upgrades), а перезагрузка
+        # остаётся за человеком: один раз напоминаем про каждое новое ядро.
+        if [[ "${v[reboot_required]:-no}" == "yes" && -n "${v[pending_kernel]:-}" && "${v[pending_kernel]}" != "${v[kernel]:-}" ]]; then
+            kfile="$STATE_DIR/$id.kernel"
+            if [[ "$(cat "$kfile" 2>/dev/null)" != "${v[pending_kernel]}" ]]; then
+                echo "${v[pending_kernel]}" > "$kfile"
+                tell "ℹ️ Узел $country ($host): установлено ядро ${v[pending_kernel]}, работает ${v[kernel]} — нужна перезагрузка. Модуль AmneziaWG под новое ядро собирает DKMS; после ребута всё поднимается само (проверено 02.09.2026)."
+            fi
+            info+=("ждёт перезагрузки: ${v[pending_kernel]}")
+        fi
     fi
 
     # Снаружи: Reality обязан ответить сертификатом донора.

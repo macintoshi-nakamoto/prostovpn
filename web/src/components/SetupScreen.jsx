@@ -309,14 +309,22 @@ export function SetupScreen({ open, onClose, onKeys }) {
   const file = (downloads || []).find((r) => r.platform === OUR_BUILD[device]);
   const subUrl = (keys || []).find((k) => k.url)?.url_vless || "";
 
-  // Ключи Amnezia выдаются наборами на устройство, внутри набора — по
-  // одному на страну. Здесь настраивают одно устройство, поэтому берём
-  // первый набор: иначе в выборе стран лежала бы каша из всех слотов.
+  // По одному ключу на страну, а не по набору.
+  //
+  // Ключ Amnezia выдаётся на одну страну (набор ios-N), и стран у человека
+  // столько, сколько он ключей завёл. Раньше здесь брался первый набор —
+  // и страны из остальных просто не показывались: ключ на Польшу лежал в
+  // третьем наборе и в списке не появлялся. Наборы с двумя странами
+  // остались с прежних времён, поэтому одну и ту же страну отсеиваем:
+  // человеку нужен выбор стран, а не список наборов.
   const vpnSet = useMemo(() => {
-    const all = vpnKeys || [];
-    if (!all.length) return [];
-    const slot = all[0].slot;
-    return all.filter((k) => k.slot === slot);
+    const seen = new Set();
+    return (vpnKeys || []).filter((k) => {
+      const name = k.country || k.server || String(k.server_id);
+      if (seen.has(name)) return false;
+      seen.add(name);
+      return true;
+    });
   }, [vpnKeys]);
   const vpn = vpnSet[Math.min(country, Math.max(vpnSet.length - 1, 0))] || null;
 

@@ -3316,29 +3316,6 @@ html.app .su-cta-alt {
   color: var(--accent);
 }
 
-/* Страны у ключа Amnezia. */
-html.app .su-os {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-html.app .su-os-b {
-  padding: 8px 14px;
-  border: 1px solid var(--tma-hair);
-  border-radius: 999px;
-  background: none;
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-html.app .su-os-b.is-on {
-  border-color: transparent;
-  background: var(--accent);
-  color: #fff;
-}
-
 html.app .su-wait {
   font-size: 14px;
   line-height: 1.45;
@@ -3359,6 +3336,41 @@ html.app .su-field-k {
   flex: none;
   font-size: 14px;
   color: var(--text-faint);
+}
+/* Флаг вместо подписи: у ключа Amnezia он же и переключает страну.
+   Стрелки нет, когда страна одна — нажимать не на что. */
+html.app .su-flag {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 2px 4px 0;
+  cursor: pointer;
+}
+html.app .su-flag svg.sheet-flag,
+html.app .su-flag .sheet-flag-code {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-faint);
+  background: var(--tma-hair);
+}
+html.app .su-flag svg.sheet-flag {
+  background: none;
+}
+html.app .su-flag-ic {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+}
+html.app .su-flag-ic svg {
+  width: 14px;
+  height: 14px;
 }
 html.app .su-field-v {
   flex: 1;

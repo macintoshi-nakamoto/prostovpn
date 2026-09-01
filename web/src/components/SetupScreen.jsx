@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ScreenShell } from "./ScreenShell.jsx";
+import { Flag } from "./Flags.jsx";
 import { api } from "../lib/api";
 import { isTma, tmaHaptic, tmaOpenApp, tmaOpenLink } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
@@ -213,14 +214,20 @@ function Pick({ label, value, options, onChange }) {
   );
 }
 
-/** Строка со значением: подпись, значение, кнопки. */
-function Field({ label, value, secret, copied, onCopy, t }) {
+/**
+ * Строка со значением: слева подпись, дальше значение и кнопки.
+ *
+ * Вместо подписи слева может стоять что угодно (`lead`) — у ключа Amnezia
+ * там выбор страны: ключ на каждую страну свой, и переключать его удобнее
+ * прямо в строке, а не отдельным рядом кнопок над ней.
+ */
+function Field({ label, lead, value, secret, copied, onCopy, t }) {
   const [shown, setShown] = useState(false);
   if (!value) return null;
   const hidden = secret && !shown;
   return (
     <div className="su-field">
-      <span className="su-field-k">{label}</span>
+      {lead || <span className="su-field-k">{label}</span>}
       <span className="su-field-v su-mono">
         {hidden ? "•".repeat(Math.min(value.length, 28)) : value}
       </span>
@@ -419,25 +426,33 @@ export function SetupScreen({ open, onClose, onKeys }) {
               <span className="su-wait">{t("su.waitFile")}</span>
             ) : vpn ? (
               <>
-                {vpnSet.length > 1 && (
-                  <div className="su-os">
-                    {vpnSet.map((one, i) => (
-                      <button
-                        key={one.slot + "-" + one.server_id}
-                        type="button"
-                        className={"su-os-b" + (i === country ? " is-on" : "")}
-                        onClick={() => {
-                          tmaHaptic("light");
-                          setCountry(i);
-                        }}
-                      >
-                        {one.country || one.server}
-                      </button>
-                    ))}
-                  </div>
-                )}
                 <Field
-                  label={t("su.key")}
+                  lead={
+                    <label
+                      className="su-flag"
+                      title={vpn.country || vpn.server}
+                      aria-label={vpn.country || vpn.server}
+                    >
+                      <Flag code={vpn.country_code} title={vpn.country || vpn.server} />
+                      {vpnSet.length > 1 && <span className="su-flag-ic">{CHEV}</span>}
+                      {vpnSet.length > 1 && (
+                        <select
+                          className="su-pick-native"
+                          value={String(country)}
+                          onChange={(e) => {
+                            tmaHaptic("light");
+                            setCountry(Number(e.target.value));
+                          }}
+                        >
+                          {vpnSet.map((one, i) => (
+                            <option key={one.slot + "-" + one.server_id} value={String(i)}>
+                              {one.country || one.server}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </label>
+                  }
                   value={vpn.vpn_url}
                   copied={copied === "vpn"}
                   onCopy={() => copy(vpn.vpn_url, "vpn")}

@@ -71,3 +71,11 @@ def country_en(code: str | None, fallback: str | None = None) -> str | None:
     if not code:
         return fallback
     return COUNTRY_NAMES_EN.get(code.strip().upper(), fallback)
+
+
+def flag(code: str | None) -> str:
+    """Флаг страны из кода (NL → 🇳🇱); без кода — глобус."""
+    value = (code or "").strip().upper()
+    if len(value) != 2 or not value.isalpha():
+        return "\U0001F310"
+    return "".join(chr(0x1F1E6 + ord(ch) - ord("A")) for ch in value)

@@ -741,7 +741,9 @@ def share_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -
     from urllib.parse import quote, urlencode
 
     tail = urlencode({k: v for k, v in query.items() if v})
-    name = quote(f"{server.country or server.name}")
+    from .. import geo
+
+    name = quote(f"{geo.flag(server.country_code)} {server.country or server.name}")
     port = (params.get("advertise_port")) or endpoint.listen_port
     return f"vless://{identity}@{host}:{port}?{tail}#{name}"
 
@@ -774,5 +776,7 @@ def hy2_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -> 
         query["obfs"] = "salamander"
         query["obfs-password"] = str(hy2["obfs"])
     tail = urlencode({k: v for k, v in query.items() if v})
-    name = quote(f"{server.country or server.name} · Hysteria2")
+    from .. import geo
+
+    name = quote(f"{geo.flag(server.country_code)} {server.country or server.name} · Hysteria2")
     return f"hysteria2://{identity}@{host}:{ports}/?{tail}#{name}"

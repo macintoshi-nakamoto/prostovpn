@@ -268,6 +268,120 @@ def _amnezia_body(
     return base64.b64encode("\n".join(links).encode()).decode()
 
 
+def _vless_targets(db: OrmSession, tok: SubscriptionToken, background: BackgroundTasks | None):
+    """(узел, точка VLESS, учётка) для каждого узла, где Reality на ходу."""
+    from .models import EndpointKind
+    from .services import xray
+
+    user = tok.user
+    out = []
+    for server, _key in _serve_targets(db, user, tok.device_id, background):
+        if server.provisioning != Provisioning.SSH:
+            continue
+        live = [
+            ep
+            for ep in server.endpoints
+            if ep.kind == EndpointKind.VLESS and ep.is_live and xray.is_on_node(ep)
+        ]
+        if not live:
+            continue
+        endpoint = sorted(live, key=lambda e: (e.priority, e.id))[0]
+        try:
+            creds = xray.live_creds(db, user, server, tok.device_id)
+            cred = next((c for c in creds if c.endpoint_id == endpoint.id), None)
+            if cred is None:
+                if not endpoint.accepts_new:
+                    continue
+                cred = xray.issue_cred(db, user, server, endpoint, tok.device_id)
+            if cred.identity:
+                out.append((server, endpoint, cred))
+        except Exception:
+            log.exception("сервер «%s» пропущен: не собралась учётка VLESS", server.name)
+    return out
+
+
+def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTasks | None) -> str:
+    """
+    Массив готовых конфигов Xray для Happ: «Лучший сервер» со всеми узлами
+    и обоими протоколами под балансировщиком, затем каждый узел отдельно —
+    Reality и Hysteria2. Российские сайты во всех конфигах идут напрямую.
+    """
+    from . import happ
+
+    reality: list[tuple] = []
+    hysteria: list[tuple] = []
+    for server, endpoint, cred in _vless_targets(db, tok, background):
+        params = endpoint.params or {}
+        extra = cred.extra or {}
+        names = params.get("server_names") or [""]
+        host = endpoint.public_host(server)
+        port = params.get("advertise_port") or endpoint.listen_port
+        identity = cred.identity
+
+        def build_reality(
+            tag: str,
+            _host=host,
+            _port=port,
+            _identity=identity,
+            _params=params,
+            _extra=extra,
+            _sni=names[0],
+        ) -> dict:
+            return happ.reality_outbound(
+                tag,
+                _host,
+                _port,
+                _identity,
+                public_key=_params.get("public_key", ""),
+                short_id=_extra.get("short_id", ""),
+                server_name=_sni,
+                fingerprint=_params.get("fingerprint", "chrome"),
+                flow=_extra.get("flow", _params.get("flow", "xtls-rprx-vision")),
+            )
+
+        reality.append((server, build_reality))
+
+        hy2 = params.get("hy2") or {}
+        if hy2.get("port"):
+
+            def build_hysteria(tag: str, _host=host, _identity=identity, _hy2=hy2) -> dict:
+                return happ.hysteria_outbound(
+                    tag, _host, _hy2["port"], _identity, server_name=_hy2.get("sni") or ""
+                )
+
+            hysteria.append((server, build_hysteria))
+
+    configs: list[dict] = []
+    if len(reality) + len(hysteria) > 1:
+        outbounds = []
+        for index, (_server, build) in enumerate([*reality, *hysteria]):
+            outbounds.append(build("proxy" if index == 0 else f"proxy-{index + 1}"))
+        configs.append(
+            happ.config(
+                "🇪🇺 Лучший сервер",
+                outbounds,
+                description="Сам выбирает живой узел и протокол — для сотовой сети",
+            )
+        )
+    for server, build in reality:
+        configs.append(
+            happ.config(
+                happ.name(server.country_code, server.country or server.name),
+                [build("proxy")],
+                description="Reality",
+            )
+        )
+    for server, build in hysteria:
+        configs.append(
+            happ.config(
+                happ.name(server.country_code, f"{server.country or server.name} · Hysteria2"),
+                [build("proxy")],
+                description="Hysteria2 — для мобильной сети",
+            )
+        )
+    return json.dumps(configs, ensure_ascii=False)
+
+
 def _vless_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTasks | None) -> str:
     """
     Список `vless://` строк для сторонних приложений, как принято у всех:
@@ -334,6 +448,9 @@ def _wanted_format(explicit: str | None, agent: str | None, accept: str | None) 
         return explicit.strip().lower()
 
     ua = (agent or "").lower()
+    # Happ умеет готовые конфиги Xray — с маршрутизацией и балансировщиком.
+    if "happ" in ua:
+        return "happ"
     if any(name in ua for name in _VLESS_AGENTS):
         return "vless"
     if any(name in ua for name in _AMNEZIA_AGENTS):
@@ -347,8 +464,8 @@ def _wanted_format(explicit: str | None, agent: str | None, accept: str | None) 
 
 
 ANNOUNCE = (
-    "На мобильном интернете выбирайте сервер с пометкой Hysteria2 — "
-    "он проходит там, где остальное режут."
+    "Выберите «Лучший сервер» — он сам держит связь на живом узле и протоколе. "
+    "Российские сайты идут напрямую."
 )
 
 
@@ -414,6 +531,14 @@ def subscription(
     except Exception:
         log.exception("заголовки профиля не собрались")
         profile = {}
+
+    if wanted == "happ":
+        body = _happ_body(db, tok, background)
+        etag = _etag(body.encode())
+        headers = {**_CACHE, **profile, "ETag": etag}
+        if _if_none_match(if_none_match, etag):
+            return Response(status_code=304, headers=headers)
+        return Response(body.encode(), media_type="application/json", headers=headers)
 
     if wanted in ("amnezia", "vless"):
         body = (

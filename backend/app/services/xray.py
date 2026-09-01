@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import secrets
 import uuid
 
@@ -266,7 +267,7 @@ def build_config(db: OrmSession, server: Server) -> dict:
     }
 
 
-def apply_config(db: OrmSession, server: Server) -> None:
+def apply_config(db: OrmSession, server: Server, *, restart: bool = True) -> None:
     payload = json.dumps(build_config(db, server), ensure_ascii=False, indent=2)
     script = f"""set -e
 exec 9>>{XRAY_LOCK}
@@ -286,7 +287,105 @@ mv "$tmp" {XRAY_CONFIG}
 sync
 """
     provisioning.run_over_ssh_with_input(server, script, payload)
-    provisioning.run_over_ssh(server, f"systemctl restart {XRAY_UNIT}")
+    if restart:
+        provisioning.run_over_ssh(server, f"systemctl restart {XRAY_UNIT}")
+
+
+def _api_addr(endpoint: NodeEndpoint) -> str:
+    port = (endpoint.params or {}).get("api_port") or API_PORT
+    return f"127.0.0.1:{int(port)}"
+
+
+def _inbound_tag(endpoint: NodeEndpoint) -> str:
+    return f"in-{endpoint.handle}"
+
+
+def _client_of(cred: UserEndpointCred, endpoint: NodeEndpoint) -> dict | None:
+    identity = cred.identity
+    if not identity:
+        return None
+    params = endpoint.params or {}
+    return {"id": identity, "flow": params.get("flow", FLOW), "email": cred.label}
+
+
+_TOTAL = re.compile(r"(Added|Removed) (\d+) user\(s\) in total")
+
+
+def _count(out: str, word: str) -> int:
+    """«Added 1 user(s) in total.» → 1; строки нет → -1."""
+    for match in _TOTAL.finditer(out or ""):
+        if match.group(1) == word:
+            return int(match.group(2))
+    return -1
+
+
+def hot_add(server: Server, endpoint: NodeEndpoint, clients: list[dict]) -> bool:
+    """
+    Добавляет учётки в работающий xray через его API, без перезапуска.
+
+    Перезапуск рвёт все соединения Reality на узле разом, а учётки
+    выдаются часто: каждый новый ключ в Happ ронял бы всех, кто уже
+    сидит на этом узле. API-вход ждёт тот же JSON, что и конфиг, но
+    только с клиентами; порт и адрес обязательны — без них xray не
+    сопоставит вход и молча ничего не добавит.
+
+    Учётка, которая на узле уже есть, — не ошибка: так бывает после
+    перезапуска по свежему конфигу, где она уже записана.
+    """
+    if not clients:
+        return True
+    params = endpoint.params or {}
+    payload = json.dumps(
+        {
+            "inbounds": [
+                {
+                    "tag": _inbound_tag(endpoint),
+                    "listen": params.get("listen_addr") or "0.0.0.0",
+                    "port": endpoint.listen_port,
+                    "protocol": "vless",
+                    "settings": {"clients": clients, "decryption": "none"},
+                }
+            ]
+        },
+        ensure_ascii=False,
+    )
+    script = f"""set -e
+umask 077
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+cat > "$tmp"
+{XRAY_BIN} api adu -s {_api_addr(endpoint)} -t 5 "$tmp" 2>&1 || true
+"""
+    out = provisioning.run_over_ssh_with_input(server, script, payload)
+    added = _count(out, "Added")
+    present = (out or "").count("already exists")
+    ok = added >= 0 and added + present >= len(clients)
+    if not ok:
+        log.warning(
+            "узел %s: xray не принял учётки через API: %s", server.name, (out or "").strip()[-400:]
+        )
+    return ok
+
+
+def hot_remove(server: Server, endpoint: NodeEndpoint, emails: list[str]) -> bool:
+    """Снимает учётки с работающего xray. Уже отсутствующие — не ошибка."""
+    emails = [e for e in emails if e]
+    if not emails:
+        return True
+    args = " ".join(provisioning._quote(e) for e in emails)
+    command = (
+        f"{XRAY_BIN} api rmu -s {_api_addr(endpoint)} -t 5 "
+        f"-tag={provisioning._quote(_inbound_tag(endpoint))} {args} 2>&1 || true"
+    )
+    out = provisioning.run_over_ssh(server, command)
+    removed = _count(out, "Removed")
+    missing = (out or "").count("not found")
+    ok = removed >= 0 and removed + missing >= len(emails)
+    if not ok:
+        log.warning(
+            "узел %s: xray не снял учётки через API: %s", server.name, (out or "").strip()[-400:]
+        )
+    return ok
 
 
 def _mark_dirty(db: OrmSession, endpoint: NodeEndpoint) -> None:
@@ -294,12 +393,51 @@ def _mark_dirty(db: OrmSession, endpoint: NodeEndpoint) -> None:
     db.commit()
 
 
-def push_to_node(db: OrmSession, server: Server) -> bool:
+def push_to_node(
+    db: OrmSession,
+    server: Server,
+    *,
+    add: list[tuple[NodeEndpoint, dict]] | None = None,
+    remove: list[tuple[NodeEndpoint, str]] | None = None,
+) -> bool:
+    """
+    Доносит конфиг VLESS до узла.
+
+    Без add/remove — полный перезапуск xray: так применяются изменения самих
+    точек входа (донор, ключи, порт). С ними — конфиг на диск пишется тот же
+    (после перезагрузки узел поднимется в актуальном виде), а живому демону
+    учётки досылаются через API, и чужие соединения не рвутся. Не вышло
+    через API — перезапуск, как раньше: доступ важнее плавности.
+    """
+    hot = add is not None or remove is not None
     try:
-        apply_config(db, server)
+        apply_config(db, server, restart=not hot)
     except Exception as exc:
         log.warning("узел %s: конфиг VLESS не записан (%s), починим обходом", server.name, exc)
         return False
+
+    if hot:
+        live = True
+        try:
+            adds: dict[int, tuple[NodeEndpoint, list[dict]]] = {}
+            for endpoint, client in add or []:
+                adds.setdefault(endpoint.id, (endpoint, []))[1].append(client)
+            for endpoint, clients in adds.values():
+                live = hot_add(server, endpoint, clients) and live
+            gone: dict[int, tuple[NodeEndpoint, list[str]]] = {}
+            for endpoint, email in remove or []:
+                gone.setdefault(endpoint.id, (endpoint, []))[1].append(email)
+            for endpoint, emails in gone.values():
+                live = hot_remove(server, endpoint, emails) and live
+        except Exception as exc:
+            log.warning("узел %s: API xray недоступен (%s), перезапускаем", server.name, exc)
+            live = False
+        if not live:
+            try:
+                provisioning.run_over_ssh(server, f"systemctl restart {XRAY_UNIT}")
+            except Exception as exc:
+                log.warning("узел %s: xray не перезапущен (%s), починим обходом", server.name, exc)
+                return False
 
     applied = utcnow()
     for endpoint in db.scalars(
@@ -387,8 +525,16 @@ def issue_cred(
     db.commit()
     db.refresh(cred)
 
+    # Точка входа на узле в актуальном виде — досылаем одну учётку через
+    # API. Если же у неё накопились неприменённые изменения, нужен полный
+    # перезапуск, и учётка уедет вместе с ними.
+    was_live = is_on_node(endpoint)
     _mark_dirty(db, endpoint)
-    push_to_node(db, server)
+    client = _client_of(cred, endpoint)
+    if was_live and client is not None:
+        push_to_node(db, server, add=[(endpoint, client)])
+    else:
+        push_to_node(db, server)
     return cred
 
 
@@ -401,8 +547,12 @@ def revoke_cred(db: OrmSession, cred: UserEndpointCred) -> None:
     db.commit()
     endpoint = db.get(NodeEndpoint, cred.endpoint_id)
     if endpoint is not None:
+        was_live = is_on_node(endpoint)
         _mark_dirty(db, endpoint)
-        push_to_node(db, endpoint.server)
+        if was_live and cred.label:
+            push_to_node(db, endpoint.server, remove=[(endpoint, cred.label)])
+        else:
+            push_to_node(db, endpoint.server)
 
 
 def revoke_for_user(db: OrmSession, user_id: int, device_id: str | None = None) -> int:
@@ -425,13 +575,27 @@ def revoke_for_user(db: OrmSession, user_id: int, device_id: str | None = None) 
         endpoint_ids.add(cred.endpoint_id)
     db.commit()
 
+    # Снимаем через API, пока точки входа на узле в актуальном виде; хоть
+    # одна отстала — этот узел получает полный перезапуск.
+    hot_servers = set(server_ids)
+    removals: dict[int, list[tuple[NodeEndpoint, str]]] = {sid: [] for sid in server_ids}
     for endpoint_id in endpoint_ids:
         endpoint = db.get(NodeEndpoint, endpoint_id)
-        if endpoint is not None:
-            _mark_dirty(db, endpoint)
+        if endpoint is None:
+            continue
+        if not is_on_node(endpoint):
+            hot_servers.discard(endpoint.server_id)
+        _mark_dirty(db, endpoint)
+        for cred in rows:
+            if cred.endpoint_id == endpoint.id and cred.label:
+                removals[endpoint.server_id].append((endpoint, cred.label))
     for server_id in server_ids:
         server = db.get(Server, server_id)
-        if server is not None:
+        if server is None:
+            continue
+        if server_id in hot_servers:
+            push_to_node(db, server, remove=removals[server_id])
+        else:
             push_to_node(db, server)
     return len(rows)
 

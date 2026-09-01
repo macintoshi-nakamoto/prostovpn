@@ -780,8 +780,25 @@ class AppState(application: Application) : AndroidViewModel(application) {
         startConnectingNotice()
         connectJob = viewModelScope.launch {
             val prepared = buildConfigForConnect(config)
+            val ports = server?.altPorts ?: emptyList()
+            val hasVless = server?.vless != null
 
-            val result = tunnel.connect(prepared, server?.altPorts ?: emptyList())
+            // Порядок: первый порт AmneziaWG коротким окном → Reality на том
+            // же узле → остальные порты → соседняя страна. Reality идёт по
+            // TCP и переживает сети, где UDP не проходит вовсе, — на сотовой
+            // связи это обычное дело, а раньше до него доходили только после
+            // полутора минут перебора портов. Смена протокола дешевле смены
+            // страны: человек остаётся там, где выбрал.
+            var result = tunnel.connect(
+                prepared,
+                ports,
+                if (hasVless) TunnelManager.Stage.FIRST else TunnelManager.Stage.ALL,
+            )
+            if (result == TunnelManager.Result.NO_HANDSHAKE && hasVless) {
+                if (tryVless()) return@launch
+                if (phase != Phase.CONNECTING) return@launch
+                result = tunnel.connect(prepared, ports, TunnelManager.Stage.REST)
+            }
             when (result) {
                 TunnelManager.Result.CONNECTED -> {
                     phase = Phase.ON
@@ -789,13 +806,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     startTimer()
                 }
                 TunnelManager.Result.NO_HANDSHAKE -> {
-                    // Порты этой страны молчат. Сперва второй протокол на том
-                    // же узле: Reality идёт по TCP и переживает сети, где UDP
-                    // не проходит вовсе — сколько портов ни перебирай. Смена
-                    // протокола дешевле смены страны, человек остаётся там,
-                    // где выбрал. Не вышло — тогда уже соседняя страна: у неё
-                    // другая сеть, другой адрес и своя обфускация.
-                    if (!tryVless() && !failoverToAnotherServer()) {
+                    // Все порты и второй протокол промолчали — соседняя
+                    // страна: у неё другая сеть, другой адрес и своя
+                    // обфускация.
+                    if (!failoverToAnotherServer()) {
                         phase = Phase.OFF
                         connectionError = s.errNoHandshake
                         stopForegroundNotice()

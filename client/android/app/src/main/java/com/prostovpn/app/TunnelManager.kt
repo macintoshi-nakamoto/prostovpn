@@ -42,6 +42,15 @@ class TunnelManager(context: Context) {
 
     enum class Status { OFF, CONNECTING, ON, RECONNECTING }
 
+    /**
+     * Какую часть списка портов перебирать. FIRST — только первый кандидат,
+     * и коротким окном: за ним ждёт второй протокол, и полминуты тишины на
+     * UDP — это полминуты, которые человек на сотовой сети просидел бы зря.
+     * REST — всё, что после первого. ALL — как есть, когда запасного
+     * протокола у узла нет.
+     */
+    enum class Stage { ALL, FIRST, REST }
+
     private val _status = MutableStateFlow(Status.OFF)
     val status: StateFlow<Status> = _status.asStateFlow()
 
@@ -84,11 +93,15 @@ class TunnelManager(context: Context) {
 
     private fun prefs() = appContext.getSharedPreferences("prosto", 0)
 
-    suspend fun connect(configText: String, alternativePorts: List<Int> = emptyList()): Result {
+    suspend fun connect(
+        configText: String,
+        alternativePorts: List<Int> = emptyList(),
+        stage: Stage = Stage.ALL,
+    ): Result {
         wanted = configText
         alternatives = alternativePorts
         _status.value = Status.CONNECTING
-        val result = attemptConnect(configText, alternativePorts)
+        val result = attemptConnect(configText, alternativePorts, stage)
 
         if (wanted == null) return Result.CANCELLED
 
@@ -107,20 +120,34 @@ class TunnelManager(context: Context) {
     private suspend fun attemptConnect(
         configText: String,
         alternativePorts: List<Int>,
+        stage: Stage = Stage.ALL,
     ): Result = withContext(tunnelDispatcher) {
         mutex.withLock {
             val basePort = Endpoints.portOf(configText)
             val ports = Endpoints.order(basePort, rememberedPort, alternativePorts)
             var outcome = Result.NO_HANDSHAKE
 
-            val plan: List<Int?> = if (ports.isEmpty()) listOf(null) else ports
+            val full: List<Int?> = if (ports.isEmpty()) listOf(null) else ports
+            val plan: List<Int?> = when (stage) {
+                Stage.ALL -> full
+                Stage.FIRST -> full.take(1)
+                Stage.REST -> full.drop(1)
+            }
+            if (plan.isEmpty()) return@withLock Result.NO_HANDSHAKE
+            val quick = stage == Stage.FIRST && full.size > 1
 
             try {
                 for ((index, port) in plan.withIndex()) {
                     if (wanted == null) break
                     val text =
                         if (port == null) configText else Endpoints.withPort(configText, port)
-                    val result = tryEndpoint(text, port, first = index == 0, ofPorts = plan.size)
+                    val result = tryEndpoint(
+                        text,
+                        port,
+                        first = index == 0 && stage != Stage.REST,
+                        ofPorts = full.size,
+                        quick = quick,
+                    )
                     if (result == Result.CONNECTED) {
                         if (port != null) rememberedPort = port
                         return@withLock Result.CONNECTED
@@ -145,6 +172,7 @@ class TunnelManager(context: Context) {
         port: Int?,
         first: Boolean = true,
         ofPorts: Int = 1,
+        quick: Boolean = false,
     ): Result {
         val config = runCatching { parseConfig(configText) }
 
@@ -152,6 +180,7 @@ class TunnelManager(context: Context) {
             .getOrNull() ?: return Result.FAILED
 
         val attempts = when {
+            quick -> 1
             ofPorts <= 1 -> ATTEMPTS
             first -> ATTEMPTS_FIRST_PORT
             else -> ATTEMPTS_OTHER_PORT
@@ -165,6 +194,7 @@ class TunnelManager(context: Context) {
             delay(STARTUP_SETTLE_MS)
 
             val window = when {
+                quick -> PROBE_WINDOW_MS
                 ofPorts > 1 && !first -> OTHER_PORT_WINDOW_MS
                 attempt == 1 -> FIRST_WINDOW_MS
                 else -> RETRY_WINDOW_MS
@@ -450,6 +480,11 @@ class TunnelManager(context: Context) {
         private const val ATTEMPTS_FIRST_PORT = 2
         private const val ATTEMPTS_OTHER_PORT = 1
         private const val OTHER_PORT_WINDOW_MS = 12_000L
+
+        // Окно первого порта, когда следом ждёт второй протокол: рукопожатие
+        // на живом UDP приходит за секунды, а 15 секунд тишины — уже не
+        // заминка, а признак, что UDP здесь не ходит.
+        private const val PROBE_WINDOW_MS = 15_000L
 
         private const val HANDSHAKE_FRESH_MS = 60_000L
 

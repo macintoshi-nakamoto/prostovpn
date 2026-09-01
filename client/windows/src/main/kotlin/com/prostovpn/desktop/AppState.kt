@@ -950,6 +950,7 @@ class AppState(private val scope: CoroutineScope) {
             ).ifEmpty { listOf(0) }
 
             var lastFailure: WindowsTunnel.Result.Failure? = null
+            var triedVless = false
 
             for ((index, port) in candidates.withIndex()) {
                 if (phase != Phase.CONNECTING) return@launch
@@ -986,20 +987,30 @@ class AppState(private val scope: CoroutineScope) {
                     // иначе второй туннель встанет поверх первого.
                     withContext(Dispatchers.IO) { runCatching { tunnel.disconnect() } }
                 }
+
+                // Первый порт промолчал — прежде чем перебирать остальные,
+                // даём ход второму протоколу на том же узле: Reality идёт по
+                // TCP на 443 и переживает сети, где UDP не проходит вовсе,
+                // сколько портов ни перебирай. Раньше до него доходили только
+                // после всех портов — полторы минуты «подключение…» там, где
+                // UDP режут целиком. Смена протокола дешевле смены страны:
+                // человек остаётся там, где выбрал.
+                //
+                // Только после «нет рукопожатия». Отказ в правах или
+                // отсутствие движка повторятся и здесь, а лишнее окно UAC
+                // после того, как человек уже нажал «нет», — издевательство.
+                if (index == 0 && !triedVless && server?.vless != null) {
+                    triedVless = true
+                    if (tryVless()) return@launch
+                    if (phase != Phase.CONNECTING) return@launch
+                }
             }
 
             if (phase != Phase.CONNECTING) return@launch
 
-            // Порты этой страны молчат. Прежде чем уезжать в другую, пробуем
-            // второй протокол на том же узле: Reality идёт по TCP на 443 и
-            // переживает сети, где UDP не проходит вовсе — сколько портов ни
-            // перебирай. Смена протокола дешевле смены страны: человек
-            // остаётся там, где выбрал.
-            //
-            // Только после «нет рукопожатия». Отказ в правах или отсутствие
-            // движка повторятся и здесь, а лишнее окно UAC после того, как
-            // человек уже нажал «нет», — издевательство.
-            if (lastFailure == null || lastFailure.reason == WindowsTunnel.Reason.NoHandshake) {
+            // Второй протокол ещё не пробовали (порт был один, и молчал он) —
+            // пробуем сейчас, на тех же условиях.
+            if (!triedVless && (lastFailure == null || lastFailure.reason == WindowsTunnel.Reason.NoHandshake)) {
                 if (tryVless()) return@launch
             }
 

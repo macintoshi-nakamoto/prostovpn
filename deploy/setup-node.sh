@@ -50,7 +50,7 @@ log "Форвардинг и BBR"
 cat > /etc/sysctl.d/99-prosto-node.conf <<'SYS'
 net.ipv4.ip_forward = 1
 net.ipv6.conf.all.forwarding = 1
-net.core.default_qdisc = fq
+net.core.default_qdisc = fq_codel
 net.ipv4.tcp_congestion_control = bbr
 SYS
 sysctl --system >/dev/null
@@ -72,6 +72,7 @@ log "Готово"
 echo "   Дальше на этом же узле:"
 echo "     sudo bash deploy/setup-xray.sh                 # VLESS+Reality (443 здесь свободен)"
 echo "     sudo bash deploy/extra-ports.sh 443 4500 2408 8443 # запасные UDP-порты для AWG"
+echo "     sudo bash deploy/node-watchdog.sh --install       # сторож: awg, редиректы, xray"
 echo
 echo "   Про 443. На отдельном узле nginx нет, поэтому Reality вешается прямо"
 echo "   на 443/TCP — stream-слой с SNI-роутингом (deploy/server/reality-443)"

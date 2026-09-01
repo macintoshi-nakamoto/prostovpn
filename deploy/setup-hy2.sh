@@ -39,6 +39,9 @@ SERVICE_USER=prosto-hy2
 UNIT=/etc/systemd/system/prosto-hy2.service
 PORTS_FILE=/etc/prosto-hy2-ports.conf
 PORTS_BIN=/usr/local/bin/prosto-hy2-ports
+AUTH_BIN=/usr/local/bin/prosto-hy2-auth
+AUTH_CONF=/etc/prosto-hy2-auth.conf
+CACHE_DIR=/var/lib/prosto-hy2
 EXTRA_FILE=/etc/prosto-extra-ports.conf
 
 log()  { printf '\n\033[1;33m== %s\033[0m\n' "$*"; }
@@ -63,9 +66,9 @@ case "${1:-}" in
         log "Снимаем Hysteria2"
         systemctl disable --now prosto-hy2 2>/dev/null || true
         [[ -x "$PORTS_BIN" ]] && "$PORTS_BIN" --close || true
-        rm -f "$UNIT" "$PORTS_BIN" "$PORTS_FILE"
+        rm -f "$UNIT" "$PORTS_BIN" "$PORTS_FILE" "$AUTH_BIN" "$AUTH_CONF"
         systemctl daemon-reload
-        rm -rf "$DIR"
+        rm -rf "$DIR" "$CACHE_DIR"
         userdel "$SERVICE_USER" 2>/dev/null || true
         ok "снято; 443/UDP снова свободен — верните его AWG через extra-ports.sh"
         exit 0
@@ -124,11 +127,11 @@ tls:
 # сверка ни к чему — доступ решает панель, а не имя.
 sniGuard: disable
 
+# Доступ решает панель, но через скрипт с кэшем: пока панель недоступна
+# (перезапуск, сбой сети), знакомые пароли пускаются по памяти до недели.
 auth:
-  type: http
-  http:
-    url: ${PANEL_URL}/api/v1/hy2/auth
-    insecure: false
+  type: command
+  command: ${AUTH_BIN}
 
 # На HTTP/3-зонд без ключа отвечаем как настоящий сайт-донор.
 masquerade:
@@ -156,6 +159,15 @@ ignoreClientBandwidth: false
 udpIdleTimeout: 60s
 YAML
 chown root:"$SERVICE_USER" "$CFG"; chmod 0640 "$CFG"
+
+log "Проверка доступа через панель с кэшем"
+install -d -m 0700 -o "$SERVICE_USER" -g "$SERVICE_USER" "$CACHE_DIR"
+echo "PANEL_URL=$PANEL_URL" > "$AUTH_CONF"
+chmod 0644 "$AUTH_CONF"
+AUTH_SRC="$(dirname "$(readlink -f "$0")")/prosto-hy2-auth.sh"
+[[ -f "$AUTH_SRC" ]] || { warn "рядом нет prosto-hy2-auth.sh — положите его в ту же папку"; exit 1; }
+install -m 0755 -o root -g root "$AUTH_SRC" "$AUTH_BIN"
+ok "$AUTH_BIN, кэш $CACHE_DIR"
 
 log "Прыгающие порты ${HY2_HOP}/udp → ${HY2_PORT}"
 printf '%s %s\n' "${HY2_HOP/-/:}" "$HY2_PORT" > "$PORTS_FILE"
@@ -219,6 +231,7 @@ ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
 ReadOnlyPaths=${DIR}
+ReadWritePaths=${CACHE_DIR}
 LimitNOFILE=65536
 
 [Install]

@@ -169,6 +169,13 @@ export const api = {
       body: { label: label || null },
     }),
 
+  renameSubscriptionKey: (id, label) =>
+    request(`/api/v1/account/subscriptions/${id}`, {
+      method: "PATCH",
+      auth: true,
+      body: { label: label || null },
+    }),
+
   revokeSubscriptionKey: (id) =>
     request(`/api/v1/account/subscriptions/${id}`, { method: "DELETE", auth: true }),
 

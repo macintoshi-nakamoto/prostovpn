@@ -1,268 +1,207 @@
-import { useEffect, useMemo, useState } from "react";
-import { ScreenShell } from "./ScreenShell.jsx";
-import { QrCode } from "./QrCode.jsx";
+import { useEffect, useState } from "react";
+import { Sheet } from "./Sheet.jsx";
 import { api } from "../lib/api";
-import { isTma } from "../lib/telegram.js";
+import { tmaHaptic } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 
 /**
- * Ключ для стороннего приложения.
+ * Ключи для устройств.
  *
- * Всё держится на одной ссылке-подписке: приложение само разбирает, какой
- * формат ему нужен, само перечитывает ключи и показывает остаток трафика.
- * Человеку остаётся выбрать программу и один раз вставить ссылку — или
- * нажать кнопку, которая откроет её прямо в приложении.
+ * Всё про установку живёт на своём экране, поэтому здесь осталась одна
+ * задача: посмотреть, какие ключи выпущены, выпустить ещё и убрать
+ * ненужный. Отсюда и лист снизу вместо полноэкранной страницы — заходят
+ * сюда на полминуты.
+ *
+ * Ключ выпускается сразу, с именем по умолчанию: придумывать название до
+ * выпуска незачем, подписать можно потом и не обязательно.
  */
 
-/**
- * Приложения, которые понимают нашу подписку.
- *
- * `deep` — ссылка, по которой программа добавляет подписку сама. Формат у
- * каждой свой; где его нет, остаётся копирование, и это нормально.
- */
-const APPS = [
-  {
-    id: "happ",
-    name: "Happ",
-    platforms: ["ios", "android", "mac", "win"],
-    deep: (url) => `happ://add/${encodeURIComponent(url)}`,
-    store: {
-      ios: "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
-      android: "https://play.google.com/store/apps/details?id=com.happproxy",
-      mac: "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
-      win: "https://github.com/Happ-proxy/happ-desktop/releases/latest",
-    },
-  },
-  {
-    id: "hiddify",
-    name: "Hiddify",
-    platforms: ["ios", "android", "mac", "win"],
-    deep: (url) => `hiddify://import/${url}`,
-    store: {
-      ios: "https://apps.apple.com/app/hiddify-proxy-vpn/id6596777532",
-      android: "https://play.google.com/store/apps/details?id=app.hiddify.com",
-      mac: "https://github.com/hiddify/hiddify-app/releases/latest",
-      win: "https://github.com/hiddify/hiddify-app/releases/latest",
-    },
-  },
-  {
-    id: "v2rayng",
-    name: "v2rayNG",
-    platforms: ["android"],
-    deep: (url) => `v2rayng://install-sub?url=${encodeURIComponent(url)}`,
-    store: { android: "https://play.google.com/store/apps/details?id=com.v2ray.ang" },
-  },
-  {
-    id: "streisand",
-    name: "Streisand",
-    platforms: ["ios", "mac"],
-    deep: (url) => `streisand://import/${url}`,
-    store: {
-      ios: "https://apps.apple.com/app/streisand/id6450534064",
-      mac: "https://apps.apple.com/app/streisand/id6450534064",
-    },
-  },
-  {
-    id: "nekobox",
-    name: "NekoBox",
-    platforms: ["android"],
-    deep: null,
-    store: { android: "https://github.com/MatsuriDayo/NekoBoxForAndroid/releases/latest" },
-  },
-];
+const MAX_KEYS = 5;
 
-const PLATFORMS = ["ios", "android", "mac", "win"];
+const COPY = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="9" y="9" width="11" height="11" rx="2.5" />
+    <path d="M15 5.5A2.5 2.5 0 0 0 12.5 3h-7A2.5 2.5 0 0 0 3 5.5v7A2.5 2.5 0 0 0 5.5 15" />
+  </svg>
+);
+const CHECK = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4.5 12.5l5 5 10-11" />
+  </svg>
+);
+const PEN = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4 20h4L19 9a2.5 2.5 0 0 0-3.5-3.5L4.5 16.5z" />
+    <path d="M14.5 6.5l3 3" />
+  </svg>
+);
+const TRASH = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M4.5 6.5h15" />
+    <path d="M9 6.5V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v1.5" />
+    <path d="M6.5 6.5l1 12A1.5 1.5 0 0 0 9 20h6a1.5 1.5 0 0 0 1.5-1.5l1-12" />
+  </svg>
+);
+const PLUS = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
 
-function detectPlatform() {
-  if (typeof navigator === "undefined") return "android";
-  const ua = navigator.userAgent || "";
-  if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
-  if (/Android/i.test(ua)) return "android";
-  if (/Macintosh|Mac OS X/i.test(ua)) return "mac";
-  if (/Windows/i.test(ua)) return "win";
-  return "android";
+/** Одна выпущенная ссылка. */
+function Row({ item, busy, copied, onCopy, onRename, onRevoke, t }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(item.label || "");
+
+  const save = () => {
+    setEditing(false);
+    const next = name.trim();
+    if (next !== (item.label || "")) onRename(next);
+  };
+
+  return (
+    <div className="kx-row">
+      <div className="kx-top">
+        {editing ? (
+          <input
+            className="kx-name-input"
+            value={name}
+            autoFocus
+            maxLength={64}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                setName(item.label || "");
+                setEditing(false);
+              }
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="kx-name"
+            onClick={() => {
+              setName(item.label || "");
+              setEditing(true);
+            }}
+          >
+            {item.label || t("keys.noLabel")}
+            <span className="kx-pen">{PEN}</span>
+          </button>
+        )}
+        <button
+          type="button"
+          className="kx-icon kx-danger"
+          aria-label={t("keys.revoke")}
+          disabled={busy}
+          onClick={onRevoke}
+        >
+          {TRASH}
+        </button>
+      </div>
+
+      {item.url_vless ? (
+        <div className="kx-link">
+          <span className="kx-link-v">{item.url_vless}</span>
+          <button type="button" className="kx-icon" aria-label={t("su.copyAria")} onClick={onCopy}>
+            {copied ? CHECK : COPY}
+          </button>
+        </div>
+      ) : (
+        // Ссылки нет у тех, что выпущены до того, как мы стали хранить её
+        // обратимо. Восстановить нечего — только выпустить новую.
+        <span className="kx-gone">{t("keys.gone")}</span>
+      )}
+
+      <span className="kx-when">{item.last_used_at ? t("keys.used") : t("keys.neverUsed")}</span>
+    </div>
+  );
 }
 
 export function TmaExternalKeys({ open, onClose }) {
   const { t } = useI18n();
 
-  const [platform, setPlatform] = useState(detectPlatform);
   const [keys, setKeys] = useState(null);
-  const [fresh, setFresh] = useState(null);
-  const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState(0);
 
-  const load = () => {
+  const load = () =>
     api
       .subscriptionKeys()
-      .then((list) => setKeys(Array.isArray(list) ? list : []))
+      .then((r) => setKeys(Array.isArray(r) ? r : []))
       .catch(() => setKeys([]));
-  };
 
   useEffect(() => {
     if (open) load();
   }, [open]);
 
-  const apps = useMemo(() => APPS.filter((app) => app.platforms.includes(platform)), [platform]);
+  const list = keys || [];
+  const left = Math.max(MAX_KEYS - list.length, 0);
 
   const issue = () => {
     setBusy(true);
     setError("");
+    tmaHaptic("light");
     api
-      .issueSubscriptionKey(label.trim())
-      .then((created) => {
-        setFresh(created);
-        setLabel("");
-        load();
-      })
-      .catch((problem) => setError(problem?.message || t("setup.ext.failed")))
+      .issueSubscriptionKey(t("keys.autoName", { n: list.length + 1 }))
+      .then(load)
+      .catch((problem) => setError(problem?.message || t("keys.failed")))
       .finally(() => setBusy(false));
+  };
+
+  const rename = (id, label) => {
+    api.renameSubscriptionKey(id, label).then(load).catch(() => {});
   };
 
   const revoke = (id) => {
     setBusy(true);
     api
       .revokeSubscriptionKey(id)
-      .then(() => {
-        if (fresh?.id === id) setFresh(null);
-        load();
-      })
+      .then(load)
       .catch(() => {})
       .finally(() => setBusy(false));
   };
 
-  const copy = (value) => {
-    navigator.clipboard?.writeText(value).then(
-      () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1600);
-      },
-      () => {},
-    );
+  const copy = async (item) => {
+    try {
+      await navigator.clipboard.writeText(item.url_vless);
+      tmaHaptic("light");
+      setCopied(item.id);
+      setTimeout(() => setCopied((cur) => (cur === item.id ? 0 : cur)), 1400);
+    } catch {}
   };
 
-  const url = fresh?.url || "";
-
   return (
-    // Стрелка — только вне Telegram: внутри назад ведёт системная кнопка,
-    // её показывает ScreenShell через pushBack. Та же запись, что у экрана
-    // профиля в Account.jsx.
-    <ScreenShell open={open} title={t("setup.ext.title")} back={!isTma()} onClose={onClose}>
-      {/* Колонка с зазором, как .ap в кабинете. Без неё дети экрана стоят
-          на голых полях, а у st-h нижний отступ отрицательный — он затягивал
-          следующий блок ПОВЕРХ заголовка, и плашки закрашивали его собой. */}
-      <div className="xk">
-        <p className="xk-lead">{t("setup.ext.lead")}</p>
-
-        <h3 className="st-h">{t("setup.ext.step1")}</h3>
-        <div className="xk-tabs">
-          {PLATFORMS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              className={"xk-tab" + (platform === id ? " xk-tab-on" : "")}
-              onClick={() => setPlatform(id)}
-            >
-              {t(`setup.ext.os.${id}`)}
-            </button>
-          ))}
-        </div>
-
-        <div className="ap-rows">
-          {apps.map((app) => (
-            <div className="ap-row xk-app" key={app.id}>
-              <span className="ap-row-body">
-                <span className="ap-row-t">{app.name}</span>
-                <span className="ap-row-s">{t("setup.ext.appSub")}</span>
-              </span>
-              <a
-                className="xk-get"
-                href={app.store[platform]}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                {t("setup.ext.install")}
-              </a>
-              {url && app.deep && (
-                <a className="xk-add" href={app.deep(url)}>
-                  {t("setup.ext.add")}
-                </a>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <h3 className="st-h">{t("setup.ext.step2")}</h3>
-        <p className="xk-note">{t("setup.ext.step2note")}</p>
-
-        <div className="xk-issue">
-          <input
-            className="xk-input"
-            value={label}
-            onChange={(event) => setLabel(event.target.value)}
-            placeholder={t("setup.ext.labelHint")}
-            maxLength={64}
-          />
-          <button type="button" className="xk-btn" onClick={issue} disabled={busy}>
-            {t("setup.ext.issue")}
-          </button>
-        </div>
-
-        {error && <p className="xk-error">{error}</p>}
-
-        {url && (
-          <div className="xk-fresh">
-            <span className="xk-fresh-t">{t("setup.ext.freshTitle")}</span>
-            <span className="xk-fresh-w">{t("setup.ext.freshWarn")}</span>
-
-            <button type="button" className="xk-url" onClick={() => copy(url)}>
-              <code>{url}</code>
-              <span className="xk-copy">{copied ? t("setup.ext.copied") : t("setup.ext.copy")}</span>
-            </button>
-
-            <div className="xk-qr">
-              <QrCode value={url} size={190} />
-            </div>
-            <span className="xk-qr-note">{t("setup.ext.qrNote")}</span>
-          </div>
+    <Sheet open={open} title={t("keys.title")} sub={t("keys.lead")} onClose={onClose}>
+      <div className="kx">
+        {keys === null ? (
+          <p className="kx-gone">{t("su.waitFile")}</p>
+        ) : (
+          list.map((item) => (
+            <Row
+              key={item.id}
+              item={item}
+              busy={busy}
+              copied={copied === item.id}
+              onCopy={() => copy(item)}
+              onRename={(label) => rename(item.id, label)}
+              onRevoke={() => revoke(item.id)}
+              t={t}
+            />
+          ))
         )}
 
-        {Array.isArray(keys) && keys.length > 0 && (
-          <>
-            <h3 className="st-h">{t("setup.ext.listTitle")}</h3>
-            <div className="ap-rows">
-              {keys.map((key) => (
-                <div className="ap-row xk-item" key={key.id}>
-                  <span className="ap-row-body">
-                    <span className="ap-row-t">{key.label || t("setup.ext.noLabel")}</span>
-                    <span className="ap-row-s">
-                      {key.last_used_at ? t("setup.ext.used") : t("setup.ext.neverUsed")}
-                    </span>
-                  </span>
-                  <button
-                    type="button"
-                    className="xk-revoke"
-                    onClick={() => revoke(key.id)}
-                    disabled={busy}
-                  >
-                    {t("setup.ext.revoke")}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+        {error && <p className="kx-error">{error}</p>}
 
-        <h3 className="st-h">{t("setup.ext.step3")}</h3>
-        <ol className="xk-steps">
-          <li>{t("setup.ext.s1")}</li>
-          <li>{t("setup.ext.s2")}</li>
-          <li>{t("setup.ext.s3")}</li>
-        </ol>
-        <p className="xk-note">{t("setup.ext.tail")}</p>
+        <button type="button" className="kx-add" disabled={busy || left === 0} onClick={issue}>
+          <span className="kx-add-ic">{PLUS}</span>
+          {t("keys.issue")}
+          <span className="kx-left">{left > 0 ? t("keys.left", { n: left }) : t("keys.full")}</span>
+        </button>
       </div>
-    </ScreenShell>
+    </Sheet>
   );
 }

@@ -2936,210 +2936,166 @@ html.app .au-forgot {
   }
 }
 
-/* ── Ключи для сторонних приложений ────────────────────────────────────
-   Крупно и спокойно: одна мысль на экран, большие цели для пальца, никакого
-   мелкого текста. Палитра общая с кабинетом — раздел должен читаться как его
-   часть, а не как отдельная страница. */
+/* ── Лист «Ключи для устройств» ────────────────────────────────────────
+   Заходят сюда на полминуты: посмотреть, что выпущено, добавить ещё,
+   убрать лишнее. Поэтому лист снизу, а не страница, и строки простые —
+   имя, ссылка, когда пользовались. */
 
-html.app .xk-lead {
-  margin: 0 4px;
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-html.app .xk-tabs {
+html.app .kx {
   display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  padding: 0 2px;
+  flex-direction: column;
+  gap: 10px;
 }
-/* Невыбранные — обводкой: серая плашка на сером фоне читалась как
-   «недоступно», хотя нажимается любая. */
-html.app .xk-tab {
-  padding: 8px 14px;
-  border: 1px solid var(--tma-hair);
-  border-radius: 999px;
-  background: none;
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text-dim);
-  cursor: pointer;
-}
-html.app .xk-tab-on {
-  border-color: transparent;
-  background: var(--accent);
-  color: #fff;
-}
-
-/* Строка приложения. Базовый ap-row — это грид «иконка / тело / шеврон», а
-   здесь иконки нет и действий два, поэтому колонки переопределяем: имя
-   тянется, кнопки прижаты вправо и не растягиваются. */
-/* Список приложений и ключей — без карточки, как всё в разделе установки.
-   Базовый ap-row — грид «значок / тело / шеврон», здесь значка нет и
-   действий два: имя тянется, кнопки прижаты вправо. */
-html.app .xk .ap-rows {
-  padding: 0;
-  background: none;
-}
-html.app .xk-app,
-html.app .xk-item {
-  grid-template-columns: 1fr auto auto;
-  gap: 8px;
-  padding: 13px 2px;
-  align-items: center;
-  cursor: default;
-}
-/* Значка нет — и линии незачем начинаться там, где он был бы. */
-html.app .xk .ap-row + .ap-row::before {
-  left: 2px;
-  right: 2px;
-}
-html.app .xk-get,
-html.app .xk-add,
-html.app .xk-revoke {
-  flex: none;
-  padding: 7px 12px;
-  border: none;
-  border-radius: 999px;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-}
-/* «Установить» серым по серому выглядело выключенным, хотя это главное
-   действие строки. Цвет действия, без заливки — рядом стоит «Добавить
-   ключ», и залитой должна быть только она. */
-html.app .xk-get {
-  background: none;
-  color: var(--accent);
-}
-html.app .xk-revoke {
-  background: none;
-  color: var(--text-faint);
-}
-html.app .xk-add {
-  background: var(--accent);
-  color: #fff;
-}
-
-html.app .xk-note {
-  margin: -4px 4px 0;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
-html.app .xk-issue {
-  display: flex;
-  gap: 8px;
-  padding: 0 2px;
-}
-html.app .xk-input {
-  flex: 1;
-  min-width: 0;
-  padding: 12px 14px;
-  border: 1px solid var(--tma-hair);
-  border-radius: 14px;
-  background: none;
-  font: inherit;
-  font-size: 15px;
-  color: var(--ink);
-}
-html.app .xk-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-html.app .xk-btn {
-  flex: none;
-  padding: 12px 18px;
-  border: none;
-  border-radius: 14px;
-  background: var(--accent);
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  cursor: pointer;
-}
-html.app .xk-btn:disabled {
-  opacity: 0.55;
-}
-html.app .xk-error {
-  margin: 0 4px;
-  font-size: 13.5px;
-  color: #ff6b6b;
-}
-
-/* Единственный блок, которому фон положен: ключ показывают один раз, и
-   он должен выделяться. Но тёплым, а не серым — серая коробка читалась бы
-   как ещё одна секция. */
-html.app .xk-fresh {
+html.app .kx-row {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 16px;
-  border-radius: 18px;
-  background: rgba(250, 76, 22, 0.07);
-  box-shadow: inset 0 0 0 1.5px var(--accent);
+  padding: 12px 12px 10px;
+  border: 1px solid var(--tma-hair);
+  border-radius: 16px;
 }
-html.app .xk-fresh-t {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
-}
-html.app .xk-fresh-w {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--accent);
-}
-html.app .xk-url {
+html.app .kx-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 11px 13px;
-  border: 1px solid var(--tma-hair);
-  border-radius: 14px;
-  background: none;
-  cursor: pointer;
-  text-align: left;
+  gap: 8px;
 }
-html.app .xk-url code {
+/* Имя нажимается и превращается в поле: отдельная кнопка «переименовать»
+   ради одной строки — лишняя. */
+html.app .kx-name {
   flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+html.app .kx-pen {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+}
+html.app .kx-pen svg {
+  width: 15px;
+  height: 15px;
+}
+html.app .kx-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: none;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  outline: none;
+}
+html.app .kx-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: transform 0.16s var(--ease-out, ease);
+}
+html.app .kx-icon svg {
+  width: 18px;
+  height: 18px;
+}
+html.app .kx-icon:active {
+  transform: scale(0.9);
+  transition-duration: 0.06s;
+  background: var(--tma-hair);
+}
+html.app .kx-icon:disabled {
+  opacity: 0.45;
+}
+html.app .kx-danger:active {
+  background: rgba(255, 107, 107, 0.16);
+  color: #ff6b6b;
+}
+html.app .kx-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 5px 5px 12px;
+  border-radius: 12px;
+  background: var(--tma-inset);
+}
+/* Ссылку читают по одному символу, когда сверяют, — моноширинный набор. */
+html.app .kx-link-v {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.5px;
-  color: var(--ink);
 }
-html.app .xk-copy {
-  flex: none;
+html.app .kx-when {
   font-size: 13px;
-  font-weight: 700;
-  color: var(--accent);
-}
-html.app .xk-qr {
-  align-self: center;
-  padding: 12px;
-  border-radius: 16px;
-  background: #fff;
-}
-html.app .xk-qr-note {
-  text-align: center;
-  font-size: 12.5px;
   color: var(--text-faint);
 }
-
-html.app .xk-steps {
-  margin: -2px 4px 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 8px;
-  font-size: 14px;
+html.app .kx-gone {
+  margin: 0;
+  font-size: 13.5px;
   line-height: 1.45;
-  color: var(--ink);
+  color: var(--text-faint);
+}
+html.app .kx-error {
+  margin: 0;
+  font-size: 13.5px;
+  color: #ff6b6b;
+}
+/* Пунктир: место, куда добавится ещё одна строка, а не готовая карточка. */
+html.app .kx-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 0 14px;
+  border: 1px dashed var(--tma-hair);
+  border-radius: 16px;
+  background: none;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+}
+html.app .kx-add:disabled {
+  opacity: 0.5;
+  cursor: default;
+  color: var(--text-faint);
+}
+html.app .kx-add-ic {
+  display: grid;
+  place-items: center;
+}
+html.app .kx-add-ic svg {
+  width: 18px;
+  height: 18px;
+}
+html.app .kx-left {
+  margin-left: auto;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-faint);
 }
 
 /* ── Экран установки ───────────────────────────────────────────────────

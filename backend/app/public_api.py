@@ -1096,6 +1096,36 @@ def issue_subscription_key(
     return _key_out(tok, raw)
 
 
+@router.patch("/account/subscriptions/{key_id}", response_model=SubscriptionKeyOut)
+def rename_subscription_key(
+    key_id: int,
+    body: SubscriptionKeyIn,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> SubscriptionKeyOut:
+    """
+    Переименовывает ссылку.
+
+    Имя нужно только человеку — понять, на каком устройстве стоит ключ.
+    Выпускаем ссылку сразу, с именем по умолчанию, а подписать её можно
+    когда угодно: заставлять придумывать название до выпуска незачем.
+    """
+    user, _session = who
+    tok = db.get(SubscriptionToken, key_id)
+    if (
+        tok is None
+        or tok.user_id != user.id
+        or tok.revoked_at is not None
+        or not (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
+    ):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "ссылка не найдена")
+
+    tok.label = (body.label or "").strip()[:64] or None
+    db.commit()
+    db.refresh(tok)
+    return _key_out(tok, services.subscription.reveal(tok))
+
+
 @router.delete("/account/subscriptions/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_subscription_key(
     key_id: int,

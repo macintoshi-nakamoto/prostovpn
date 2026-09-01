@@ -3123,8 +3123,9 @@ html.app .xk-steps {
 }
 
 /* ── Экран установки ───────────────────────────────────────────────────
-   Один экран вместо мастера: переключатель наверху, под ним ровно то,
-   что нужно выбранному способу. Ни шагов, ни инструкций. */
+   Шапка-карточка, два выбора и карточки-шаги: значок слева, текст справа,
+   действие снизу во всю ширину. Каждый шаг — отдельная карточка, чтобы
+   взгляд не искал, где кончается один и начинается другой. */
 
 html.app .su {
   display: flex;
@@ -3132,116 +3133,170 @@ html.app .su {
   gap: 14px;
 }
 
-html.app .su-hero {
-  display: flex;
-  flex-direction: column;
+/* Шапка: значок и текст в строку — так же, как ap-head в кабинете. */
+html.app .su-head {
+  flex-direction: row;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px 2px;
-  text-align: center;
+  gap: 14px;
 }
-/* Шестерёнка в дышащих кольцах. Кольца — тени, а не элементы: так они не
+/* Шестерёнка в дышащих кольцах. Кольца — тени, а не элементы: они не
    занимают места и не двигают вёрстку, когда расходятся. */
 html.app .su-gear {
+  flex: none;
   display: grid;
   place-items: center;
-  width: 76px;
-  height: 76px;
+  width: 54px;
+  height: 54px;
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
   box-shadow:
-    0 0 0 10px rgba(250, 76, 22, 0.22),
-    0 0 0 20px rgba(250, 76, 22, 0.1),
-    0 10px 30px -10px rgba(250, 76, 22, 0.9);
+    0 0 0 8px rgba(250, 76, 22, 0.22),
+    0 0 0 15px rgba(250, 76, 22, 0.1);
   animation: su-breathe 3.4s ease-in-out infinite;
 }
 html.app .su-gear svg {
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
 }
 @keyframes su-breathe {
   0%,
   100% {
     box-shadow:
-      0 0 0 10px rgba(250, 76, 22, 0.22),
-      0 0 0 20px rgba(250, 76, 22, 0.1),
-      0 10px 30px -10px rgba(250, 76, 22, 0.9);
+      0 0 0 8px rgba(250, 76, 22, 0.22),
+      0 0 0 15px rgba(250, 76, 22, 0.1);
   }
   50% {
     box-shadow:
-      0 0 0 14px rgba(250, 76, 22, 0.14),
-      0 0 0 26px rgba(250, 76, 22, 0.05),
-      0 10px 34px -10px rgba(250, 76, 22, 0.7);
+      0 0 0 11px rgba(250, 76, 22, 0.14),
+      0 0 0 20px rgba(250, 76, 22, 0.05);
   }
 }
-/* Тем, кому анимация мешает, — неподвижный значок. */
+/* Кому анимация мешает — неподвижный значок. */
 @media (prefers-reduced-motion: reduce) {
   html.app .su-gear {
     animation: none;
   }
 }
-html.app .su-hero-t {
-  font-size: 21px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-html.app .su-hero-s {
-  font-size: 14.5px;
-  color: var(--text-faint);
-}
 
-/* Переключатель: стеклянная подложка, бегунок едет за выбором. Ширина
-   бегунка ровно в треть, поэтому transform считается в процентах его
-   собственной ширины — от числа положений вёрстка не зависит. */
-html.app .su-seg {
-  position: relative;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  padding: 4px;
-  border-radius: 999px;
-  background: var(--tma-glass);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4);
-  backdrop-filter: blur(18px) saturate(1.4);
-  box-shadow: inset 0 0 0 1px var(--tma-glass-line);
+/* Два выбора подряд — одной группой, разделённые волосяной линией. */
+html.app .su-picks {
+  display: flex;
+  flex-direction: column;
 }
-/* Место бегунку считает не CSS, а замер выбранной кнопки в пикселях.
-   Через проценты он приезжал мимо (в calc для left они резолвятся не от
-   контейнера), а анимация left не шла вовсе — поэтому сдвиг задаётся
-   трансформацией. Замер точен по определению и не требует, чтобы
-   сегменты были одинаковой ширины. */
-html.app .su-seg-pill {
+html.app .su-pick {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 2px;
+  cursor: pointer;
+}
+html.app .su-pick + .su-pick::before {
+  content: "";
   position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 0;
-  border-radius: 999px;
-  background: var(--accent);
-  box-shadow: 0 6px 16px -6px rgba(250, 76, 22, 0.9);
-  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1),
-    width 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  left: 2px;
+  right: 2px;
+  top: 0;
+  height: 1px;
+  background: var(--tma-hair);
 }
-html.app .su-seg-b {
-  position: relative;
-  white-space: nowrap;
-  z-index: 1;
-  min-height: 38px;
-  padding: 0 6px;
+html.app .su-pick-k {
+  font-size: 16px;
+  color: var(--text-dim);
+}
+html.app .su-pick-v {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--accent);
+}
+html.app .su-pick-ic {
+  display: grid;
+  place-items: center;
+}
+html.app .su-pick-ic svg {
+  width: 16px;
+  height: 16px;
+}
+/* Настоящий select поверх строки: в Telegram он открывает системный
+   список устройства. Своё меню пришлось бы чинить под каждую оболочку. */
+html.app .su-pick-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
   border: none;
   background: none;
   font: inherit;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--text-dim);
   cursor: pointer;
-  transition: color 0.2s ease;
-}
-html.app .su-seg-b.is-on {
-  color: #fff;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
-/* Платформы и наши сборки — теми же пилюлями, что и везде в кабинете. */
+/* Карточка шага. */
+html.app .su-step {
+  gap: 12px;
+}
+html.app .su-step-head {
+  display: grid;
+  grid-template-columns: 38px 1fr;
+  align-items: start;
+  gap: 14px;
+}
+html.app .su-step-ic {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: rgba(250, 76, 22, 0.14);
+  color: var(--accent);
+}
+html.app .su-step-ic svg {
+  width: 20px;
+  height: 20px;
+}
+html.app .su-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+html.app .su-step-t {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--ink);
+}
+html.app .su-step-s {
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
+html.app .su-cta {
+  display: grid;
+  place-items: center;
+  min-height: 50px;
+  padding: 0 18px;
+  text-decoration: none;
+  text-align: center;
+}
+/* Второе действие в шаге — та же пилюля, но приглушённая. Обводка нужна
+   на светлой теме: там заливка в 14% поверх белой карточки почти не
+   отличается от неё, и кнопка переставала читаться кнопкой. */
+html.app .su-cta-alt {
+  border: 1px solid rgba(250, 76, 22, 0.35);
+  background: rgba(250, 76, 22, 0.12);
+  color: var(--accent);
+}
+
+/* Страны у ключа Amnezia. */
 html.app .su-os {
   display: flex;
   flex-wrap: wrap;
@@ -3264,38 +3319,21 @@ html.app .su-os-b.is-on {
   color: #fff;
 }
 
-html.app .su-cta {
-  display: grid;
-  place-items: center;
-  min-height: 50px;
-  padding: 0 18px;
-  text-decoration: none;
-  text-align: center;
-  box-shadow: 0 8px 18px -8px rgba(250, 76, 22, 0.55);
-}
-
-html.app .su-note {
-  margin: 0 4px;
-  font-size: 14px;
-  line-height: 1.45;
-  color: var(--text-faint);
-}
 html.app .su-wait {
-  margin: 0 4px;
   font-size: 14px;
   line-height: 1.45;
   color: var(--text-faint);
 }
 
-/* Строка со значением: подпись, само значение, кнопки справа. Одинаково
-   для логина, пароля и ключа — человеку не надо каждый раз разбираться. */
+/* Строка со значением: подпись, значение, кнопки. Одинаково для логина,
+   пароля и ключа — человеку не надо каждый раз разбираться. */
 html.app .su-field {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 8px 8px 16px;
-  border: 1px solid var(--tma-hair);
-  border-radius: 16px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 14px;
+  background: var(--tma-inset);
 }
 html.app .su-field-k {
   flex: none;
@@ -3321,18 +3359,18 @@ html.app .su-field-b {
   flex: none;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border: none;
-  border-radius: 12px;
+  border-radius: 10px;
   background: none;
   color: var(--text-faint);
   cursor: pointer;
   transition: transform 0.16s var(--ease-out, ease);
 }
 html.app .su-field-b svg {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
 }
 html.app .su-field-b:active {
   transform: scale(0.9);
@@ -3340,69 +3378,6 @@ html.app .su-field-b:active {
   background: var(--tma-hair);
 }
 
-/* Список программ: имя слева, действия справа. */
-html.app .su-apps {
-  display: flex;
-  flex-direction: column;
-}
-html.app .su-app {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 8px;
-  padding: 13px 2px;
-}
-html.app .su-app + .su-app::before {
-  content: "";
-  position: absolute;
-  left: 2px;
-  right: 2px;
-  top: 0;
-  height: 1px;
-  background: var(--tma-hair);
-}
-html.app .su-app-n {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--ink);
-}
-html.app .su-app-get,
-html.app .su-app-add {
-  flex: none;
-  padding: 7px 12px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-html.app .su-app-get {
-  color: var(--accent);
-}
-html.app .su-app-add {
-  background: var(--accent);
-  color: #fff;
-}
-
-/* Пара кнопок на карточке подписки: продлить и подключить устройство.
-   Ровно пополам — обе нужны, и ни одна не важнее настолько, чтобы
-   занимать всю ширину. */
-html.app .ap-duo {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-/* Второе действие той же формы, но без заливки: цветом на карточке
-   выделено одно. */
-html.app .ap-cta-alt {
-  border: 1px solid var(--tma-hair);
-  background: none;
-  color: var(--ink);
-}
-html.app .ap-cta-alt:hover {
-  background: var(--tma-inset);
-}
 html.app .su-more {
   align-self: center;
   margin-top: 2px;

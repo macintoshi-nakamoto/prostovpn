@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ScreenShell } from "./ScreenShell.jsx";
 import { api } from "../lib/api";
 import { isTma, tmaHaptic, tmaOpenApp, tmaOpenLink } from "../lib/telegram.js";
@@ -7,58 +7,61 @@ import { useI18n } from "../lib/i18n/index.jsx";
 /**
  * Экран установки.
  *
- * Всё, что нужно для подключения, — на одном экране, без шагов и без
- * листания. Наверху переключатель из трёх положений; под ним ровно то,
- * что требует выбранный способ, и ничего больше:
+ * Два вопроса подряд — какое устройство и какая программа, — и дальше
+ * карточки-шаги: поставить, добавить ключ (или войти), подключиться.
+ * Ни вкладок, ни развилок: на каждом шаге ровно одно действие, и оно
+ * относится к тому, что выбрано сверху.
  *
- *   наше приложение → скачать + логин с паролем (вход по ним, не по ключу);
- *   AmneziaVPN      → поставить из магазина + ключ в его формате;
- *   Happ и другие   → список программ + ключ в формате vless.
- *
- * Ключ виден сразу и всегда: человек приходит сюда взять его, а не нажать
- * «создать». Первую ссылку заводит сервер сам при первом заходе.
+ * Программ у нас несколько на одно устройство, поэтому выбора два, а не
+ * один: второй заранее стоит на том, что мы советуем, и трогать его не
+ * обязательно.
  */
-
-/** Наши приложения: вход логином и паролем, ключ им не нужен. */
-const OURS = [
-  { os: "win", platform: "windows" },
-  { os: "android", platform: "android" },
-  { os: "mac", platform: "macos" },
-];
 
 const APPSTORE_AMNEZIA = "https://apps.apple.com/app/amneziavpn/id1600529900";
 
-/** AmneziaVPN по платформам. Свой формат ключа, свои магазины. */
-const AMNEZIA_STORE = {
-  ios: APPSTORE_AMNEZIA,
-  android: "https://play.google.com/store/apps/details?id=org.amnezia.vpn",
-  mac: APPSTORE_AMNEZIA,
-  win: "https://github.com/amnezia-vpn/amnezia-client/releases/latest",
-};
+/** Устройства в порядке распространённости. */
+const DEVICES = ["android", "ios", "win", "mac", "tv"];
 
 /**
- * Программы, работающие с обычной подпиской vless.
+ * Что чем настраивается.
  *
- * `deep` — ссылка, по которой программа добавляет подписку сама. Где её
- * нет, остаётся копирование, и это нормально.
+ *   ours — наше приложение: скачать и войти логином, ключ не нужен;
+ *   vpn  — AmneziaVPN: ей нужен готовый ключ vpn://, ссылку она не берёт;
+ *   sub  — Happ и подобные: берут ссылку-подписку и обновляют её сами.
  */
-const VLESS_APPS = [
-  {
-    id: "happ",
+const APPS = {
+  prosto: {
+    name: "Prosto VPN",
+    kind: "ours",
+    on: { android: 1, win: 1, mac: 1, tv: 1 },
+  },
+  amnezia: {
+    name: "AmneziaVPN",
+    kind: "vpn",
+    on: { ios: 1, android: 1, mac: 1, win: 1 },
+    store: {
+      ios: APPSTORE_AMNEZIA,
+      mac: APPSTORE_AMNEZIA,
+      android: "https://play.google.com/store/apps/details?id=org.amnezia.vpn",
+      win: "https://github.com/amnezia-vpn/amnezia-client/releases/latest",
+    },
+  },
+  happ: {
     name: "Happ",
-    on: ["ios", "android", "mac", "win"],
+    kind: "sub",
+    on: { ios: 1, android: 1, mac: 1, win: 1 },
     deep: (url) => `happ://add/${encodeURIComponent(url)}`,
     store: {
       ios: "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
-      android: "https://play.google.com/store/apps/details?id=com.happproxy",
       mac: "https://apps.apple.com/app/happ-proxy-utility/id6504287215",
+      android: "https://play.google.com/store/apps/details?id=com.happproxy",
       win: "https://github.com/Happ-proxy/happ-desktop/releases/latest",
     },
   },
-  {
-    id: "hiddify",
+  hiddify: {
     name: "Hiddify",
-    on: ["ios", "android", "mac", "win"],
+    kind: "sub",
+    on: { ios: 1, android: 1, mac: 1, win: 1 },
     deep: (url) => `hiddify://import/${url}`,
     store: {
       ios: "https://apps.apple.com/app/hiddify-proxy-vpn/id6596777532",
@@ -67,38 +70,39 @@ const VLESS_APPS = [
       win: "https://github.com/hiddify/hiddify-app/releases/latest",
     },
   },
-  {
-    id: "streisand",
+  streisand: {
     name: "Streisand",
-    on: ["ios", "mac"],
+    kind: "sub",
+    on: { ios: 1, mac: 1 },
     deep: (url) => `streisand://import/${url}`,
     store: {
       ios: "https://apps.apple.com/app/streisand/id6450534064",
       mac: "https://apps.apple.com/app/streisand/id6450534064",
     },
   },
-  {
-    id: "v2rayng",
+  v2rayng: {
     name: "v2rayNG",
-    on: ["android"],
+    kind: "sub",
+    on: { android: 1 },
     deep: (url) => `v2rayng://install-sub?url=${encodeURIComponent(url)}`,
     store: { android: "https://play.google.com/store/apps/details?id=com.v2ray.ang" },
   },
-  {
-    id: "nekobox",
+  nekobox: {
     name: "NekoBox",
-    on: ["android"],
+    kind: "sub",
+    on: { android: 1 },
     deep: null,
     store: { android: "https://github.com/MatsuriDayo/NekoBoxForAndroid/releases/latest" },
   },
-];
+};
 
-const PLATFORMS = ["ios", "android", "mac", "win"];
+/** Что советуем по умолчанию: своё приложение там, где оно есть. */
+const DEFAULT_APP = { android: "prosto", win: "prosto", mac: "prosto", tv: "prosto", ios: "amnezia" };
 
-/** Наша сборка под платформу, которую выбрали для стороннего приложения. */
-const OUR_PLATFORM = { win: "windows", android: "android", mac: "macos" };
+/** Наша сборка под устройство. Телевизор берёт андроидную. */
+const OUR_BUILD = { win: "windows", android: "android", mac: "macos", tv: "android" };
 
-function guessPlatform() {
+function guessDevice() {
   if (typeof navigator === "undefined") return "android";
   const ua = navigator.userAgent || "";
   if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
@@ -108,8 +112,7 @@ function guessPlatform() {
   return "android";
 }
 
-/* Значок раздела: шестерёнка в расходящихся кольцах. Кольца дышат — экран
-   открывается редко, и живой значок сразу говорит, что попал куда надо. */
+/* Значок раздела — шестерёнка в дышащих кольцах. */
 const GEAR = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <circle cx="12" cy="12" r="3.2" />
@@ -117,6 +120,34 @@ const GEAR = (
   </svg>
 );
 
+/* Значки шагов: скачать, ключ, подключиться. */
+const IC_DOWNLOAD = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 3v12" />
+    <path d="M7.5 10.5L12 15l4.5-4.5" />
+    <path d="M4 18.5h16" />
+  </svg>
+);
+const IC_KEY = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="7.5" cy="16.5" r="3.8" />
+    <path d="M10.2 13.8L20 4" />
+    <path d="M16.5 7.5l2.5 2.5" />
+    <path d="M14 10l2 2" />
+  </svg>
+);
+const IC_LOCK = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="4.5" y="10.5" width="15" height="10" rx="2.6" />
+    <path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" />
+  </svg>
+);
+const IC_LINK = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M10 13a4.5 4.5 0 0 0 6.4.4l2.6-2.6a4.5 4.5 0 0 0-6.4-6.4L11.4 6" />
+    <path d="M14 11a4.5 4.5 0 0 0-6.4-.4L5 13.2a4.5 4.5 0 0 0 6.4 6.4L12.6 18" />
+  </svg>
+);
 const COPY = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <rect x="9" y="9" width="11" height="11" rx="2.5" />
@@ -142,16 +173,55 @@ const EYE_OFF = (
     <path d="M9.9 9.9a2.7 2.7 0 0 0 3.8 3.8" />
   </svg>
 );
+const CHEV = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M8 10l4-4 4 4" />
+    <path d="M16 14l-4 4-4-4" />
+  </svg>
+);
 
-/** Строка «подпись — значение — кнопки». Логин, пароль и ключ устроены одинаково. */
-function Field({ label, value, mono, secret, copied, onCopy, t }) {
+/**
+ * Выбор из списка.
+ *
+ * Внутри настоящий select: в Telegram он открывает системный список
+ * устройства — привычный, с прокруткой и крупными строками. Своё меню
+ * пришлось бы рисовать и чинить под каждую оболочку.
+ */
+function Pick({ label, value, options, onChange }) {
+  return (
+    <label className="su-pick">
+      <span className="su-pick-k">{label}</span>
+      <span className="su-pick-v">
+        {options.find((o) => o.id === value)?.title || ""}
+        <span className="su-pick-ic">{CHEV}</span>
+      </span>
+      <select
+        className="su-pick-native"
+        value={value}
+        onChange={(e) => {
+          tmaHaptic("light");
+          onChange(e.target.value);
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.title}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** Строка со значением: подпись, значение, кнопки. */
+function Field({ label, value, secret, copied, onCopy, t }) {
   const [shown, setShown] = useState(false);
   if (!value) return null;
   const hidden = secret && !shown;
   return (
     <div className="su-field">
       <span className="su-field-k">{label}</span>
-      <span className={"su-field-v" + (mono ? " su-mono" : "")}>
+      <span className="su-field-v su-mono">
         {hidden ? "•".repeat(Math.min(value.length, 28)) : value}
       </span>
       {secret && (
@@ -171,32 +241,33 @@ function Field({ label, value, mono, secret, copied, onCopy, t }) {
   );
 }
 
+/** Карточка шага: значок слева, заголовок и текст справа, действия снизу. */
+function Step({ icon, title, text, children }) {
+  return (
+    <div className="ap-card su-step">
+      <div className="su-step-head">
+        <span className="su-step-ic">{icon}</span>
+        <span className="su-step-body">
+          <span className="su-step-t">{title}</span>
+          {text && <span className="su-step-s">{text}</span>}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function SetupScreen({ open, onClose, onKeys }) {
   const { t } = useI18n();
 
-  // "ours" | "amnezia" | "vless"
-  const [tab, setTab] = useState("ours");
-  const [platform, setPlatform] = useState(guessPlatform);
+  const [device, setDevice] = useState(guessDevice);
+  const [app, setApp] = useState(() => DEFAULT_APP[guessDevice()]);
   const [downloads, setDownloads] = useState(null);
   const [creds, setCreds] = useState(null);
   const [keys, setKeys] = useState(null);
-  // Ключи для AmneziaVPN — это не ссылка-подписка, а готовые vpn://
-  // по одному на страну. Ссылку она не принимает: в неё вставляют сам
-  // ключ. Берём те же, что кабинет отдаёт для iPhone.
   const [vpnKeys, setVpnKeys] = useState(null);
   const [country, setCountry] = useState(0);
   const [copied, setCopied] = useState("");
-
-  // Бегунок переключателя ставим по измеренной кнопке, а не по доле
-  // ширины: проценты внутри calc для left тут считаются не от контейнера,
-  // и бегунок приезжал не туда. Замер заодно переживает любые подписи —
-  // сегменты не обязаны быть одинаковой ширины.
-  //
-  // Узел ловим callback-ref, а не useRef: ScreenShell показывает тело не в
-  // том же кадре, в котором открывается, и обычный эффект успевал бы
-  // отработать по пустому DOM.
-  const [segEl, setSegEl] = useState(null);
-  const [pill, setPill] = useState(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -204,32 +275,11 @@ export function SetupScreen({ open, onClose, onKeys }) {
     api.downloads().then((r) => alive && setDownloads(Array.isArray(r) ? r : [])).catch(() => alive && setDownloads([]));
     api.credentials().then((r) => alive && setCreds(r)).catch(() => alive && setCreds({}));
     api.subscriptionKeys().then((r) => alive && setKeys(Array.isArray(r) ? r : [])).catch(() => alive && setKeys([]));
-    api
-      .account()
-      .then((r) => alive && setVpnKeys(r?.ios?.keys || []))
-      .catch(() => alive && setVpnKeys([]));
+    api.account().then((r) => alive && setVpnKeys(r?.ios?.keys || [])).catch(() => alive && setVpnKeys([]));
     return () => {
       alive = false;
     };
   }, [open]);
-
-  useLayoutEffect(() => {
-    if (!segEl) return undefined;
-    const place = () => {
-      const on = segEl.querySelector(".su-seg-b.is-on");
-      if (!on) return;
-      const c = segEl.getBoundingClientRect();
-      const b = on.getBoundingClientRect();
-      if (!b.width) return;
-      setPill({ left: Math.round(b.left - c.left), width: Math.round(b.width) });
-    };
-    place();
-    // Поворот экрана, всплывшая клавиатура, смена шрифта — ширина кнопки
-    // меняется и без нашего участия.
-    const ro = new ResizeObserver(place);
-    ro.observe(segEl);
-    return () => ro.disconnect();
-  }, [segEl, tab]);
 
   const copy = async (value, key) => {
     if (!value) return;
@@ -241,24 +291,27 @@ export function SetupScreen({ open, onClose, onKeys }) {
     } catch {}
   };
 
-  const pickTab = (id) => {
-    if (id === tab) return;
-    tmaHaptic("light");
-    setTab(id);
+  // Сменили устройство — прежняя программа могла под него не подходить.
+  const pickDevice = (id) => {
+    setDevice(id);
+    if (!APPS[app]?.on[id]) setApp(DEFAULT_APP[id]);
   };
 
-  // Первая живая ссылка. Их может быть несколько — для остальных устройств,
-  // — но на виду держим одну: выбирать человеку здесь нечего.
-  const key = useMemo(() => (keys || []).find((k) => k.url) || null, [keys]);
+  const appList = useMemo(
+    () =>
+      Object.entries(APPS)
+        .filter(([, one]) => one.on[device])
+        .map(([id, one]) => ({ id, title: one.name })),
+    [device],
+  );
 
-  const ourPlatform = OUR_PLATFORM[platform] || "windows";
-  const file = (downloads || []).find((r) => r.platform === ourPlatform);
-  const vlessApps = VLESS_APPS.filter((a) => a.on.includes(platform));
+  const meta = APPS[app] || APPS[DEFAULT_APP[device]];
+  const file = (downloads || []).find((r) => r.platform === OUR_BUILD[device]);
+  const subUrl = (keys || []).find((k) => k.url)?.url_vless || "";
 
-  // Ключи выдаются наборами на устройство (слот), внутри набора — по
+  // Ключи Amnezia выдаются наборами на устройство, внутри набора — по
   // одному на страну. Здесь настраивают одно устройство, поэтому берём
-  // первый набор: иначе в выборе стран лежала бы каша из всех слотов с
-  // повторяющимися названиями.
+  // первый набор: иначе в выборе стран лежала бы каша из всех слотов.
   const vpnSet = useMemo(() => {
     const all = vpnKeys || [];
     if (!all.length) return [];
@@ -267,97 +320,36 @@ export function SetupScreen({ open, onClose, onKeys }) {
   }, [vpnKeys]);
   const vpn = vpnSet[Math.min(country, Math.max(vpnSet.length - 1, 0))] || null;
 
-  const TABS = [
-    { id: "ours", title: t("su.tabOurs") },
-    { id: "amnezia", title: "Amnezia" },
-    { id: "vless", title: t("su.tabOther") },
-  ];
-
-  const keyLine = (which) => {
-    const value = which === "amnezia" ? key?.url_amnezia : key?.url_vless;
-    if (keys === null) return <p className="su-wait">{t("su.waitFile")}</p>;
-    if (!value) return <p className="su-wait">{t("su.noKey")}</p>;
-    return (
-      <Field
-        label={t("su.key")}
-        value={value}
-        mono
-        copied={copied === which}
-        onCopy={() => copy(value, which)}
-        t={t}
-      />
-    );
-  };
-
   return (
     <ScreenShell open={open} title={t("su.title")} back={!isTma()} onClose={onClose}>
       <div className="su">
-        <div className="su-hero">
+        <div className="ap-card su-head">
           <span className="su-gear">{GEAR}</span>
-          <span className="su-hero-t">{t("su.heroTitle")}</span>
-          <span className="su-hero-s">{t("su.heroLead")}</span>
+          <span className="ap-head-body">
+            <span className="ap-title">{t("su.heroTitle")}</span>
+            <span className="ap-sub">{t("su.heroLead")}</span>
+          </span>
         </div>
 
-        {/* Переключатель: подложка стеклянная, бегунок едет за выбором. */}
-        <div className="su-seg" role="tablist" ref={setSegEl}>
-          {pill && (
-            <span
-              className="su-seg-pill"
-              style={{ transform: `translateX(${pill.left}px)`, width: pill.width }}
-            />
-          )}
-          {TABS.map((one) => (
-            <button
-              key={one.id}
-              type="button"
-              role="tab"
-              aria-selected={tab === one.id}
-              className={"su-seg-b" + (tab === one.id ? " is-on" : "")}
-              onClick={() => pickTab(one.id)}
-            >
-              {one.title}
-            </button>
-          ))}
+        <div className="su-picks">
+          <Pick
+            label={t("su.device")}
+            value={device}
+            options={DEVICES.map((id) => ({ id, title: t(`su.dev.${id}`) }))}
+            onChange={pickDevice}
+          />
+          <Pick label={t("su.app")} value={meta === APPS[app] ? app : DEFAULT_APP[device]} options={appList} onChange={setApp} />
         </div>
 
-        {tab !== "ours" && (
-          <div className="su-os">
-            {PLATFORMS.map((id) => (
-              <button
-                key={id}
-                type="button"
-                className={"su-os-b" + (platform === id ? " is-on" : "")}
-                onClick={() => {
-                  tmaHaptic("light");
-                  setPlatform(id);
-                }}
-              >
-                {t(`setup.ext.os.${id}`)}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {tab === "ours" && (
-          <>
-            <div className="su-os">
-              {OURS.map((one) => (
-                <button
-                  key={one.os}
-                  type="button"
-                  className={"su-os-b" + (ourPlatform === one.platform ? " is-on" : "")}
-                  onClick={() => {
-                    tmaHaptic("light");
-                    setPlatform(one.os);
-                  }}
-                >
-                  {t(`setup.ext.os.${one.os}`)}
-                </button>
-              ))}
-            </div>
-
-            {downloads === null ? (
-              <p className="su-wait">{t("su.waitFile")}</p>
+        {/* ── шаг 1: поставить программу ──────────────────────────────── */}
+        <Step
+          icon={IC_DOWNLOAD}
+          title={t("su.stepInstall", { app: meta.name })}
+          text={meta.kind === "ours" ? t("su.installOurs") : t("su.installOther", { app: meta.name })}
+        >
+          {meta.kind === "ours" ? (
+            downloads === null ? (
+              <span className="su-wait">{t("su.waitFile")}</span>
             ) : file?.url ? (
               <button
                 type="button"
@@ -367,13 +359,21 @@ export function SetupScreen({ open, onClose, onKeys }) {
                   tmaOpenLink(file.url);
                 }}
               >
-                {t("su.download", { os: t(`setup.ext.os.${platform}`) })}
+                {t("su.download", { os: t(`su.dev.${device}`) })}
               </button>
             ) : (
-              <p className="su-wait">{t("su.noFile")}</p>
-            )}
+              <span className="su-wait">{t("su.noFile")}</span>
+            )
+          ) : (
+            <a className="ap-cta su-cta" href={meta.store?.[device]} target="_blank" rel="noreferrer noopener">
+              {t("su.install", { app: meta.name })}
+            </a>
+          )}
+        </Step>
 
-            <p className="su-note">{t("su.ourLead")}</p>
+        {/* ── шаг 2: войти или добавить ключ ──────────────────────────── */}
+        {meta.kind === "ours" && (
+          <Step icon={IC_LOCK} title={t("su.stepSignIn")} text={t("su.ourLead")}>
             <Field
               label={t("account.webLoginLogin")}
               value={creds?.login || ""}
@@ -385,36 +385,23 @@ export function SetupScreen({ open, onClose, onKeys }) {
               <Field
                 label={t("account.webLoginPassword")}
                 value={creds.password}
-                mono
                 secret
                 copied={copied === "pwd"}
                 onCopy={() => copy(creds.password, "pwd")}
                 t={t}
               />
             ) : creds?.is_generated === false ? (
-              <p className="su-note">{t("su.ownPassword")}</p>
+              <span className="su-wait">{t("su.ownPassword")}</span>
             ) : null}
-          </>
+          </Step>
         )}
 
-        {tab === "amnezia" && (
-          <>
-            <a
-              className="ap-cta su-cta"
-              href={AMNEZIA_STORE[platform]}
-              target="_blank"
-              rel="noreferrer noopener"
-            >
-              {t("su.install", { app: "AmneziaVPN" })}
-            </a>
-            <p className="su-note">{t("su.amneziaLead")}</p>
-
+        {meta.kind === "vpn" && (
+          <Step icon={IC_KEY} title={t("su.stepKey")} text={t("su.amneziaLead")}>
             {vpnKeys === null ? (
-              <p className="su-wait">{t("su.waitFile")}</p>
+              <span className="su-wait">{t("su.waitFile")}</span>
             ) : vpn ? (
               <>
-                {/* Ключ у каждой страны свой — выбор нужен здесь, а не
-                    где-то в настройках приложения. */}
                 {vpnSet.length > 1 && (
                   <div className="su-os">
                     {vpnSet.map((one, i) => (
@@ -435,7 +422,6 @@ export function SetupScreen({ open, onClose, onKeys }) {
                 <Field
                   label={t("su.key")}
                   value={vpn.vpn_url}
-                  mono
                   copied={copied === "vpn"}
                   onCopy={() => copy(vpn.vpn_url, "vpn")}
                   t={t}
@@ -448,49 +434,46 @@ export function SetupScreen({ open, onClose, onKeys }) {
                     tmaOpenApp(vpn.vpn_url);
                   }}
                 >
-                  {t("su.openIn", { app: "AmneziaVPN" })}
+                  {t("su.openIn", { app: meta.name })}
                 </button>
               </>
             ) : (
-              <p className="su-wait">{t("su.noVpnKey")}</p>
+              <span className="su-wait">{t("su.noVpnKey")}</span>
             )}
-          </>
+          </Step>
         )}
 
-        {tab === "vless" && (
-          <>
-            <div className="su-apps">
-              {vlessApps.map((app) => (
-                <div className="su-app" key={app.id}>
-                  <span className="su-app-n">{app.name}</span>
-                  <a
-                    className="su-app-get"
-                    href={app.store[platform]}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                  >
-                    {t("setup.ext.install")}
+        {meta.kind === "sub" && (
+          <Step icon={IC_KEY} title={t("su.stepKey")} text={t("su.vlessLead")}>
+            {keys === null ? (
+              <span className="su-wait">{t("su.waitFile")}</span>
+            ) : subUrl ? (
+              <>
+                <Field
+                  label={t("su.key")}
+                  value={subUrl}
+                  copied={copied === "sub"}
+                  onCopy={() => copy(subUrl, "sub")}
+                  t={t}
+                />
+                {meta.deep && (
+                  <a className="ap-cta su-cta su-cta-alt" href={meta.deep(subUrl)}>
+                    {t("su.openIn", { app: meta.name })}
                   </a>
-                  {key?.url_vless && app.deep && (
-                    <a className="su-app-add" href={app.deep(key.url_vless)}>
-                      {t("setup.ext.add")}
-                    </a>
-                  )}
-                </div>
-              ))}
-            </div>
-            <p className="su-note">{t("su.vlessLead")}</p>
-            {keyLine("vless")}
-          </>
+                )}
+              </>
+            ) : (
+              <span className="su-wait">{t("su.noKey")}</span>
+            )}
+          </Step>
         )}
 
-        {/* Ключи на другие устройства — тихой ссылкой: большинству хватает
-            одного, а кому нужен второй, тот знает, что ищет. */}
-        {tab !== "ours" && (
-          <button type="button" className="su-more" onClick={onKeys}>
-            {t("su.moreKeys")}
-          </button>
-        )}
+        {/* ── шаг 3: подключиться ─────────────────────────────────────── */}
+        <Step icon={IC_LINK} title={t("su.stepConnect")} text={t("su.connectLead")} />
+
+        <button type="button" className="su-more" onClick={onKeys}>
+          {t("su.moreKeys")}
+        </button>
       </div>
     </ScreenShell>
   );

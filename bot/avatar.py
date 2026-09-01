@@ -1,3 +1,12 @@
+"""Ставит боту анимированный аватар из assets/avatar.mp4.
+
+Метод setMyProfilePhoto в aiogram ещё не обёрнут, поэтому запрос уходит в
+Telegram напрямую: файл прикладывается как attach, а описание — объектом
+InputProfilePhoto.
+
+Запуск: venv/bin/python avatar.py
+"""
+
 import asyncio
 import json
 import sys

@@ -36,9 +36,7 @@ from utils.logger import logger
 
 
 COMMANDS = (
-    BotCommand(command="start", description="Личный кабинет и меню"),
-    BotCommand(command="menu", description="Главное меню"),
-    BotCommand(command="myid", description="Мой Telegram ID"),
+    BotCommand(command="start", description="Открыть приложение"),
 )
 
 # Пауза перед новой попыткой, когда Telegram недоступен.
@@ -86,6 +84,12 @@ def build_dispatcher() -> Dispatcher:
     dp.message.middleware(ChannelMiddleware())
     dp.callback_query.middleware(ChannelMiddleware())
 
+    # Управление уехало в мини-приложение: в боте остались витрина
+    # (первый экран с кнопкой запуска), пригласительные ссылки и оплата
+    # звёздами — её Telegram проводит только через бота. Роутеры входа,
+    # кабинета, тарифов, друзей и переводов отключены намеренно: их
+    # экраны живут в приложении, и два места для одного и того же
+    # расходились бы.
     dp.include_routers(
         # Оплата — ПЕРВОЙ, и это не вкусовщина.
         #
@@ -104,12 +108,6 @@ def build_dispatcher() -> Dispatcher:
         promo.router,
         subscribe.router,
         admin.router,
-        auth.router,
-        cabinet.router,
-        friends.router,
-        transfer.router,
-        plans.router,
-        support.router,
     )
 
     return dp

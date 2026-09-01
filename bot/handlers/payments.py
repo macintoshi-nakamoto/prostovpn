@@ -54,12 +54,18 @@ async def pre_checkout(query: PreCheckoutQuery) -> None:
     проверить заранее: жив ли тариф, знаем ли кому продлевать и та ли сумма.
     """
     code, paid_with, quantity = _parse_payload(query.invoice_payload)
+    user_id = query.from_user.id
 
     try:
         # Ответить Telegram нужно за десять секунд, иначе он сам покажет
         # человеку сбой оплаты. Запрос к панели ждёт своих двадцати пяти, и
         # без этой рамки медленная панель молча съедала бы всё окно.
-        plan = await asyncio.wait_for(panel.plan_by_code(code), timeout=PRE_CHECKOUT_BUDGET)
+        # Тариф берём от имени плательщика: сумму в счёте считали так же, и
+        # без его токена вводная цена посчиталась бы по-другому.
+        plan = await asyncio.wait_for(
+            panel.plan_by_code(code, await models.session_token(user_id)),
+            timeout=PRE_CHECKOUT_BUDGET,
+        )
     except (panel.PanelError, asyncio.TimeoutError):
         # Панель молчит — деньги не берём: продлить всё равно не сможем.
         await query.answer(ok=False, error_message="Сервис недоступен, попробуйте позже")
@@ -71,7 +77,6 @@ async def pre_checkout(query: PreCheckoutQuery) -> None:
 
     # Кому продлевать. Без учётки платёж превращается в ручной разбор с
     # админом — а человеку проще войти сейчас, чем ждать возврата потом.
-    user_id = query.from_user.id
     session = await models.get_session(user_id)
     login = session.panel_login if session else await models.last_login(user_id)
 
@@ -89,7 +94,11 @@ async def pre_checkout(query: PreCheckoutQuery) -> None:
     # Сверяем в той же единице, в какой выставляли: звёздный счёт — в
     # звёздах, счёт картой в боте — в копейках. Одна мерка на оба сломала бы
     # оплату картой, у которой сумма на два порядка другая.
-    expected = (plan.price_kopecks if paid_with == "card" else plan.stars) * quantity
+    # Обе величины уже с учётом количества и вводной цены — умножать ещё раз
+    # нельзя, иначе предчек отклонит правильный счёт.
+    expected = (
+        plan.amount_kopecks(quantity) if paid_with == "card" else plan.stars_for(quantity)
+    )
 
     if query.total_amount != expected:
         logger.warning(
@@ -155,7 +164,7 @@ async def successful_payment(message: Message) -> None:
     plan = None
 
     try:
-        plan = await panel.plan_by_code(code)
+        plan = await panel.plan_by_code(code, await models.session_token(message.from_user.id))
 
         if plan is None:
             raise panel.PanelError(f"тариф «{code}» пропал из витрины")

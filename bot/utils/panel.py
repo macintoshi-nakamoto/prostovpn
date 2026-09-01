@@ -55,9 +55,40 @@ class Plan:
     # сайте показывается как «3 страны» — здесь тоже страны, иначе человек
     # сравнивает витрину бота с сайтом и видит разные слова про одно и то же.
     server_limit: int = 0
+    # Цена первой покупки. `intro_applies` считает панель и считает её НА
+    # ЧЕЛОВЕКА, поэтому тарифы надо запрашивать с его токеном: без токена
+    # панель ответит «действует» кому угодно, включая тех, кто уже покупал.
+    intro_price_kopecks: int = 0
+    intro_applies: bool = False
+
+    def amount_kopecks(self, quantity: int = 1) -> int:
+        """
+        Столько спишут на самом деле.
+
+        Повторяет правило из backend/app/services/orders.py:order_amount —
+        вводная цена достаётся только первой покупке и только за одну штуку.
+        Считать её здесь по-своему нельзя: бот назовёт одну сумму, а панель
+        выставит другую.
+        """
+        count = max(1, quantity)
+        if count == 1 and self.intro_applies and self.intro_price_kopecks > 0:
+            return self.intro_price_kopecks
+        return self.price_kopecks * count
+
+    def rub_for(self, quantity: int = 1) -> int:
+        return self.amount_kopecks(quantity) // 100
+
+    def stars_for(self, quantity: int = 1) -> int:
+        """Звёзды считаем от той же суммы: вводная цена действует на все способы."""
+        return max(1, round(self.rub_for(quantity) * config.stars_rate))
+
+    def intro_now(self, quantity: int = 1) -> bool:
+        """Действует ли вводная цена — по ней решаем, показывать ли «далее»."""
+        return self.amount_kopecks(quantity) != self.price_kopecks * max(1, quantity)
 
     @property
     def rub(self) -> int:
+        """Обычная цена тарифа. Что спишут — в rub_for()."""
         return self.price_kopecks // 100
 
     @property
@@ -272,18 +303,25 @@ def _plan(row: dict) -> Plan:
         traffic_limit_bytes=row.get("traffic_limit_bytes"),
         purchasable=row.get("purchasable", False),
         server_limit=row.get("server_limit") or 0,
+        intro_price_kopecks=row.get("intro_price_kopecks") or 0,
+        intro_applies=bool(row.get("intro_applies")),
     )
 
 
-async def plans() -> list[Plan]:
-    """Тарифы витрины — те же, что на сайте."""
-    rows = await _request("GET", f"{CLIENT}/plans")
+async def plans(token: str | None = None) -> list[Plan]:
+    """
+    Тарифы витрины — те же, что на сайте.
+
+    С токеном панель отвечает про конкретного человека: действует ли ему
+    вводная цена. Без токена — как незнакомцу, то есть «действует».
+    """
+    rows = await _request("GET", f"{CLIENT}/plans", token=token)
 
     return [_plan(row) for row in rows if row.get("purchasable")]
 
 
-async def plan_by_code(code: str) -> Plan | None:
-    for plan in await plans():
+async def plan_by_code(code: str, token: str | None = None) -> Plan | None:
+    for plan in await plans(token):
         if plan.code == code:
             return plan
 
@@ -638,7 +676,9 @@ async def extend(
         payload={
             "plan_code": plan.code,
             "days": plan.duration_days * quantity,
-            "price": plan.rub * quantity,
+            # Ровно столько списали: если действует вводная цена, в кассе
+            # должна быть она, иначе отчёты разойдутся с платежами.
+            "price": plan.rub_for(quantity),
             "quantity": quantity,
             "register_payment": True,
             "method": method,

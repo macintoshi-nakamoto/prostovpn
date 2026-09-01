@@ -118,6 +118,17 @@ async def save_session(
         await db.commit()
 
 
+async def session_token(user_id: int) -> str | None:
+    """
+    Токен для запросов, ответ на которые зависит от человека.
+
+    Вводную цену панель считает на пользователя: без токена она ответит
+    «действует» кому угодно, включая тех, кто уже покупал.
+    """
+    session = await get_session(user_id)
+    return session.token if session else None
+
+
 async def get_session(user_id: int) -> Session | None:
     async with _connect() as db:
         cursor = await db.execute(

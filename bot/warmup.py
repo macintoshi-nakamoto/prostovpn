@@ -1,3 +1,12 @@
+"""Прогрев анимаций: выгружает файлы в Telegram один раз.
+
+Выгрузка с сервера занимает секунды, и платить их при первом нажатии не
+должен ни бот, ни человек. Скрипт отправляет каждую анимацию администратору,
+запоминает file_id в базе и тут же удаляет сообщение.
+
+Запуск после выкладки: venv/bin/python warmup.py
+"""
+
 import asyncio
 import sys
 import time
@@ -29,6 +38,8 @@ async def main() -> None:
 
     chat = config.admin_ids[0]
     failed = 0
+    # Выгрузка тяжёлого файла разово доходила до двух минут — здесь ждём дольше,
+    # чем в боте: этот запас нужен один раз, зато после него экраны мгновенные.
     bot = Bot(token=config.token, session=BotSession(timeout=600))
 
     for path in FILES:
@@ -47,6 +58,8 @@ async def main() -> None:
         try:
             message = await bot.send_animation(chat, FSInputFile(str(path)), caption="прогрев")
         except TelegramAPIError as error:
+            # Telegram иногда отвечает 504 на выгрузке. Не бросаем всё: этот
+            # файл догоним следующим запуском, остальные прогреем сейчас.
             print(f"{path.name}: не вышло за {time.monotonic() - started:.0f}с — {error}")
             failed += 1
             continue

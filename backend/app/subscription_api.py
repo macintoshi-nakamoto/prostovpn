@@ -67,7 +67,9 @@ def _endpoints_for(db: OrmSession, server: Server, key: UserKey | None) -> list[
     base = provisioning.serving_config(server, key)
     if not base:
         return []
-    primary = _with_chosen_port(db, server, key, base)
+    # JSON читают приложения, которые не назвали версию, — I1–I5 им не
+    # отдаём: незнакомую строку старый движок отвергает вместе с ключом.
+    primary = provisioning.without_special_junk(_with_chosen_port(db, server, key, base))
     main_port, spare_ports = _ports_for(db, server, key)
     chosen = provisioning.endpoint_port(primary) or main_port
     wheel = [chosen] + [p for p in ([main_port] + spare_ports) if p != chosen]
@@ -223,8 +225,19 @@ def _payload(db: OrmSession, tok: SubscriptionToken, background: BackgroundTasks
     }
 
 
-def _amnezia_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTasks | None) -> str:
+def _amnezia_body(
+    db: OrmSession,
+    tok: SubscriptionToken,
+    background: BackgroundTasks | None,
+    special_junk: bool = False,
+) -> str:
+    """
+    special_junk — отдавать ли I1–I5: да только для AmneziaVPN, который
+    назвал версию с их поддержкой (см. services/compat.py).
+    """
     import base64
+
+    from .api_client import _endpoint_for
 
     user = tok.user
     links: list[str] = []
@@ -236,6 +249,11 @@ def _amnezia_body(db: OrmSession, tok: SubscriptionToken, background: Background
             continue
         try:
             config = _with_chosen_port(db, server, key, config)
+            endpoint = _endpoint_for(db, server, key)
+            if special_junk and endpoint is not None:
+                config = provisioning.with_special_junk(config, endpoint.params)
+            else:
+                config = provisioning.without_special_junk(config)
             links.append(
                 provisioning.build_vpn_key(
                     server.host,
@@ -286,6 +304,11 @@ def _vless_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTa
             link = xray.share_link(endpoint, cred, server)
             if link:
                 links.append(link)
+            # Тот же узел по Hysteria2 — для сотовых сетей, где Reality
+            # душат по повадкам трафика, а QUIC не трогают.
+            hy2 = xray.hy2_link(endpoint, cred, server)
+            if hy2:
+                links.append(hy2)
         except Exception:
             log.exception("сервер «%s» пропущен: не собралась ссылка vless://", server.name)
     return base64.b64encode("\n".join(links).encode()).decode()
@@ -381,7 +404,12 @@ def subscription(
 
     if wanted in ("amnezia", "vless"):
         body = (
-            _amnezia_body(db, tok, background)
+            _amnezia_body(
+                db,
+                tok,
+                background,
+                special_junk=services.compat.amnezia_supports_special_junk(user_agent),
+            )
             if wanted == "amnezia"
             else _vless_body(db, tok, background)
         )

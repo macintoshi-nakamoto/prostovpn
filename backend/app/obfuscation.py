@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import secrets as _secrets
 from dataclasses import dataclass
 
@@ -153,3 +154,97 @@ def from_config_text(config: str, *, strict: bool = False) -> ObfuscationSet:
     if missing:
         raise InvalidObfuscation("в конфиге нет параметров: " + ", ".join(missing))
     return validate(values, strict=strict)
+
+
+# ---------------------------------------------------------------------------
+# AWG 1.5: сигнатурные пакеты I1–I5
+# ---------------------------------------------------------------------------
+#
+# Jc/Jmin/Jmax и S1/S2 прячут размер рукопожатия, но сама картина — серия
+# случайного мусора и следом пакет ровно в 148+S1 байт — со временем стала
+# приметой. I-пакеты клиент шлёт ПЕРЕД рукопожатием, и их содержимое задаём
+# мы: первое, что видит DPI на потоке, — «настоящий» пакет знакомого
+# протокола. Сервер такие пакеты просто отбрасывает, поэтому в серверный
+# конфиг они не попадают и старым клиентам не мешают: кто не умеет I1,
+# тому строки не отдаём (см. services/compat.py).
+#
+# Язык значения — теги amneziawg-go:
+#   <b 0xHEX>  байты как есть      <r N>   N случайных байт
+#   <c>        счётчик, 4 байта    <rc N>  N случайных букв/цифр
+#   <t>        время, 4 байта      <rd N>  N случайных цифр
+
+SPECIAL_FIELDS = ("i1", "i2", "i3", "i4", "i5")
+
+# Пакет QUIC v1 Initial, каким его шлёт браузер: длинный заголовок (0xc4),
+# версия 1, восьмибайтный DCID, пустые SCID и токен, длина 1182 и
+# «зашифрованное» тело до ровно 1200 байт — минимального размера Initial по
+# RFC 9000. На UDP/443 это неотличимо от открытия сайта по HTTP/3.
+QUIC_INITIAL = "<b 0xc40000000108><r 8><b 0x0000449e><r 1182>"
+
+# Больше одного MTU пакет не пройдёт целиком, а движок такого и не примет.
+SPECIAL_MAX_BYTES = 1280
+
+_TAG = re.compile(r"<\s*(b|c|t|r|rc|rd)(?:\s+([^<>]*?))?\s*>")
+
+
+def special_junk_size(value: str) -> int:
+    """
+    Сколько байт уйдёт в сеть по описанию пакета; заодно проверяет синтаксис.
+    """
+    text = (value or "").strip()
+    if not text:
+        return 0
+    size = 0
+    pos = 0
+    for match in _TAG.finditer(text):
+        if text[pos : match.start()].strip():
+            raise InvalidObfuscation(f"лишний текст вне тегов: {text[pos:match.start()]!r}")
+        pos = match.end()
+        tag, arg = match.group(1), (match.group(2) or "").strip()
+        if tag == "b":
+            body = arg[2:] if arg.lower().startswith("0x") else ""
+            if not body or len(body) % 2 or not re.fullmatch(r"[0-9a-fA-F]+", body):
+                raise InvalidObfuscation(f"<b> ждёт чётное число hex-цифр после 0x, а не {arg!r}")
+            size += len(body) // 2
+        elif tag in ("c", "t"):
+            if arg:
+                raise InvalidObfuscation(f"<{tag}> без аргументов")
+            size += 4
+        else:
+            if not arg.isdigit() or int(arg) <= 0:
+                raise InvalidObfuscation(f"<{tag}> ждёт число байт, а не {arg!r}")
+            size += int(arg)
+    if text[pos:].strip():
+        raise InvalidObfuscation(f"лишний текст вне тегов: {text[pos:]!r}")
+    if size > SPECIAL_MAX_BYTES:
+        raise InvalidObfuscation(f"пакет {size} байт не пройдёт целиком: предел {SPECIAL_MAX_BYTES}")
+    return size
+
+
+def special_junk(params: dict | None, *, strict: bool = True) -> dict[str, str]:
+    """
+    I1–I5 из параметров точки входа: имя → описание пакета, пустые пропущены.
+
+    strict — падать на кривом значении; иначе такое просто не отдаём:
+    выдача ключа важнее одного лишнего пакета.
+    """
+    out: dict[str, str] = {}
+    for name in SPECIAL_FIELDS:
+        raw = (params or {}).get(name)
+        value = str(raw).strip() if raw is not None else ""
+        if not value:
+            continue
+        try:
+            special_junk_size(value)
+        except InvalidObfuscation:
+            if strict:
+                raise
+            continue
+        out[name] = value
+    return out
+
+
+def special_lines(params: dict | None, *, strict: bool = False) -> str:
+    return "\n".join(
+        f"{name.upper()} = {value}" for name, value in special_junk(params, strict=strict).items()
+    )

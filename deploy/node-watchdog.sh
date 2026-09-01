@@ -158,6 +158,27 @@ PY
     fi
 fi
 
+# --- Hysteria2 --------------------------------------------------------------
+if systemctl cat prosto-hy2 >/dev/null 2>&1 && systemctl is-enabled --quiet prosto-hy2 2>/dev/null; then
+    hy2_port="$(sed -nE 's/^listen:[[:space:]]*:?([0-9]+).*/\1/p' /opt/prosto-hy2/config.yaml 2>/dev/null | head -1)"
+    if ! systemctl is-active --quiet prosto-hy2; then
+        say "prosto-hy2 не работает — перезапускаем"
+        systemctl restart prosto-hy2 && fixed=1
+    elif [[ -n "$hy2_port" ]] && ! ss -Hlun "sport = :$hy2_port" 2>/dev/null | grep -q .; then
+        say "Hysteria2 не слушает $hy2_port/udp — перезапускаем"
+        systemctl restart prosto-hy2 && fixed=1
+    fi
+    # Редирект прыгающих портов ставит тот же скрипт, что и служба.
+    if [[ -x /usr/local/bin/prosto-hy2-ports && -f /etc/prosto-hy2-ports.conf && -n "$WAN" ]]; then
+        while read -r range target; do
+            [[ "$range" =~ ^[0-9]+:[0-9]+$ && "$target" =~ ^[0-9]+$ ]] || continue
+            if ! iptables -t nat -C PREROUTING -i "$WAN" -p udp --dport "$range" -j REDIRECT --to-ports "$target" 2>/dev/null; then
+                /usr/local/bin/prosto-hy2-ports && say "восстановлен редирект Hysteria2 $range → $target" && fixed=1
+            fi
+        done < /etc/prosto-hy2-ports.conf
+    fi
+fi
+
 # --- очередь на внешнем интерфейсе ------------------------------------------
 if [[ -n "$WAN" ]] && tc qdisc show dev "$WAN" 2>/dev/null | head -1 | grep -qE '^qdisc (fq|pfifo_fast) '; then
     say "на $WAN очередь $(tc qdisc show dev "$WAN" | awk 'NR==1{print $2}') — ставим fq_codel"

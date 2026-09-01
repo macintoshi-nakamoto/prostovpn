@@ -301,6 +301,7 @@ def _servers_out(
             continue
         main_port, spare_ports = _ports_for(db, server, key)
         config = _with_chosen_port(db, server, key, config)
+        config = _with_junk_for(db, session, server, key, config)
         out.append(
             ServerOut(
                 id=server.id,
@@ -379,35 +380,106 @@ PORT_PROBE_SECONDS = 180
 PORT_PROBE_GRACE = dt.timedelta(minutes=10)
 
 
+def _endpoint_for(db: OrmSession, server: Server, key: UserKey | None) -> NodeEndpoint | None:
+    if key is None or key.endpoint_id is None:
+        return None
+    endpoint = db.get(NodeEndpoint, key.endpoint_id)
+    if endpoint is None or endpoint.server_id != server.id:
+        return None
+    return endpoint
+
+
+def _port_plan(
+    db: OrmSession, server: Server, key: UserKey | None
+) -> tuple[int, list[int], int]:
+    """
+    (главный порт, запасные по порядку перебора, порт, который слушает awg).
+
+    Главный — тот, что назначен точке входа (advertise_port), а не тот, что
+    слушает awg. 51820 — эталонный порт WireGuard, и у сотовых операторов
+    он под шейпом: рукопожатие проходит, дальше растут потери. Поэтому он
+    уходит в самый конец списка — клиент дойдёт до него, только когда
+    промолчат все остальные. Объявленный порт обязан быть среди запасных:
+    на узел он попадает NAT-редиректом, и порт «из головы» ушёл бы человеку
+    в никуда.
+    """
+    endpoint = _endpoint_for(db, server, key)
+    if endpoint is not None:
+        listen, spares = endpoint.listen_port, endpoint.alt_port_list()
+        raw = (endpoint.params or {}).get("advertise_port")
+    else:
+        listen, spares, raw = server.port, server.alt_port_list(), None
+
+    try:
+        advertised = int(raw) if raw else None
+    except (TypeError, ValueError):
+        advertised = None
+
+    if advertised and advertised != listen and advertised in spares:
+        return advertised, [p for p in spares if p != advertised] + [listen], listen
+    return listen, spares, listen
+
+
 def _ports_for(
     db: OrmSession, server: Server, key: UserKey | None
 ) -> tuple[int, list[int]]:
-    if key is not None and key.endpoint_id is not None:
-        endpoint = db.get(NodeEndpoint, key.endpoint_id)
-        if endpoint is not None:
-            return endpoint.listen_port, endpoint.alt_port_list()
-    return server.port, server.alt_port_list()
+    main_port, spares, _listen = _port_plan(db, server, key)
+    return main_port, spares
 
 
 def _with_chosen_port(
     db: OrmSession, server: Server, key: UserKey | None, config: str
 ) -> str:
-    main_port, ports = _ports_for(db, server, key)
+    main_port, ports, listen = _port_plan(db, server, key)
     if key is None or not ports:
         return config
 
     now = utcnow()
     if key.last_handshake_at is not None or now - key.created_at < PORT_PROBE_GRACE:
         chosen = key.endpoint_port or provisioning.endpoint_port(config) or main_port
+        if chosen == listen and main_port != listen:
+            # Ключ прилип к порту awg, пока у точки не было объявленного:
+            # первое же рукопожатие на 51820 замораживало выбор навсегда,
+            # хотя дальше связь шла с потерями. Переводим на объявленный;
+            # у кого работает только 51820, приложение вернёт его само —
+            # он остался в конце списка запасных.
+            chosen = main_port
+            if key.endpoint_port != chosen:
+                key.endpoint_port = chosen
+                db.commit()
         return provisioning.with_endpoint_port(config, chosen)
 
-    wheel = [main_port] + ports
+    # Колесо перебора для ключа, который ни разу не подключался. Порт awg в
+    # него не входит, когда есть объявленный: попади он в конфиг, первое
+    # удачное рукопожатие заморозило бы ключ на задушенном порту.
+    wheel = [main_port] + [p for p in ports if p != listen or main_port == listen]
     index = int(now.timestamp() // PORT_PROBE_SECONDS) % len(wheel)
     chosen = wheel[index]
     if key.endpoint_port != chosen:
         key.endpoint_port = chosen
         db.commit()
     return provisioning.with_endpoint_port(config, chosen)
+
+
+def _with_junk_for(
+    db: OrmSession,
+    session: Session | None,
+    server: Server,
+    key: UserKey | None,
+    config: str,
+) -> str:
+    """
+    Строки I1–I5 — только тем приложениям, которые их разбирают.
+
+    Остальным — конфиг без них: старый движок отвергает незнакомый ключ
+    целиком, и человек остался бы без связи из-за одного лишнего пакета.
+    """
+    endpoint = _endpoint_for(db, server, key)
+    platform = session.platform if session is not None else None
+    version = session.app_version if session is not None else None
+    if endpoint is not None and services.compat.supports_special_junk(platform, version):
+        return provisioning.with_special_junk(config, endpoint.params)
+    return provisioning.without_special_junk(config)
 
 
 def _adopt_by_orders(db: OrmSession, telegram_id: int) -> User | None:

@@ -65,7 +65,7 @@ def start_menu() -> InlineKeyboardMarkup:
     """Первый экран: кнопка мини-приложения и наш канал под ней."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [make_btn("Открыть приложение", web_app=f"{config.site_url}/account")],
+            [make_btn("Открыть приложение", web_app=f"{config.site_url}/account", emoji="rocket")],
             [make_btn("Наш канал", url=config.channel_url, emoji="channel")],
         ]
     )
@@ -95,7 +95,10 @@ def main_menu() -> InlineKeyboardMarkup:
                 make_btn(
                     "Кабинет на сайте — без пароля",
                     web_app=f"{config.site_url}/account",
-                    emoji="link",
+                    # 📁 занят «Документами» в этом же сообщении, а два
+                    # одинаковых значка читаются как ошибка вёрстки. 🔓 здесь
+                    # к тому же по смыслу: входить не нужно.
+                    emoji="unlock",
                 )
             ],
             [make_btn("Тарифы и оплата", callback_data="plans", emoji="wallet", style=SUCCESS)],
@@ -220,7 +223,8 @@ def plans_menu(plans: list[Plan], method: PayMethod) -> InlineKeyboardMarkup:
 
 
 def price(plan: Plan, method: PayMethod) -> str:
-    return f"{plan.stars} ★" if method.code == "stars" else f"{plan.rub} ₽"
+    """Цена на кнопке — та же, что спишут."""
+    return f"{plan.stars_for()} ★" if method.code == "stars" else f"{plan.rub_for()} ₽"
 
 
 def pay_link_menu(url: str) -> InlineKeyboardMarkup:
@@ -421,22 +425,15 @@ def promo_menu(invite_url: str) -> InlineKeyboardMarkup:
     """
     Экран пригласительной ссылки.
 
-    Регистрация — единственная зелёная кнопка: дни даются только за новый
-    аккаунт, и предлагать вход первым значит уводить человека мимо подарка.
-    Вход всё равно оставляем: по ссылке приходят и те, кто уже с нами.
-
-    Копирование ссылки здесь же — человек, которому подарок не достался
-    (аккаунт у него давно), всё равно может передать её дальше, и это
-    единственный экран, где ссылка у него перед глазами.
+    Аккаунт заводится в приложении — там же, где им дальше и пользуются;
+    дни начислим сразу после регистрации. Ссылку оставляем на виду: тот,
+    кому подарок не достался (аккаунт у него давно), передаст её дальше.
     """
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [make_btn("Создать аккаунт", callback_data="register", emoji="profile", style=SUCCESS)],
+            [make_btn("Открыть приложение", web_app=f"{config.site_url}/account", emoji="rocket")],
             [make_btn("Скопировать ссылку", copy_text=invite_url, emoji="link")],
-            [
-                make_btn("Войти", callback_data="login", emoji="key"),
-                make_btn("О сервисе", callback_data="about", emoji="rocket"),
-            ],
+            [make_btn("Наш канал", url=config.channel_url, emoji="channel")],
         ]
     )
 
@@ -501,11 +498,19 @@ def nudge_signup_menu() -> InlineKeyboardMarkup:
 
 
 def nudge_idle_menu() -> InlineKeyboardMarkup:
-    """Письмо «аккаунт есть, а VPN не включали»: главное здесь — инструкция."""
+    """
+    Письмо «аккаунт есть, а VPN не включали».
+
+    Нужное действие здесь одно — поставить приложение, поэтому первой и
+    цветной стоит именно она; экран «about» держит установщики под все
+    платформы. Инструкция ниже — для тех, у кого что-то не сойдётся.
+    Раньше второй кнопкой был личный кабинет: человеку, который ещё ни разу
+    не включал VPN, там нечего делать.
+    """
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [make_btn("Инструкция", url=config.guide_url, emoji="guide", style=SUCCESS)],
-            [make_btn("Личный кабинет", callback_data="cabinet", emoji="profile")],
+            [make_btn("Скачать приложение", callback_data="about", emoji="rocket", style=SUCCESS)],
+            [make_btn("Инструкция", url=config.guide_url, emoji="guide")],
         ]
     )
 

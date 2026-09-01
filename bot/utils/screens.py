@@ -177,7 +177,7 @@ def invoice(
         rich.title("Счёт на оплату", "wallet"),
         rich.facts(
             ("Тариф", plan.title),
-            ("Сумма", f"{plan.rub * quantity} ₽"),
+            ("Сумма", f"{plan.rub_for(quantity)} ₽"),
             ("Срок", timeutils.plural_days(plan.duration_days * quantity)),
         ),
         rich.paragraph(

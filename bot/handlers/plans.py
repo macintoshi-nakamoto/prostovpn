@@ -73,7 +73,8 @@ async def send_stars_invoice(message: Message, plan: Plan, quantity: int = 1) ->
             ),
             payload=f"{plan.code}:stars:{quantity}",
             currency="XTR",
-            prices=[LabeledPrice(label=plan.title, amount=plan.stars * quantity)],
+            # Вводная цена действует на все способы, звёзды не исключение.
+            prices=[LabeledPrice(label=plan.title, amount=plan.stars_for(quantity))],
         )
     except TelegramAPIError as error:
         logger.error("счёт звёздами не выставлен (%s): %s", plan.code, error)
@@ -118,7 +119,7 @@ async def plans(callback: CallbackQuery) -> None:
         return
 
     try:
-        available = await panel.plans()
+        available = await panel.plans(await models.session_token(callback.from_user.id))
     except panel.PanelError as error:
         await show_error(callback, texts.panel_error(error))
         await callback.answer()
@@ -159,7 +160,9 @@ async def buy(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     try:
-        plan = await panel.plan_by_code(plan_code)
+        plan = await panel.plan_by_code(
+            plan_code, await models.session_token(callback.from_user.id)
+        )
     except panel.PanelError as error:
         await show_error(callback, texts.panel_error(error))
         await callback.answer()
@@ -262,7 +265,9 @@ async def daily_days(message: Message, state: FSMContext) -> None:
     chosen = data.get("method")
 
     try:
-        plan = await panel.plan_by_code(data.get("plan", ""))
+        plan = await panel.plan_by_code(
+            data.get("plan", ""), await models.session_token(message.from_user.id)
+        )
 
         if plan is None:
             raise panel.PanelError("тариф больше недоступен")

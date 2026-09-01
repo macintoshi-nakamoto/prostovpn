@@ -105,15 +105,26 @@ async def sweep(bot: Bot | None, dry: bool = False) -> Counter:
     несколько, и три сообщения подряд читаются как поломка бота.
     """
     people = await models.audience()
-    accounts = {row.login.lower(): row for row in await panel.admin_users()}
+    rows = await panel.admin_users()
+    accounts = {row.login.lower(): row for row in rows}
+    # Аккаунт заводят в мини-приложении, и бот про это узнаёт единственным
+    # способом: панель привязала Telegram к учётке при регистрации.
+    by_telegram = {row.telegram_id: row for row in rows if row.telegram_id}
     done: Counter = Counter()
 
     for person in people:
         account = accounts.get(person.login.lower()) if person.login else None
 
+        if account is None:
+            account = by_telegram.get(person.user_id)
+
         # Логин известен, а учётки нет: её удалили из панели. Предлагать
         # такому регистрацию заново мы не беремся — молча пропускаем.
         if person.login and account is None:
+            continue
+
+        if account is not None and await _promo_claim(bot, person, account, dry):
+            done["promo"] += 1
             continue
 
         if account is None:
@@ -133,6 +144,63 @@ async def sweep(bot: Bot | None, dry: bool = False) -> Counter:
             done[RENEW] += 1
 
     return done
+
+
+async def _promo_claim(
+    bot: Bot | None,
+    person: models.Candidate,
+    account: panel.AdminUser,
+    dry: bool,
+) -> bool:
+    """
+    Начисляет обещанное тому, кто завёл аккаунт в приложении.
+
+    Раньше это делала регистрация в боте — теперь её нет, и единственный
+    надёжный признак «аккаунт появился» приходит из панели: она привязала
+    Telegram к учётке. Обещаний может быть два сразу (пригласительная
+    ссылка и письмо вдогонку) — берём большее, а не сумму: иначе человек,
+    получивший письмо и перешедший по чужой ссылке, унёс бы оба подарка.
+    """
+    promo = await models.pending_promo(person.user_id)
+    promised = await models.promised_days(person.user_id, "signup")
+    days = max(promo.days if promo else 0, promised)
+
+    if not days:
+        return False
+    if dry:
+        return True
+
+    reason = f"промо {promo.code}" if promo else "дожим: регистрация"
+
+    try:
+        granted = await panel.grant_days(account.login, days, reason=reason)
+    except panel.PanelError as error:
+        logger.warning("подарок (%s): дни не начислены (%s)", reason, error)
+        return False
+
+    if not granted:
+        logger.warning("подарок (%s): учётки %s в панели нет", reason, account.login)
+        return False
+
+    if promo:
+        await models.claim_promo(person.user_id, account.login, days)
+    if promised:
+        await models.claim_nudge(person.user_id, "signup", days)
+
+    logger.info("подарок (%s): %s дн. начислены %s", reason, days, account.login)
+
+    if bot is not None:
+        # Кнопка одна — открыть приложение: подключение, тариф и всё
+        # остальное живут там.
+        await _send(
+            bot,
+            person.user_id,
+            assets.MINIAPP,
+            texts.promo_granted_text(days),
+            menus.start_menu(),
+        )
+
+    return True
 
 
 def _quiet(person: models.Candidate) -> bool:

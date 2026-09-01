@@ -262,6 +262,17 @@ def reissue(db: OrmSession, user: User) -> list[str]:
 
 def _vpn_url(server: Server, key: UserKey, name: str) -> str:
     config = provisioning.serving_config(server, key) or key.config
+    # Ключ уходит в AmneziaVPN: с 4.8.5 приложение понимает I1–I5, а более
+    # старое незнакомые поля vpn:// просто не читает — сигнатурные пакеты
+    # ему не мешают. Значения берём из точки входа, а не из текста ключа.
+    from sqlalchemy.orm import object_session
+
+    from ..models import NodeEndpoint
+
+    db = object_session(key)
+    endpoint = db.get(NodeEndpoint, key.endpoint_id) if db is not None and key.endpoint_id else None
+    if endpoint is not None:
+        config = provisioning.with_special_junk(config, endpoint.params)
     return provisioning.build_vpn_key(
         server.host,
         config,

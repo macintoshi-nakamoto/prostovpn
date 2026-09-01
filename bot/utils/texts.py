@@ -216,7 +216,8 @@ def plan_terms(plan: Plan) -> str:
 
 
 def plan_price(plan: Plan, method: PayMethod) -> str:
-    return f"{plan.stars} ★" if method.code == "stars" else f"{plan.rub} ₽"
+    """Цена, которую спишут: вводная действует на все способы одинаково."""
+    return f"{plan.stars_for()} ★" if method.code == "stars" else f"{plan.rub_for()} ₽"
 
 
 def plans_text(method: PayMethod, plans: list[Plan]) -> str:
@@ -244,7 +245,7 @@ def plans_text(method: PayMethod, plans: list[Plan]) -> str:
 def daily_prompt(plan: Plan, method: str | None = None) -> str:
     # Цену называем в той валюте, в которой сейчас платят: обещать рубли
     # тому, кто выбрал звёзды, значит показать одну цену, а списать другую.
-    price = f"{plan.stars}★" if method == "stars" else f"{plan.rub} ₽"
+    price = f"{plan.stars_for()}★" if method == "stars" else f"{plan.rub_for()} ₽"
 
     return (
         f'{tg("coffee")} <b>{escape(plan.title)}</b>\n\n'
@@ -268,7 +269,14 @@ def invoice_text(plan: Plan, quantity: int = 1, method: str | None = None) -> st
 
     return (
         f'{tg("wallet")} <b>Счёт на оплату</b>\n\n'
-        f"<b>{escape(plan.title)}</b> - {plan.rub * quantity} ₽ · {escape(terms)}\n\n"
+        f"<b>{escape(plan.title)}</b> - {plan.rub_for(quantity)} ₽ · {escape(terms)}\n\n"
+        + (
+            # Цену продления называем до оплаты, а не через месяц.
+            f"Дальше тариф стоит {plan.rub} ₽ в месяц.\n\n"
+            if plan.intro_now(quantity)
+            else ""
+        )
+        + 
         "Нажмите «Оплатить» и завершите платёж на открывшейся странице. "
         # Срок у способов разный: банковская ссылка живёт минуты, а перевод
         # в сети подтверждается своим ходом — обещать ему 15 минут нельзя.
@@ -473,8 +481,8 @@ def promo_text(days: int) -> str:
     return (
         f'{tg("gift")} <b>{timeutils.plural_days(days)} бесплатно</b>\n\n'
         "Вы перешли по пригласительной ссылке.\n"
-        f"Заведите аккаунт — и {timeutils.plural_days(days)} доступа "
-        "начислим сразу, без карты и без оплаты.\n\n"
+        f"Откройте приложение, заведите аккаунт — и {timeutils.plural_days(days)} "
+        "доступа начислим сразу, без карты и без оплаты.\n\n"
         f"{tg('star')} Друг по этой же ссылке получит столько же."
     )
 
@@ -587,7 +595,7 @@ def nudge_idle_text(days: int) -> str:
         f"Дарим вам <b>{timeutils.plural_days(days)}</b> бесплатного доступа — "
         "они уже на вашем счету.\n\n"
         "Осталось поставить приложение и войти теми же логином и паролем. "
-        "Как это сделать — по кнопке «Инструкция»."
+        "Если что-то не сойдётся — в «Инструкции» разбор по шагам."
     )
 
 

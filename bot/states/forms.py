@@ -22,11 +22,13 @@ class Support(StatesGroup):
 
 
 class Transfer(StatesGroup):
+    """Передача дней другу: сначала кому, потом сколько."""
 
     recipient = State()
     days = State()
 
 
 class BuyDaily(StatesGroup):
+    """Посуточный тариф: спрашиваем, на сколько дней."""
 
     days = State()

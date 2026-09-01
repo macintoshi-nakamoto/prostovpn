@@ -12,6 +12,7 @@ import zlib
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from .models import Provisioning, Server, UserKey
+from .obfuscation import special_lines
 
 
 def generate_keypair() -> tuple[str, str]:
@@ -210,6 +211,11 @@ def render_endpoint_config(endpoint, server: Server, private_key: str, address: 
     # WireGuard, и у сотовых операторов он под шейпом: рукопожатие проходит,
     # а дальше растут потери. Отдаём тот, что назначен точке входа.
     port = params.get("advertise_port") or endpoint.listen_port
+    # Сигнатурные пакеты AWG 1.5 (I1–I5) — только в клиентский конфиг:
+    # сервер их не шлёт. Здесь они попадают в сохранённый текст ключа, а
+    # при выдаче with_special_junk / without_special_junk приводят строки к
+    # тому, что понимает конкретное приложение.
+    special = special_lines(params)
 
     return (
         "[Interface]\n"
@@ -218,7 +224,8 @@ def render_endpoint_config(endpoint, server: Server, private_key: str, address: 
         f"DNS = {dns}\n"
         f"MTU = {mtu}\n"
         f"{obfuscation.config_lines()}\n"
-        "\n"
+        + (f"{special}\n" if special else "")
+        + "\n"
         "[Peer]\n"
         f"PublicKey = {server_public_key}\n"
         f"AllowedIPs = {allowed}\n"
@@ -284,9 +291,28 @@ cat > /etc/sysctl.d/99-prosto-net.conf <<'SYSCTL'
 net.core.default_qdisc = fq_codel
 net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
+net.core.rmem_default = 1048576
+net.core.wmem_default = 1048576
 net.core.netdev_max_backlog = 4096
+net.core.somaxconn = 4096
+net.ipv4.tcp_max_syn_backlog = 4096
 net.ipv4.tcp_mtu_probing = 1
 net.ipv4.tcp_base_mss = 1024
+# Reality — это TCP, который терминируется на самом узле; буферы под
+# дальний путь до России, а окно не сжимается после каждой паузы в
+# просмотре страницы.
+net.ipv4.tcp_rmem = 4096 131072 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_notsent_lowat = 131072
+net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_keepalive_time = 600
+net.ipv4.tcp_keepalive_intvl = 30
+net.ipv4.tcp_keepalive_probes = 5
+net.ipv4.ip_local_port_range = 10240 65535
+# Одиночные UDP-датаграммы (первые пакеты рукопожатия через редирект) живут
+# в conntrack не 30 секунд, а минуту: у сотовых сетей ответ идёт долго.
+net.netfilter.nf_conntrack_udp_timeout = 60
 net.netfilter.nf_conntrack_udp_timeout_stream = 180
 SYSCTL
 sysctl -p /etc/sysctl.d/99-prosto-net.conf >/dev/null 2>&1 || true
@@ -356,6 +382,37 @@ def with_endpoint_port(config: str, port: int) -> str:
     if not config:
         return config
     return ENDPOINT_LINE.sub(lambda m: f"{m.group(1)}{m.group(2)}:{port}", config, count=1)
+
+
+SPECIAL_LINE = re.compile(r"(?im)^[ \t]*I[1-5][ \t]*=[^\n]*\n?")
+
+PEER_HEADER = re.compile(r"(?im)^[ \t]*\[Peer\][ \t]*$")
+
+
+def without_special_junk(config: str) -> str:
+    """Конфиг без I1–I5 — для приложений, чей движок таких строк не знает."""
+    if not config:
+        return config
+    return SPECIAL_LINE.sub("", config)
+
+
+def with_special_junk(config: str, params: dict | None) -> str:
+    """
+    Конфиг с I1–I5 из параметров точки входа вместо того, что было в тексте.
+
+    Источник правды — параметры точки: выключили I1 в панели — строка
+    исчезает из выдачи, хотя в сохранённом ключе она есть. Кривое значение
+    не роняет выдачу, а молча пропускается (strict=False).
+    """
+    base = without_special_junk(config)
+    lines = special_lines(params, strict=False)
+    if not base or not lines:
+        return base
+    match = PEER_HEADER.search(base)
+    if match is None:
+        return base.rstrip("\n") + "\n" + lines + "\n"
+    head = base[: match.start()].rstrip("\n")
+    return head + "\n" + lines + "\n\n" + base[match.start() :]
 
 
 def with_endpoint_host(config: str, host: str) -> str:

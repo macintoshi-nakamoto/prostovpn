@@ -21,7 +21,7 @@ from aiogram.types import CallbackQuery, Message
 from config.settings import config
 from database import models
 from handlers.common import show_screen
-from keyboards.menus import gift_menu, iphone_menu, promo_granted_menu, promo_menu
+from keyboards.menus import gift_menu, promo_granted_menu, promo_menu
 from utils import assets, panel, screens, texts, timeutils
 from utils.logger import logger
 
@@ -29,6 +29,11 @@ from utils.logger import logger
 router = Router()
 
 PROMO_PREFIX = "promo_"
+
+
+def promo_url(code: str) -> str:
+    """Ссылка на бота с кодом — её и рассылают, и показывают на экране подарка."""
+    return f"https://t.me/{config.bot_username}?start={PROMO_PREFIX}{code}"
 
 
 def promo_code_from_payload(payload: str | None) -> str | None:
@@ -189,87 +194,3 @@ def share_url(promo) -> str:
         "бесплатно по моей ссылке"
     )
     return "https://t.me/share/url?" + urlencode({"url": promo_url(promo.code), "text": pitch})
-
-
-@router.callback_query(F.data == "iphone")
-async def iphone(callback: CallbackQuery) -> None:
-    """Экран установки для iPhone. Приложения нет — есть ключ AmneziaVPN."""
-    authorized = await models.get_session(callback.from_user.id) is not None
-
-    await show_screen(
-        callback,
-        screens.iphone,
-        iphone_menu(authorized),
-        text=texts.iphone_text(),
-        animation=assets.ABOUT,
-    )
-    await callback.answer()
-
-
-# --------------------------------------------------------------------------
-# Администратору
-# --------------------------------------------------------------------------
-
-
-def promo_url(code: str) -> str:
-    return f"https://t.me/{config.bot_username}?start={PROMO_PREFIX}{code}"
-
-
-@router.message(Command("promo"))
-async def promo_command(message: Message, command: CommandObject) -> None:
-    """
-    Создать ссылку или посмотреть, что с ней.
-
-        /promo                       — список ссылок
-        /promo КОД 14 10             — КОД даёт 14 дней, ссылка живёт 10 суток
-    """
-    if message.from_user.id not in config.admin_ids:
-        return
-
-    args = (command.args or "").split()
-
-    if not args:
-        rows = await models.all_promos()
-
-        if not rows:
-            await message.answer(
-                "Ссылок нет.\n\nСоздать: <code>/promo КОД ДНЕЙ СРОК</code>\n"
-                "Например: <code>/promo WELCOME14 14 10</code>"
-            )
-            return
-
-        lines = []
-        for promo in rows:
-            visits, claims = await models.promo_stats(promo.code)
-            state = "действует" if promo.alive else "истекла"
-            lines.append(
-                f"<code>{escape(promo.code)}</code> — {promo.days} дн., "
-                f"до {timeutils.human_date(promo.expires_at)} ({state})\n"
-                f"переходов: {visits}, начислено: {claims}\n"
-                f"{escape(promo_url(promo.code))}"
-            )
-
-        await message.answer("\n\n".join(lines))
-        return
-
-    code = promo_code_from_payload(PROMO_PREFIX + args[0])
-
-    if not code:
-        await message.answer("В коде можно только латиницу, цифры и дефис.")
-        return
-
-    days = int(args[1]) if len(args) > 1 and args[1].isdigit() else 14
-    ttl = int(args[2]) if len(args) > 2 and args[2].isdigit() else 10
-
-    if not (1 <= days <= 365) or not (1 <= ttl <= 365):
-        await message.answer("Дней и срок — от 1 до 365.")
-        return
-
-    promo = await models.create_promo(code, days=days, ttl_days=ttl)
-    logger.info("промо %s: создана админом %s", code, message.from_user.id)
-
-    await message.answer(
-        f"Ссылка готова: <b>{timeutils.plural_days(promo.days)}</b> "
-        f"новому аккаунту, действует до {timeutils.human_date(promo.expires_at)}.\n\n"
-        f"<code>{escape(promo_url(code))}</code>"
-    )

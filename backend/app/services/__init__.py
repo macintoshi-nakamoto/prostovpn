@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from . import (
     billing_webhook,
+    compat,
     credentials,
     delivery,
     devices,

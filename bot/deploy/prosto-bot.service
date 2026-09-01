@@ -2,11 +2,14 @@
 Description=Prosto VPN Telegram bot
 After=network-online.target prosto-panel.service
 Wants=network-online.target
+# Без лимита попыток: авария Telegram или сети длится дольше десяти секунд,
+# а служба, ушедшая в failed по счётчику, уже не поднимется сама.
 StartLimitIntervalSec=0
 
 [Service]
 Type=notify
 NotifyAccess=main
+# Бот шлёт пульс раз в 90с; тишина дольше — процесс завис, перезапускаем.
 WatchdogSec=180
 WorkingDirectory=/opt/prosto-bot
 Environment=PYTHONUNBUFFERED=1

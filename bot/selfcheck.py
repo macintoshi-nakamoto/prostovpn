@@ -114,6 +114,9 @@ COLORED = (
     # Письма вдогонку: у каждого ровно одно нужное действие, оно и цветное.
     "Зарегистрироваться",
     "Инструкция",
+    # У письма «зарегистрировался, но не пользуется» нужное действие —
+    # поставить приложение; инструкция там ушла на вторую строку.
+    "Скачать приложение",
 )
 
 FREEZE_READY = panel.Freeze(can_freeze=True, days_left=27)
@@ -172,10 +175,12 @@ def check_keyboards() -> None:
                 assert payload.get("icon_custom_emoji_id"), f"{name}: нет иконки"
                 # Кнопка копирования не ведёт никуда: она кладёт текст в
                 # буфер — у неё нет ни callback_data, ни url, и это норма.
+                # Кнопка мини-приложения ведёт в web_app — тоже норма.
                 assert (
                     payload.get("callback_data")
                     or payload.get("url")
                     or payload.get("copy_text")
+                    or payload.get("web_app")
                 ), name
 
                 if style != DEFAULT:
@@ -443,9 +448,27 @@ async def check_panel() -> None:
 
     for plan in plans:
         assert plan.stars > 0
+
+        # Вводная цена должна действовать одинаково на все способы: рубли и
+        # звёзды считаются от одной суммы. Расхождение здесь означает, что
+        # человеку показали одну цену, а списали другую.
+        assert plan.stars_for(1) == max(1, round(plan.rub_for(1) * config.stars_rate)), (
+            f"{plan.code}: звёзды и рубли посчитаны от разных сумм"
+        )
+
+        if plan.intro_price_kopecks:
+            # Правило панели: вводная цена только за одну штуку.
+            assert plan.rub_for(1) == plan.intro_price_kopecks // 100, (
+                f"{plan.code}: за одну штуку берём не вводную цену"
+            )
+            assert plan.rub_for(2) == plan.rub * 2, (
+                f"{plan.code}: вводная цена утекла на вторую штуку"
+            )
+
+        intro = f"  вводная {plan.rub_for(1)} ₽/{plan.stars_for(1)} ★" if plan.intro_now(1) else ""
         print(
             f"  {plan.code:8} {plan.title:12} {plan.duration_days:3} дн"
-            f"  {plan.rub:5} ₽  {plan.stars:4} ★  устройств {plan.device_limit}"
+            f"  {plan.rub:5} ₽  {plan.stars:4} ★  устройств {plan.device_limit}{intro}"
         )
 
     apps = await panel.downloads()

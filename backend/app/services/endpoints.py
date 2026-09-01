@@ -105,6 +105,9 @@ def create_awg_endpoint(
         subnet=str(network),
         params={
             **values.as_dict(),
+            # Первый пакет от клиента выглядит как QUIC Initial (AWG 1.5);
+            # выдаётся только приложениям, которые его понимают.
+            "i1": obf.QUIC_INITIAL,
             "dns": "1.1.1.1, 1.0.0.1",
             "mtu": 1280,
             "allowed_ips": "0.0.0.0/0, ::/0",

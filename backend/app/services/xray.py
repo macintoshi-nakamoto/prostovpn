@@ -736,3 +736,35 @@ def share_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -
     name = quote(f"{server.country or server.name}")
     port = (params.get("advertise_port")) or endpoint.listen_port
     return f"vless://{identity}@{host}:{port}?{tail}#{name}"
+
+
+def hy2_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -> str | None:
+    """
+    Ссылка hysteria2:// для того же узла и той же учётки.
+
+    Hysteria2 на узле (deploy/setup-hy2.sh) своих пользователей не хранит:
+    на каждое соединение он спрашивает панель, а паролем служит UUID
+    VLESS-учётки — поэтому ссылка собирается из той же креды. Порты после
+    двоеточия — основной и диапазон «прыгающих»: Happ сам выбирает один и
+    время от времени переходит на другой. Сертификат самоподписанный,
+    отсюда insecure=1; DPI видит только SNI, и он совпадает с донором Reality.
+    """
+    hy2 = (endpoint.params or {}).get("hy2") or {}
+    if not hy2.get("port"):
+        return None
+    identity = cred.identity
+    if not identity:
+        return None
+    from urllib.parse import quote, urlencode
+
+    host = endpoint.public_host(server)
+    ports = str(hy2["port"])
+    if hy2.get("hop"):
+        ports += f",{hy2['hop']}"
+    query = {"sni": hy2.get("sni") or "", "insecure": "1"}
+    if hy2.get("obfs"):
+        query["obfs"] = "salamander"
+        query["obfs-password"] = str(hy2["obfs"])
+    tail = urlencode({k: v for k, v in query.items() if v})
+    name = quote(f"{server.country or server.name} · Hysteria2")
+    return f"hysteria2://{identity}@{host}:{ports}/?{tail}#{name}"

@@ -226,31 +226,36 @@ def revoke_key(db: OrmSession, key: UserKey) -> None:
     db.commit()
 
 
-def migrate_to_awg2(db: OrmSession, user: User, server: Server, key: UserKey | None) -> UserKey | None:
+def migrate_awg(db: OrmSession, user: User, server: Server, key: UserKey | None) -> UserKey | None:
     """
-    Переносит ключ на точку 2.0, если клиент её понимает, а ключ ещё на
-    старой. Перевыпуск меняет ключ и адрес — годится для приложений и
-    подписок, которые забирают конфиг сами; ключи iOS-слотов (vpn://,
+    Переносит ключ на точку того поколения, которое понимает клиент: на
+    более новую, если клиент до неё дорос, и обратно на старую, если ключ
+    уехал выше, чем этот клиент умеет. Перевыпуск меняет ключ и адрес — годится для приложений
+    и подписок, которые забирают конфиг сами; ключи iOS-слотов (vpn://,
     вставленные руками) не трогаем: их пришлось бы переимпортировать.
     """
     from . import compat
-    from .placement import is_awg2, pick_endpoint
+    from .placement import awg_level_of, pick_endpoint
 
-    if key is None or key.revoked_at is not None or not compat.CLIENT_AWG2.get():
+    # Ноль — клиент про наборы AmneziaWG ничего не сказал (Happ, сайт, бот):
+    # такому ключи с места не трогаем.
+    if key is None or key.revoked_at is not None or compat.CLIENT_AWG_LEVEL.get() <= 0:
         return key
     if is_ios_slot(key.device_id) or server.provisioning != Provisioning.SSH:
         return key
     current = db.get(NodeEndpoint, key.endpoint_id) if key.endpoint_id else None
-    if current is not None and is_awg2(current):
-        return key
+    current_level = awg_level_of(current) if current is not None else 1
     # Живой туннель не рвём: перевыпуск снимает старого пира с узла, и тот,
     # кто сейчас подключён этим ключом, отвалился бы посреди сессии. Переезд
     # только для ключа, который молчит хотя бы пять минут, — при следующем
     # подключении приложение и так забирает свежий конфиг.
     if key.last_handshake_at is not None and utcnow() - key.last_handshake_at < MIGRATE_IDLE:
         return key
+    # Переезд в обе стороны: вверх — клиент дорос до нового набора; вниз —
+    # ключ уехал на точку, которую этот клиент не понимает (одной ссылкой
+    # пользуются приложения разных версий). Точка того же поколения — не повод.
     target = pick_endpoint(db, user, server, key.device_id)
-    if target is None or not is_awg2(target):
+    if target is None or awg_level_of(target) == current_level:
         return key
     try:
         return issue_key(db, user, server, rotate=True, device_id=key.device_id)
@@ -263,5 +268,5 @@ def log_migrate(server: Server, key: UserKey, exc: Exception) -> None:
     import logging
 
     logging.getLogger("panel.keys").warning(
-        "ключ %s на %s не переехал на точку 2.0: %s", key.id, server.name, exc
+        "ключ %s на %s не переехал на новую точку: %s", key.id, server.name, exc
     )

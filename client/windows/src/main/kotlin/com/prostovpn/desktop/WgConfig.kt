@@ -7,6 +7,11 @@ object WgConfig {
         "jc", "jmin", "jmax", "s1", "s2", "s3", "s4",
         "h1", "h2", "h3", "h4",
         "i1", "i2", "i3", "i4", "i5",
+        // AmneziaWG 3.x: шифрование заголовков, дополнение содержимого,
+        // случайные хвосты и таймеры — туннель v3.1 их понимает.
+        "headerprotectionkey", "contentpaddingaddition", "randomtrailers", "disablecookies",
+        "rekeyaftertime", "rekeytimeout", "rejectaftertime", "keepalivetimeout",
+        "maxhandshakeattempts",
     )
 
     private val peerKeys = setOf(

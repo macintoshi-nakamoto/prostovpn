@@ -69,6 +69,15 @@ IOS_SLOT_PREFIX = "ios-"
 IOS_MAX_KEYS = 5
 
 
+# Слот ссылки-подписки, выпущенной руками (public_api.EXTERNAL_SLOT_PREFIX):
+# у неё нет своих ключей, она живёт общим ключом учётки.
+EXTERNAL_SLOT_PREFIX = "ext-"
+
+
+def is_external_slot(device_id: str | None) -> bool:
+    return bool(device_id) and str(device_id).startswith(EXTERNAL_SLOT_PREFIX)
+
+
 def is_ios_slot(device_id: str | None) -> bool:
     return (device_id or "").startswith(IOS_SLOT_PREFIX)
 

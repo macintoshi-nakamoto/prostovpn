@@ -61,36 +61,58 @@ def amnezia_supports_special_junk(user_agent: str | None) -> bool:
     return version is not None and version >= AMNEZIA_SPECIAL_JUNK_SINCE
 
 
-# --- AmneziaWG 2.0 -------------------------------------------------------------
+# --- Поколения AmneziaWG ------------------------------------------------------
 #
-# Наборы 2.0 (S3/S4, диапазоны заголовков) старый движок отвергает целиком,
-# поэтому ключ на точке 2.0 получают только те, кто её понимает. Кто именно
-# спрашивает — известно только в обработчике запроса (сессия приложения или
-# User-Agent подписки), а решение принимается глубоко в выдаче ключей, так
-# что признак едет через контекст запроса.
-AWG2_SINCE: dict[str, Version] = {
-    "android": (1, 1, 0),   # awg-tunnel.aar на amneziawg-go v3: разбирает S3/S4 и диапазоны
-    "windows": (1, 0, 30),  # туннель v3.1
-    "macos": (1, 0, 5),
+# 1 — исходный набор (Jc/Jmin/Jmax, S1/S2, фиксированные H1–H4) + I1;
+# 2 — S3/S4 и диапазоны заголовков (amneziawg-go v3, «AmneziaWG 2.0»);
+# 3 — шифрование заголовков ключом HeaderProtectionKey и случайное
+#     дополнение содержимого («AmneziaWG 3.0», июль 2026). 3.0 несовместим
+#     со старыми клиентами, 2.0 старый движок тоже отвергает, поэтому ключ
+#     каждой точки получают только те, кто её понимает. Кто спрашивает —
+#     известно лишь в обработчике запроса (сессия приложения или User-Agent
+#     подписки), а решение принимается глубоко в выдаче ключей, так что
+#     уровень едет через контекст запроса.
+#
+# Свои приложения: Android — awg-tunnel.aar на amneziawg-go v3 с
+# header_protection_key/content_padding_addition (с 1.1.9 точно эта
+# библиотека); Windows — туннель v3.1 умеет всё, но санитайзер конфига до
+# 1.0.32 выбрасывал незнакомые строки, 3.0 — с 1.0.33; macOS — 2.0 (3.0 не
+# проверен). AmneziaVPN: 2.0 с 4.8.12.9, 3.0 с 5.0.0.5 (docs.amnezia.org,
+# wiki.zapret.moe).
+AWG_LEVELS: dict[str, list[tuple[Version, int]]] = {
+    "android": [((1, 1, 9), 3), ((1, 1, 0), 2)],
+    "windows": [((1, 0, 33), 3), ((1, 0, 30), 2)],
+    "macos": [((1, 0, 5), 2)],
 }
 
-AMNEZIA_AWG2_SINCE: Version = (4, 8, 12, 9)
+AMNEZIA_LEVELS: list[tuple[Version, int]] = [((5, 0, 0, 5), 3), ((4, 8, 12, 9), 2)]
 
-CLIENT_AWG2: contextvars.ContextVar[bool | None] = contextvars.ContextVar("client_awg2", default=None)
-
-
-def supports_awg2(platform: str | None, app_version: str | None) -> bool:
-    since = AWG2_SINCE.get((platform or "").strip().lower())
-    if since is None:
-        return False
-    version = parse_version(app_version)
-    return version is not None and version >= since
+# Какое поколение наборов AmneziaWG понимает клиент текущего запроса:
+# 1, 2 или 3. Ноль — «неизвестно / наборы ему не нужны» (сайт, бот, Happ,
+# незнакомый User-Agent): такому новые ключи выдаются на самой старой
+# точке, а существующие с места не трогаются.
+CLIENT_AWG_LEVEL: contextvars.ContextVar[int] = contextvars.ContextVar("client_awg_level", default=0)
 
 
-def amnezia_supports_awg2(user_agent: str | None) -> bool:
+def _level(version: Version | None, table: list[tuple[Version, int]]) -> int:
+    if version is None:
+        return 1
+    for since, level in table:
+        if version >= since:
+            return level
+    return 1
+
+
+def awg_level(platform: str | None, app_version: str | None) -> int:
+    table = AWG_LEVELS.get((platform or "").strip().lower())
+    if not table:
+        return 1
+    return _level(parse_version(app_version), table)
+
+
+def amnezia_awg_level(user_agent: str | None) -> int:
     agent = (user_agent or "").lower()
     at = agent.find("amneziavpn/")
     if at < 0:
-        return False
-    version = parse_version(agent[at + len("amneziavpn/") :])
-    return version is not None and version >= AMNEZIA_AWG2_SINCE
+        return 0
+    return _level(parse_version(agent[at + len("amneziavpn/") :]), AMNEZIA_LEVELS)

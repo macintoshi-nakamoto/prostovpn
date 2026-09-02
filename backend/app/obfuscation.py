@@ -203,15 +203,18 @@ def validate(values: dict | ObfuscationSet, *, strict: bool = True) -> Obfuscati
 def generate(rng=None, *, version: int = 1) -> ObfuscationSet:
     rng = rng or _secrets.SystemRandom()
 
-    if version == 2:
+    if version in (2, 3):
         jc = V2_JC
         jmin = rng.randint(*V2_JMIN)
         jmax = rng.randint(*V2_JMAX)
         s1 = rng.randint(*V2_S1)
         forbidden = s1 + INIT_BASE - RESPONSE_BASE
         s2 = rng.choice([value for value in range(V2_S2[0], V2_S2[1] + 1) if value != forbidden])
-        s3 = rng.randint(*V2_S3)
-        s4 = rng.randint(*V2_S4)
+        # 3.0: первые 12 байт мусора S1–S4 служат nonce для шифра заголовков,
+        # поэтому меньше 12 нельзя.
+        floor = 12 if version == 3 else 0
+        s3 = rng.randint(max(V2_S3[0], floor), V2_S3[1])
+        s4 = rng.randint(max(V2_S4[0], floor), V2_S4[1])
         spans: list[tuple[int, int]] = []
         while len(spans) < 4:
             lo = rng.randint(*V2_H_BASE)
@@ -275,6 +278,45 @@ def from_config_text(config: str, *, strict: bool = False) -> ObfuscationSet:
 #   <t>        время, 4 байта      <rd N>  N случайных цифр
 
 SPECIAL_FIELDS = ("i1", "i2", "i3", "i4", "i5")
+
+
+# ---------------------------------------------------------------------------
+# AWG 3.0: шифрование заголовков и дополнение содержимого
+# ---------------------------------------------------------------------------
+#
+# HeaderProtectionKey — 32 случайных байта в base64, одинаковый на сервере и
+# у клиента: заголовки пакетов шифруются ChaCha20, и без ключа даже тип
+# пакета не виден. ContentPaddingAddition — диапазон случайного дополнения
+# содержимого (клиентская сторона). DisableCookies — узел не отвечает на
+# cookie-запросы, которыми зонды вызывают предсказуемый ответ (3.1,
+# односторонний параметр, клиента не касается).
+
+CONTENT_PADDING_DEFAULT = "8-48"
+
+
+def generate_header_key(rng=None) -> str:
+    import base64
+
+    return base64.b64encode(_secrets.token_bytes(32)).decode()
+
+
+def awg3_server_lines(params: dict | None) -> str:
+    params = params or {}
+    lines = []
+    if params.get("header_protection_key"):
+        lines.append(f"HeaderProtectionKey = {params['header_protection_key']}")
+    if params.get("disable_cookies"):
+        lines.append("DisableCookies = on")
+    return "\n".join(lines)
+
+
+def awg3_client_lines(params: dict | None) -> str:
+    params = params or {}
+    lines = []
+    if params.get("header_protection_key"):
+        lines.append(f"HeaderProtectionKey = {params['header_protection_key']}")
+        lines.append(f"ContentPaddingAddition = {params.get('content_padding_addition') or CONTENT_PADDING_DEFAULT}")
+    return "\n".join(lines)
 
 # Пакет QUIC v1 Initial, каким его шлёт браузер: длинный заголовок (0xc4),
 # версия 1, восьмибайтный DCID, пустые SCID и токен, длина 1182 и

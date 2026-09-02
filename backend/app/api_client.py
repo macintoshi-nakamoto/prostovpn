@@ -19,6 +19,7 @@ from .models import (
     Session,
     User,
     UserKey,
+    is_external_slot,
     is_ios_slot,
     utcnow,
     Order,
@@ -201,16 +202,16 @@ def _subscription_url(db: OrmSession, session: Session) -> str | None:
     return services.subscription.url_for(services.subscription.mint_for_session(db, session))
 
 
-def _provision_missing_keys(user_id: int, device_id: str, awg2: bool | None = None) -> None:
+def _provision_missing_keys(user_id: int, device_id: str, awg_level: int = 1) -> None:
     from .db import SessionLocal
 
-    services.compat.CLIENT_AWG2.set(awg2)
+    services.compat.CLIENT_AWG_LEVEL.set(awg_level)
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if user is None or not user.has_access():
             return
-        if device_id not in user.devices():
-            log.info("фоновая выдача пропущена: устройство %s уже отвязано", device_id or "(учётки)")
+        if device_id and device_id not in user.devices():
+            log.info("фоновая выдача пропущена: устройство %s уже отвязано", device_id)
             return
         services.ensure_keys(db, user, devices={device_id})
 
@@ -264,6 +265,14 @@ def _serve_targets(
             elif not key.device_id:
                 shared[key.server_id] = key
 
+    # Ссылка, выпущенная руками (ext-N), своих ключей не имеет и живёт общим
+    # ключом учётки: недостающие ключи для неё заводим общие, иначе узел,
+    # добавленный после выпуска ссылки, в подписке так и не появится.
+    external = is_external_slot(device_id)
+    if external:
+        for server_id, key in shared.items():
+            by_server.setdefault(server_id, key)
+
     if background is not None:
         missing = any(
             server.id not in by_server and server.provisioning != Provisioning.SHARED
@@ -271,11 +280,15 @@ def _serve_targets(
         )
         if missing:
             background.add_task(
-                _provision_missing_keys, user.id, device_id, services.compat.CLIENT_AWG2.get()
+                _provision_missing_keys,
+                user.id,
+                "" if external else device_id,
+                services.compat.CLIENT_AWG_LEVEL.get(),
             )
 
-    for server_id, key in shared.items():
-        by_server.setdefault(server_id, key)
+    if not external:
+        for server_id, key in shared.items():
+            by_server.setdefault(server_id, key)
 
     targets: list[tuple[Server, UserKey | None]] = []
     for server in services.active_servers(db):
@@ -291,7 +304,7 @@ def _serve_targets(
             # И ключ устройства, и общий ключ учётки, которым живут подписки:
             # переезд на точку 2.0 — только если клиент её понимает и ключ
             # сейчас не подключён (см. keys.migrate_to_awg2).
-            key = services.keys.migrate_to_awg2(db, user, server, key)
+            key = services.keys.migrate_awg(db, user, server, key)
         targets.append((server, key))
     return targets
 
@@ -303,8 +316,8 @@ def _servers_out(
     background: BackgroundTasks | None = None,
 ) -> list[ServerOut]:
     device_id = session.device_key if session is not None else ""
-    services.compat.CLIENT_AWG2.set(
-        services.compat.supports_awg2(session.platform, session.app_version) if session is not None else None
+    services.compat.CLIENT_AWG_LEVEL.set(
+        services.compat.awg_level(session.platform, session.app_version) if session is not None else 0
     )
     out: list[ServerOut] = []
     for server, key in _serve_targets(db, user, device_id, background):
@@ -617,7 +630,7 @@ LOGIN_PROVISION_SECONDS = 8
 def _provision_for_login(db: OrmSession, user: User, session: Session) -> None:
     if not user.has_access() or not session.is_device:
         return
-    services.compat.CLIENT_AWG2.set(services.compat.supports_awg2(session.platform, session.app_version))
+    services.compat.CLIENT_AWG_LEVEL.set(services.compat.awg_level(session.platform, session.app_version))
     warnings = services.ensure_keys(
         db,
         user,

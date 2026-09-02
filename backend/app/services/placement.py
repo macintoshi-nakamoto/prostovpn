@@ -13,8 +13,23 @@ from . import endpoints as endpoints_service
 from .errors import PanelError
 
 
+def awg_level_of(endpoint: NodeEndpoint) -> int:
+    try:
+        return int((endpoint.params or {}).get("awg_version") or 1)
+    except (TypeError, ValueError):
+        return 1
+
+
 def is_awg2(endpoint: NodeEndpoint) -> bool:
-    return (endpoint.params or {}).get("awg_version") == 2
+    return awg_level_of(endpoint) >= 2
+
+
+def best_endpoint(endpoints: list[NodeEndpoint], client_level: int) -> NodeEndpoint | None:
+    """Самая новая из живых точек, которую клиент понимает."""
+    fit = [ep for ep in endpoints if ep.is_live and ep.accepts_new and awg_level_of(ep) <= client_level]
+    if not fit:
+        return None
+    return sorted(fit, key=lambda ep: (-awg_level_of(ep), ep.priority, ep.id))[0]
 
 log = logging.getLogger("panel.placement")
 
@@ -30,8 +45,11 @@ def pick_endpoint(
     if not awg_endpoints:
         return None
 
-    # Понимает ли клиент наборы 2.0 — из контекста запроса (services.compat).
-    prefer_v2 = bool(compat.CLIENT_AWG2.get())
+    # Какое поколение наборов понимает клиент — из контекста запроса. Ноль
+    # значит «не сказал»: новые ключи — на самую старую точку, существующие
+    # остаются где были.
+    raw_level = compat.CLIENT_AWG_LEVEL.get()
+    client_level = max(raw_level, 1)
 
     with _PICK_LOCK:
         existing = db.scalar(
@@ -44,12 +62,16 @@ def pick_endpoint(
         if existing is not None and existing.endpoint_id is not None:
             endpoint = db.get(NodeEndpoint, existing.endpoint_id)
             if endpoint is not None:
-                if prefer_v2 and not is_awg2(endpoint):
-                    # Клиент дорос до 2.0, ключ ещё на старой точке — при
-                    # перевыпуске уедет на новую (см. keys.migrate_to_awg2).
-                    newer = [ep for ep in awg_endpoints if is_awg2(ep) and ep.is_live and ep.accepts_new]
-                    if newer:
-                        return sorted(newer, key=lambda ep: (ep.priority, ep.id))[0]
+                best = best_endpoint(awg_endpoints, client_level)
+                if best is not None and awg_level_of(best) > awg_level_of(endpoint):
+                    # Клиент дорос до более нового набора, ключ ещё на старой
+                    # точке — при перевыпуске уедет на новую (keys.migrate_awg).
+                    return best
+                if best is not None and raw_level > 0 and awg_level_of(endpoint) > client_level:
+                    # Ключ на точке, которую этот клиент не понимает (той же
+                    # ссылкой пользовались из более новой версии) — отдаём
+                    # самую новую из понятных, перевыпуск вернёт его туда.
+                    return best
                 return endpoint
 
         if existing is not None and existing.address:
@@ -61,12 +83,12 @@ def pick_endpoint(
         live = [ep for ep in awg_endpoints if ep.is_live]
         if not live:
             raise PanelError("на узле нет работающих точек входа")
-        # Новый ключ: умеющим 2.0 — точку 2.0 (если она есть), остальным —
-        # только старые. Наоборот нельзя: старый движок конфиг 2.0 не примет.
-        wanted = [ep for ep in live if is_awg2(ep) == prefer_v2]
-        if not wanted and prefer_v2:
-            wanted = [ep for ep in live if not is_awg2(ep)]
-        live = wanted or live
+        # Новый ключ: самое новое поколение, которое клиент понимает; более
+        # новое давать нельзя — старый движок такой конфиг отвергнет.
+        understood = [ep for ep in live if awg_level_of(ep) <= client_level]
+        if understood:
+            top = max(awg_level_of(ep) for ep in understood)
+            live = [ep for ep in understood if awg_level_of(ep) == top]
 
         siblings = db.scalars(
             select(UserKey.endpoint_id).where(

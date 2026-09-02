@@ -619,10 +619,11 @@ def subscription(
     services.subscription.touch(db, tok)
 
     wanted = _wanted_format(format, user_agent, accept)
-    # Наборы AmneziaWG 2.0 — только AmneziaVPN, который их понимает; всем
-    # остальным (и неизвестным) — старая точка.
-    services.compat.CLIENT_AWG2.set(
-        services.compat.amnezia_supports_awg2(user_agent) if wanted == "amnezia" else None
+    # Поколение наборов AmneziaWG — по версии AmneziaVPN в User-Agent. Happ,
+    # vless-формат и незнакомые клиенты наборами не пользуются: ноль — ключи
+    # с места не трогать, недостающие заводить на самой старой точке.
+    services.compat.CLIENT_AWG_LEVEL.set(
+        services.compat.amnezia_awg_level(user_agent) if wanted == "amnezia" else 0
     )
 
     # Заголовки профиля идут со всеми ответами: приложение берёт из них

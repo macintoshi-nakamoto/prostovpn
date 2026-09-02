@@ -34,13 +34,15 @@ slot_number = ios_slot_number
 
 def _prefer_awg2() -> None:
     """
-    Ключи vpn:// для AmneziaVPN выпускаются на точке 2.0: приложение из
-    магазинов давно её понимает (с 4.8.12.9), а именно такие ключи проходят
-    на сотовых сетях. Старому приложению — обновиться, кабинет об этом говорит.
+    Ключи vpn:// из кабинета и бота: версия приложения неизвестна, поэтому
+    поколение задаётся настройкой PANEL_AWG_KEYS_LEVEL (по умолчанию 2 —
+    AmneziaVPN с 4.8.12.9; 3 требует 5.0.0.5 и несовместим со старыми).
+    Кабинет говорит, какая версия нужна.
     """
+    from ..config import settings
     from . import compat
 
-    compat.CLIENT_AWG2.set(True)
+    compat.CLIENT_AWG_LEVEL.set(int(settings().awg_keys_level))
 
 
 @dataclass(frozen=True)

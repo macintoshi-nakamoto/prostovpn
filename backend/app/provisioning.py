@@ -12,7 +12,7 @@ import zlib
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from .models import Provisioning, Server, UserKey
-from .obfuscation import special_lines
+from .obfuscation import awg3_client_lines, awg3_server_lines, special_lines
 
 
 def generate_keypair() -> tuple[str, str]:
@@ -29,6 +29,7 @@ AWG_PARAMS = (
     "S1", "S2", "S3", "S4",
     "H1", "H2", "H3", "H4",
     "I1", "I2", "I3", "I4", "I5",
+    "HeaderProtectionKey", "ContentPaddingAddition",
 )
 
 
@@ -216,6 +217,7 @@ def render_endpoint_config(endpoint, server: Server, private_key: str, address: 
     # при выдаче with_special_junk / without_special_junk приводят строки к
     # тому, что понимает конкретное приложение.
     special = special_lines(params)
+    awg3 = awg3_client_lines(params)
 
     return (
         "[Interface]\n"
@@ -224,6 +226,7 @@ def render_endpoint_config(endpoint, server: Server, private_key: str, address: 
         f"DNS = {dns}\n"
         f"MTU = {mtu}\n"
         f"{obfuscation.config_lines()}\n"
+        + (f"{awg3}\n" if awg3 else "")
         + (f"{special}\n" if special else "")
         + "\n"
         "[Peer]\n"
@@ -249,6 +252,7 @@ def create_awg_interface(server: Server, endpoint) -> dict[str, str]:
     # Тот же источник, что и у клиентского конфига, — чтобы стороны не
     # разъезжались: параметры точки входа, иначе безопасные 1280.
     mtu = (endpoint.params or {}).get("mtu") or 1280
+    awg3 = awg3_server_lines(endpoint.params)
 
     conf = config_path(interface)
     lock = lock_path(interface)
@@ -269,6 +273,7 @@ PrivateKey = $(cat {AWG_DIR}/{interface}_private.key)
 # крупные ответы теряются. Рукопожатие проходит, страницы не грузятся.
 MTU = {mtu}
 {obfuscation.config_lines()}
+{awg3}
 
 # Клампинг MSS: у сотовых операторов ICMP часто режут, и определение
 # размера пути не работает — тогда TCP шлёт сегменты больше туннеля и

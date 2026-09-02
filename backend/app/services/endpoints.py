@@ -97,7 +97,17 @@ def create_awg_endpoint(
 
     values = obfuscation_set or obf.generate(version=awg_version)
     extra: dict = {}
-    if values.version == 2:
+    if awg_version >= 3:
+        # Точка 3.0: заголовки шифруются общим ключом, содержимое дополняется
+        # случайной длиной, на cookie-зонды узел молчит. Старые клиенты сюда
+        # не попадают — им отдают точки 2.0 и 1.0.
+        extra = {
+            "awg_version": 3,
+            "header_protection_key": obf.generate_header_key(),
+            "content_padding_addition": obf.CONTENT_PADDING_DEFAULT,
+            "disable_cookies": True,
+        }
+    elif values.version == 2:
         # Точка 2.0: сигнатурного I1 нет — как у конфигов, которые проходят
         # на сотовых сетях; маскировку дают S4 и диапазоны заголовков.
         extra = {"awg_version": 2}
@@ -130,6 +140,10 @@ def create_awg_endpoint(
     db.add(endpoint)
     db.commit()
     db.refresh(endpoint)
+    # Сессия не сбрасывает объекты при коммите, и уже загруженный список
+    # server.endpoints новой точки не знает — размещение в той же сессии
+    # выбирало бы среди старых. Заставляем перечитать.
+    db.expire(server, ["endpoints"])
     log.info("заведена точка входа %s (порт %s, подсеть %s)", handle, listen_port, subnet)
     return endpoint
 

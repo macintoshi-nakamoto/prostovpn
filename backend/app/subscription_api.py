@@ -412,45 +412,68 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
 
             hysteria.append((server, build_hysteria))
 
+    # Названия — для людей, не для админов: страна = обычный вариант (Wi-Fi,
+    # домашний интернет), «LTE», «LTE 2», «LTE 3» — пути для мобильного
+    # интернета в порядке, в котором их стоит пробовать. Протоколы человеку
+    # не нужны — они в подписи под названием и в памяти проекта.
+    LTE_LABEL = {"XHTTP": ("LTE", "Для мобильного интернета"), "WS": ("LTE 2", "Запасной для мобильного интернета")}
+
+    def numbered(builders):
+        return [build("proxy" if i == 0 else f"proxy-{i + 1}") for i, (_s, build) in enumerate(builders)]
+
+    everyone = [*[(s, b) for s, _kind, b in tls_ways], *reality, *hysteria]
+    mobile = [*[(s, b) for s, _kind, b in tls_ways], *hysteria]
+
     configs: list[dict] = []
-    if len(reality) + len(tls_ways) + len(hysteria) > 1:
-        outbounds = []
-        # Порядок в балансировщике не важен — он меряет всех; но первым идёт
-        # обычный TLS на свой домен: на сотовой сети это самый надёжный путь.
-        everyone = [*[(s, b) for s, _kind, b in tls_ways], *reality, *hysteria]
-        for index, (_server, build) in enumerate(everyone):
-            outbounds.append(build("proxy" if index == 0 else f"proxy-{index + 1}"))
+    if len(everyone) > 1:
         configs.append(
             happ.config(
                 "🇪🇺 Лучший сервер",
-                outbounds,
-                description="Сам выбирает живой узел и протокол — для сотовой сети",
+                numbered(everyone),
+                description="Включите это: сам выбирает, что работает",
             )
         )
+    if len(mobile) > 1:
+        configs.append(
+            happ.config(
+                "📶 LTE авто",
+                numbered(mobile),
+                description="Для мобильного интернета: сам выбирает путь",
+            )
+        )
+
+    per_server: dict[int, dict] = {}
+
+    def slot(server):
+        return per_server.setdefault(server.id, {"server": server, "reality": None, "lte": []})
+
     for server, build in reality:
-        configs.append(
-            happ.config(
-                happ.name(server.country_code, server.country or server.name),
-                [build("proxy")],
-                description="Reality",
-            )
-        )
+        slot(server)["reality"] = build
     for server, kind, build in tls_ways:
-        configs.append(
-            happ.config(
-                happ.name(server.country_code, f"{server.country or server.name} · {kind}"),
-                [build("proxy")],
-                description=f"{kind} + TLS — для мобильной сети",
-            )
-        )
+        label, note = LTE_LABEL.get(kind, (kind, "Для мобильного интернета"))
+        slot(server)["lte"].append((label, build, note))
     for server, build in hysteria:
-        configs.append(
-            happ.config(
-                happ.name(server.country_code, f"{server.country or server.name} · Hysteria2"),
-                [build("proxy")],
-                description="Hysteria2 — для мобильной сети",
+        slot(server)["lte"].append(("LTE 3", build, "Ещё один запасной для мобильного интернета"))
+
+    for entry in per_server.values():
+        server = entry["server"]
+        country = server.country or server.name
+        if entry["reality"] is not None:
+            configs.append(
+                happ.config(
+                    happ.name(server.country_code, country),
+                    [entry["reality"]("proxy")],
+                    description="Для Wi-Fi и домашнего интернета",
+                )
             )
-        )
+        for label, build, note in entry["lte"]:
+            configs.append(
+                happ.config(
+                    happ.name(server.country_code, f"{country} · {label}"),
+                    [build("proxy")],
+                    description=note,
+                )
+            )
     return json.dumps(configs, ensure_ascii=False)
 
 
@@ -537,8 +560,8 @@ def _wanted_format(explicit: str | None, agent: str | None, accept: str | None) 
 
 
 ANNOUNCE = (
-    "Выберите «Лучший сервер» — он сам держит связь на живом узле и протоколе. "
-    "Российские сайты идут напрямую."
+    "Включите «Лучший сервер» — он сам выбирает, что работает. "
+    "На мобильном интернете есть «LTE авто». Российские сайты идут напрямую."
 )
 
 

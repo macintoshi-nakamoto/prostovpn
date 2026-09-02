@@ -1071,7 +1071,7 @@ export const en = {
     stepConnect: "3. Connect",
     connectLead: "In the app pick a country and press connect — the VPN icon lights up at the top of the screen.",
     connectLeadSub:
-      "In Happ pick “Best server” — it keeps the connection on a live node and protocol by itself, and Russian sites go direct. In other apps on mobile data pick the entry marked “Hysteria2”. Press connect — the VPN icon lights up at the top of the screen.",
+      "In Happ turn on “Best server” — it picks what works by itself; for mobile data there is “LTE auto”. In other apps on mobile data pick the entry marked “LTE”. Russian sites go direct. Press connect — the VPN icon lights up at the top of the screen.",
     dev: { android: "Android", ios: "iPhone", win: "Windows", mac: "Mac", tv: "TV" },
     openIn: "Open in {app}",
     noVpnKey: "No keys yet — they appear once the subscription is active.",

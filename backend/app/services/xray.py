@@ -860,7 +860,7 @@ def tls_links(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) ->
             "mode": "auto",
             "alpn": "h2,http/1.1",
         }
-        out.append(f"vless://{identity}@{host}:{port}?{urlencode(query)}#{quote(label + ' · XHTTP')}")
+        out.append(f"vless://{identity}@{host}:{port}?{urlencode(query)}#{quote(label + ' · LTE')}")
     ws = params.get("ws") or {}
     if ws.get("port"):
         query = {
@@ -873,7 +873,7 @@ def tls_links(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) ->
             "alpn": "http/1.1",
         }
         out.append(
-            f"vless://{identity}@{host}:{int(ws['port'])}?{urlencode(query)}#{quote(label + ' · WS')}"
+            f"vless://{identity}@{host}:{int(ws['port'])}?{urlencode(query)}#{quote(label + ' · LTE 2')}"
         )
     return out
 
@@ -910,5 +910,5 @@ def hy2_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -> 
     tail = urlencode({k: v for k, v in query.items() if v})
     from .. import geo
 
-    name = quote(f"{geo.flag(server.country_code)} {server.country or server.name} · Hysteria2")
+    name = quote(f"{geo.flag(server.country_code)} {server.country or server.name} · LTE 3")
     return f"hysteria2://{identity}@{host}:{ports}/?{tail}#{name}"

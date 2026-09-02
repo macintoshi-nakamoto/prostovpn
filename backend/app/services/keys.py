@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import time
 
 from sqlalchemy import select
@@ -13,6 +14,9 @@ from .errors import PanelError
 ENSURE_DEADLINE_SECONDS = 20
 
 ADDRESS_ATTEMPTS = 5
+
+# Сколько ключ должен молчать, чтобы его можно было перевыпустить на другой точке.
+MIGRATE_IDLE = dt.timedelta(minutes=5)
 
 
 def active_servers(db: OrmSession) -> list[Server]:
@@ -121,6 +125,10 @@ def issue_key(
         return key
 
     address = key.address if key is not None and key.address else None
+    if key is not None and endpoint is not None and key.endpoint_id != endpoint.id:
+        # Переезд на другую точку входа: у неё своя подсеть, старый адрес
+        # там чужой — берём новый.
+        address = None
     if address is None:
         key, address = _reserve_address(db, key, user, server, device_id, endpoint=endpoint)
 
@@ -216,3 +224,44 @@ def revoke_key(db: OrmSession, key: UserKey) -> None:
         )
     key.revoked_at = utcnow()
     db.commit()
+
+
+def migrate_to_awg2(db: OrmSession, user: User, server: Server, key: UserKey | None) -> UserKey | None:
+    """
+    Переносит ключ на точку 2.0, если клиент её понимает, а ключ ещё на
+    старой. Перевыпуск меняет ключ и адрес — годится для приложений и
+    подписок, которые забирают конфиг сами; ключи iOS-слотов (vpn://,
+    вставленные руками) не трогаем: их пришлось бы переимпортировать.
+    """
+    from . import compat
+    from .placement import is_awg2, pick_endpoint
+
+    if key is None or key.revoked_at is not None or not compat.CLIENT_AWG2.get():
+        return key
+    if is_ios_slot(key.device_id) or server.provisioning != Provisioning.SSH:
+        return key
+    current = db.get(NodeEndpoint, key.endpoint_id) if key.endpoint_id else None
+    if current is not None and is_awg2(current):
+        return key
+    # Живой туннель не рвём: перевыпуск снимает старого пира с узла, и тот,
+    # кто сейчас подключён этим ключом, отвалился бы посреди сессии. Переезд
+    # только для ключа, который молчит хотя бы пять минут, — при следующем
+    # подключении приложение и так забирает свежий конфиг.
+    if key.last_handshake_at is not None and utcnow() - key.last_handshake_at < MIGRATE_IDLE:
+        return key
+    target = pick_endpoint(db, user, server, key.device_id)
+    if target is None or not is_awg2(target):
+        return key
+    try:
+        return issue_key(db, user, server, rotate=True, device_id=key.device_id)
+    except Exception as exc:
+        log_migrate(server, key, exc)
+        return key
+
+
+def log_migrate(server: Server, key: UserKey, exc: Exception) -> None:
+    import logging
+
+    logging.getLogger("panel.keys").warning(
+        "ключ %s на %s не переехал на точку 2.0: %s", key.id, server.name, exc
+    )

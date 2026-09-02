@@ -32,6 +32,17 @@ def key_name(user: User, slot: int = 1) -> str:
 slot_number = ios_slot_number
 
 
+def _prefer_awg2() -> None:
+    """
+    Ключи vpn:// для AmneziaVPN выпускаются на точке 2.0: приложение из
+    магазинов давно её понимает (с 4.8.12.9), а именно такие ключи проходят
+    на сотовых сетях. Старому приложению — обновиться, кабинет об этом говорит.
+    """
+    from . import compat
+
+    compat.CLIENT_AWG2.set(True)
+
+
 @dataclass(frozen=True)
 class IosKey:
 
@@ -62,6 +73,7 @@ def _live_slot_keys(user: User) -> list[UserKey]:
 
 
 def sync(db: OrmSession, user: User, home: int | None = None) -> list[str]:
+    _prefer_awg2()
     if not user.ios_access:
         return []
 
@@ -88,6 +100,7 @@ def sync(db: OrmSession, user: User, home: int | None = None) -> list[str]:
 
 
 def enable(db: OrmSession, user: User, server_id: int | None = None) -> list[str]:
+    _prefer_awg2()
     home = home_id(db, server_id)
     user.ios_access = True
     user.ios_blocked = False
@@ -134,6 +147,7 @@ def home_id(db: OrmSession, server_id: int | None) -> int | None:
 
 
 def add_key(db: OrmSession, user: User, server_id: int | None = None) -> tuple[int, list[str]]:
+    _prefer_awg2()
     if user.ios_blocked:
         raise PanelError("ключи отключены администратором")
     if not user.has_access():
@@ -238,6 +252,7 @@ def remove(db: OrmSession, user: User) -> list[str]:
 
 
 def reissue(db: OrmSession, user: User) -> list[str]:
+    _prefer_awg2()
     if not user.ios_access:
         raise PanelError("у этой учётки нет ключа для iPhone — сначала выдайте его")
 

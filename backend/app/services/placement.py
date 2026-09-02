@@ -8,8 +8,13 @@ from sqlalchemy.orm import Session as OrmSession
 
 from .. import provisioning
 from ..models import EndpointKind, EndpointState, NodeEndpoint, Server, User, UserKey
+from . import compat
 from . import endpoints as endpoints_service
 from .errors import PanelError
+
+
+def is_awg2(endpoint: NodeEndpoint) -> bool:
+    return (endpoint.params or {}).get("awg_version") == 2
 
 log = logging.getLogger("panel.placement")
 
@@ -25,6 +30,9 @@ def pick_endpoint(
     if not awg_endpoints:
         return None
 
+    # Понимает ли клиент наборы 2.0 — из контекста запроса (services.compat).
+    prefer_v2 = bool(compat.CLIENT_AWG2.get())
+
     with _PICK_LOCK:
         existing = db.scalar(
             select(UserKey).where(
@@ -36,6 +44,12 @@ def pick_endpoint(
         if existing is not None and existing.endpoint_id is not None:
             endpoint = db.get(NodeEndpoint, existing.endpoint_id)
             if endpoint is not None:
+                if prefer_v2 and not is_awg2(endpoint):
+                    # Клиент дорос до 2.0, ключ ещё на старой точке — при
+                    # перевыпуске уедет на новую (см. keys.migrate_to_awg2).
+                    newer = [ep for ep in awg_endpoints if is_awg2(ep) and ep.is_live and ep.accepts_new]
+                    if newer:
+                        return sorted(newer, key=lambda ep: (ep.priority, ep.id))[0]
                 return endpoint
 
         if existing is not None and existing.address:
@@ -47,6 +61,12 @@ def pick_endpoint(
         live = [ep for ep in awg_endpoints if ep.is_live]
         if not live:
             raise PanelError("на узле нет работающих точек входа")
+        # Новый ключ: умеющим 2.0 — точку 2.0 (если она есть), остальным —
+        # только старые. Наоборот нельзя: старый движок конфиг 2.0 не примет.
+        wanted = [ep for ep in live if is_awg2(ep) == prefer_v2]
+        if not wanted and prefer_v2:
+            wanted = [ep for ep in live if not is_awg2(ep)]
+        live = wanted or live
 
         siblings = db.scalars(
             select(UserKey.endpoint_id).where(

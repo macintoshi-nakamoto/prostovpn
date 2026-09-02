@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import re
 
 Version = tuple[int, ...]
@@ -58,3 +59,38 @@ def amnezia_supports_special_junk(user_agent: str | None) -> bool:
         return False
     version = parse_version(agent[at + len("amneziavpn/") :])
     return version is not None and version >= AMNEZIA_SPECIAL_JUNK_SINCE
+
+
+# --- AmneziaWG 2.0 -------------------------------------------------------------
+#
+# Наборы 2.0 (S3/S4, диапазоны заголовков) старый движок отвергает целиком,
+# поэтому ключ на точке 2.0 получают только те, кто её понимает. Кто именно
+# спрашивает — известно только в обработчике запроса (сессия приложения или
+# User-Agent подписки), а решение принимается глубоко в выдаче ключей, так
+# что признак едет через контекст запроса.
+AWG2_SINCE: dict[str, Version] = {
+    "android": (1, 1, 0),   # awg-tunnel.aar на amneziawg-go v3: разбирает S3/S4 и диапазоны
+    "windows": (1, 0, 30),  # туннель v3.1
+    "macos": (1, 0, 5),
+}
+
+AMNEZIA_AWG2_SINCE: Version = (4, 8, 12, 9)
+
+CLIENT_AWG2: contextvars.ContextVar[bool | None] = contextvars.ContextVar("client_awg2", default=None)
+
+
+def supports_awg2(platform: str | None, app_version: str | None) -> bool:
+    since = AWG2_SINCE.get((platform or "").strip().lower())
+    if since is None:
+        return False
+    version = parse_version(app_version)
+    return version is not None and version >= since
+
+
+def amnezia_supports_awg2(user_agent: str | None) -> bool:
+    agent = (user_agent or "").lower()
+    at = agent.find("amneziavpn/")
+    if at < 0:
+        return False
+    version = parse_version(agent[at + len("amneziavpn/") :])
+    return version is not None and version >= AMNEZIA_AWG2_SINCE

@@ -619,6 +619,11 @@ def subscription(
     services.subscription.touch(db, tok)
 
     wanted = _wanted_format(format, user_agent, accept)
+    # Наборы AmneziaWG 2.0 — только AmneziaVPN, который их понимает; всем
+    # остальным (и неизвестным) — старая точка.
+    services.compat.CLIENT_AWG2.set(
+        services.compat.amnezia_supports_awg2(user_agent) if wanted == "amnezia" else None
+    )
 
     # Заголовки профиля идут со всеми ответами: приложение берёт из них
     # остаток трафика, срок и то, как часто перечитывать подписку.

@@ -1054,7 +1054,7 @@ export const en = {
     tabOurs: "Prosto VPN",
     tabOther: "Happ etc.",
     ourLead: "The same login and password. Countries load by themselves.",
-    amneziaLead: "Tap «Open in AmneziaVPN» — the key adds itself. Or copy it and paste manually.",
+    amneziaLead: "Tap «Open in AmneziaVPN» — the key adds itself. Or copy it and paste manually. Requires AmneziaVPN 4.8.13 or newer: update the app if the key does not connect.",
     amneziaVlessHint:
       "Not connecting on mobile data? Add the second link to AmneziaVPN — same server over Reality: paste it as a regular key.",
     amneziaVlessLabel: "Reality link (backup)",

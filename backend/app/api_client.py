@@ -201,9 +201,10 @@ def _subscription_url(db: OrmSession, session: Session) -> str | None:
     return services.subscription.url_for(services.subscription.mint_for_session(db, session))
 
 
-def _provision_missing_keys(user_id: int, device_id: str) -> None:
+def _provision_missing_keys(user_id: int, device_id: str, awg2: bool | None = None) -> None:
     from .db import SessionLocal
 
+    services.compat.CLIENT_AWG2.set(awg2)
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if user is None or not user.has_access():
@@ -269,7 +270,9 @@ def _serve_targets(
             for server in services.active_servers(db)
         )
         if missing:
-            background.add_task(_provision_missing_keys, user.id, device_id)
+            background.add_task(
+                _provision_missing_keys, user.id, device_id, services.compat.CLIENT_AWG2.get()
+            )
 
     for server_id, key in shared.items():
         by_server.setdefault(server_id, key)
@@ -283,7 +286,13 @@ def _serve_targets(
                 server.host,
             )
             continue
-        targets.append((server, by_server.get(server.id)))
+        key = by_server.get(server.id)
+        if key is not None:
+            # И ключ устройства, и общий ключ учётки, которым живут подписки:
+            # переезд на точку 2.0 — только если клиент её понимает и ключ
+            # сейчас не подключён (см. keys.migrate_to_awg2).
+            key = services.keys.migrate_to_awg2(db, user, server, key)
+        targets.append((server, key))
     return targets
 
 
@@ -294,6 +303,9 @@ def _servers_out(
     background: BackgroundTasks | None = None,
 ) -> list[ServerOut]:
     device_id = session.device_key if session is not None else ""
+    services.compat.CLIENT_AWG2.set(
+        services.compat.supports_awg2(session.platform, session.app_version) if session is not None else None
+    )
     out: list[ServerOut] = []
     for server, key in _serve_targets(db, user, device_id, background):
         config = serving_config(server, key)
@@ -605,6 +617,7 @@ LOGIN_PROVISION_SECONDS = 8
 def _provision_for_login(db: OrmSession, user: User, session: Session) -> None:
     if not user.has_access() or not session.is_device:
         return
+    services.compat.CLIENT_AWG2.set(services.compat.supports_awg2(session.platform, session.app_version))
     warnings = services.ensure_keys(
         db,
         user,

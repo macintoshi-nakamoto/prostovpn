@@ -6,10 +6,17 @@ from dataclasses import dataclass
 
 FIELDS = ("jc", "jmin", "jmax", "s1", "s2", "h1", "h2", "h3", "h4")
 
+# AmneziaWG 2.0 (amneziawg-go v3): S3 — мусор в cookie-ответе, S4 — мусор в
+# КАЖДОМ транспортном пакете (размеры перестают быть «почерком» WireGuard),
+# H1–H4 — диапазоны «min-max», из которых заголовок выбирается на каждый
+# пакет. Старые движки (AmneziaVPN < 4.8.12.9, amneziawg-go v0.2) такие
+# строки не понимают, поэтому наборы 2.0 живут на отдельной точке входа.
+FIELDS_V2 = ("s3", "s4")
+
 RESERVED_HEADERS = frozenset({0, 1, 2, 3, 4})
 
 H_MIN = 5
-H_MAX = 2**31 - 1
+H_MAX = 2**32 - 1
 
 INIT_BASE = 148
 RESPONSE_BASE = 92
@@ -21,6 +28,24 @@ JMAX_LO, JMAX_HI = 256, 1000
 
 JMIN_FLOOR = 1
 JMAX_CEILING = 1280
+
+# Границы наборов 2.0 — как у живых конфигов, которые проходят на сотовых
+# сетях (Jc = 4, Jmin 161–230, Jmax 649–823, S1 56–73, S2 118–149,
+# S3 12–36, S4 12–18, диапазоны заголовков шириной 6–50 тысяч).
+V2_JC = 4
+V2_JMIN = (120, 240)
+V2_JMAX = (600, 900)
+V2_S1 = (40, 90)
+V2_S2 = (100, 160)
+V2_S3 = (10, 40)
+V2_S4 = (10, 24)
+V2_S_MAX = 64
+V2_H_WIDTH = (8_000, 40_000)
+V2_H_BASE = (2**24, 2**32 - 2**17)
+
+Header = int | str
+
+_RANGE = re.compile(r"^\s*(\d+)\s*-\s*(\d+)\s*$")
 
 
 class InvalidObfuscation(ValueError):
@@ -35,33 +60,48 @@ class ObfuscationSet:
     jmax: int
     s1: int
     s2: int
-    h1: int
-    h2: int
-    h3: int
-    h4: int
+    h1: Header
+    h2: Header
+    h3: Header
+    h4: Header
+    s3: int = 0
+    s4: int = 0
 
-    def as_dict(self) -> dict[str, int]:
-        return {name: getattr(self, name) for name in FIELDS}
+    @property
+    def version(self) -> int:
+        if self.s3 or self.s4:
+            return 2
+        if any(isinstance(getattr(self, name), str) for name in ("h1", "h2", "h3", "h4")):
+            return 2
+        return 1
+
+    def as_dict(self) -> dict:
+        out = {name: getattr(self, name) for name in FIELDS}
+        if self.s3 or self.s4:
+            out["s3"] = self.s3
+            out["s4"] = self.s4
+        return out
 
     def config_lines(self) -> str:
-        return "\n".join(
-            f"{name} = {value}"
-            for name, value in (
-                ("Jc", self.jc),
-                ("Jmin", self.jmin),
-                ("Jmax", self.jmax),
-                ("S1", self.s1),
-                ("S2", self.s2),
-                ("H1", self.h1),
-                ("H2", self.h2),
-                ("H3", self.h3),
-                ("H4", self.h4),
-            )
-        )
+        pairs: list[tuple[str, object]] = [
+            ("Jc", self.jc),
+            ("Jmin", self.jmin),
+            ("Jmax", self.jmax),
+            ("S1", self.s1),
+            ("S2", self.s2),
+        ]
+        # S3/S4 пишем только у наборов 2.0: старый движок незнакомую строку
+        # отвергает вместе со всем конфигом.
+        if self.s3 or self.s4:
+            pairs += [("S3", self.s3), ("S4", self.s4)]
+        pairs += [("H1", self.h1), ("H2", self.h2), ("H3", self.h3), ("H4", self.h4)]
+        return "\n".join(f"{name} = {value}" for name, value in pairs)
 
 
-def _as_int(values: dict, name: str) -> int:
-    if name not in values:
+def _as_int(values: dict, name: str, *, default: int | None = None) -> int:
+    if name not in values or values[name] is None or values[name] == "":
+        if default is not None:
+            return default
         raise InvalidObfuscation(f"не хватает параметра {name.upper()}")
     value = values[name]
     if isinstance(value, bool) or not isinstance(value, int):
@@ -72,23 +112,55 @@ def _as_int(values: dict, name: str) -> int:
     return value
 
 
+def _as_header(values: dict, name: str) -> Header:
+    if name not in values:
+        raise InvalidObfuscation(f"не хватает параметра {name.upper()}")
+    value = values[name]
+    if isinstance(value, str):
+        match = _RANGE.match(value)
+        if match:
+            lo, hi = int(match.group(1)), int(match.group(2))
+            if lo >= hi:
+                raise InvalidObfuscation(f"{name.upper()}: диапазон {value.strip()} пуст")
+            return f"{lo}-{hi}"
+    return _as_int(values, name)
+
+
+def _bounds(value: Header) -> tuple[int, int]:
+    if isinstance(value, str):
+        lo, hi = value.split("-", 1)
+        return int(lo), int(hi)
+    return value, value
+
+
 def validate(values: dict | ObfuscationSet, *, strict: bool = True) -> ObfuscationSet:
     if isinstance(values, ObfuscationSet):
         values = values.as_dict()
 
-    parsed = {name: _as_int(values, name) for name in FIELDS}
+    parsed: dict = {name: _as_int(values, name) for name in ("jc", "jmin", "jmax", "s1", "s2")}
+    for name in ("h1", "h2", "h3", "h4"):
+        parsed[name] = _as_header(values, name)
+    for name in FIELDS_V2:
+        parsed[name] = _as_int(values, name, default=0)
 
-    headers = [parsed["h1"], parsed["h2"], parsed["h3"], parsed["h4"]]
-    for index, value in enumerate(headers, start=1):
-        if value in RESERVED_HEADERS:
+    spans: list[tuple[int, int]] = []
+    for index, name in enumerate(("h1", "h2", "h3", "h4"), start=1):
+        lo, hi = _bounds(parsed[name])
+        if lo in RESERVED_HEADERS or hi in RESERVED_HEADERS or lo < H_MIN:
             raise InvalidObfuscation(
-                f"H{index} = {value} — это служебный тип пакета WireGuard, "
+                f"H{index} = {parsed[name]} — это служебный тип пакета WireGuard, "
                 f"заголовок с ним выдаёт протокол; нужно ≥ {H_MIN}"
             )
-        if not (H_MIN <= value <= H_MAX):
-            raise InvalidObfuscation(f"H{index} должен быть от {H_MIN} до {H_MAX}, а не {value}")
-    if len(set(headers)) != 4:
-        raise InvalidObfuscation("H1..H4 должны быть четырьмя разными числами")
+        if not (H_MIN <= lo <= hi <= H_MAX):
+            raise InvalidObfuscation(f"H{index} должен быть от {H_MIN} до {H_MAX}, а не {parsed[name]}")
+        spans.append((lo, hi))
+    for i in range(4):
+        for j in range(i + 1, 4):
+            a, b = spans[i], spans[j]
+            if a[0] <= b[1] and b[0] <= a[1]:
+                raise InvalidObfuscation(
+                    "H1..H4 должны быть четырьмя разными числами или непересекающимися диапазонами"
+                )
 
     s1, s2 = parsed["s1"], parsed["s2"]
     if s1 < 0 or s2 < 0:
@@ -98,6 +170,9 @@ def validate(values: dict | ObfuscationSet, *, strict: bool = True) -> Obfuscati
             f"S1 и S2 дают пакеты одной длины ({INIT_BASE + s1}): "
             f"рукопожатие вычисляется по размеру, нужно S1 + {INIT_BASE} ≠ S2 + {RESPONSE_BASE}"
         )
+    for name in FIELDS_V2:
+        if not (0 <= parsed[name] <= V2_S_MAX):
+            raise InvalidObfuscation(f"{name.upper()} должен быть от 0 до {V2_S_MAX}, а не {parsed[name]}")
 
     jmin, jmax = parsed["jmin"], parsed["jmax"]
     if jmin < JMIN_FLOOR:
@@ -107,7 +182,8 @@ def validate(values: dict | ObfuscationSet, *, strict: bool = True) -> Obfuscati
     if jmax > JMAX_CEILING:
         raise InvalidObfuscation(f"Jmax больше {JMAX_CEILING} — пакет не пройдёт целиком")
 
-    if strict:
+    result = ObfuscationSet(**parsed)
+    if strict and result.version == 1:
         jc = parsed["jc"]
         if not (JC_MIN <= jc <= JC_MAX):
             raise InvalidObfuscation(f"Jc должен быть от {JC_MIN} до {JC_MAX}, а не {jc}")
@@ -121,11 +197,32 @@ def validate(values: dict | ObfuscationSet, *, strict: bool = True) -> Obfuscati
         if not (JMAX_LO <= jmax <= JMAX_HI):
             raise InvalidObfuscation(f"Jmax должен быть от {JMAX_LO} до {JMAX_HI}, а не {jmax}")
 
-    return ObfuscationSet(**parsed)
+    return result
 
 
-def generate(rng=None) -> ObfuscationSet:
+def generate(rng=None, *, version: int = 1) -> ObfuscationSet:
     rng = rng or _secrets.SystemRandom()
+
+    if version == 2:
+        jc = V2_JC
+        jmin = rng.randint(*V2_JMIN)
+        jmax = rng.randint(*V2_JMAX)
+        s1 = rng.randint(*V2_S1)
+        forbidden = s1 + INIT_BASE - RESPONSE_BASE
+        s2 = rng.choice([value for value in range(V2_S2[0], V2_S2[1] + 1) if value != forbidden])
+        s3 = rng.randint(*V2_S3)
+        s4 = rng.randint(*V2_S4)
+        spans: list[tuple[int, int]] = []
+        while len(spans) < 4:
+            lo = rng.randint(*V2_H_BASE)
+            hi = lo + rng.randint(*V2_H_WIDTH)
+            if all(hi < a or lo > b for a, b in spans):
+                spans.append((lo, hi))
+        headers = {f"h{i + 1}": f"{lo}-{hi}" for i, (lo, hi) in enumerate(spans)}
+        return validate(
+            {"jc": jc, "jmin": jmin, "jmax": jmax, "s1": s1, "s2": s2, "s3": s3, "s4": s4, **headers},
+            strict=False,
+        )
 
     jc = rng.randint(JC_MIN, JC_MAX)
     jmin = rng.randint(JMIN_LO, JMIN_HI)
@@ -135,7 +232,7 @@ def generate(rng=None) -> ObfuscationSet:
     forbidden = s1 + INIT_BASE - RESPONSE_BASE
     s2 = rng.choice([value for value in range(S_MIN, S_MAX + 1) if value != forbidden])
 
-    h1, h2, h3, h4 = rng.sample(range(H_MIN, H_MAX + 1), 4)
+    h1, h2, h3, h4 = rng.sample(range(H_MIN, 2**31), 4)
 
     return validate(
         {"jc": jc, "jmin": jmin, "jmax": jmax, "s1": s1, "s2": s2,
@@ -153,6 +250,10 @@ def from_config_text(config: str, *, strict: bool = False) -> ObfuscationSet:
     missing = [name.upper() for name, value in values.items() if value is None]
     if missing:
         raise InvalidObfuscation("в конфиге нет параметров: " + ", ".join(missing))
+    for name in FIELDS_V2:
+        value = interface.get(name.upper())
+        if value is not None:
+            values[name] = value
     return validate(values, strict=strict)
 
 

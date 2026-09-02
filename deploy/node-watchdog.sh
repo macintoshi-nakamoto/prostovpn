@@ -3,7 +3,7 @@
 # Сторож узла ProstoVPN. Раз в минуту проверяет, что всё, от чего зависит
 # связь, на месте, и молча возвращает то, что пропало:
 #
-#   * интерфейс awg0 поднят и слушает; MTU совпадает с конфигом;
+#   * каждый интерфейс awg* поднят и слушает; MTU совпадает с конфигом;
 #   * форвардинг включён;
 #   * правила из PostUp конфига awg0 (FORWARD, MASQUERADE, клампинг MSS)
 #     стоят — ufw при перезапуске их стирает;
@@ -75,8 +75,10 @@ esac
 fixed=0
 WAN="$(ip route show default 2>/dev/null | awk '{print $5; exit}')"
 
-# --- awg0 -------------------------------------------------------------------
-if [[ -f "$AWG_CONF" ]]; then
+# --- все интерфейсы AmneziaWG (awg0 — старый набор, awg1 — 2.0) --------------
+for AWG_CONF in /etc/amnezia/amneziawg/awg*.conf; do
+    [[ -f "$AWG_CONF" ]] || continue
+    AWG_IF="$(basename "$AWG_CONF" .conf)"
     if ! awg show "$AWG_IF" listen-port >/dev/null 2>&1; then
         say "$AWG_IF не отвечает — поднимаем awg-quick@$AWG_IF"
         systemctl restart "awg-quick@$AWG_IF" && fixed=1
@@ -113,7 +115,7 @@ if [[ -f "$AWG_CONF" ]]; then
             fi
         done
     fi
-fi
+done
 
 # --- форвардинг -------------------------------------------------------------
 if [[ "$(sysctl -n net.ipv4.ip_forward 2>/dev/null)" != "1" ]]; then
@@ -123,7 +125,7 @@ fi
 
 # --- редиректы запасных портов ----------------------------------------------
 if [[ -f "$PORTS_FILE" && -n "$WAN" ]]; then
-    awg_port="$(awg show "$AWG_IF" listen-port 2>/dev/null || echo 51820)"
+    awg_port="$(awg show awg0 listen-port 2>/dev/null || echo 51820)"
     while IFS=: read -r port target; do
         [[ "$port" =~ ^[0-9]+$ ]] || continue
         [[ "$target" =~ ^[0-9]+$ ]] || target="$awg_port"

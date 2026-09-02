@@ -53,6 +53,7 @@ def create_awg_endpoint(
     capacity: int | None = None,
     note: str | None = None,
     obfuscation_set: obf.ObfuscationSet | None = None,
+    awg_version: int = 1,
 ) -> NodeEndpoint:
     suggested_handle, suggested_port, suggested_subnet = _suggest_slot(db, server)
     handle = provisioning.iface_name(handle or suggested_handle)
@@ -94,7 +95,16 @@ def create_awg_endpoint(
         if owner is not None:
             raise PanelError(f"порт {port} уже занят по UDP ({owner})")
 
-    values = obfuscation_set or obf.generate()
+    values = obfuscation_set or obf.generate(version=awg_version)
+    extra: dict = {}
+    if values.version == 2:
+        # Точка 2.0: сигнатурного I1 нет — как у конфигов, которые проходят
+        # на сотовых сетях; маскировку дают S4 и диапазоны заголовков.
+        extra = {"awg_version": 2}
+    else:
+        # Первый пакет от клиента выглядит как QUIC Initial (AWG 1.5);
+        # выдаётся только приложениям, которые его понимают.
+        extra = {"i1": obf.QUIC_INITIAL}
     endpoint = NodeEndpoint(
         server_id=server.id,
         kind=EndpointKind.AWG,
@@ -105,9 +115,7 @@ def create_awg_endpoint(
         subnet=str(network),
         params={
             **values.as_dict(),
-            # Первый пакет от клиента выглядит как QUIC Initial (AWG 1.5);
-            # выдаётся только приложениям, которые его понимают.
-            "i1": obf.QUIC_INITIAL,
+            **extra,
             "dns": "1.1.1.1, 1.0.0.1",
             "mtu": 1280,
             "allowed_ips": "0.0.0.0/0, ::/0",

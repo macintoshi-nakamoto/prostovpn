@@ -325,7 +325,13 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
             if xhttp.get("port"):
 
                 def build_xhttp(
-                    tag: str, _host=host, _identity=identity, _sni=tls["host"], _x=xhttp, _lp=endpoint.listen_port
+                    tag: str,
+                    _host=host,
+                    _identity=identity,
+                    _sni=tls["host"],
+                    _x=xhttp,
+                    _lp=endpoint.listen_port,
+                    _fp=params.get("fingerprint", "chrome"),
                 ) -> dict:
                     return happ.tls_outbound(
                         tag,
@@ -336,13 +342,21 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
                         server_name=_sni,
                         path=_x.get("path") or "/",
                         alpn=["h2", "http/1.1"],
+                        fingerprint=_fp,
                     )
 
                 tls_ways.append((server, "XHTTP", build_xhttp))
             ws = params.get("ws") or {}
             if ws.get("port"):
 
-                def build_ws(tag: str, _host=host, _identity=identity, _sni=tls["host"], _w=ws) -> dict:
+                def build_ws(
+                    tag: str,
+                    _host=host,
+                    _identity=identity,
+                    _sni=tls["host"],
+                    _w=ws,
+                    _fp=params.get("fingerprint", "chrome"),
+                ) -> dict:
                     return happ.tls_outbound(
                         tag,
                         _host,
@@ -352,6 +366,7 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
                         server_name=_sni,
                         path=_w.get("path") or "/",
                         alpn=["http/1.1"],
+                        fingerprint=_fp,
                     )
 
                 tls_ways.append((server, "WS", build_ws))
@@ -382,7 +397,9 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
         hy2 = params.get("hy2") or {}
         if hy2.get("port"):
 
-            def build_hysteria(tag: str, _host=host, _identity=identity, _hy2=hy2) -> dict:
+            def build_hysteria(
+                tag: str, _host=host, _identity=identity, _hy2=hy2, _fp=params.get("fingerprint", "chrome")
+            ) -> dict:
                 return happ.hysteria_outbound(
                     tag,
                     _host,
@@ -390,6 +407,7 @@ def _happ_body(db: OrmSession, tok: SubscriptionToken, background: BackgroundTas
                     _identity,
                     server_name=_hy2.get("sni") or "",
                     allow_insecure=_hy2.get("tls") != "real",
+                    fingerprint=_fp,
                 )
 
             hysteria.append((server, build_hysteria))

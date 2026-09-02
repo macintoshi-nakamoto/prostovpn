@@ -146,7 +146,14 @@ def tls_outbound(
 
 
 def hysteria_outbound(
-    tag: str, host: str, port: int, identity: str, *, server_name: str, allow_insecure: bool = True
+    tag: str,
+    host: str,
+    port: int,
+    identity: str,
+    *,
+    server_name: str,
+    allow_insecure: bool = True,
+    fingerprint: str = "chrome",
 ) -> dict:
     """Выход Hysteria2 в записи Happ; allow_insecure — пока сертификат самоподписанный."""
     return {
@@ -159,7 +166,7 @@ def hysteria_outbound(
             "tlsSettings": {
                 "alpn": ["h3"],
                 "serverName": server_name,
-                "fingerprint": "chrome",
+                "fingerprint": fingerprint,
                 "enableSessionResumption": False,
                 "allowInsecure": bool(allow_insecure),
             },

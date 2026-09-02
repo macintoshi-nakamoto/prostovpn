@@ -842,6 +842,9 @@ def tls_links(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) ->
 
     host = endpoint.public_host(server)
     sni = tls["host"]
+    # Отпечаток TLS — из параметров точки: по наблюдениям 2026 года ТСПУ
+    # метит chrome/safari/ios, а firefox проходит (см. память).
+    fingerprint = params.get("fingerprint", "chrome")
     label = f"{geo.flag(server.country_code)} {server.country or server.name}"
     out: list[str] = []
     xhttp = params.get("xhttp") or {}
@@ -852,7 +855,7 @@ def tls_links(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) ->
             "security": "tls",
             "sni": sni,
             "host": sni,
-            "fp": "chrome",
+            "fp": fingerprint,
             "path": xhttp.get("path") or "/",
             "mode": "auto",
             "alpn": "h2,http/1.1",
@@ -865,7 +868,7 @@ def tls_links(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) ->
             "security": "tls",
             "sni": sni,
             "host": sni,
-            "fp": "chrome",
+            "fp": fingerprint,
             "path": ws.get("path") or "/",
             "alpn": "http/1.1",
         }

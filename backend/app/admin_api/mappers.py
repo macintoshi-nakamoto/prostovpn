@@ -199,6 +199,31 @@ def key_out(key: UserKey) -> schemas.UserKeyOut:
     )
 
 
+def cred_out(cred, now: dt.datetime | None = None) -> schemas.EndpointCredOut:
+    moment = now or utcnow()
+    server = cred.endpoint.server if cred.endpoint is not None else None
+    return schemas.EndpointCredOut(
+        id=cred.id,
+        server_id=cred.server_id,
+        server_name=server.name if server is not None else str(cred.server_id),
+        country=server.country if server is not None else None,
+        country_code=server.country_code if server is not None else None,
+        city=server.city if server is not None else None,
+        endpoint_handle=cred.endpoint.handle if cred.endpoint is not None else None,
+        endpoint_port=cred.endpoint.listen_port if cred.endpoint is not None else None,
+        cred_type=cred.cred_type or "vless",
+        device_id=cred.device_id or "",
+        label=cred.label,
+        rx_bytes=cred.rx_bytes or 0,
+        tx_bytes=cred.tx_bytes or 0,
+        last_seen_at=cred.last_seen_at,
+        is_connected=(
+            cred.last_seen_at is not None and cred.last_seen_at > moment - HANDSHAKE_WINDOW
+        ),
+        created_at=cred.created_at,
+    )
+
+
 def user_detail(
     user: User, now: dt.datetime | None = None, orders: list[Order] | None = None
 ) -> schemas.UserDetail:
@@ -257,15 +282,30 @@ def user_detail(
         ],
         keys=[key_out(k) for k in sorted(user.keys, key=lambda k: k.server_id)],
         ios_keys=[
-            ios_key_out(k, moment) for k in ios.keys(user, include_disconnected=True)
+            ios_key_out(k, moment, user) for k in ios.keys(user, include_disconnected=True)
         ],
         ios_max_keys=IOS_MAX_KEYS,
         ios_can_add=user.has_access(moment) and ios.free_slot(user) is not None,
+        # Учётки VLESS/Hysteria2 — по ним видно Happ, Hiddify и запасной ключ
+        # AmneziaVPN: раньше админка их не показывала вовсе, и человек на
+        # подписке выглядел так, будто VPN не пользуется.
+        creds=[
+            cred_out(c, moment)
+            for c in sorted(
+                (c for c in user.endpoint_creds if c.revoked_at is None),
+                key=lambda c: (c.device_id or "", c.server_id, c.id),
+            )
+        ],
     )
 
 
-def ios_key_out(key: "ios.IosKey", now: dt.datetime | None = None) -> schemas.IosKeyOut:
+def ios_key_out(
+    key: "ios.IosKey", now: dt.datetime | None = None, user: User | None = None
+) -> schemas.IosKeyOut:
     moment = now or utcnow()
+    # Ключ iPhone идёт вместе с запасной учёткой VLESS того же слота — она
+    # тоже считается за подключение.
+    via_cred = user is not None and user.device_connected(f"ios-{key.slot}", moment)
     return schemas.IosKeyOut(
         id=key.id,
         slot=key.slot,
@@ -281,10 +321,13 @@ def ios_key_out(key: "ios.IosKey", now: dt.datetime | None = None) -> schemas.Io
         last_handshake_at=key.last_handshake_at,
         created_at=key.created_at,
         is_active=key.is_active,
-        is_connected=(
-            key.is_active
-            and key.last_handshake_at is not None
-            and key.last_handshake_at > moment - HANDSHAKE_WINDOW
+        is_connected=key.is_active
+        and (
+            (
+                key.last_handshake_at is not None
+                and key.last_handshake_at > moment - HANDSHAKE_WINDOW
+            )
+            or via_cred
         ),
         disconnected=key.disconnected,
     )

@@ -48,6 +48,7 @@ def _load(db: OrmSession, user_id: int) -> User:
             selectinload(User.payments),
             selectinload(User.subscriptions),
             selectinload(User.keys),
+            selectinload(User.endpoint_creds),
         )
         .execution_options(populate_existing=True)
     )

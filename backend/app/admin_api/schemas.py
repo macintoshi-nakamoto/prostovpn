@@ -162,6 +162,29 @@ class UserKeyOut(Schema):
     revoked_at: dt.datetime | None
 
 
+class EndpointCredOut(Schema):
+    """Учётка VLESS/Hysteria2 на узле: Happ, Hiddify, ссылка-подписка,
+    запасной ключ AmneziaVPN. Трафик и «последний раз видели» — из
+    счётчиков xray/hy2, которые панель снимает раз в минуту."""
+
+    id: int
+    server_id: int
+    server_name: str
+    country: str | None = None
+    country_code: str | None = None
+    city: str | None = None
+    endpoint_handle: str | None = None
+    endpoint_port: int | None = None
+    cred_type: str = "vless"
+    device_id: str = ""
+    label: str | None = None
+    rx_bytes: int = 0
+    tx_bytes: int = 0
+    last_seen_at: dt.datetime | None = None
+    is_connected: bool = False
+    created_at: dt.datetime
+
+
 class IosKeyOut(Schema):
 
     id: int
@@ -218,6 +241,7 @@ class UserDetail(UserRow):
     ios_keys: list[IosKeyOut] = []
     ios_max_keys: int = 0
     ios_can_add: bool = False
+    creds: list[EndpointCredOut] = []
 
 
 class UserCreate(Schema):

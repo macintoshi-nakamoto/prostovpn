@@ -12,8 +12,30 @@
   try {
     url = decodeURIComponent((window.location.hash || "").slice(1));
   } catch (e) {}
-  // Только схема Амнезии: страница не должна работать открытым редиректором.
-  var valid = /^vpn:\/\/[A-Za-z0-9+/=_-]+$/.test(url);
+  // Страница не должна работать открытым редиректором: пускаем только ключ
+  // Амнезии и deep link'и приложений-подписок, внутри которых наша ссылка.
+  var isKey = /^vpn:\/\/[A-Za-z0-9+/=_-]+$/.test(url);
+  var subApp = null;
+  var subUrl = "";
+  var ownHosts = [window.location.host, "sub.prostovpn.cc", "prostovpn.cc", "rusvpn.prostovpn.cc"];
+  var ownLink = function (link) {
+    var m = /^https:\/\/([^/?#]+)\/s\/[A-Za-z0-9_-]+(\?format=[a-z]+)?$/.exec(link || "");
+    return Boolean(m && ownHosts.indexOf(m[1]) !== -1);
+  };
+  var deep = /^(happ:\/\/add\/|hiddify:\/\/import\/|streisand:\/\/import\/)(https:\/\/.+)$/.exec(url);
+  if (deep && ownLink(deep[2])) {
+    subApp = { "happ://add/": "Happ", "hiddify://import/": "Hiddify", "streisand://import/": "Streisand" }[deep[1]];
+    subUrl = deep[2];
+  } else {
+    var v2 = /^v2rayng:\/\/install-sub\?url=(.+)$/.exec(url);
+    var decoded = "";
+    try { decoded = v2 ? decodeURIComponent(v2[1]) : ""; } catch (e) {}
+    if (v2 && ownLink(decoded)) {
+      subApp = "v2rayNG";
+      subUrl = decoded;
+    }
+  }
+  var valid = isKey || Boolean(subApp);
 
   var en = /(^|[?&])l=en(&|$)/.test(window.location.search);
   var ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -85,7 +107,25 @@
 
   $("copy").addEventListener("click", copyKey);
 
-  if (ios) {
+  if (subApp) {
+    // Приложение-подписка: у Happ, Hiddify, Streisand и v2rayNG схема есть и
+    // на iOS, и на Android — открываем напрямую. Копируется сама ссылка
+    // подписки: её можно вставить в приложение руками.
+    url = subUrl;
+    document.title = en ? "Prosto VPN — add to " + subApp : "Prosto VPN — добавить в " + subApp;
+    $("title").textContent = en ? "Opening " + subApp + "…" : "Открываем " + subApp + "…";
+    $("sub").textContent = en
+      ? "Confirm opening the app. If nothing happened, tap the button below or copy the subscription link and add it in " + subApp + " by hand."
+      : "Подтвердите открытие приложения. Если ничего не произошло — нажмите кнопку ниже или скопируйте ссылку подписки и добавьте её в " + subApp + " вручную.";
+    $("open").textContent = en ? "Open " + subApp : "Открыть " + subApp;
+    $("copy").textContent = en ? "Copy the subscription link" : "Скопировать ссылку подписки";
+    T.copy = $("copy").textContent;
+    T.copied = en ? "Copied — now paste it in " + subApp : "Скопировано — вставьте в " + subApp;
+    $("note").textContent = "";
+    var goApp = function () { window.location.href = deep ? deep[0] : v2[0]; };
+    $("open").addEventListener("click", goApp);
+    setTimeout(goApp, 350);
+  } else if (ios) {
     // На iOS vpn:// некому обработать — Safari скажет «адрес недействителен».
     // Правильный путь: ключ в буфер → открыть приложение → импорт из буфера.
     $("title").textContent = T.iosTitle;

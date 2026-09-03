@@ -537,7 +537,9 @@ def _ios_out(db: OrmSession, user: User, now: dt.datetime) -> IosOut:
             is_connected=(
                 key.last_handshake_at is not None
                 and key.last_handshake_at > now - HANDSHAKE_WINDOW
-            ),
+            )
+            # …или по запасной учётке VLESS того же слота.
+            or user.device_connected(f"ios-{key.slot}", now),
             disconnected=key.disconnected,
         )
 

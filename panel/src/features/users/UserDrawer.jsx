@@ -666,7 +666,10 @@ function Sessions({ user, onChanged }) {
   const [busy, setBusy] = useState(null);
   const [warning, setWarning] = useState("");
   const iosDevices = iosDeviceRows(user);
-  if (!user.sessions.length && !iosDevices.length) return <Empty>Входов пока не было</Empty>;
+  const subDevices = subscriptionRows(user);
+  if (!user.sessions.length && !iosDevices.length && !subDevices.length) {
+    return <Empty>Входов пока не было</Empty>;
+  }
 
   const kill = async (session) => {
     const live = session.isDevice !== false;
@@ -749,6 +752,26 @@ function Sessions({ user, onChanged }) {
           </div>
         ))}
 
+        {subDevices.map((row) => (
+          <div key={`sub-${row.deviceId}`} className="gd-r">
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+                Подписка {row.deviceId.replace("ext-", "")}
+                <span className="gd-chip">Happ / Hiddify</span>
+                {row.connected && <Chip color="var(--gd-pos)">в VPN</Chip>}
+              </div>
+              <div className="gd-cellsub">
+                ссылка-подписка · VLESS и Hysteria2 · выдана {date(row.createdAt)} · {bytes(row.traffic)}
+              </div>
+            </div>
+            <div className="r" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={row.lastSeenAt ? undefined : { color: "var(--gd-faint)" }}>
+                {row.lastSeenAt ? ago(row.lastSeenAt) : "не подключалась"}
+              </span>
+            </div>
+          </div>
+        ))}
+
         {iosDevices.map((row) => (
           <div key={`ios-${row.slot}`} className="gd-r">
             <div style={{ minWidth: 0 }}>
@@ -777,6 +800,40 @@ function Sessions({ user, onChanged }) {
       </div>
     </Card>
   );
+}
+
+// Ссылки-подписки (Happ, Hiddify, v2rayNG…): у них нет входа в приложение,
+// только учётки VLESS/Hysteria2 на узлах. Одна строка на ссылку ext-N —
+// по самой свежей активности среди её учёток.
+function subscriptionRows(user) {
+  const byDevice = new Map();
+  for (const cred of user.creds || []) {
+    if (!/^ext-\d+$/.test(cred.deviceId || "")) continue;
+    const row = byDevice.get(cred.deviceId) || {
+      deviceId: cred.deviceId,
+      connected: false,
+      lastSeenAt: null,
+      createdAt: cred.createdAt,
+      traffic: 0,
+    };
+    row.connected = row.connected || Boolean(cred.isConnected);
+    row.traffic += (cred.rxBytes || 0) + (cred.txBytes || 0);
+    if (cred.lastSeenAt && (!row.lastSeenAt || Date.parse(cred.lastSeenAt) > Date.parse(row.lastSeenAt))) {
+      row.lastSeenAt = cred.lastSeenAt;
+    }
+    if (Date.parse(cred.createdAt) < Date.parse(row.createdAt)) row.createdAt = cred.createdAt;
+    byDevice.set(cred.deviceId, row);
+  }
+  return [...byDevice.values()].sort((a, b) => a.deviceId.localeCompare(b.deviceId, undefined, { numeric: true }));
+}
+
+function credDeviceLabel(user, deviceId) {
+  if (!deviceId) return "общая учётка";
+  const ext = /^ext-(\d+)$/.exec(deviceId);
+  if (ext) return `ссылка-подписка ${ext[1]} (Happ, Hiddify…)`;
+  const ios = /^ios-(\d+)$/.exec(deviceId);
+  if (ios) return `iPhone · ключ ${ios[1]} · запасной VLESS`;
+  return deviceLabel(user, deviceId);
 }
 
 function iosDeviceRows(user) {
@@ -810,10 +867,46 @@ function deviceLabel(user, deviceId) {
 
 function Servers({ user }) {
   const live = user.keys.filter((k) => !k.revokedAt);
-  if (!live.length) return <Empty>Ключей на серверах нет</Empty>;
+  const creds = user.creds || [];
+  if (!live.length && !creds.length) return <Empty>Ключей на серверах нет</Empty>;
 
   return (
     <Card pad>
+      {creds.length > 0 && (
+        <Section
+          title="Учётки VLESS / Hysteria2"
+          sub="Happ, Hiddify, ссылки-подписки и запасной ключ AmneziaVPN — трафик и активность снимаются с узлов раз в минуту"
+        >
+          <div className="gd-rows">
+            {creds.map((cred) => (
+              <div key={cred.id} className="gd-r">
+                <span style={{ fontSize: 18 }}>{flag(cred.countryCode)}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+                    {cred.country || cred.serverName}
+                    {cred.city ? `, ${cred.city}` : ""}
+                    {cred.isConnected && <Chip color="var(--gd-pos)">в VPN</Chip>}
+                  </div>
+                  <div className="gd-cellsub gd-mono">
+                    {credDeviceLabel(user, cred.deviceId)} · {cred.endpointHandle || cred.credType}
+                    {cred.endpointPort ? ` · порт ${cred.endpointPort}` : ""}
+                  </div>
+                </div>
+                <div className="r">
+                  {bytes((cred.rxBytes || 0) + (cred.txBytes || 0))}
+                  <div
+                    className="gd-cellsub"
+                    style={cred.lastSeenAt ? undefined : { color: "var(--gd-faint)" }}
+                  >
+                    {cred.lastSeenAt ? ago(cred.lastSeenAt) : "не подключалась"}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+      {live.length > 0 && (
       <Section
         title="Ключи на серверах"
         sub="По одному пиру на устройство — поэтому отключить можно одно, не трогая остальные"
@@ -846,6 +939,7 @@ function Servers({ user }) {
           ))}
         </div>
       </Section>
+      )}
     </Card>
   );
 }

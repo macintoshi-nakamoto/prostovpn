@@ -106,11 +106,15 @@ def create_awg_endpoint(
             "header_protection_key": obf.generate_header_key(),
             "content_padding_addition": obf.CONTENT_PADDING_DEFAULT,
             "disable_cookies": True,
+            "i1": obf.QUIC_INITIAL,
         }
     elif values.version == 2:
-        # Точка 2.0: сигнатурного I1 нет — как у конфигов, которые проходят
-        # на сотовых сетях; маскировку дают S4 и диапазоны заголовков.
-        extra = {"awg_version": 2}
+        # Точка 2.0: к S4 и диапазонам заголовков — сигнатурный I1 (первый
+        # пакет выглядит как QUIC Initial). Без него рукопожатие AmneziaWG
+        # режется DPI; получают его только клиенты, которые I1 понимают
+        # (см. compat), а на точке 2.0 других и не бывает. 04.09.2026 I1
+        # включён на всех живых точках awg1/awg2.
+        extra = {"awg_version": 2, "i1": obf.QUIC_INITIAL}
     else:
         # Первый пакет от клиента выглядит как QUIC Initial (AWG 1.5);
         # выдаётся только приложениям, которые его понимают.

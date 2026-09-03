@@ -564,7 +564,19 @@ export function SetupScreen({ open, onClose, onKeys }) {
                   t={t}
                 />
                 {meta.deep && (
-                  <a className="ap-cta su-cta su-cta-alt" href={meta.deep(deepUrl)}>
+                  // Из вебвью Telegram кастомная схема уходит в приложение
+                  // искалеченной («URL подписки не валидна» в Happ), поэтому
+                  // там — через трамплин /open.html во внешнем браузере.
+                  <a
+                    className="ap-cta su-cta su-cta-alt"
+                    href={meta.deep(deepUrl)}
+                    onClick={(e) => {
+                      if (!isTma()) return;
+                      e.preventDefault();
+                      tmaHaptic("light");
+                      tmaOpenApp(meta.deep(deepUrl));
+                    }}
+                  >
                     {t("su.openIn", { app: meta.name })}
                   </a>
                 )}

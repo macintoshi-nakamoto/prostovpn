@@ -8,16 +8,17 @@
 import { useEffect, useState } from "react";
 import { TonConnectUI, toUserFriendlyAddress } from "@tonconnect/ui";
 import { readTheme } from "./theme.jsx";
+import { BRAND } from "./brand.js";
 
 let instance = null;
 
 export function tonUI() {
   if (!instance) {
     instance = new TonConnectUI({
-      manifestUrl: "https://prostovpn.cc/tonconnect-manifest.json",
+      manifestUrl: `${BRAND.siteUrl}/tonconnect-manifest.json`,
       actionsConfiguration: {
         // Куда кошелёк возвращает человека после подписи внутри Telegram.
-        twaReturnUrl: "https://t.me/prostovpnn_bot",
+        twaReturnUrl: `https://t.me/${BRAND.supportBot}`,
       },
     });
     instance.uiOptions = { uiPreferences: { theme: readTheme() === "dark" ? "DARK" : "LIGHT" } };

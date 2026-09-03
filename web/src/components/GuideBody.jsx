@@ -1,3 +1,4 @@
+import { BRAND } from "../lib/brand.js";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Picture } from "./Picture.jsx";
@@ -93,7 +94,7 @@ export function GuideBody({ login, embedded = false }) {
               {needsKey ? (
                 <img className="gd-app-icon" src="/assets/guide/amnezia-icon.svg" alt="AmneziaVPN" />
               ) : (
-                <Picture className="gd-app-icon" src="/assets/guide/app-icon.png" alt="Prosto VPN" />
+                <Picture className="gd-app-icon" src="/assets/guide/app-icon.png" alt={BRAND.name} />
               )}
               <div className="gd-app-text">
                 <span className="gd-app-title">{current.appTitle}</span>

@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { tmaSignedOut, useSession } from "./lib/session.jsx";
 import { initTma, isTma, tmaStartParam } from "./lib/telegram.js";
 import { rememberRef } from "./lib/referral.js";
+import { BRAND } from "./lib/brand.js";
 import { Landing } from "./pages/Landing.jsx";
 import { Login } from "./pages/Login.jsx";
 import { Reset } from "./pages/Reset.jsx";
@@ -103,7 +104,11 @@ export function App() {
       <ScrollToTop />
       <TmaGate>
       <Routes>
-        <Route path="/" element={isTma() ? <Navigate to="/account" replace /> : <Landing />} />
+        {/* Бренд без лендинга (Rus VPN): корень — сразу кабинет, как в Telegram. */}
+        <Route
+          path="/"
+          element={isTma() || !BRAND.landing ? <Navigate to="/account" replace /> : <Landing />}
+        />
         <Route path="/login" element={<Login />} />
         <Route path="/reset" element={<Reset />} />
         <Route

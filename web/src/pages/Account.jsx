@@ -9,6 +9,9 @@ import { ScreenShell } from "../components/ScreenShell.jsx";
 import { CryptoIcon, SbpIcon, TelegramIcon, TonIcon } from "../components/PayIcons.jsx";
 import { starsPayUrl } from "../lib/contacts.js";
 import { TgsEmoji } from "../components/TgsEmoji.jsx";
+import { BrandFreezeEmoji, BrandLogo, BrandMark } from "../components/BrandLogo.jsx";
+import { BRAND, isBrand } from "../lib/brand.js";
+import { Controls } from "../components/Controls.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
 import { SetupScreen } from "../components/SetupScreen.jsx";
 import { TmaExternalKeys } from "../components/TmaExternalKeys.jsx";
@@ -181,9 +184,11 @@ export function Account() {
       <header className="ac-header">
         <div className="wrap ac-header-in">
           <Link to="/" className="ac-logo">
-            <Picture src="/assets/logo-v3.png" alt="PROSTO" />
+            {/* У Rus VPN над знаком — название раздела, как у нативных. */}
+            <BrandLogo caption={title} />
           </Link>
           <CabinetNav tabs={TABS} tab={shownTab} hrefOf={sectionPath} />
+          {isBrand("rusvpn") && <Controls />}
           <button
             type="button"
             className="ac-id"
@@ -516,7 +521,7 @@ function TmaFreeze({ freeze, onApply }) {
 
   return (
     <div className="ap-freeze">
-      <TgsEmoji name="freeze-emoji" size={48} />
+      <BrandFreezeEmoji size={48} />
       <span className="ap-row-body">
         <span className="ap-row-t">{t("account.tmaFreezeTitle")}</span>
         {sub && <span className="ap-row-s">{sub}</span>}
@@ -1104,11 +1109,11 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
       <div className="ap-card">
         <div className="ap-head">
           <span className="ap-ic ap-ic-emoji">
-            <TgsEmoji name="fire" size={62} />
+            <BrandMark size={62} />
           </span>
           <span className="ap-head-body">
             <span className="ap-title-row">
-              <span className="ap-title">Prosto VPN</span>
+              <span className="ap-title">{BRAND.name}</span>
               {data.plan_title && <span className="ap-chip">{data.plan_title}</span>}
             </span>
             <span className="ap-status">
@@ -1528,7 +1533,7 @@ function AccountTab({ data, onManage, onSetup, onFriends, onPassword, onChanged,
                 : t("account.inactive")}
           </span>
           <span className="ac-hero-plan">
-            {data.plan_title ? `Prosto VPN · ${data.plan_title}` : t("account.noPlan")}
+            {data.plan_title ? `${BRAND.name} · ${data.plan_title}` : t("account.noPlan")}
           </span>
           <span className="ac-hero-sub">
             {data.freeze?.frozen

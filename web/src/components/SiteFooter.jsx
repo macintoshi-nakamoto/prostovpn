@@ -1,5 +1,6 @@
+import { BrandLogo } from "./BrandLogo.jsx";
+import { BRAND } from "../lib/brand.js";
 import { Link } from "react-router-dom";
-import { Picture } from "./Picture.jsx";
 import { useT } from "../lib/i18n/index.jsx";
 import {
   NEWS_TELEGRAM,
@@ -16,7 +17,7 @@ export function SiteFooter() {
   return (
     <footer className="sf">
       <div className="wrap sf-in">
-        <Picture className="sf-logo" src="/assets/logo-v3.png" alt="PROSTO" />
+        <BrandLogo className="sf-logo" />
 
         <div className="sf-cols">
           <div>
@@ -56,7 +57,7 @@ export function SiteFooter() {
         </div>
 
         <div className="sf-bottom">
-          <span>© {new Date().getFullYear()} Prosto VPN</span>
+          <span>© {new Date().getFullYear()} {BRAND.name}</span>
           <div>
             <Link to="/terms">{t("footer.terms")}</Link>
             <Link to="/privacy">{t("footer.privacy")}</Link>

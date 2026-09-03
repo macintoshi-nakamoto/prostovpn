@@ -12,6 +12,9 @@ import { App } from "./App.jsx";
 // Обличье мини-приложения Telegram. Грузится последним намеренно: все его
 // правила должны перекрывать стили страниц. Вне Telegram файл спит.
 import "./styles/tma.css";
+// Обличье второго бренда (Rus VPN). Живёт под html.brand-rusvpn — сборке
+// Prosto ничего не меняет, поэтому подключается всегда и последним.
+import "./styles/brand-rusvpn.css";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

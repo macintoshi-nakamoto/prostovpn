@@ -49,3 +49,7 @@ bot/logs/
 bot/database/database.db
 bot/assets/
 .claude/
+
+# Сборки второго бренда и локальные переопределения окружения фронта
+web/dist-*/
+web/.env.local

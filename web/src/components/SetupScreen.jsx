@@ -1,3 +1,4 @@
+import { BRAND } from "../lib/brand.js";
 import { useEffect, useMemo, useState } from "react";
 import { ScreenShell } from "./ScreenShell.jsx";
 import { Flag } from "./Flags.jsx";
@@ -32,7 +33,7 @@ const DEVICES = ["android", "ios", "win", "mac", "tv"];
  */
 const APPS = {
   prosto: {
-    name: "Prosto VPN",
+    name: BRAND.name,
     kind: "ours",
     on: { android: 1, win: 1, mac: 1, tv: 1 },
   },

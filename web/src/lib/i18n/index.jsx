@@ -3,8 +3,11 @@ import { ru } from "./ru.js";
 import { en } from "./en.js";
 import { isTma } from "../telegram.js";
 import * as fmt from "../format.js";
+import { brandize } from "../brand.js";
 
-const DICTS = { ru, en };
+// Словари написаны для Prosto VPN; второй бренд получает их с подменённым
+// названием, доменом и контактами (см. brand.js).
+const DICTS = { ru: brandize(ru), en: brandize(en) };
 export const LANGS = ["ru", "en"];
 const STORAGE_KEY = "prosto_lang";
 

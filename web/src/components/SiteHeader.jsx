@@ -1,9 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
-import { Picture } from "./Picture.jsx";
 import { Controls } from "./Controls.jsx";
 import { useSession } from "../lib/session.jsx";
 import { useScrolled } from "../lib/hooks";
 import { useT } from "../lib/i18n/index.jsx";
+import { BrandLogo } from "./BrandLogo.jsx";
+import { BRAND } from "../lib/brand.js";
 import "./site-header.css";
 
 export function SiteHeader() {
@@ -26,8 +27,10 @@ export function SiteHeader() {
     <header className={`sh${scrolled ? " sh-solid" : ""}`}>
       <div className="wrap sh-in">
         <Link to="/" className="sh-logo" onClick={toTop}>
-          <Picture src="/assets/logo-v3.png" alt="PROSTO" />
+          <BrandLogo />
         </Link>
+        {/* Разделы лендинга есть только у бренда с лендингом. */}
+        {BRAND.landing && (
         <nav className="sh-nav">
           <a href={section("speed")}>{t("nav.speed")}</a>
           <a href={section("app")}>{t("nav.app")}</a>
@@ -36,6 +39,7 @@ export function SiteHeader() {
           <Link to="/guide">{t("nav.guide")}</Link>
           <Link to="/faq">{t("nav.faq")}</Link>
         </nav>
+        )}
         <div className="sh-right">
           <Controls />
           {!onLogin && (

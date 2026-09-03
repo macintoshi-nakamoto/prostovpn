@@ -194,10 +194,14 @@ function VpnRow({ group, busy, copied, onCopy, onRevoke, t }) {
   );
 }
 
-export function TmaExternalKeys({ open, onClose }) {
+export function TmaExternalKeys({ open, onClose, initialTab = "sub" }) {
   const { t } = useI18n();
 
-  const [tab, setTab] = useState("sub");
+  const [tab, setTab] = useState(initialTab);
+  // С экрана установки лист открывают сразу на нужной вкладке.
+  useEffect(() => {
+    if (open) setTab(initialTab);
+  }, [open, initialTab]);
   const [keys, setKeys] = useState(null);
   const [ios, setIos] = useState(null);
   const [busy, setBusy] = useState(false);

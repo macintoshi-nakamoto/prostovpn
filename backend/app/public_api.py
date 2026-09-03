@@ -27,6 +27,7 @@ from .models import (
     ios_slot_number,
     normalize_email,
     utcnow,
+    ios_slot,
 )
 from .payments import platega
 from .payments.base import WebhookRejected
@@ -583,16 +584,36 @@ def _tunnel_out(db: OrmSession) -> TunnelFileOut:
     )
 
 
+def _ios_device_rows(user: User, now: dt.datetime) -> list[DeviceOut]:
+    """iPhone с ключами, которыми пользовались, — по строке на слот."""
+    rows: list[DeviceOut] = []
+    for number, last in sorted(user.ios_slots_in_use().items()):
+        slot_keys = [
+            k for k in user.keys if k.revoked_at is None and ios_slot_number(k.device_id) == number
+        ]
+        rows.append(
+            DeviceOut(
+                id=-number,
+                kind="ios_key",
+                slot=number,
+                platform="amnezia",
+                last_seen_at=last,
+                created_at=min((k.created_at for k in slot_keys), default=last),
+                is_connected=user.device_connected(ios_slot(number), now),
+            )
+        )
+    return rows
+
+
 def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
     subscription = user.active_subscription()
     plan = subscription.plan_ref if subscription else None
     now = utcnow()
 
     # Устройство — это вход приложения, по одному на device_id (повторный
-    # вход с того же телефона — то же устройство). Ключи iPhone сюда не
-    # входят: слот ключа — это страна, а не телефон, и у ключей свой
-    # счётчик в блоке ios. Раньше слоты считались устройствами, и человек
-    # с одним телефоном и двумя странами видел «3 из 2».
+    # вход с того же телефона — то же устройство), плюс каждый iPhone с
+    # ключом, которым пользовались (слот = устройство, «по ключу на
+    # устройство»). Выданный, но не подключавшийся ключ не считается.
     devices = [
         DeviceOut(
             id=session.id,
@@ -605,7 +626,7 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
             is_connected=_device_connected(user, session.device_key, now),
         )
         for session in user.devices(now).values()
-    ]
+    ] + _ios_device_rows(user, now)
     devices.sort(key=lambda d: d.last_seen_at, reverse=True)
 
     return AccountOut(

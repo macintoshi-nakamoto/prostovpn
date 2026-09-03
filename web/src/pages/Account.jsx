@@ -100,6 +100,7 @@ export function Account() {
   // Установка и список ключей — экраны поверх кабинета, а не вкладки.
   const [setupOpen, setSetupOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
+  const [keysTab, setKeysTab] = useState("sub");
 
   useEffect(() => {
     const known = section === undefined || TAB_BY_SECTION[section] !== undefined;
@@ -320,9 +321,12 @@ export function Account() {
       <SetupScreen
         open={setupOpen}
         onClose={() => setSetupOpen(false)}
-        onKeys={() => setKeysOpen(true)}
+        onKeys={(tab) => {
+          setKeysTab(tab === "vpn" ? "vpn" : "sub");
+          setKeysOpen(true);
+        }}
       />
-      <TmaExternalKeys open={keysOpen} onClose={() => setKeysOpen(false)} />
+      <TmaExternalKeys open={keysOpen} initialTab={keysTab} onClose={() => setKeysOpen(false)} />
 
       <WalletSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
 

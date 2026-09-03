@@ -17,7 +17,7 @@ from app.models import (
     UserKey,
     utcnow,
 )
-from app.public_api import _ios_out
+from app.public_api import _ios_device_rows, _ios_out
 from app.security import hash_password
 from app.services import billing, ios
 from app.services import keys as keys_service
@@ -223,9 +223,9 @@ def test_unknown_country_is_refused(server_id, node):
             ios.add_key(db, user, server_id=999_999)
 
 
-def test_ios_key_is_not_a_device_but_reports_connection(server_id, node):
-    """Слот ключа — страна, а не телефон: в устройства он не входит,
-    подключение видно на самом ключе."""
+def test_ios_key_becomes_a_device_only_after_traffic(server_id, node):
+    """Слот ключа — устройство, но считается им только после первого
+    подключения; подключение видно и на самом ключе."""
     user_id = _paid_user("ios-dev-1")
     with SessionLocal() as db:
         user = db.get(User, user_id)
@@ -233,7 +233,8 @@ def test_ios_key_is_not_a_device_but_reports_connection(server_id, node):
         db.refresh(user)
         now = utcnow()
 
-        assert user.devices(now) == {}
+        assert _ios_device_rows(user, now) == []
+        assert user.devices_used(now) == 0
         assert [k.is_connected for k in _ios_out(db, user, now).keys] == [False]
 
         key = _slot_keys(db, user_id, server_id)[0]
@@ -241,13 +242,18 @@ def test_ios_key_is_not_a_device_but_reports_connection(server_id, node):
         db.commit()
         db.refresh(user)
 
-        assert user.devices(now) == {}
+        rows = _ios_device_rows(user, now)
+        assert len(rows) == 1 and rows[0].kind == "ios_key" and rows[0].slot == 1
+        assert rows[0].id == -1 and rows[0].is_connected is True
+        assert user.devices_used(now) == 1
         assert [k.is_connected for k in _ios_out(db, user, now).keys] == [True]
         assert user.is_vpn_connected(now) is True
 
         key.last_handshake_at = now - HANDSHAKE_WINDOW - dt.timedelta(minutes=2)
         db.commit()
         db.refresh(user)
+        rows = _ios_device_rows(user, now)
+        assert len(rows) == 1 and rows[0].is_connected is False
         assert [k.is_connected for k in _ios_out(db, user, now).keys] == [False]
         assert user.is_vpn_connected(now) is False
 
@@ -525,9 +531,11 @@ def test_account_api_shows_ios_device_and_disconnect_cycle(server_id, node):
         headers = {"Authorization": f"Bearer {r.json()['token']}"}
 
         account = client.get("/api/v1/account", headers=headers).json()
-        # Вход с сайта — не устройство, ключ iPhone — тоже: список пуст,
-        # а подключение видно на ключе.
-        assert account["devices"] == []
+        # Вход с сайта — не устройство, а iPhone с рабочим ключом — да.
+        rows = [d for d in account["devices"] if d["kind"] == "ios_key"]
+        assert [d["kind"] for d in account["devices"]] == ["ios_key"]
+        assert rows[0]["slot"] == 1 and rows[0]["id"] == -1
+        assert rows[0]["is_connected"] is True
         assert account["ios"]["keys"], "рабочая ссылка должна быть в списке"
         assert account["ios"]["keys"][0]["is_connected"] is True
         link_before = account["ios"]["keys"][0]["vpn_url"]

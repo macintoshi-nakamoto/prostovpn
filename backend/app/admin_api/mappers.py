@@ -105,10 +105,9 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         app_online=any(_is_online(s, moment) for s in sessions),
         last_handshake_at=user.last_handshake(),
         sessions_count=sum(1 for s in sessions if s.revoked_at is None),
-        # Устройства считаем так же, как видит их человек в кабинете: входы
-        # приложения по одному на device_id. Ключи iPhone — отдельный
-        # счётчик ios_keys_count, в устройства они не входят.
-        devices_used=len(user.devices(moment)),
+        # Та же цифра, что видит человек в кабинете: входы приложения по
+        # одному на device_id плюс iPhone с ключами, которыми пользовались.
+        devices_used=user.devices_used(moment),
         device_limit=user.device_limit(moment),
         servers_count=sum(1 for k in user.keys if k.revoked_at is None),
         ios_access=user.ios_access,

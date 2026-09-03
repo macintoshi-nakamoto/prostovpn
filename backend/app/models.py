@@ -689,6 +689,33 @@ class User(Base):
         ]
         return max(stamps, default=None)
 
+    def ios_slots_in_use(self) -> dict[int, dt.datetime]:
+        """
+        Ключи iPhone, которыми хоть раз пользовались: номер слота → когда
+        видели в последний раз (рукопожатие AmneziaWG или трафик запасной
+        учётки VLESS того же слота).
+
+        Слот — это устройство («по ключу на устройство»), поэтому такой слот
+        считается в устройствах наравне с входом приложения. Выданный, но ни
+        разу не подключавшийся ключ устройством не считается.
+        """
+        seen: dict[int, dt.datetime] = {}
+        for key in self.keys:
+            number = ios_slot_number(key.device_id)
+            if number > 0 and key.revoked_at is None and key.last_handshake_at is not None:
+                seen[number] = max(seen.get(number, key.last_handshake_at), key.last_handshake_at)
+        for cred in self.endpoint_creds:
+            number = ios_slot_number(cred.device_id)
+            if number > 0 and cred.revoked_at is None and cred.last_seen_at is not None:
+                seen[number] = max(seen.get(number, cred.last_seen_at), cred.last_seen_at)
+        return seen
+
+    def devices_used(self, now: dt.datetime | None = None) -> int:
+        """Сколько устройств занято: входы приложения по одному на device_id
+        плюс iPhone с ключами, которыми пользовались. Одна цифра для кабинета,
+        админки и лимита тарифа."""
+        return len(self.devices(now)) + len(self.ios_slots_in_use())
+
     def device_connected(self, device_id: str, now: dt.datetime | None = None) -> bool:
         """
         Подключено ли конкретное устройство.

@@ -528,7 +528,23 @@ export function SetupScreen({ open, onClose, onKeys }) {
                   </>
                 )}
               </>
-            ) : issue === "error" ? (
+            ) : null}
+            {/* Второй iPhone — второй ключ: слот на устройство. Раньше
+                это пряталось за «Ключи для других устройств» внизу, и люди
+                думали, что добавить ключ нельзя. */}
+            {vpn && (
+              <button
+                type="button"
+                className="ap-cta su-cta su-cta-alt"
+                onClick={() => {
+                  tmaHaptic("light");
+                  onKeys?.("vpn");
+                }}
+              >
+                {t("su.addKey")}
+              </button>
+            )}
+            {vpnKeys === null || issue === "busy" || vpn ? null : issue === "error" ? (
               <>
                 <span className="su-wait">{issueError || t("su.keyFailed")}</span>
                 <button

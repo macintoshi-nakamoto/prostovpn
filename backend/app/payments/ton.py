@@ -71,6 +71,19 @@ def expected_nanotons(order: "Order") -> int | None:
         return None
 
 
+def order_memo(order) -> str:
+    """Комментарий перевода для заказа.
+
+    Не сам номер заказа (по нему читается статус), а его HMAC на ключе
+    панели: сверить может только вотчер, а из блокчейна номер не вытащить.
+    """
+    import hashlib
+    import hmac
+
+    secret = settings().secrets_key.encode()
+    return hmac.new(secret, str(order.id).encode(), hashlib.sha256).hexdigest()[:16]
+
+
 class TonProvider:
     """Приём TON на кошелёк-кассу: без приватных ключей и вебхуков.
 
@@ -83,6 +96,7 @@ class TonProvider:
     name = "ton"
 
     def create_payment(self, order: "Order") -> PaymentSession:
+        # Комментарий перевода виден всей сети — номер заказа туда не кладём.
         config = settings()
         address = config.ton_wallet_address.strip()
         if not address:
@@ -94,7 +108,7 @@ class TonProvider:
         ton = rubles / ton_rate_rub() * (1 + config.ton_rate_spread)
         nanotons = max(math.ceil(ton * NANO), MIN_NANOTON)
 
-        link = f"ton://transfer/{address}?amount={nanotons}&text={quote(order.id)}"
+        link = f"ton://transfer/{address}?amount={nanotons}&text={quote(order_memo(order))}"
         log.info("заказ %s: счёт на %.4f TON (%.2f ₽)", order.id, nanotons / NANO, rubles)
         return PaymentSession(payment_id=order.id, redirect_url=link)
 

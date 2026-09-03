@@ -95,6 +95,18 @@ async def ios_key(callback: CallbackQuery) -> None:
     if not account:
         return
 
+    # Ключа ещё нет, а подписка действует (в том числе пробная) —
+    # выпускаем прямо сейчас, а не отправляем «загляните через минуту».
+    if not account.ios_keys and account.active:
+        try:
+            account = await panel.enable_ios(session.token)
+        except panel.PanelUnavailable:
+            await callback.answer("Панель не отвечает, попробуйте через минуту", show_alert=True)
+            return
+        except panel.PanelError as error:
+            await callback.answer(str(error), show_alert=True)
+            return
+
     await render.show(
         callback, lambda: (texts.ios_keys_text(account), back_menu("cabinet", "Назад"))
     )

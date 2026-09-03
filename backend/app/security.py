@@ -131,8 +131,14 @@ def _clean_ip(value: str | None) -> str | None:
 
 
 def client_ip(request: Request) -> str | None:
+    from .config import settings
+
+    peer = request.client.host if request.client else None
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
+    # X-Forwarded-For честен только из-под нашего nginx: с любого другого
+    # адреса его пишет сам клиент, и верить ему — отдать лимиты и
+    # опознание узлов в чужие руки.
+    if forwarded and peer in settings().trusted_proxy_list:
         nearest = _clean_ip(forwarded.rsplit(",", 1)[-1])
         if nearest:
             return nearest

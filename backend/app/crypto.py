@@ -57,6 +57,11 @@ def decrypt(token: str) -> str:
         raise SecretsUnavailable("ключ не подходит к этому шифротексту") from exc
 
 
+def is_encrypted(value: str | None) -> bool:
+    """Строка уже прошла через encrypt (по префиксу формата)."""
+    return bool(value) and value.startswith(_PREFIX)
+
+
 def encrypt_or_none(plaintext: str | None) -> str | None:
     if plaintext is None:
         return None

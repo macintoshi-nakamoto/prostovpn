@@ -22,6 +22,9 @@ os.environ.update(
         "PANEL_CRYPTOCLOUD_SECRET": "test-cryptocloud-secret",
         "PANEL_MAIL_PROVIDER": "console",
         "PANEL_SECRETS_KEY": "test-secrets-key-for-pytest",
+        # TestClient приходит с адреса «testclient»; тесты подставляют
+        # X-Forwarded-For, как это делает nginx.
+        "PANEL_TRUSTED_PROXIES": "testclient,127.0.0.1,::1",
         "PANEL_SITE_DIR": "",
         "PANEL_MOCK_DELAY_SECONDS": "0",
         "PANEL_ORDER_MAX_PER_HOUR": "500",

@@ -205,6 +205,9 @@ class Server(Base):
     ssh_user: Mapped[str | None] = mapped_column(String(64), default=None)
     ssh_password: Mapped[str | None] = mapped_column(Text, default=None)
     ssh_key: Mapped[str | None] = mapped_column(Text, default=None)
+    # Отпечаток хоста узла: «ssh-ed25519 AAAA…». Пусто — запомним при
+    # первом соединении, дальше подмена узла (MITM) обрывает связь.
+    ssh_host_key: Mapped[str | None] = mapped_column(Text, default=None)
     awg_template: Mapped[str | None] = mapped_column(Text, default=None)
 
     def alt_port_list(self) -> list[int]:
@@ -236,6 +239,22 @@ class Server(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     keys: Mapped[list["UserKey"]] = relationship(back_populates="server", cascade="all, delete-orphan")
+
+    def ssh_secret(self, field: str) -> str | None:
+        """Ключ или пароль SSH в открытом виде.
+
+        В базе они лежат зашифрованными (crypto.encrypt): дамп базы не должен
+        отдавать root на всех узлах. Старые строки открытым текстом читаются
+        как есть — миграция при старте перешифровывает их.
+        """
+        from . import crypto
+
+        value = getattr(self, field)
+        if crypto.is_encrypted(value):
+            return crypto.decrypt(value)
+        return value
+
+
     endpoints: Mapped[list["NodeEndpoint"]] = relationship(
         back_populates="server", cascade="all, delete-orphan"
     )
@@ -455,6 +474,9 @@ class User(Base):
     )
     payments: Mapped[list["Payment"]] = relationship(back_populates="user", cascade="all, delete-orphan")
     sessions: Mapped[list["Session"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    # Учётки VLESS/Hysteria2 — только для чтения: их жизнью управляют
+    # сервисы xray/hy2, а здесь они нужны, чтобы понять, подключён ли человек.
+    endpoint_creds: Mapped[list["UserEndpointCred"]] = relationship(viewonly=True)
 
     @property
     def is_frozen(self) -> bool:
@@ -648,12 +670,52 @@ class User(Base):
         return self.email
 
     def last_handshake(self) -> dt.datetime | None:
+        """
+        Последний признак жизни в туннеле по всем протоколам.
+
+        AmneziaWG оставляет рукопожатие на ключе, VLESS и Hysteria2 —
+        отметку трафика на учётке. Раньше считались только ключи, и
+        человек на VLESS в админке вечно значился «отключён».
+        """
         stamps = [
             key.last_handshake_at
             for key in self.keys
             if key.revoked_at is None and key.last_handshake_at is not None
         ]
+        stamps += [
+            cred.last_seen_at
+            for cred in self.endpoint_creds
+            if cred.revoked_at is None and cred.last_seen_at is not None
+        ]
         return max(stamps, default=None)
+
+    def device_connected(self, device_id: str, now: dt.datetime | None = None) -> bool:
+        """
+        Подключено ли конкретное устройство.
+
+        Смотрим его собственные ключи и учётки (они выдаются на device_id
+        входа). Если у устройства своих нет — это старая сборка на общем
+        ключе учётки, тогда судим по общим ключам (device_id пустой).
+        """
+        moment = now or utcnow()
+        wanted = (device_id or "").strip()
+        edge = moment - HANDSHAKE_WINDOW
+
+        def alive(stamps: list[dt.datetime | None]) -> bool:
+            return any(stamp is not None and stamp > edge for stamp in stamps)
+
+        own_keys = [k for k in self.keys if k.revoked_at is None and (k.device_id or "") == wanted]
+        own_creds = [
+            c for c in self.endpoint_creds if c.revoked_at is None and (c.device_id or "") == wanted
+        ]
+        if own_keys or own_creds:
+            return alive([k.last_handshake_at for k in own_keys]) or alive(
+                [c.last_seen_at for c in own_creds]
+            )
+        if wanted == "":
+            return False
+        shared = [k for k in self.keys if k.revoked_at is None and not (k.device_id or "")]
+        return alive([k.last_handshake_at for k in shared])
 
     def is_vpn_connected(self, now: dt.datetime | None = None) -> bool:
         stamp = self.last_handshake()

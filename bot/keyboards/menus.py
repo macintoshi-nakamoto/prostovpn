@@ -155,9 +155,12 @@ def cabinet_menu(active: bool, ios: bool = False, freeze=None) -> InlineKeyboard
             ]
         )
 
-    if ios:
+    if ios or paid:
         # Приложения под iPhone нет: человек подключается ключом из
-        # AmneziaVPN, и это для него главная кнопка кабинета.
+        # AmneziaVPN, и это для него главная кнопка кабинета. Кнопка
+        # стоит у всех с действующей подпиской, а не только у тех, кому
+        # ключ уже выдан: пробный тоже имеет право на iPhone, ключ
+        # выпустится при первом нажатии.
         rows.append([make_btn("Ключ для iPhone", callback_data="ioskey", emoji="unlock")])
 
     # Файл нужен тем, кто сидит с iPhone: в наших приложениях список

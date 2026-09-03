@@ -32,7 +32,9 @@ TIMEOUT = 20.0
 def _ip_allowed(client_ip: str | None) -> bool:
     networks = settings().yookassa_ips
     if not networks:
-        return True
+        # Пустой список — не «пускать всех», а «не настроено»: уведомления
+        # с чужих адресов отбиваем.
+        return False
     if not client_ip:
         return False
     try:

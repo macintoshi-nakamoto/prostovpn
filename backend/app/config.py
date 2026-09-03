@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     secret_key: str = INSECURE_DEFAULT_SECRET
     secrets_key: str = INSECURE_DEFAULT_SECRET
 
+    # Кому верить заголовку X-Forwarded-For. Панель стоит за nginx на этой же
+    # машине; с любого другого адреса заголовок — выдумка клиента, и по нему
+    # нельзя ни считать лимиты, ни узнавать узел (hy2_api).
+    trusted_proxies: str = "127.0.0.1,::1"
+
+    @property
+    def trusted_proxy_list(self) -> frozenset[str]:
+        return frozenset(item.strip() for item in self.trusted_proxies.split(",") if item.strip())
+
     client_token_days: int = 30
     admin_token_days: int = 7
 

@@ -67,6 +67,10 @@ def generate_password(length: int | None = None) -> str:
 
 
 def reveal_password(user: User) -> str:
+    if user.credentials_set_at is not None:
+        raise PanelError(
+            "пароль придумал сам пользователь — показать его нельзя, только сбросить"
+        )
     if not user.password_enc:
         raise PanelError(
             "пароль недоступен: учётка заведена до включения шифрования или ключ сменили. "
@@ -91,6 +95,8 @@ def create_user(
     price: float | None = None,
     email: str | None = None,
 ) -> tuple[User, str, list[str]]:
+    # Пароль, который придумал человек, — его секрет: обратно не читаем.
+    supplied = bool(password)
     plan = None
     if plan_code:
         plan = db.scalar(select(Plan).where(Plan.code == plan_code))
@@ -119,7 +125,7 @@ def create_user(
     user = User(
         login=login,
         password_hash=hash_password(password),
-        password_enc=crypto.encrypt_or_none(password),
+        password_enc=None if supplied else crypto.encrypt_or_none(password),
         name=name,
         contact=contact,
         note=note,
@@ -150,16 +156,24 @@ def find_by_email(db: OrmSession, address: str | None) -> User | None:
 
 
 def set_password(db: OrmSession, user: User, password: str | None = None) -> str:
+    generated = password is None
     value = password or generate_password()
     if len(value) < 4:
         raise PanelError("пароль короче четырёх символов")
     user.password_hash = hash_password(value)
-    user.password_enc = crypto.encrypt_or_none(value)
+    # Обратимо храним только выданный нами пароль — чтобы показать его
+    # человеку и отправить письмом. Придуманный им самим не читаем никто.
+    user.password_enc = crypto.encrypt_or_none(value) if generated else None
     user.password_hint = None
     for session in user.sessions:
         if session.revoked_at is None:
             session.revoked_at = utcnow()
     db.commit()
+    # Ссылки-подписки сторонних приложений — тоже вход в учётку: тот, кто
+    # успел их выпустить чужим паролем, после смены пароля должен отвалиться.
+    from . import subscription as subscription_service
+
+    subscription_service.revoke_all(db, user.id)
     return value
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import binascii
 import ipaddress
 import json
@@ -8,6 +9,8 @@ import re
 import socket
 import struct
 import zlib
+
+log = logging.getLogger("panel.provisioning")
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
@@ -614,15 +617,29 @@ def _ssh_connect(server: Server):
         raise ValueError(f"у сервера «{server.name}» не заданы доступы по SSH")
 
     client = paramiko.SSHClient()
-    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    # Отпечаток узла: известен — только он (подмена узла обрывает связь),
+    # неизвестен — примем и запомним при первом соединении (TOFU).
+    pinned = _pinned_host_key(paramiko, server)
+    if pinned is not None:
+        name, key = pinned
+        entry = (
+            server.ssh_host
+            if int(server.ssh_port or 22) == 22
+            else f"[{server.ssh_host}]:{int(server.ssh_port)}"
+        )
+        client.get_host_keys().add(entry, name, key)
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
+    else:
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
     common = {
         "timeout": CONNECT_TIMEOUT,
         "banner_timeout": CONNECT_TIMEOUT,
         "auth_timeout": CONNECT_TIMEOUT,
     }
-    if server.ssh_key:
-        pkey = _load_private_key(paramiko, server.ssh_key)
+    ssh_key = server.ssh_secret("ssh_key")
+    if ssh_key:
+        pkey = _load_private_key(paramiko, ssh_key)
         client.connect(
             server.ssh_host, port=server.ssh_port, username=server.ssh_user, pkey=pkey, **common
         )
@@ -631,14 +648,44 @@ def _ssh_connect(server: Server):
             server.ssh_host,
             port=server.ssh_port,
             username=server.ssh_user,
-            password=server.ssh_password,
+            password=server.ssh_secret("ssh_password"),
             **common,
         )
 
     transport = client.get_transport()
     if transport is not None:
         transport.set_keepalive(5)
+        if pinned is None:
+            _remember_host_key(server, transport)
     return client
+
+
+def _pinned_host_key(paramiko, server: Server):
+    raw = (server.ssh_host_key or "").strip()
+    if not raw:
+        return None
+    parts = raw.split()
+    if len(parts) < 2:
+        return None
+    try:
+        return parts[0], paramiko.PKey.from_type_string(parts[0], base64.b64decode(parts[1]))
+    except Exception as exc:  # noqa: BLE001 — битая запись не должна ронять связь
+        log.warning("отпечаток узла «%s» не разбирается (%s) — запомним заново", server.name, exc)
+        return None
+
+
+def _remember_host_key(server: Server, transport) -> None:
+    try:
+        key = transport.get_remote_server_key()
+        server.ssh_host_key = f"{key.get_name()} {key.get_base64()}"
+        from sqlalchemy.orm import object_session
+
+        session = object_session(server)
+        if session is not None:
+            session.commit()
+        log.info("узел «%s»: отпечаток хоста запомнен (%s)", server.name, key.get_name())
+    except Exception as exc:  # noqa: BLE001
+        log.warning("узел «%s»: отпечаток хоста не сохранён: %s", server.name, exc)
 
 
 def _load_private_key(paramiko, material: str):

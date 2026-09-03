@@ -29,7 +29,15 @@ def _pending(db: OrmSession) -> dict[str, Order]:
             Order.provider == "ton",
         )
     )
-    return {order.id: order for order in rows}
+    # Свежие заказы узнаём по комментарию-HMAC, старые (выписаны до
+    # перехода) — по номеру; те доживают свои сутки и исчезают.
+    from ..payments.ton import order_memo
+
+    pending: dict[str, Order] = {}
+    for order in rows:
+        pending[order_memo(order)] = order
+        pending[order.id] = order
+    return pending
 
 
 def _transactions(address: str) -> list[dict]:

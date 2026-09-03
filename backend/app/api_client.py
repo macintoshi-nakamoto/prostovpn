@@ -565,6 +565,12 @@ def _link_telegram(db: OrmSession, user: User, init_data: str | None) -> None:
             db.commit()
         return
 
+    if user.telegram_id:
+        # К учётке уже привязан другой Telegram. Молча переписать его — значит
+        # отдать вход без пароля тому, кто один раз узнал пароль. Перепривязка
+        # — только через поддержку.
+        log.info("привязка Telegram %s: у %s уже другой аккаунт, не трогаем", telegram_id, user.login)
+        return
     taken = db.scalar(
         select(User).where(User.telegram_id == telegram_id, User.id != user.id).limit(1)
     )

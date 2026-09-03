@@ -76,12 +76,12 @@ def _reusable_order(
         )
         .order_by(Order.created_at.desc())
     )
-    if user_id is not None:
-        query = query.where(Order.user_id == user_id)
-    elif email:
-        query = query.where(Order.email == email, Order.user_id.is_(None))
-    else:
+    if user_id is None:
+        # Гостевой заказ по одной лишь почте не переиспользуем: иначе любой,
+        # кто знает адрес, получал бы чужой номер заказа и его статус. Свой
+        # заказ гость и так держит в ссылке оплаты.
         return None
+    query = query.where(Order.user_id == user_id)
 
     now = utcnow()
     for order in db.scalars(query.limit(3)):
@@ -392,10 +392,15 @@ def fulfil(db: OrmSession, order: Order, manual_by: int | None = None) -> Fulfil
         user = existing
         is_renewal = True
         if user.is_blocked:
-            user.is_blocked = False
-            user.blocked_reason = None
-            user.blocked_at = None
-        user.is_active = True
+            # Оплата не снимает блокировку: её ставил администратор, ему и
+            # снимать. Дни начислим, доступ откроется после разбора.
+            log.warning(
+                "заказ %s оплачен заблокированной учёткой %s — блокировка остаётся",
+                order.id,
+                user.public_id,
+            )
+        else:
+            user.is_active = True
     else:
         is_renewal = False
         password = credentials.gen_password()
@@ -415,10 +420,24 @@ def fulfil(db: OrmSession, order: Order, manual_by: int | None = None) -> Fulfil
     if order.platform == "ios":
         user.ios_access = True
 
+    count = max(1, order.quantity or 1)
+    days = plan.period_days * count
+    full_price = plan.price_kopecks * count
+    if 0 < order.amount_kopecks < full_price and not intro_available(db, existing, order.email):
+        # Заказ выписан по вводной цене, но право на неё уже потрачено другой
+        # оплатой (несколько заказов подряд до первого платежа). Дней — по
+        # деньгам, а не по тарифу: пять месяцев по цене первого — это дыра.
+        days = max(1, round(days * order.amount_kopecks / full_price))
+        log.warning(
+            "заказ %s: вводная цена уже использована, начислено %d дн. вместо %d",
+            order.id,
+            days,
+            plan.period_days * count,
+        )
     subscription = grant_subscription(
         db,
         user,
-        days=plan.period_days * max(1, order.quantity or 1),
+        days=days,
         plan=plan,
         price=float(Decimal(order.amount_kopecks) / 100),
         commit=False,
@@ -473,7 +492,12 @@ def fulfil(db: OrmSession, order: Order, manual_by: int | None = None) -> Fulfil
 
     from .referrals import credit_purchase
 
-    credit_purchase(db, user)
+    # Бонус пригласившему — за настоящую покупку, а не за суточный тариф за
+    # 10 ₽: иначе приглашённые «сами себе» кормили бы главный аккаунт днями.
+    real_purchase = plan.period_days * max(1, order.quantity or 1) >= 30
+
+    if real_purchase:
+        credit_purchase(db, user)
 
     return Fulfilment(order, user, password, is_renewal, subscription.expires_at)
 

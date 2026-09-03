@@ -24,6 +24,7 @@ def backfill(db: OrmSession) -> None:
     _encrypt_legacy_passwords(db)
     _encrypt_legacy_emails(db)
     _encrypt_key_private_keys(db)
+    _encrypt_server_ssh_secrets(db)
     _seed_node_endpoints(db)
     _measure_published_releases(db)
 
@@ -342,6 +343,27 @@ def _encrypt_key_private_keys(db: OrmSession) -> None:
             "(открытый текст пока оставлен как аварийная копия)",
             changed,
         )
+
+
+def _encrypt_server_ssh_secrets(db: OrmSession) -> None:
+    """Ключи и пароли SSH узлов — под шифр. Это root на всём парке, и лежать
+    открытым текстом рядом с остальными (уже зашифрованными) секретами им
+    нечего."""
+    from . import crypto
+    from .models import Server
+
+    if not crypto.available():
+        return
+    done = 0
+    for server in db.scalars(select(Server)):
+        for field in ("ssh_key", "ssh_password"):
+            value = getattr(server, field)
+            if value and not crypto.is_encrypted(value):
+                setattr(server, field, crypto.encrypt(value))
+                done += 1
+    if done:
+        db.commit()
+        log.info("секреты SSH узлов зашифрованы: %d", done)
 
 
 def _seed_node_endpoints(db: OrmSession) -> None:

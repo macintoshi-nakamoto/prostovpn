@@ -1,8 +1,7 @@
-import { BRAND } from "../lib/brand.js";
 import { useEffect, useMemo, useState } from "react";
 import { ScreenShell } from "./ScreenShell.jsx";
 import { Flag } from "./Flags.jsx";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { isTma, tmaHaptic, tmaOpenApp, tmaOpenLink } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 
@@ -33,7 +32,7 @@ const DEVICES = ["android", "ios", "win", "mac", "tv"];
  */
 const APPS = {
   prosto: {
-    name: BRAND.name,
+    name: "Prosto VPN",
     kind: "ours",
     on: { android: 1, win: 1, mac: 1, tv: 1 },
   },
@@ -274,6 +273,10 @@ export function SetupScreen({ open, onClose, onKeys }) {
   const [creds, setCreds] = useState(null);
   const [keys, setKeys] = useState(null);
   const [vpnKeys, setVpnKeys] = useState(null);
+  const [account, setAccount] = useState(null);
+  // Выпуск ключа AmneziaVPN прямо здесь: idle → busy → done | error.
+  const [issue, setIssue] = useState("idle");
+  const [issueError, setIssueError] = useState("");
   const [country, setCountry] = useState(0);
   const [copied, setCopied] = useState("");
 
@@ -283,7 +286,14 @@ export function SetupScreen({ open, onClose, onKeys }) {
     api.downloads().then((r) => alive && setDownloads(Array.isArray(r) ? r : [])).catch(() => alive && setDownloads([]));
     api.credentials().then((r) => alive && setCreds(r)).catch(() => alive && setCreds({}));
     api.subscriptionKeys().then((r) => alive && setKeys(Array.isArray(r) ? r : [])).catch(() => alive && setKeys([]));
-    api.account().then((r) => alive && setVpnKeys(r?.ios?.keys || [])).catch(() => alive && setVpnKeys([]));
+    api
+      .account()
+      .then((r) => {
+        if (!alive) return;
+        setAccount(r);
+        setVpnKeys(r?.ios?.keys || []);
+      })
+      .catch(() => alive && setVpnKeys([]));
     return () => {
       alive = false;
     };
@@ -314,6 +324,34 @@ export function SetupScreen({ open, onClose, onKeys }) {
   );
 
   const meta = APPS[app] || APPS[DEFAULT_APP[device]];
+
+  // Ключ AmneziaVPN не выпускается при регистрации — раньше человек с
+  // iPhone упирался здесь в «ключей пока нет» без единой кнопки. Теперь,
+  // как только выбрана AmneziaVPN и подписка действует, ключ выпускается
+  // сам; ошибку показываем словами и даём повторить.
+  useEffect(() => {
+    if (!open || meta.kind !== "vpn" || issue !== "idle") return undefined;
+    if (vpnKeys === null || vpnKeys.length > 0) return undefined;
+    if (!account?.active || account?.ios?.blocked) return undefined;
+    let alive = true;
+    setIssue("busy");
+    api
+      .enableIos()
+      .then((r) => {
+        if (!alive) return;
+        setAccount(r);
+        setVpnKeys(r?.ios?.keys || []);
+        setIssue("done");
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setIssueError(err instanceof ApiError ? err.message : "");
+        setIssue("error");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [open, meta.kind, issue, vpnKeys, account]);
   const file = (downloads || []).find((r) => r.platform === OUR_BUILD[device]);
   const key = (keys || []).find((k) => k.url) || null;
   // Копируют — отдаём с явным форматом: вставить могут во что угодно, а
@@ -431,8 +469,8 @@ export function SetupScreen({ open, onClose, onKeys }) {
 
         {meta.kind === "vpn" && (
           <Step icon={IC_KEY} title={t("su.stepKey")} text={t("su.amneziaLead")}>
-            {vpnKeys === null ? (
-              <span className="su-wait">{t("su.waitFile")}</span>
+            {vpnKeys === null || issue === "busy" ? (
+              <span className="su-wait">{t(issue === "busy" ? "su.issuingKey" : "su.waitFile")}</span>
             ) : vpn ? (
               <>
                 <Field
@@ -490,6 +528,22 @@ export function SetupScreen({ open, onClose, onKeys }) {
                   </>
                 )}
               </>
+            ) : issue === "error" ? (
+              <>
+                <span className="su-wait">{issueError || t("su.keyFailed")}</span>
+                <button
+                  type="button"
+                  className="ap-cta su-cta su-cta-alt"
+                  onClick={() => {
+                    tmaHaptic("light");
+                    setIssue("idle");
+                  }}
+                >
+                  {t("su.issueKey")}
+                </button>
+              </>
+            ) : account && !account.active ? (
+              <span className="su-wait">{t("su.noVpnKeyInactive")}</span>
             ) : (
               <span className="su-wait">{t("su.noVpnKey")}</span>
             )}

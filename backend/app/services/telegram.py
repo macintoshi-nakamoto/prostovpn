@@ -15,8 +15,10 @@ from .errors import PanelError
 log = logging.getLogger("panel.telegram")
 
 # initData живёт недолго: Telegram выдаёт свежую при каждом открытии
-# мини-приложения, поэтому сутки — запас с горкой. Старее — считаем украденной.
-INIT_DATA_MAX_AGE = 24 * 3600
+# мини-приложения, а подписанная строка — это готовый вход без пароля.
+# Час — запас на медленные сети и повторный вход после смены пароля;
+# старее — считаем украденной.
+INIT_DATA_MAX_AGE = 3600
 
 
 def validate_init_data(init_data: str, token: str) -> dict:

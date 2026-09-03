@@ -6,7 +6,15 @@ import threading
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 
-from ..models import AuditLog, DayTransfer, DeliveryJob, User, normalize_email, utcnow
+from ..models import (
+    AuditLog,
+    DayTransfer,
+    DeliveryJob,
+    Subscription,
+    User,
+    normalize_email,
+    utcnow,
+)
 from .billing import add_bonus_days, take_bonus_days
 from .errors import PanelError
 
@@ -70,6 +78,26 @@ def transfer(
         return _do_transfer(db, sender, recipient, days, origin, note)
 
 
+def paid_days_left(db: OrmSession, user: User, now) -> int:
+    """Сколько полных суток впереди набирается из оплаченных периодов."""
+    import datetime as dt
+
+    total = dt.timedelta(0)
+    for period in db.scalars(
+        select(Subscription).where(
+            Subscription.user_id == user.id,
+            Subscription.is_cancelled.is_(False),
+            Subscription.expires_at > now,
+        )
+    ):
+        if period.is_bonus or float(period.price or 0) <= 0:
+            continue
+        floor = max(now, period.starts_at)
+        if period.expires_at > floor:
+            total += period.expires_at - floor
+    return int(total.total_seconds() // 86400)
+
+
 def _do_transfer(
     db: OrmSession,
     sender: User,
@@ -80,7 +108,9 @@ def _do_transfer(
 ) -> DayTransfer:
     now = utcnow()
     db.refresh(sender)
-    left = sender.access_days_left(now) or 0
+    # Отдать можно только оплаченные дни. Пробные и подарочные — нет: иначе
+    # десяток одноразовых регистраций сливал бы дни в один аккаунт.
+    left = min(sender.access_days_left(now) or 0, paid_days_left(db, sender, now))
     if left <= 0:
         raise TransferError("передавать нечего: оплаченных дней не осталось")
     if days > left:

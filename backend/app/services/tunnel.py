@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
@@ -46,6 +47,9 @@ def save(
 
     name = (filename or "").strip() or "prostovpn-ru-sites.json"
     name = name.replace("\\", "/").rsplit("/", 1)[-1].replace('"', "")[:128]
+    # Имя уходит в заголовок Content-Disposition: перевод строки или
+    # не-латиница там ломают ответ целиком. Остаётся безопасный набор.
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", name).strip("._") or "tunnel.json"
     if not name.lower().endswith(KNOWN_SUFFIXES):
         name = f"{name}.json"
 

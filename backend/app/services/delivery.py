@@ -68,6 +68,9 @@ def _deliver(db: OrmSession, job: DeliveryJob) -> bool:
 
     job.sent_at = utcnow()
     job.last_error = None
+    if job.template == "password_reset":
+        # Ссылка сброса — одноразовый секрет; отправили — в базе ей делать нечего.
+        job.payload = None
     db.commit()
     log.info("доставлено: %s#%d → %s", job.channel, job.id, _mask(job.target))
     return True

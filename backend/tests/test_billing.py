@@ -76,6 +76,24 @@ def _deliver_webhook(client, order_id: str, event: str = "succeeded", attempt: i
     )
 
 
+def _issued_password(client, order_id: str) -> str:
+    """Пароль, выданный учётке при оплате заказа.
+
+    Со статуса заказа он больше не отдаётся (номер заказа гуляет по ссылкам
+    и переводам), поэтому берём через админский reveal — выданные нами
+    пароли по-прежнему читаемы, придуманные человеком — нет.
+    """
+    r = client.post("/api/admin/login", json={"login": "admin", "password": "admin"})
+    assert r.status_code == 200, r.text
+    headers = {"Authorization": f"Bearer {r.json()['token']}"}
+    with SessionLocal() as db:
+        user_id = db.get(Order, order_id).user_id
+    assert user_id, "заказ не оплачен — учётки ещё нет"
+    r = client.post(f"/api/admin/users/{user_id}/reveal", headers=headers)
+    assert r.status_code == 200, r.text
+    return r.json()["password"]
+
+
 def test_plans_come_from_database(client):
     r = client.get("/api/v1/plans")
     assert r.status_code == 200
@@ -163,7 +181,7 @@ def test_twenty_deliveries_give_exactly_one_account(client):
         assert db.get(Order, order["id"]).status == OrderStatus.PAID.value
 
 
-def test_status_endpoint_shows_credentials_once_paid(client):
+def test_status_endpoint_shows_login_but_never_password(client):
     order = _order(client, "creds@example.com")
 
     before = client.get(f"/api/v1/orders/{order['id']}/status").json()
@@ -177,7 +195,9 @@ def test_status_endpoint_shows_credentials_once_paid(client):
     assert after["status"] == "paid"
     assert after["login"].startswith("pv")
     assert len(after["login"]) == 9
-    assert len(after["password"].split("-")) == 3
+    # Пароль по номеру заказа не отдаётся никогда — он уходит письмом и ботом.
+    assert after["password"] is None and after.get("email") is None
+    assert len(_issued_password(client, order["id"]).split("-")) == 3
     assert after["expires_at"] is not None
 
 
@@ -288,7 +308,7 @@ def test_password_is_never_stored_or_logged_in_plaintext(client, caplog):
 
     order = _order(client, "secret@example.com")
     _deliver_webhook(client, order["id"])
-    password = client.get(f"/api/v1/orders/{order['id']}/status").json()["password"]
+    password = _issued_password(client, order["id"])
     assert password
 
     with SessionLocal() as db:
@@ -356,7 +376,7 @@ def test_account_email_can_be_added_and_is_unique(client):
 def test_admin_reveal_writes_audit(client, auth):
     order = _order(client, "reveal@example.com")
     _deliver_webhook(client, order["id"])
-    password = client.get(f"/api/v1/orders/{order['id']}/status").json()["password"]
+    password = _issued_password(client, order["id"])
 
     with SessionLocal() as db:
         user_id = _user_by_email(db, "reveal@example.com").id
@@ -409,7 +429,7 @@ def test_account_shows_devices_and_no_technical_fields(client):
         "/api/v1/login",
         json={
             "login": status["login"],
-            "password": status["password"],
+            "password": _issued_password(client, order["id"]),
             "platform": "web",
             "device_id": "browser-1",
             "device_name": "Chrome",
@@ -437,7 +457,7 @@ def test_browser_does_not_take_a_device_slot(client):
             "/api/v1/login",
             json={
                 "login": status["login"],
-                "password": status["password"],
+                "password": _issued_password(client, order["id"]),
                 "platform": platform,
                 "device_id": device,
                 "device_name": device,
@@ -463,7 +483,7 @@ def test_telegram_bot_does_not_take_a_device_slot(client):
     status = client.get(f"/api/v1/orders/{order['id']}/status").json()
 
     def login(payload: dict) -> str:
-        r = client.post("/api/v1/login", json={**payload, "login": status["login"], "password": status["password"]})
+        r = client.post("/api/v1/login", json={**payload, "login": status["login"], "password": _issued_password(client, order["id"])})
         assert r.status_code == 200, r.text
         return r.json()["token"]
 
@@ -487,7 +507,7 @@ def test_device_limit_drops_oldest_session(client):
             "/api/v1/login",
             json={
                 "login": status["login"],
-                "password": status["password"],
+                "password": _issued_password(client, order["id"]),
                 "device_id": device,
                 "device_name": device,
             },
@@ -536,7 +556,7 @@ def test_demo_servers_are_never_given_to_clients(client):
     status = client.get(f"/api/v1/orders/{order['id']}/status").json()
 
     r = client.post(
-        "/api/v1/login", json={"login": status["login"], "password": status["password"]}
+        "/api/v1/login", json={"login": status["login"], "password": _issued_password(client, order["id"])}
     )
     assert r.status_code == 200, r.text
     body = r.json()
@@ -567,7 +587,7 @@ def test_empty_server_list_explains_itself(client):
 
     try:
         r = client.post(
-            "/api/v1/login", json={"login": status["login"], "password": status["password"]}
+            "/api/v1/login", json={"login": status["login"], "password": _issued_password(client, order["id"])}
         )
         assert r.status_code == 200, r.text
         body = r.json()
@@ -591,7 +611,7 @@ def test_notice_names_the_real_reason_when_subscription_ended(client):
     status = client.get(f"/api/v1/orders/{order['id']}/status").json()
 
     r = client.post(
-        "/api/v1/login", json={"login": status["login"], "password": status["password"]}
+        "/api/v1/login", json={"login": status["login"], "password": _issued_password(client, order["id"])}
     )
     token = r.json()["token"]
 
@@ -628,7 +648,7 @@ def _paid_user(client, email: str):
             )
         )
         db.commit()
-        return user.id, status["login"], status["password"]
+        return user.id, status["login"], _issued_password(client, order["id"])
 
 
 def _live_keys(user_id: int) -> int:

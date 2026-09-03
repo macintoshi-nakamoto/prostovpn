@@ -49,7 +49,11 @@ def _apply(server: Server, body: schemas.ServerIn) -> None:
     server.provisioning = (
         Provisioning.SSH if body.provisioning == "ssh" else Provisioning.SHARED
     )
-    server.ssh_host = body.ssh_host or server.ssh_host or body.host
+    new_ssh_host = body.ssh_host or server.ssh_host or body.host
+    if new_ssh_host != server.ssh_host:
+        # Другая машина — прежний отпечаток к ней не относится.
+        server.ssh_host_key = None
+    server.ssh_host = new_ssh_host
     server.ssh_port = body.ssh_port
     server.ssh_user = body.ssh_user or server.ssh_user
 
@@ -58,9 +62,9 @@ def _apply(server: Server, body: schemas.ServerIn) -> None:
     if body.awg_template:
         server.awg_template = body.awg_template
     if body.ssh_password:
-        server.ssh_password = body.ssh_password
+        server.ssh_password = _sealed(body.ssh_password)
     if body.ssh_key:
-        server.ssh_key = body.ssh_key
+        server.ssh_key = _sealed(body.ssh_key)
 
     server.is_active = body.is_active
     server.sort_order = body.sort_order
@@ -91,6 +95,18 @@ def _check_usable(server: Server) -> None:
         )
     if server.provisioning == Provisioning.SHARED and not server.shared_config:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "для общего ключа нужен сам ключ")
+
+
+def _sealed(secret: str) -> str:
+    """Секрет SSH — в базу только под шифром; без ключа шифрования — не сохраняем."""
+    from .. import crypto
+
+    if not crypto.available():
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "PANEL_SECRETS_KEY не задан — доступы SSH открытым текстом не сохраняем",
+        )
+    return crypto.encrypt(secret)
 
 
 @router.get("", response_model=list[schemas.ServerOut])

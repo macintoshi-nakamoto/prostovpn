@@ -84,14 +84,10 @@ def authenticate(
         window_minutes=config.login_window_minutes,
         lock_minutes=config.login_lock_minutes,
     )
-    if verdict.allowed:
-        verdict = ratelimit.hit(
-            db,
-            name_key,
-            limit=config.login_max_attempts * BY_NAME_FACTOR,
-            window_minutes=config.login_window_minutes * BY_NAME_FACTOR,
-            lock_minutes=config.login_lock_minutes,
-        )
+    # Замок по одному логину считает только промахи и запирает только их:
+    # иначе чужие попытки с пары адресов запирали бы хозяина с верным
+    # паролем. Верный пароль проходит всегда, промах под замком — нет.
+    name_verdict = ratelimit.check(db, name_key)
     if verdict.allowed:
         verdict = ratelimit.check(db, ip_key)
     if not verdict.allowed:
@@ -111,7 +107,16 @@ def authenticate(
             window_minutes=config.login_window_minutes,
             lock_minutes=config.login_lock_minutes,
         )
+        ratelimit.hit(
+            db,
+            name_key,
+            limit=config.login_max_attempts * BY_NAME_FACTOR,
+            window_minutes=config.login_window_minutes * BY_NAME_FACTOR,
+            lock_minutes=config.login_lock_minutes,
+        )
         db.commit()
+        if not name_verdict.allowed:
+            raise LoginThrottled(name_verdict.retry_after)
         raise PanelError(BAD_CREDENTIALS, "bad_credentials")
 
     if user.is_blocked:
@@ -242,14 +247,9 @@ def authenticate_admin(
         window_minutes=config.login_window_minutes,
         lock_minutes=config.login_lock_minutes,
     )
-    if verdict.allowed:
-        verdict = ratelimit.hit(
-            db,
-            name_key,
-            limit=config.login_max_attempts * ADMIN_BY_NAME_FACTOR,
-            window_minutes=config.login_window_minutes * BY_NAME_FACTOR,
-            lock_minutes=config.login_lock_minutes,
-        )
+    # Как и у клиентов: замок по имени — только для промахов, хозяина с
+    # верным паролем чужой перебор не запирает.
+    name_verdict = ratelimit.check(db, name_key)
     if verdict.allowed:
         verdict = ratelimit.check(db, ip_key)
     if not verdict.allowed:
@@ -267,6 +267,15 @@ def authenticate_admin(
             window_minutes=config.login_window_minutes,
             lock_minutes=config.login_lock_minutes,
         )
+        ratelimit.hit(
+            db,
+            name_key,
+            limit=config.login_max_attempts * ADMIN_BY_NAME_FACTOR,
+            window_minutes=config.login_window_minutes * BY_NAME_FACTOR,
+            lock_minutes=config.login_lock_minutes,
+        )
+        if not name_verdict.allowed:
+            raise LoginThrottled(name_verdict.retry_after)
         raise PanelError("неверный логин или пароль")
 
     ratelimit.clear(db, key)

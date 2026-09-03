@@ -215,7 +215,16 @@ async def _http() -> aiohttp.ClientSession:
 
 
 async def close() -> None:
-    global _session
+    global _session, _admin_token
+
+    # Админскую сессию за собой закрываем: иначе каждый перезапуск оставлял
+    # в панели живой токен на неделю.
+    if _admin_token and _session and not _session.closed:
+        try:
+            await _request("POST", f"{ADMIN}/logout", token=_admin_token)
+        except Exception:  # noqa: BLE001 — выходим, ошибка здесь не важна
+            pass
+        _admin_token = ""
 
     if _session and not _session.closed:
         await _session.close()
@@ -358,6 +367,14 @@ async def account(token: str) -> Account:
     return _account(await _request("GET", f"{CLIENT}/account", token=token))
 
 
+async def enable_ios(token: str) -> Account:
+    """Выпускает ключ AmneziaVPN (первый слот). Панель отвечает аккаунтом
+    целиком — с ключами внутри."""
+    return _account(
+        await _request("POST", f"{CLIENT}/account/ios", payload={"server_id": None}, token=token)
+    )
+
+
 async def freeze(token: str) -> Account:
     """Ставит подписку на паузу. Панель отвечает аккаунтом целиком."""
     return _account(await _request("POST", f"{CLIENT}/account/freeze", token=token))
@@ -480,8 +497,13 @@ async def downloads() -> list[Download]:
 # --------------------------------------------------------------------------
 
 
+_admin_lock = asyncio.Lock()
+
+
 async def _admin() -> str:
-    """Токен админа панели. Держим до истечения, дальше входим заново."""
+    """Токен админа панели. Держим до истечения, дальше входим заново.
+    Под замком: два параллельных вызова на старте не должны заводить две
+    сессии."""
     global _admin_token, _admin_expires
 
     now = dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
@@ -492,21 +514,25 @@ async def _admin() -> str:
     if not config.panel_admin_login or not config.panel_admin_password:
         raise PanelError("доступ к панели не настроен")
 
-    body = await _request(
-        "POST",
-        f"{ADMIN}/login",
-        payload={
-            "login": config.panel_admin_login,
-            "password": config.panel_admin_password,
-        },
-    )
+    async with _admin_lock:
+        if _admin_token and _admin_expires and _admin_expires > now + dt.timedelta(minutes=5):
+            return _admin_token
 
-    _admin_token = body["token"]
-    # Старые сборки панели срок жизни токена не отдают — тогда просто входим
-    # заново раз в несколько часов, а протухший токен ловится по 401.
-    _admin_expires = _parse_time(body.get("expires_at")) or now + dt.timedelta(hours=6)
+        body = await _request(
+            "POST",
+            f"{ADMIN}/login",
+            payload={
+                "login": config.panel_admin_login,
+                "password": config.panel_admin_password,
+            },
+        )
 
-    return _admin_token
+        _admin_token = body["token"]
+        # Старые сборки панели срок жизни токена не отдают — тогда просто входим
+        # заново раз в несколько часов, а протухший токен ловится по 401.
+        _admin_expires = _parse_time(body.get("expires_at")) or now + dt.timedelta(hours=6)
+
+        return _admin_token
 
 
 async def _admin_request(

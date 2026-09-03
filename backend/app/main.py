@@ -248,6 +248,10 @@ async def security_headers(request: Request, call_next):
         "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()",
     )
     response.headers.setdefault("X-Permitted-Cross-Domain-Policies", "none")
+    # Ответы кабинета и админки — с паролями, ссылками и ключами: ни браузеру,
+    # ни прокси их хранить нельзя.
+    if request.url.path.startswith(("/api/v1/account", "/api/admin")):
+        response.headers.setdefault("Cache-Control", "no-store")
     ctype = response.headers.get("content-type", "")
     if ctype.startswith("text/html"):
         response.headers.setdefault("Content-Security-Policy", _csp_for(request.url.path))
@@ -292,9 +296,14 @@ if PANEL_DIST.is_dir():
     def panel_spa(full_path: str = "") -> FileResponse:
         root = PANEL_DIST.resolve()
         candidate = (root / full_path).resolve()
-        if full_path and candidate.is_file() and candidate.is_relative_to(root):
+        if full_path and not _hidden_path(full_path) and candidate.is_file() and candidate.is_relative_to(root):
             return FileResponse(candidate)
         return FileResponse(root / "index.html")
+
+
+def _hidden_path(full_path: str) -> bool:
+    """Скрытые файлы (.env, .git, .map-исходники с точкой) наружу не отдаём."""
+    return any(part.startswith(".") for part in full_path.split("/") if part)
 
 
 _SITE = _site_dir()
@@ -319,7 +328,7 @@ if _SITE is not None and settings().site_spa:
 
         root = _SITE.resolve()
         candidate = (root / full_path).resolve()
-        if full_path and candidate.is_file() and candidate.is_relative_to(root):
+        if full_path and not _hidden_path(full_path) and candidate.is_file() and candidate.is_relative_to(root):
             return FileResponse(candidate)
         return FileResponse(root / "index.html")
 
@@ -335,7 +344,9 @@ def main() -> None:
     import uvicorn
 
     config = settings()
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=config.debug)
+    # Только петля: наружу панель смотрит через nginx, а X-Forwarded-For с
+    # чужих адресов нельзя ни считать, ни доверять.
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=config.debug)
 
 
 if __name__ == "__main__":

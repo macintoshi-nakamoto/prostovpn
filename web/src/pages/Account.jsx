@@ -9,9 +9,6 @@ import { ScreenShell } from "../components/ScreenShell.jsx";
 import { CryptoIcon, SbpIcon, TelegramIcon, TonIcon } from "../components/PayIcons.jsx";
 import { starsPayUrl } from "../lib/contacts.js";
 import { TgsEmoji } from "../components/TgsEmoji.jsx";
-import { BrandFreezeEmoji, BrandLogo, BrandMark } from "../components/BrandLogo.jsx";
-import { BRAND, isBrand } from "../lib/brand.js";
-import { Controls } from "../components/Controls.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
 import { SetupScreen } from "../components/SetupScreen.jsx";
 import { TmaExternalKeys } from "../components/TmaExternalKeys.jsx";
@@ -127,7 +124,10 @@ export function Account() {
 
   // Аватар из Telegram — только внутри мини-аппа; подпись проверяет сервер,
   // фото — чистая витрина.
-  const tgPhoto = isTma() ? tmaUser()?.photo_url : null;
+  // Фото профиля — только с серверов Telegram: адрес приходит из хеша,
+  // который может подсунуть и чужая ссылка.
+  const rawPhoto = isTma() ? tmaUser()?.photo_url : null;
+  const tgPhoto = rawPhoto && /^https:\/\/t\.me\//.test(rawPhoto) ? rawPhoto : null;
 
   const load = useCallback(async () => {
     try {
@@ -184,11 +184,9 @@ export function Account() {
       <header className="ac-header">
         <div className="wrap ac-header-in">
           <Link to="/" className="ac-logo">
-            {/* У Rus VPN над знаком — название раздела, как у нативных. */}
-            <BrandLogo caption={title} />
+            <Picture src="/assets/logo-v3.png" alt="PROSTO" />
           </Link>
           <CabinetNav tabs={TABS} tab={shownTab} hrefOf={sectionPath} />
-          {isBrand("rusvpn") && <Controls />}
           <button
             type="button"
             className="ac-id"
@@ -521,7 +519,7 @@ function TmaFreeze({ freeze, onApply }) {
 
   return (
     <div className="ap-freeze">
-      <BrandFreezeEmoji size={48} />
+      <TgsEmoji name="freeze-emoji" size={48} />
       <span className="ap-row-body">
         <span className="ap-row-t">{t("account.tmaFreezeTitle")}</span>
         {sub && <span className="ap-row-s">{sub}</span>}
@@ -1109,11 +1107,11 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
       <div className="ap-card">
         <div className="ap-head">
           <span className="ap-ic ap-ic-emoji">
-            <BrandMark size={62} />
+            <TgsEmoji name="fire" size={62} />
           </span>
           <span className="ap-head-body">
             <span className="ap-title-row">
-              <span className="ap-title">{BRAND.name}</span>
+              <span className="ap-title">Prosto VPN</span>
               {data.plan_title && <span className="ap-chip">{data.plan_title}</span>}
             </span>
             <span className="ap-status">
@@ -1385,7 +1383,7 @@ function TmaFriends() {
         return;
       }
     } catch {}
-    window.open(url, "_blank");
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
   const copy = async () => {
@@ -1533,7 +1531,7 @@ function AccountTab({ data, onManage, onSetup, onFriends, onPassword, onChanged,
                 : t("account.inactive")}
           </span>
           <span className="ac-hero-plan">
-            {data.plan_title ? `${BRAND.name} · ${data.plan_title}` : t("account.noPlan")}
+            {data.plan_title ? `Prosto VPN · ${data.plan_title}` : t("account.noPlan")}
           </span>
           <span className="ac-hero-sub">
             {data.freeze?.frozen
@@ -2396,7 +2394,7 @@ function TmaPaySheet({ open, plan, quantity, busyMethod, invoice, onPay, onNewIn
     try {
       const wa = window.Telegram?.WebApp;
       if (wa?.openLink) wa.openLink(invoice.url);
-      else window.open(invoice.url, "_blank");
+      else window.open(invoice.url, "_blank", "noopener,noreferrer");
     } catch {}
   };
 

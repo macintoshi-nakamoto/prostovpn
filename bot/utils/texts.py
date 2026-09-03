@@ -473,7 +473,9 @@ def panel_error(error: PanelError) -> str:
     if error.code == "login_taken":
         return "Такой логин уже занят."
 
-    return str(error) or "Что-то пошло не так."
+    # Текст ошибки приходит из панели и уходит в сообщение с parse_mode=HTML —
+    # угловые скобки и амперсанды в нём Telegram не простит.
+    return escape(str(error)) or "Что-то пошло не так."
 
 
 def promo_text(days: int) -> str:

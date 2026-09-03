@@ -17,7 +17,6 @@ from ..models import (
     TunnelFile,
     User,
     UserKey,
-    ios_slot_number,
     is_ios_slot,
     utcnow,
 )
@@ -50,23 +49,9 @@ def _is_online(session: Session, now: dt.datetime) -> bool:
 def _session_connected(user: User, session: Session, now: dt.datetime) -> bool:
     if session.revoked_at is not None or not session.is_device:
         return False
-    device_id = session.device_key
-    for key in user.keys:
-        if key.revoked_at is not None or (key.device_id or "") != device_id:
-            continue
-        if key.last_handshake_at is not None and key.last_handshake_at > now - HANDSHAKE_WINDOW:
-            return True
-    return False
-
-
-def _ios_device_slots(user: User) -> set[int]:
-    return {
-        ios_slot_number(k.device_id)
-        for k in user.keys
-        if k.revoked_at is None
-        and is_ios_slot(k.device_id)
-        and k.last_handshake_at is not None
-    }
+    # Та же логика, что в кабинете: ключи и учётки устройства по всем
+    # протоколам, для старых сборок — общий ключ учётки.
+    return user.device_connected(session.device_key, now)
 
 
 def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
@@ -120,7 +105,10 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         app_online=any(_is_online(s, moment) for s in sessions),
         last_handshake_at=user.last_handshake(),
         sessions_count=sum(1 for s in sessions if s.revoked_at is None),
-        devices_used=len(user.device_sessions(moment)) + len(_ios_device_slots(user)),
+        # Устройства считаем так же, как видит их человек в кабинете: входы
+        # приложения по одному на device_id. Ключи iPhone — отдельный
+        # счётчик ios_keys_count, в устройства они не входят.
+        devices_used=len(user.devices(moment)),
         device_limit=user.device_limit(moment),
         servers_count=sum(1 for k in user.keys if k.revoked_at is None),
         ios_access=user.ios_access,

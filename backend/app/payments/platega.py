@@ -208,6 +208,9 @@ class PlategaProvider:
                 log.error("платёж %s: API Platega недоступно, сумма не подтверждена", payment_id)
                 kopecks = None
             else:
+                api_payload = confirmed.get("payload")
+                if api_payload is not None and order_id is not None and str(api_payload) != order_id:
+                    raise WebhookRejected("уведомление и API называют разные заказы")
                 api_status = str(confirmed.get("status") or "")
                 if api_status != "CONFIRMED":
                     raise WebhookRejected(

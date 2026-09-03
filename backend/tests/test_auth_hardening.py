@@ -42,8 +42,18 @@ def _fake_request(headers: dict[str, str], peer: str | None = "203.0.113.5"):
 def test_forwarded_for_takes_the_address_nginx_appended():
     from app.security import client_ip
 
-    request = _fake_request({"X-Forwarded-For": "1.2.3.4, 198.51.100.77"})
+    # Заголовок честен только из-под нашего nginx (петля).
+    request = _fake_request({"X-Forwarded-For": "1.2.3.4, 198.51.100.77"}, peer="127.0.0.1")
     assert client_ip(request) == "198.51.100.77"
+
+
+def test_forwarded_for_from_a_stranger_is_ignored():
+    from app.security import client_ip
+
+    # Прямое соединение мимо nginx: X-Forwarded-For пишет сам клиент, и по
+    # нему нельзя ни обходить лимиты, ни притворяться узлом.
+    request = _fake_request({"X-Forwarded-For": "1.2.3.4, 198.51.100.77"}, peer="203.0.113.5")
+    assert client_ip(request) == "203.0.113.5"
 
 
 def test_client_ip_falls_back_to_peer_without_header():
@@ -56,11 +66,11 @@ def test_client_ip_never_returns_something_too_long_for_the_column():
     from app.security import client_ip
 
     long_zone = "fe80::1%" + "A" * 300
-    value = client_ip(_fake_request({"X-Forwarded-For": long_zone}))
+    value = client_ip(_fake_request({"X-Forwarded-For": long_zone}, peer="127.0.0.1"))
     assert value == "fe80::1", "zone id должен отбрасываться вместе со своей длиной"
 
-    junk = client_ip(_fake_request({"X-Forwarded-For": "не адрес вовсе"}))
-    assert junk == "203.0.113.5", "мусор в заголовке — берём адрес соединения"
+    junk = client_ip(_fake_request({"X-Forwarded-For": "не адрес вовсе"}, peer="127.0.0.1"))
+    assert junk == "127.0.0.1", "мусор в заголовке — берём адрес соединения"
 
     for header in (long_zone, "A" * 500, "1.2.3.4" * 40):
         got = client_ip(_fake_request({"X-Forwarded-For": header}))
@@ -139,12 +149,16 @@ def _paid_order(client, email: str) -> str:
     return order_id
 
 
-def test_order_password_stops_being_served_after_the_window(client):
+def test_order_status_never_serves_password_or_email(client):
+    """Номер заказа гуляет по ссылкам возврата и переводам TON — по нему
+    нельзя получить ни пароль, ни почту. Пароль уходит письмом и ботом."""
     order_id = _paid_order(client, "window@example.com")
 
     fresh = client.get(f"/api/v1/orders/{order_id}/status").json()
-    assert fresh["password"], "сразу после оплаты пароль обязан показываться"
-    assert client.get(f"/api/v1/orders/{order_id}/status").json()["password"] == fresh["password"]
+    assert fresh["status"] == "paid"
+    assert fresh["login"], "логин и срок остаются: по ним человек пишет в поддержку"
+    assert fresh["password"] is None
+    assert fresh.get("email") is None
 
     with SessionLocal() as db:
         order = db.get(Order, order_id)
@@ -152,22 +166,22 @@ def test_order_password_stops_being_served_after_the_window(client):
         db.commit()
 
     stale = client.get(f"/api/v1/orders/{order_id}/status").json()
-    assert stale["status"] == "paid"
-    assert stale["login"], "логин и срок остаются: по ним человек пишет в поддержку"
-    assert stale["password"] is None, "пароль отдаётся бессрочно"
+    assert stale["login"] and stale["password"] is None
 
 
-def test_password_show_is_written_to_the_audit_once(client, auth):
-    order_id = _paid_order(client, "audit-window@example.com")
-
-    for _ in range(3):
-        assert client.get(f"/api/v1/orders/{order_id}/status").json()["password"]
-
-    rows = client.get(
-        "/api/admin/audit", params={"action": "order.password_shown"}, headers=auth
-    ).json()
-    mine = [row for row in rows if row["target"] == order_id]
-    assert len(mine) == 1, f"на заказ должна быть одна запись, а их {len(mine)}"
+def test_pending_order_status_does_not_tell_whether_email_is_a_customer(client):
+    """Ожидающий заказ не выдаёт «продление или новая учётка» — это был бы
+    способ проверить, есть ли у адреса аккаунт."""
+    _paid_order(client, "known@example.com")
+    r = client.post(
+        "/api/v1/orders",
+        json={"plan_code": "basic", "email": "known@example.com"},
+        headers={"X-Forwarded-For": "10.9.9.9"},
+    )
+    assert r.status_code == 201, r.text
+    body = client.get(f"/api/v1/orders/{r.json()['id']}/status").json()
+    assert body["status"] == "pending"
+    assert body["is_renewal"] is False and body["login"] is None and body.get("email") is None
 
 
 def test_encrypt_refuses_the_default_key(monkeypatch):

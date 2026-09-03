@@ -57,7 +57,16 @@ def _paid_user(client, email: str) -> dict:
         },
     )
     assert r.status_code == 200, r.text
-    return client.get(f"/api/v1/orders/{order['id']}/status").json()
+    status = client.get(f"/api/v1/orders/{order['id']}/status").json()
+    # Пароль по номеру заказа не отдаётся — берём выданный через админский reveal.
+    r = client.post("/api/admin/login", json={"login": "admin", "password": "admin"})
+    assert r.status_code == 200, r.text
+    headers = {"Authorization": f"Bearer {r.json()['token']}"}
+    with SessionLocal() as db:
+        user_id = db.get(Order, order["id"]).user_id
+    r = client.post(f"/api/admin/users/{user_id}/reveal", headers=headers)
+    assert r.status_code == 200, r.text
+    return {**status, "password": r.json()["password"]}
 
 
 def _login(client, creds: dict, platform: str = "windows", device: str = "dev-1") -> dict:

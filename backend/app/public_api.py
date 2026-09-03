@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
-from . import payments, services
+from . import crypto, payments, services
 from .config import settings
 from .db import get_db
 from .models import (
@@ -206,14 +206,18 @@ def order_status(
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "заказ не найден")
 
+    # Статус по номеру заказа знает только тот, кто заказ создал, но номер
+    # гуляет по ссылкам возврата, комментариям переводов TON и истории
+    # браузера. Поэтому здесь нет ни почты, ни пароля: пароль новой учётки
+    # уходит письмом и в Telegram, а «продление или новая» видно лишь по
+    # оплаченному заказу — по ожидающему это был бы способ узнать, есть ли
+    # у адреса аккаунт.
     out = OrderStatusOut(
         id=order.id,
         status=order.status,
         plan_code=order.plan_code,
         amount_kopecks=order.amount_kopecks,
         currency=order.currency,
-        is_renewal=order.is_renewal,
-        email=order.email,
     )
     if order.status != OrderStatus.PAID.value or not order.user_id:
         return out
@@ -222,29 +226,9 @@ def order_status(
     if user is None:
         return out
 
+    out.is_renewal = order.is_renewal
     out.login = user.login
     out.expires_at = user.access_expires_at()
-
-    if not order.is_renewal and _password_window_open(order):
-        shown = db.scalar(
-            select(AuditLog.id).where(
-                AuditLog.action == PASSWORD_SHOWN_ACTION, AuditLog.target == order.id
-            )
-        )
-        if shown is None:
-            db.add(
-                AuditLog(
-                    admin_id=None,
-                    action=PASSWORD_SHOWN_ACTION,
-                    target=order.id,
-                    detail=f"логин {user.login}",
-                )
-            )
-            db.commit()
-        try:
-            out.password = services.reveal_password(user)
-        except services.PanelError as exc:
-            log.warning("пароль для страницы успеха недоступен: %s", exc)
     return out
 
 
@@ -471,12 +455,7 @@ class AccountOut(BaseModel):
 
 
 def _device_connected(user: User, device_id: str, now: dt.datetime) -> bool:
-    for key in user.keys:
-        if key.revoked_at is not None or (key.device_id or "") != device_id:
-            continue
-        if key.last_handshake_at is not None and key.last_handshake_at > now - HANDSHAKE_WINDOW:
-            return True
-    return False
+    return user.device_connected(device_id, now)
 
 
 def _amnezia_vless_url(db: OrmSession, user: User, key: "services.ios.IosKey") -> str | None:
@@ -587,33 +566,6 @@ def _ios_out(db: OrmSession, user: User, now: dt.datetime) -> IosOut:
     )
 
 
-def _ios_device_rows(user: User, now: dt.datetime) -> list[DeviceOut]:
-    by_slot: dict[int, list] = {}
-    for key in user.keys:
-        number = ios_slot_number(key.device_id)
-        if number > 0 and key.revoked_at is None:
-            by_slot.setdefault(number, []).append(key)
-
-    rows: list[DeviceOut] = []
-    for number, slot_keys in sorted(by_slot.items()):
-        stamps = [k.last_handshake_at for k in slot_keys if k.last_handshake_at is not None]
-        if not stamps:
-            continue
-        last = max(stamps)
-        rows.append(
-            DeviceOut(
-                id=-number,
-                kind="ios_key",
-                slot=number,
-                platform="amnezia",
-                last_seen_at=last,
-                created_at=min(k.created_at for k in slot_keys),
-                is_connected=last > now - HANDSHAKE_WINDOW,
-            )
-        )
-    return rows
-
-
 def _tunnel_out(db: OrmSession) -> TunnelFileOut:
     entry = services.tunnel.current(db)
     if entry is None:
@@ -634,6 +586,11 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
     plan = subscription.plan_ref if subscription else None
     now = utcnow()
 
+    # Устройство — это вход приложения, по одному на device_id (повторный
+    # вход с того же телефона — то же устройство). Ключи iPhone сюда не
+    # входят: слот ключа — это страна, а не телефон, и у ключей свой
+    # счётчик в блоке ios. Раньше слоты считались устройствами, и человек
+    # с одним телефоном и двумя странами видел «3 из 2».
     devices = [
         DeviceOut(
             id=session.id,
@@ -645,8 +602,8 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
             is_current=session.id == current.id,
             is_connected=_device_connected(user, session.device_key, now),
         )
-        for session in user.device_sessions(now)
-    ] + _ios_device_rows(user, now)
+        for session in user.devices(now).values()
+    ]
     devices.sort(key=lambda d: d.last_seen_at, reverse=True)
 
     return AccountOut(
@@ -929,7 +886,7 @@ def password_forgot(
 ) -> dict[str, object]:
     ip = client_ip(request)
     verdict = services.ratelimit.hit(
-        db, f"forgot:{ip}", limit=5, window_minutes=60, lock_minutes=60
+        db, f"forgot:{ip_tag(ip)}", limit=5, window_minutes=60, lock_minutes=60
     )
     if not verdict.allowed:
         raise HTTPException(
@@ -939,6 +896,14 @@ def password_forgot(
         )
 
     address = normalize_email(body.email)
+    # И по адресу тоже: с нескольких IP можно было заваливать один почтовый
+    # ящик письмами и гасить только что присланную ссылку. Ответ тот же —
+    # чужой почте не положено знать, что она у нас есть.
+    per_mail = services.ratelimit.hit(
+        db, f"forgot-mail:{crypto.blind_index(address or '')}", limit=3, window_minutes=60
+    )
+    if not per_mail.allowed:
+        return {"ok": True}
     try:
         services.passwords.request(db, address, ip=ip)
     except Exception:

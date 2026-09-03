@@ -293,7 +293,7 @@ export function tmaOpenLink(url) {
     }
   } catch {}
   try {
-    window.open(url, "_blank");
+    window.open(url, "_blank", "noopener,noreferrer");
   } catch {
     window.location.href = url;
   }
@@ -336,7 +336,7 @@ export function tmaOpenTg(url) {
     }
   } catch {}
   try {
-    window.open(url, "_blank");
+    window.open(url, "_blank", "noopener,noreferrer");
   } catch {
     window.location.href = url;
   }

@@ -4,30 +4,42 @@ import android.graphics.BlurMaskFilter
 import android.os.Build
 import android.view.HapticFeedbackConstants
 import android.view.View
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.IndicationNodeFactory
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,26 +55,34 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+
+// ─── Отклик ────────────────────────────────────────────────────────────────
 
 class Haptics(private val view: View) {
     fun tap() {
@@ -80,6 +100,10 @@ class Haptics(private val view: View) {
     fun selection() {
         view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
     }
+
+    fun heavy() {
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+    }
 }
 
 @Composable
@@ -88,8 +112,52 @@ fun rememberHaptics(): Haptics {
     return remember(view) { Haptics(view) }
 }
 
+/**
+ * Вспышка вместо Material-ripple.
+ *
+ * Появляется за 90 мс, гаснет за 160 — то же, что в кабинете при нажатии
+ * строки. Ставится глобально, чтобы дефолтный круг не вылезал там, где мы
+ * забыли передать `indication = null`.
+ */
+object FlashIndication : IndicationNodeFactory {
+    override fun create(interactionSource: InteractionSource): DelegatableNode =
+        FlashNode(interactionSource)
+
+    override fun equals(other: Any?): Boolean = other === this
+
+    override fun hashCode(): Int = 0x51A5
+
+    private class FlashNode(
+        private val interactionSource: InteractionSource,
+    ) : Modifier.Node(), DrawModifierNode {
+        private val alpha = androidx.compose.animation.core.Animatable(0f)
+
+        override fun onAttach() {
+            coroutineScope.launch {
+                interactionSource.interactions.collectLatest { interaction ->
+                    when (interaction) {
+                        is PressInteraction.Press -> alpha.animateTo(1f, tween(90))
+                        is PressInteraction.Release,
+                        is PressInteraction.Cancel,
+                        -> alpha.animateTo(0f, tween(160))
+                    }
+                }
+            }
+        }
+
+        override fun ContentDrawScope.draw() {
+            drawContent()
+            if (alpha.value > 0.01f) {
+                drawRect(Color.White.copy(alpha = 0.06f * alpha.value))
+            }
+        }
+    }
+}
+
+// ─── Модификаторы ──────────────────────────────────────────────────────────
+
 fun Modifier.scaleClickable(
-    scale: Float = 0.96f,
+    scale: Float = 0.98f,
     enabled: Boolean = true,
     haptic: Boolean = true,
     onClick: () -> Unit,
@@ -127,17 +195,39 @@ fun Modifier.noRippleClickable(
     )
 }
 
-fun Modifier.tvFocusHighlight(shape: Shape = RoundedCornerShape(16.dp)): Modifier = composed {
+/** Нажатие строки — вспышка белым 6%, как в кабинете. */
+fun Modifier.flashClickable(
+    enabled: Boolean = true,
+    haptic: Boolean = true,
+    onClick: () -> Unit,
+): Modifier = composed {
+    val interaction = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
+    this
+        .pressHighlight(interaction, 0.06f)
+        .clickable(
+            interactionSource = interaction,
+            indication = null,
+            enabled = enabled,
+            onClick = {
+                if (haptic) haptics.tap()
+                onClick()
+            },
+        )
+}
+
+fun Modifier.tvFocusHighlight(shape: Shape = RoundedCornerShape(18.dp)): Modifier = composed {
     var focused by remember { mutableStateOf(false) }
+    val accent = Theme.accent
+    val wash = Theme.accentWash
     this
         .onFocusChanged { focused = it.isFocused }
         .drawWithContent {
             drawContent()
             if (focused) {
                 val outline = shape.createOutline(size, layoutDirection, this)
-
-                drawOutline(outline, color = Theme.accentTint10)
-                drawOutline(outline, color = Theme.accent, style = Stroke(width = 2.dp.toPx()))
+                drawOutline(outline, color = wash)
+                drawOutline(outline, color = accent, style = Stroke(width = 2.dp.toPx()))
             }
         }
 }
@@ -147,12 +237,12 @@ fun Modifier.fadeUp(delayMs: Int = 0): Modifier = composed {
     LaunchedEffect(Unit) { shown = true }
     val progress by animateFloatAsState(
         targetValue = if (shown) 1f else 0f,
-        animationSpec = tween(550, delayMs, CubicBezierEasing(0f, 0f, 0.58f, 1f)),
+        animationSpec = tween(480, delayMs, CubicBezierEasing(0f, 0f, 0.58f, 1f)),
         label = "fadeUp",
     )
     graphicsLayer {
         alpha = progress
-        translationY = (1f - progress) * 16.dp.toPx()
+        translationY = (1f - progress) * 14.dp.toPx()
     }
 }
 
@@ -215,11 +305,485 @@ fun Modifier.softShadow(
     }
 }
 
+/**
+ * Стекло кабинета: заливка, верхний блик и мягкая тень.
+ *
+ * Настоящее размытие фона стоит только там, где под карточкой действительно
+ * что-то есть (нижняя панель, лист). Обычные карточки лежат на канве, и
+ * размывать под ними нечего — заливка с бликом даёт тот же результат дешевле.
+ */
+fun Modifier.glass(
+    radius: Dp = R2.card,
+    fill: Color? = null,
+    shadow: Boolean = true,
+    shadowColor: Color? = null,
+    shadowBlur: Dp = 26.dp,
+    shadowY: Dp = 12.dp,
+): Modifier = composed {
+    val paletteFill = fill ?: Theme.glassFill
+    val highlight = Theme.glassHighlight
+    val base = if (Theme.isLight) Color.White.copy(alpha = 0.86f) else paletteFill
+    val shade = shadowColor ?: Theme.shadowLift
+
+    this
+        .then(if (shadow) Modifier.softShadow(shade, shadowBlur, radius, shadowY) else Modifier)
+        .clip(RoundedCornerShape(radius))
+        .background(base)
+        .drawBehind {
+            val strokeW = 1.dp.toPx()
+            drawRoundRect(
+                brush = Brush.verticalGradient(
+                    0f to highlight,
+                    0.42f to Color.Transparent,
+                ),
+                topLeft = Offset(strokeW / 2f, strokeW / 2f),
+                size = Size(size.width - strokeW, size.height - strokeW),
+                cornerRadius = CornerRadius(radius.toPx() - strokeW / 2f, radius.toPx() - strokeW / 2f),
+                style = Stroke(width = strokeW),
+            )
+        }
+}
+
+// ─── Карточки и строки ─────────────────────────────────────────────────────
+
 @Composable
-fun LogoImage(
+fun GlassCard(
     modifier: Modifier = Modifier,
-    glowAlpha: Float = 0.35f,
+    radius: Dp = R2.card,
+    padding: Dp = 16.dp,
+    content: @Composable ColumnScope.() -> Unit,
 ) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .glass(radius)
+            .padding(padding),
+        content = content,
+    )
+}
+
+/** Карточка-список: строки внутри одной карточки, между ними волосяная линия. */
+@Composable
+fun RowsCard(
+    modifier: Modifier = Modifier,
+    radius: Dp = R2.card,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .glass(radius),
+        content = content,
+    )
+}
+
+@Composable
+fun HairLine(inset: Dp = 18.dp) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = inset)
+            .height(1.dp)
+            .background(Theme.hair),
+    )
+}
+
+@Composable
+fun IconCircle(
+    icon: ImageVector,
+    size: Dp = 40.dp,
+    tint: Color = Theme.accentText,
+    background: Color = Theme.accentWash,
+    iconSize: Dp = 19.dp,
+) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(background),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(iconSize))
+    }
+}
+
+/**
+ * Строка-меню: иконка в кружке, заголовок с подписью, справа значение или
+ * шеврон. Высота 62, разделитель рисует родитель.
+ */
+@Composable
+fun MenuRow(
+    title: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    value: String? = null,
+    icon: ImageVector? = null,
+    iconTint: Color = Theme.accentText,
+    iconBackground: Color = Theme.accentWash,
+    titleColor: Color = Theme.text,
+    chevron: Boolean = true,
+    height: Dp = 62.dp,
+    onClick: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = height)
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .tvFocusHighlight(RoundedCornerShape(R2.card))
+                        .flashClickable(onClick = onClick)
+                } else {
+                    Modifier
+                }
+            )
+            .padding(horizontal = 18.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            IconCircle(icon = icon, tint = iconTint, background = iconBackground)
+            Spacer(Modifier.width(14.dp))
+        }
+
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, style = pro(16.sp, W.semibold, titleColor))
+            if (subtitle != null) {
+                Text(subtitle, style = pro(13.sp, W.regular, Theme.textFaint))
+            }
+        }
+
+        if (value != null) {
+            Spacer(Modifier.width(10.dp))
+            Text(value, style = pro(14.sp, W.medium, Theme.textFaint, tabular = true))
+        }
+
+        if (trailing != null) {
+            Spacer(Modifier.width(12.dp))
+            trailing()
+        } else if (chevron && onClick != null) {
+            Spacer(Modifier.width(8.dp))
+            Icon(
+                imageVector = Icons.chevronRight,
+                contentDescription = null,
+                tint = Theme.textFaint,
+                modifier = Modifier.size(17.dp),
+            )
+        }
+    }
+}
+
+// ─── Действия ──────────────────────────────────────────────────────────────
+
+@Composable
+fun PrimaryPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    height: Dp = 56.dp,
+    enabled: Boolean = true,
+    icon: ImageVector? = null,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
+    val fontSize = if (height >= 52.dp) 17.sp else 15.sp
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .pressScale(interaction, 0.98f)
+            .softShadow(Theme.shadowAccent, 16.dp, height / 2f, yOffset = 10.dp)
+            .tvFocusHighlight(CircleShape)
+            .clip(CircleShape)
+            .background(Theme.brandGradient)
+            .pressHighlight(interaction, 0.12f)
+            .clickable(
+                interactionSource = interaction,
+                indication = null,
+                enabled = enabled,
+            ) {
+                haptics.tap()
+                onClick()
+            },
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(9.dp))
+        }
+        Text(text, style = pro(fontSize, W.semibold, Color.White))
+    }
+}
+
+@Composable
+fun GhostPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    height: Dp = 52.dp,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(height)
+            .pressScale(interaction, 0.98f)
+            .tvFocusHighlight(CircleShape)
+            .clip(CircleShape)
+            .background(if (Theme.isLight) Color.White.copy(alpha = 0.9f) else Theme.glassFill)
+            .border(1.dp, Theme.ghostStroke, CircleShape)
+            .pressHighlight(interaction, 0.06f)
+            .clickable(interactionSource = interaction, indication = null) {
+                haptics.tap()
+                onClick()
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = pro(15.sp, W.semibold, Theme.text))
+    }
+}
+
+@Composable
+fun SoftPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    height: Dp = 44.dp,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
+    Box(
+        modifier = modifier
+            .height(height)
+            .pressScale(interaction, 0.97f)
+            .tvFocusHighlight(CircleShape)
+            .clip(CircleShape)
+            .background(Theme.accentWash)
+            .clickable(interactionSource = interaction, indication = null) {
+                haptics.tap()
+                onClick()
+            }
+            .padding(horizontal = 18.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = pro(14.sp, W.semibold, Theme.accentText))
+    }
+}
+
+/** Маленькая залитая пилюля 38 — «Продлить», «Обновить» в баннерах. */
+@Composable
+fun MiniPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val haptics = rememberHaptics()
+    Box(
+        modifier = modifier
+            .height(38.dp)
+            .pressScale(interaction, 0.96f)
+            .tvFocusHighlight(CircleShape)
+            .clip(CircleShape)
+            .background(Theme.brandGradient)
+            .clickable(interactionSource = interaction, indication = null) {
+                haptics.tap()
+                onClick()
+            }
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = pro(13.5.sp, W.semibold, Color.White))
+    }
+}
+
+@Composable
+fun Chip(
+    text: String,
+    color: Color = Theme.accentText,
+    background: Color = Theme.accentWash,
+    modifier: Modifier = Modifier,
+    tabular: Boolean = false,
+) {
+    Text(
+        text = text,
+        style = pro(12.sp, W.semibold, color, tabular = tabular),
+        modifier = modifier
+            .clip(CircleShape)
+            .background(background)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    )
+}
+
+/** Переключатель 46×28: трек уезжает в акцент, кружок белый. */
+@Composable
+fun ProToggle(checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    val haptics = rememberHaptics()
+    val thumbOffset by animateDpAsState(
+        targetValue = if (checked) 21.dp else 3.dp,
+        animationSpec = tween(200, easing = Theme.easeStandard),
+        label = "thumb",
+    )
+    val track by animateColorAsState(
+        targetValue = if (checked) Theme.accent else Theme.tileDeep,
+        animationSpec = tween(200, easing = Theme.easeStandard),
+        label = "track",
+    )
+    Box(
+        modifier = Modifier
+            .size(width = 46.dp, height = 28.dp)
+            .tvFocusHighlight(CircleShape)
+            .clip(CircleShape)
+            .background(track)
+            .noRippleClickable(enabled = enabled, haptic = false) {
+                haptics.selection()
+                onChange(!checked)
+            },
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = thumbOffset)
+                .size(22.dp)
+                .softShadow(Color.Black.copy(alpha = 0.28f), 3.dp, 11.dp, yOffset = 1.dp)
+                .clip(CircleShape)
+                .background(Color.White),
+        )
+    }
+}
+
+/** Сегмент из двух-трёх пилюль: язык, тема. */
+@Composable
+fun Segment(
+    options: List<Pair<String, String>>,
+    selected: String,
+    modifier: Modifier = Modifier,
+    height: Dp = 34.dp,
+    onSelect: (String) -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .height(height)
+            .clip(CircleShape)
+            .background(if (Theme.isLight) Theme.tile else Color.White.copy(alpha = 0.07f))
+            .padding(3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        options.forEach { (key, label) ->
+            val active = key == selected
+            val bg by animateColorAsState(
+                targetValue = if (active) Theme.accent else Color.Transparent,
+                animationSpec = tween(220),
+                label = "segBg",
+            )
+            val fg by animateColorAsState(
+                targetValue = if (active) Color.White else Theme.textMuted,
+                animationSpec = tween(220),
+                label = "segFg",
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .tvFocusHighlight(CircleShape)
+                    .clip(CircleShape)
+                    .background(bg)
+                    .noRippleClickable { onSelect(key) }
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label, style = pro(13.sp, W.semibold, fg))
+            }
+        }
+    }
+}
+
+// ─── Баннеры и заглушки ────────────────────────────────────────────────────
+
+enum class BannerTone { ACCENT, WARNING, INFO, ERROR }
+
+@Composable
+fun Banner(
+    title: String,
+    tone: BannerTone = BannerTone.ACCENT,
+    body: String? = null,
+    actionText: String? = null,
+    modifier: Modifier = Modifier,
+    onAction: (() -> Unit)? = null,
+) {
+    val background = when (tone) {
+        BannerTone.ACCENT -> Theme.accentWash
+        BannerTone.WARNING -> Theme.warningWash
+        BannerTone.INFO -> Theme.infoWash
+        BannerTone.ERROR -> Theme.errorWash
+    }
+    val titleColor = when (tone) {
+        BannerTone.ACCENT -> Theme.accentText
+        BannerTone.WARNING -> Theme.warningText
+        BannerTone.INFO -> Theme.info
+        BannerTone.ERROR -> Theme.errorText
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(R2.card))
+            .background(background)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = pro(14.5.sp, W.semibold, titleColor, lineHeight = 20.sp))
+            if (body != null) {
+                Text(body, style = pro(13.sp, W.regular, Theme.textMuted, lineHeight = 18.sp))
+            }
+        }
+        if (actionText != null && onAction != null) {
+            Spacer(Modifier.width(12.dp))
+            MiniPill(text = actionText, onClick = onAction)
+        }
+    }
+}
+
+@Composable
+fun Skeleton(width: Dp, height: Dp, radius: Dp = 8.dp) {
+    val shift by androidx.compose.animation.core.rememberInfiniteTransition(label = "sk")
+        .animateFloat(
+            initialValue = -1f,
+            targetValue = 2f,
+            animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+                tween(1200, easing = androidx.compose.animation.core.LinearEasing),
+            ),
+            label = "skShift",
+        )
+    Box(
+        Modifier
+            .size(width = width, height = height)
+            .clip(RoundedCornerShape(radius))
+            .drawBehind {
+                drawRect(Theme.tile.copy(alpha = if (Theme.isLight) 1f else 0.55f))
+                val w = size.width
+                drawRect(
+                    brush = Brush.horizontalGradient(
+                        0f to Color.Transparent,
+                        0.5f to Color.White.copy(alpha = if (Theme.isLight) 0.55f else 0.06f),
+                        1f to Color.Transparent,
+                        startX = shift * w,
+                        endX = (shift + 1f) * w,
+                    ),
+                )
+            },
+    )
+}
+
+// ─── Мелочи ────────────────────────────────────────────────────────────────
+
+@Composable
+fun LogoImage(modifier: Modifier = Modifier, glowAlpha: Float = 0f) {
+    val accent = Theme.accent
     Image(
         painter = painterResource(R.drawable.logo),
         contentDescription = null,
@@ -227,14 +791,11 @@ fun LogoImage(
             if (glowAlpha > 0f) {
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(
-                            Theme.accentWarm.copy(alpha = glowAlpha),
-                            Color.Transparent,
-                        ),
+                        colors = listOf(accent.copy(alpha = glowAlpha), Color.Transparent),
                         center = center,
-                        radius = size.minDimension * 0.72f,
+                        radius = size.minDimension * 0.9f,
                     ),
-                    radius = size.minDimension * 0.72f,
+                    radius = size.minDimension * 0.9f,
                     center = center,
                 )
             }
@@ -244,81 +805,78 @@ fun LogoImage(
 
 @Composable
 fun GlassCircleButton(
-    backdrop: BackdropState,
-    size: Dp = 46.dp,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    size: Dp = 40.dp,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val haptics = rememberHaptics()
     val interaction = remember { MutableInteractionSource() }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(size)
             .pressScale(interaction, 0.92f)
             .tvFocusHighlight(CircleShape)
             .clip(CircleShape)
-            .liquidGlass(backdrop)
-
-            .graphicsLayer()
-            .pressHighlight(interaction)
+            .background(if (Theme.isLight) Color.White.copy(alpha = 0.9f) else Theme.glassFill)
+            .pressHighlight(interaction, 0.08f)
             .clickable(interactionSource = interaction, indication = null) {
                 haptics.tap()
                 onClick()
             },
         contentAlignment = Alignment.Center,
-    ) {
-        content()
-    }
+        content = content,
+    )
 }
 
+/** Шапка внутреннего экрана: кружок «назад» и заголовок 22/700. */
 @Composable
-fun GlassBackButton(
-    backdrop: BackdropState,
+fun ScreenHeader(
+    title: String,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    GlassCircleButton(backdrop = backdrop, size = 44.dp, onClick = onBack) {
-        androidx.compose.material3.Icon(
-            imageVector = Icons.chevronLeft,
-            contentDescription = null,
-            tint = Theme.text.copy(alpha = 0.85f),
-            modifier = Modifier.size(20.dp).offset(x = (-1).dp),
-        )
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        GlassCircleButton(onClick = onBack) {
+            Icon(
+                imageVector = Icons.chevronLeft,
+                contentDescription = null,
+                tint = Theme.text,
+                modifier = Modifier.size(19.dp).offset(x = (-1).dp),
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(title, style = pro(22.sp, W.bold, Theme.text, tracking = em(22.sp, -0.025f)))
+        Spacer(Modifier.weight(1f))
+        trailing?.invoke(this)
     }
 }
 
 @Composable
-fun RollingText(
-    text: String,
-    style: androidx.compose.ui.text.TextStyle,
-    modifier: Modifier = Modifier,
-) {
+fun RollingText(text: String, style: TextStyle, modifier: Modifier = Modifier) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         val length = text.length
         text.forEachIndexed { index, char ->
-
             androidx.compose.runtime.key(length - index) {
                 androidx.compose.animation.AnimatedContent(
-                targetState = char,
-                transitionSpec = {
-                    (androidx.compose.animation.slideInVertically(
-                        animationSpec = androidx.compose.animation.core.spring(
-                            dampingRatio = 0.9f,
-                            stiffness = 650f,
-                        ),
-                    ) { height -> height } + androidx.compose.animation.fadeIn(
-                        androidx.compose.animation.core.tween(140)
-                    )).togetherWith(
-                        androidx.compose.animation.slideOutVertically(
-                            animationSpec = androidx.compose.animation.core.spring(
-                                dampingRatio = 0.9f,
-                                stiffness = 650f,
-                            ),
-                        ) { height -> -height } + androidx.compose.animation.fadeOut(
-                            androidx.compose.animation.core.tween(100)
-                        )
-                    )
-                },
-                label = "roll$index",
+                    targetState = char,
+                    transitionSpec = {
+                        (androidx.compose.animation.slideInVertically(
+                            animationSpec = tween(220, easing = Theme.easeStandard),
+                        ) { height -> height } + androidx.compose.animation.fadeIn(tween(140)))
+                            .togetherWith(
+                                androidx.compose.animation.slideOutVertically(
+                                    animationSpec = tween(220, easing = Theme.easeStandard),
+                                ) { height -> -height } + androidx.compose.animation.fadeOut(tween(100))
+                            )
+                    },
+                    label = "roll$index",
                 ) { c ->
                     Text(text = c.toString(), style = style)
                 }
@@ -328,168 +886,7 @@ fun RollingText(
 }
 
 @Composable
-fun CardGroup(
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Theme.card)
-            .drawWithContent {
-                drawContent()
-                val strokeW = 1.dp.toPx()
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.06f),
-                        0.5f to Color.Transparent,
-                    ),
-                    topLeft = Offset(strokeW / 2f, strokeW / 2f),
-                    size = androidx.compose.ui.geometry.Size(size.width - strokeW, size.height - strokeW),
-                    cornerRadius = CornerRadius(20.dp.toPx() - strokeW / 2f, 20.dp.toPx() - strokeW / 2f),
-                    style = Stroke(width = strokeW),
-                )
-            }
-            .padding(6.dp),
-    ) {
-        content()
-    }
-}
-
-@Composable
-fun CardDivider() {
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp)
-            .height(1.dp)
-            .background(Theme.divider),
-    )
-}
-
-@Composable
-fun FlagChip(flag: String, size: Dp = 40.dp) {
-    val fontSize = with(LocalDensity.current) { (size * 0.5f).toSp() }
-    Box(
-        modifier = Modifier
-            .size(size)
-            .clip(RoundedCornerShape(size * 0.3f))
-            .background(Theme.accentTint12),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = flag, fontSize = fontSize)
-    }
-}
-
-@Composable
-fun ProtocolBadge() {
-    Text(
-        text = "AWG2",
-        style = manrope(11.sp, W.bold, Theme.accentSoft, letterSpacing = 0.5.sp),
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(Theme.accentTint12)
-            .padding(horizontal = 7.dp, vertical = 2.dp),
-    )
-}
-
-@Composable
-fun OrangeToggle(checked: Boolean, onChange: (Boolean) -> Unit) {
-    val haptics = rememberHaptics()
-    val thumbOffset by animateDpAsState(
-        targetValue = if (checked) 21.5.dp else 2.5.dp,
-        animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = 0.72f,
-            stiffness = 520f,
-        ),
-        label = "thumb",
-    )
-    val fillAlpha by animateFloatAsState(
-        targetValue = if (checked) 1f else 0f,
-        animationSpec = Theme.spring(250),
-        label = "fill",
-    )
-    Box(
-        modifier = Modifier
-            .size(width = 48.dp, height = 29.dp)
-            .tvFocusHighlight(CircleShape)
-            .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.12f))
-            .drawBehind {
-                drawRoundRect(
-                    brush = Theme.accentGradient,
-                    cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
-                    alpha = fillAlpha,
-                )
-            }
-            .noRippleClickable {
-                haptics.selection()
-                onChange(!checked)
-            },
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        Box(
-            modifier = Modifier
-                .offset(x = thumbOffset)
-                .size(24.dp)
-                .softShadow(Color.Black.copy(alpha = 0.35f), 3.dp, 12.dp, yOffset = 2.dp)
-                .clip(CircleShape)
-                .background(Color.White),
-        )
-    }
-}
-
-@Composable
-fun PrimaryButton(
-    text: String,
-    modifier: Modifier = Modifier,
-    icon: ImageVector? = null,
-    height: Dp = 50.dp,
-    cornerRadius: Dp = 16.dp,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(height)
-            .softShadow(Theme.accent.copy(alpha = 0.30f), 12.dp, cornerRadius, yOffset = 8.dp)
-            .tvFocusHighlight(RoundedCornerShape(cornerRadius))
-            .clip(RoundedCornerShape(cornerRadius))
-            .background(Theme.primaryGradient)
-            .drawWithContent {
-                drawContent()
-                val strokeW = 1.dp.toPx()
-                drawRoundRect(
-                    brush = Brush.verticalGradient(
-                        0f to Color.White.copy(alpha = 0.25f),
-                        0.5f to Color.Transparent,
-                    ),
-                    topLeft = Offset(strokeW / 2f, strokeW / 2f),
-                    size = androidx.compose.ui.geometry.Size(size.width - strokeW, size.height - strokeW),
-                    cornerRadius = CornerRadius(cornerRadius.toPx() - strokeW / 2f, cornerRadius.toPx() - strokeW / 2f),
-                    style = Stroke(width = strokeW),
-                )
-            }
-            .noRippleClickable(onClick = onClick),
-        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (icon != null) {
-            androidx.compose.material3.Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(9.dp))
-        }
-        Text(text = text, style = manrope(15.sp, W.bold, Color.White))
-    }
-}
-
-@Composable
-fun WarmAlertDialog(
+fun ProDialog(
     title: String,
     message: String,
     confirmText: String,
@@ -502,59 +899,118 @@ fun WarmAlertDialog(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(28.dp))
-                .background(Theme.sheetGradient)
-                .padding(horizontal = 24.dp, vertical = 24.dp),
+                .clip(RoundedCornerShape(R2.plate))
+                .background(if (Theme.isLight) Color.White else Color(0xFF1D1D1F))
+                .padding(horizontal = 22.dp, vertical = 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
                 text = title,
-                style = manrope(18.sp, W.extraBold, Theme.text),
+                style = pro(19.sp, W.bold, Theme.text, tracking = em(19.sp, -0.02f)),
                 textAlign = TextAlign.Center,
             )
             if (message.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
                     text = message,
-                    style = manrope(13.5.sp, W.medium, Theme.textSecondary),
+                    style = pro(14.sp, W.regular, Theme.textMuted, lineHeight = 20.sp),
                     textAlign = TextAlign.Center,
                 )
             }
             Spacer(Modifier.height(20.dp))
-            Row {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (dismissText != null) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(46.dp)
-                            .tvFocusHighlight(RoundedCornerShape(15.dp))
-                            .clip(RoundedCornerShape(15.dp))
-                            .background(Color.White.copy(alpha = 0.06f))
-                            .noRippleClickable(onClick = onDismiss),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(dismissText, style = manrope(15.sp, W.bold, Theme.text))
-                    }
-                    Spacer(Modifier.width(10.dp))
+                    GhostPill(
+                        text = dismissText,
+                        height = 48.dp,
+                        modifier = Modifier.weight(1f),
+                        onClick = onDismiss,
+                    )
                 }
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(46.dp)
-                        .tvFocusHighlight(RoundedCornerShape(15.dp))
-                        .clip(RoundedCornerShape(15.dp))
-                        .background(
-                            if (destructive) Theme.accentTint12 else Color.White.copy(alpha = 0.06f)
-                        )
+                        .height(48.dp)
+                        .tvFocusHighlight(CircleShape)
+                        .clip(CircleShape)
+                        .background(if (destructive) Theme.errorWash else Theme.accentWash)
                         .noRippleClickable(onClick = onConfirm),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
                         confirmText,
-                        style = manrope(15.sp, W.bold, if (destructive) Theme.link else Theme.text),
+                        style = pro(15.sp, W.semibold, if (destructive) Theme.errorText else Theme.accentText),
                     )
                 }
             }
+        }
+    }
+}
+
+/** Свечение канвы — цветное пятно из-под верхнего края экрана. */
+@Composable
+fun CanvasGlow(color: Color, strength: Float = 1f, modifier: Modifier = Modifier) {
+    val animated by animateColorAsState(color, tween(420), label = "glowColor")
+    val power by animateFloatAsState(strength, tween(420), label = "glowPower")
+    androidx.compose.foundation.Canvas(modifier.fillMaxSize()) {
+        if (power <= 0.01f) return@Canvas
+        val radius = size.width * 1.05f
+        val center = Offset(size.width / 2f, -size.height * 0.08f)
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(animated.copy(alpha = animated.alpha * power), Color.Transparent),
+                center = center,
+                radius = radius,
+            ),
+            radius = radius,
+            center = center,
+        )
+    }
+}
+
+/** Каркас листа: ручка, заголовок, подзаголовок и содержимое. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun SheetShell(
+    title: String,
+    subtitle: String?,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color.Transparent,
+        dragHandle = null,
+        shape = RoundedCornerShape(topStart = R2.plate, topEnd = R2.plate),
+        scrimColor = Color(0xFF080809).copy(alpha = 0.55f),
+        contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0.dp) },
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(topStart = R2.plate, topEnd = R2.plate))
+                .background(if (Theme.isLight) Color.White else Color(0xFF141416))
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 18.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(top = 10.dp, bottom = 14.dp)
+                    .align(Alignment.CenterHorizontally)
+                    .size(width = 38.dp, height = 4.dp)
+                    .clip(CircleShape)
+                    .background(if (Theme.isLight) Theme.tileDeep else Color.White.copy(alpha = 0.18f)),
+            )
+            Text(title, style = pro(24.sp, W.bold, Theme.text, tracking = em(24.sp, -0.025f)))
+            if (!subtitle.isNullOrEmpty()) {
+                Spacer(Modifier.height(4.dp))
+                Text(subtitle, style = pro(14.sp, W.regular, Theme.textMuted))
+            }
+            Spacer(Modifier.height(16.dp))
+            content()
         }
     }
 }

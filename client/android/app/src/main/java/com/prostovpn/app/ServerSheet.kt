@@ -1,184 +1,215 @@
 package com.prostovpn.app
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.launch
 
+/**
+ * Выбор страны.
+ *
+ * Отдельная вкладка, а не лист: в приложении это второе по частоте действие
+ * после подключения, и прятать его за строкой на главной незачем.
+ */
 @Composable
-fun CurrentServerCard(
-    state: AppState,
-    backdrop: BackdropState,
-    onOpen: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val interaction = remember { MutableInteractionSource() }
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .pressScale(interaction, 0.98f)
-
-            .tvFocusHighlight(RoundedCornerShape(26.dp))
-            .clip(RoundedCornerShape(26.dp))
-            .liquidGlass(backdrop, cornerRadius = 26.dp)
-            .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
-            .padding(vertical = 13.dp, horizontal = 16.dp),
-    ) {
-        ServerRow(server = state.currentServer) {
-            Icon(
-                imageVector = Icons.chevronUp,
-                contentDescription = null,
-                tint = Theme.textTertiary,
-                modifier = Modifier.size(17.dp),
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ServerListSheet(state: AppState, onDismiss: () -> Unit) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
-    val haptics = rememberHaptics()
+fun CountriesPage(state: AppState, onDone: () -> Unit) {
     val s = state.s
+    val servers = state.displayServers()
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color.Transparent,
-        dragHandle = null,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        scrimColor = Color.Black.copy(alpha = 0.45f),
-        contentWindowInsets = { WindowInsets(0.dp) },
-    ) {
+    LaunchedEffect(Unit) { state.refreshPings() }
+
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().background(Theme.canvas))
+        CanvasGlow(
+            color = if (Theme.isLight) Color(0x22FA4C16) else Color.White.copy(alpha = 0.08f),
+        )
+
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .background(Theme.sheetGradient)
-                .navigationBarsPadding(),
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .padding(top = 10.dp)
-                    .size(width = 38.dp, height = 5.dp)
-                    .clip(RoundedCornerShape(2.5.dp))
-                    .background(Color.White.copy(alpha = 0.18f))
-                    .align(Alignment.CenterHorizontally),
-            )
-
-            Text(
-                text = s.chooseServer,
-                style = manrope(13.sp, W.bold, Theme.textMuted, letterSpacing = 0.5.sp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 28.dp)
-                    .padding(top = 20.dp, bottom = 8.dp),
-            )
+            Column(
+                modifier = Modifier.padding(top = 18.dp, bottom = 18.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = s.countryTitle,
+                    style = pro(24.sp, W.bold, Theme.text, tracking = em(24.sp, -0.025f)),
+                )
+                Text(text = s.countrySub, style = pro(14.sp, W.regular, Theme.textMuted))
+            }
 
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(2.dp),
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                state.displayServers().forEachIndexed { index, server ->
-                    val isActive = index == state.selectedServerIndex
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
+                BestServerCard(state = state, modifier = Modifier.fadeUp())
 
-                            .tvFocusHighlight(RoundedCornerShape(16.dp))
-                            .scaleClickable(0.98f, haptic = false) {
-                                haptics.selection()
-                                state.selectServer(index)
-                                scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
-                            }
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (isActive) Theme.accent.copy(alpha = 0.07f) else Color.Transparent)
-                            .padding(vertical = 12.dp, horizontal = 8.dp),
-                    ) {
-                        ServerRow(server = server) {
-                            if (isActive) {
-                                Icon(
-                                    imageVector = Icons.check,
-                                    contentDescription = null,
-                                    tint = Theme.link,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
-                        }
+                RowsCard(modifier = Modifier.fadeUp(60)) {
+                    servers.forEachIndexed { index, server ->
+                        if (index > 0) HairLine(inset = 63.dp)
+                        CountryRow(
+                            state = state,
+                            server = server,
+                            active = !state.autoServer && index == state.selectedServerIndex,
+                            onClick = { state.chooseServer(index) },
+                        )
+                    }
+                    if (servers.isEmpty()) {
+                        Text(
+                            text = s.errNoServers,
+                            style = pro(14.sp, W.regular, Theme.textMuted, lineHeight = 20.sp),
+                            modifier = Modifier.padding(18.dp),
+                        )
                     }
                 }
+
+                Spacer(Modifier.height(8.dp))
+            }
+
+            PrimaryPill(
+                text = if (state.phase == Phase.ON) s.applyDone else s.connect,
+                modifier = Modifier.padding(top = 12.dp),
+                onClick = {
+                    if (state.phase != Phase.ON) state.toggleConnection()
+                    onDone()
+                },
+            )
+
+            Spacer(Modifier.navigationBarsPadding().height(86.dp))
+        }
+    }
+}
+
+@Composable
+private fun BestServerCard(state: AppState, modifier: Modifier = Modifier) {
+    val s = state.s
+    val active = state.autoServer
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(66.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(R2.card))
+            .background(Theme.accentWash)
+            .flashClickable { state.chooseAuto() }
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(if (Theme.isLight) Color.White else Color.White.copy(alpha = 0.10f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.zap,
+                contentDescription = null,
+                tint = Theme.accent,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(s.bestServer, style = pro(15.sp, W.semibold, Theme.text))
+            Text(s.bestServerSub, style = pro(12.sp, W.regular, Theme.textMuted))
+        }
+        if (active) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(Theme.accent),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp),
+                )
             }
         }
     }
 }
 
 @Composable
-fun ServerRow(
-    server: DisplayServer?,
-    trailing: @Composable () -> Unit,
+private fun CountryRow(
+    state: AppState,
+    server: DisplayServer,
+    active: Boolean,
+    onClick: () -> Unit,
 ) {
+    val s = state.s
+    val ping = state.pingFor(server)
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(62.dp)
+            .flashClickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        FlagChip(flag = server?.flag ?: "🌐")
-
-        Spacer(Modifier.width(14.dp))
-
-        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = server?.name ?: "—",
-                    style = manrope(15.sp, W.bold, Theme.text),
-                    maxLines = 1,
-                )
-                Spacer(Modifier.width(8.dp))
-                ProtocolBadge()
-            }
-
+        CountryFlag(code = server.code, size = 34.dp)
+        Spacer(Modifier.width(15.dp))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
-                text = server?.sub ?: "",
-                style = manrope(12.5.sp, W.medium, Theme.textMuted),
+                text = server.name.ifEmpty { server.host.orEmpty() },
+                style = pro(15.sp, W.semibold, Theme.text),
                 maxLines = 1,
             )
+            if (server.sub.isNotEmpty()) {
+                Text(text = server.sub, style = pro(12.sp, W.regular, Theme.textFaint), maxLines = 1)
+            }
         }
-
-        Spacer(Modifier.weight(1f))
-
-        trailing()
+        if (ping != null) {
+            Text(
+                text = "$ping ${s.ms}",
+                style = pro(13.sp, W.semibold, pingColor(ping), tabular = true),
+            )
+        }
+        if (active) {
+            Spacer(Modifier.width(10.dp))
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(Theme.accent),
+            )
+        }
     }
+}
+
+@Composable
+private fun pingColor(ping: Int): Color = when {
+    ping < 40 -> Theme.success
+    ping > 60 -> Theme.warning
+    else -> Theme.textMuted
 }

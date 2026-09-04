@@ -4,11 +4,6 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -18,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,13 +23,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -56,86 +49,130 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 @Composable
 fun SettingsScreen(state: AppState, onBack: () -> Unit) {
     val s = state.s
+    val context = LocalContext.current
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showFileSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { state.updates.check(silent = true) }
 
-    val backdrop = rememberBackdropState()
-
     Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .backdropSource(backdrop)
-        ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Theme.background)
-            )
-            SoftTopOrb()
-        }
+        Box(Modifier.fillMaxSize().background(Theme.canvas))
+        CanvasGlow(
+            color = if (Theme.isLight) Color(0x22FA4C16) else Color.White.copy(alpha = 0.08f),
+        )
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 24.dp)
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp),
+                .padding(horizontal = 16.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-            ) {
-                GlassBackButton(backdrop = backdrop, onBack = onBack)
-            }
-
-            Text(
-                text = s.settings,
-                style = manrope(30.sp, W.extraBold, Theme.text),
-                modifier = Modifier.padding(start = 2.dp, top = 6.dp, bottom = 22.dp),
-            )
+            ScreenHeader(title = s.settings, onBack = onBack)
 
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                TogglesCard(
-                    state = state,
-                    onAddFile = { showFileSheet = true },
-                )
-                LanguageCard(state)
-                UpdateCard(state)
-                Spacer(Modifier.height(0.dp))
-            }
+                Spacer(Modifier.height(6.dp))
 
-            Spacer(Modifier.height(14.dp))
+                UpdateBanner(state)
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .tvFocusHighlight(RoundedCornerShape(20.dp))
-                    .scaleClickable(0.98f) { showLogoutConfirm = true }
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(Theme.accentTint08),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = s.logout,
-                    style = manrope(15.sp, W.bold, Theme.link),
-                )
+                Overline(s.sectionConnection)
+
+                RowsCard(modifier = Modifier.fadeUp()) {
+                    MenuRow(
+                        title = s.autostartTitle,
+                        chevron = false,
+                        trailing = {
+                            ProToggle(checked = state.autoConnect) { state.changeAutoConnect(it) }
+                        },
+                    )
+                    HairLine()
+                    MenuRow(
+                        title = s.split,
+                        subtitle = s.splitDesc,
+                        height = 70.dp,
+                        chevron = false,
+                        trailing = {
+                            ProToggle(checked = state.splitTunnelEnabled) {
+                                state.changeSplitTunnel(it)
+                            }
+                        },
+                    )
+                    HairLine()
+                    BackgroundWorkRow(state)
+                    NotificationsRow(state)
+                    HairLine()
+                    MenuRow(
+                        title = s.fileTitle,
+                        subtitle = fileSubtitle(state, s),
+                        height = 70.dp,
+                        onClick = { showFileSheet = true },
+                    )
+                }
+
+                Overline(s.sectionApp)
+
+                RowsCard(modifier = Modifier.fadeUp(60)) {
+                    MenuRow(
+                        title = s.language,
+                        chevron = false,
+                        trailing = {
+                            Segment(
+                                options = listOf("ru" to "RU", "en" to "EN"),
+                                selected = state.lang,
+                                onSelect = { state.changeLang(it) },
+                            )
+                        },
+                    )
+                    HairLine()
+                    MenuRow(
+                        title = s.theme,
+                        chevron = false,
+                        trailing = {
+                            Segment(
+                                options = listOf("dark" to s.themeDark, "light" to s.themeLight),
+                                selected = if (state.themeMode == ThemeMode.LIGHT) "light" else "dark",
+                                onSelect = {
+                                    state.changeTheme(
+                                        if (it == "light") ThemeMode.LIGHT else ThemeMode.DARK
+                                    )
+                                },
+                            )
+                        },
+                    )
+                    HairLine()
+                    MenuRow(
+                        title = s.about,
+                        value = BuildConfig.VERSION_NAME,
+                        onClick = { openUrl(context, "https://prostovpn.cc/guide") },
+                    )
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .tvFocusHighlight(CircleShape)
+                        .clip(CircleShape)
+                        .background(Theme.errorWash)
+                        .noRippleClickable { showLogoutConfirm = true },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(s.logout, style = pro(15.sp, W.semibold, Theme.errorText))
+                }
+
+                Spacer(Modifier.navigationBarsPadding().height(24.dp))
             }
         }
     }
 
     if (showLogoutConfirm) {
-        WarmAlertDialog(
+        ProDialog(
             title = s.logoutConfirmTitle,
             message = s.logoutConfirmMessage,
             confirmText = s.yes,
@@ -154,36 +191,47 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
 }
 
 @Composable
-private fun TogglesCard(state: AppState, onAddFile: () -> Unit) {
-    val s = state.s
-    CardGroup {
-        ToggleRow(s.split, s.splitDesc, state.splitTunnelEnabled) { state.changeSplitTunnel(it) }
+private fun Overline(text: String) {
+    Text(
+        text = text,
+        style = pro(12.sp, W.bold, Theme.textFaint, tracking = em(12.sp, 0.08f)),
+        modifier = Modifier.padding(start = 6.dp, top = 6.dp),
+    )
+}
 
-        AnimatedVisibility(
-            visible = state.splitTunnelEnabled,
-            enter = expandVertically(animationSpec = Theme.spring(300)) + fadeIn(Theme.spring(300)),
-            exit = shrinkVertically(animationSpec = Theme.spring(300)) + fadeOut(Theme.spring(200)),
-        ) {
-            PrimaryButton(
-                text = s.addFile,
-                icon = Icons.plus,
-                height = 46.dp,
-                cornerRadius = 15.dp,
-                onClick = onAddFile,
-                modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 2.dp, bottom = 10.dp),
-            )
-        }
-
-        CardDivider()
-        ToggleRow(s.autoconnect, s.autoconnectDesc, state.autoConnect) { state.changeAutoConnect(it) }
-        CardDivider()
-        BackgroundWorkRow(state)
-        NotificationsOffRow(state)
-    }
+private fun fileSubtitle(state: AppState, s: Strings): String {
+    val file = state.activeTunnelFile ?: return s.defaultMeta
+    return "${file.name} · ${file.count} ${s.entries}"
 }
 
 @Composable
-private fun NotificationsOffRow(state: AppState) {
+private fun UpdateBanner(state: AppState) {
+    val s = state.s
+    val updates = state.updates
+    val actionable = updates.stage == UpdateManager.Stage.AVAILABLE ||
+        updates.stage == UpdateManager.Stage.FAILED
+
+    val title = when (updates.stage) {
+        UpdateManager.Stage.CHECKING -> s.updateChecking
+        UpdateManager.Stage.UP_TO_DATE -> s.updateNone
+        UpdateManager.Stage.AVAILABLE -> s.updateAvailable.format(updates.info?.version.orEmpty())
+        UpdateManager.Stage.DOWNLOADING -> s.updateDownloading.format(updates.percent)
+        UpdateManager.Stage.INSTALLING -> s.updateInstalling
+        UpdateManager.Stage.FAILED -> s.updateFailed
+    }
+
+    Banner(
+        title = title,
+        body = s.updateCurrent.format(BuildConfig.VERSION_NAME),
+        tone = if (updates.stage == UpdateManager.Stage.FAILED) BannerTone.WARNING else BannerTone.ACCENT,
+        actionText = if (actionable) s.updateButton else null,
+        onAction = { updates.retry() },
+        modifier = Modifier.fadeUp(),
+    )
+}
+
+@Composable
+private fun NotificationsRow(state: AppState) {
     val s = state.s
     val context = LocalContext.current
     var enabled by remember {
@@ -193,36 +241,29 @@ private fun NotificationsOffRow(state: AppState) {
         enabled = androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
         onPauseOrDispose { }
     }
-    if (enabled) return
 
-    CardDivider()
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .tvFocusHighlight(RoundedCornerShape(12.dp))
-            .noRippleClickable {
-                runCatching {
-                    context.startActivity(
-                        android.content.Intent(
-                            android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS,
-                        )
-                            .putExtra(
-                                android.provider.Settings.EXTRA_APP_PACKAGE,
-                                context.packageName,
-                            )
-                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+    HairLine()
+    MenuRow(
+        title = s.notificationsTitle,
+        subtitle = if (enabled) null else s.notificationsDesc,
+        height = if (enabled) 62.dp else 70.dp,
+        chevron = false,
+        onClick = {
+            runCatching {
+                context.startActivity(
+                    android.content.Intent(
+                        android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS,
                     )
-                }
+                        .putExtra(
+                            android.provider.Settings.EXTRA_APP_PACKAGE,
+                            context.packageName,
+                        )
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
             }
-            .padding(vertical = 13.dp, horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = s.notifOffWarn,
-            style = manrope(12.5.sp, W.medium, Theme.accentSoft),
-            modifier = Modifier.weight(1f),
-        )
-    }
+        },
+        trailing = { ProToggle(checked = enabled, enabled = false) { } },
+    )
 }
 
 @Composable
@@ -236,177 +277,39 @@ private fun BackgroundWorkRow(state: AppState) {
         onPauseOrDispose { }
     }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .tvFocusHighlight(RoundedCornerShape(12.dp))
-            .noRippleClickable {
-                if (unrestricted) {
-                    BackgroundWork.openOemAutoStart(context)
-                } else {
-                    BackgroundWork.request(context)
+    MenuRow(
+        title = s.background,
+        subtitle = if (unrestricted) s.backgroundDone else s.backgroundDesc,
+        height = 70.dp,
+        onClick = {
+            if (unrestricted) BackgroundWork.openOemAutoStart(context) else BackgroundWork.request(context)
+        },
+        trailing = {
+            if (unrestricted) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .clip(CircleShape)
+                        .background(Theme.successWash),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.check,
+                        contentDescription = null,
+                        tint = Theme.success,
+                        modifier = Modifier.size(12.dp),
+                    )
                 }
+            } else {
+                Icon(
+                    imageVector = Icons.chevronRight,
+                    contentDescription = null,
+                    tint = Theme.textFaint,
+                    modifier = Modifier.size(17.dp),
+                )
             }
-            .padding(vertical = 13.dp, horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(s.background, style = manrope(15.sp, W.bold, Theme.text))
-            Text(
-                text = if (unrestricted) s.backgroundDone else s.backgroundDesc,
-                style = manrope(
-                    12.5.sp,
-                    W.medium,
-                    if (unrestricted) Theme.success else Theme.textMuted,
-                ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun LanguageCard(state: AppState) {
-    val s = state.s
-    CardGroup {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 13.dp, horizontal = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(s.language, style = manrope(15.sp, W.bold, Theme.text))
-                Text(s.langName, style = manrope(12.5.sp, W.medium, Theme.textMuted))
-            }
-
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(Color.White.copy(alpha = 0.08f))
-                    .padding(3.dp),
-            ) {
-                LangButton("RU", state.lang == "ru") { state.changeLang("ru") }
-                LangButton("EN", state.lang == "en") { state.changeLang("en") }
-            }
-        }
-    }
-}
-
-@Composable
-private fun UpdateCard(state: AppState) {
-    val s = state.s
-    val updates = state.updates
-
-    CardGroup {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 13.dp, horizontal = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = when (updates.stage) {
-                    UpdateManager.Stage.CHECKING -> s.updateChecking
-                    UpdateManager.Stage.UP_TO_DATE -> s.updateNone
-                    UpdateManager.Stage.AVAILABLE ->
-                        s.updateAvailable.format(updates.info?.version.orEmpty())
-                    UpdateManager.Stage.DOWNLOADING -> s.updateDownloading.format(updates.percent)
-                    UpdateManager.Stage.INSTALLING -> s.updateInstalling
-                    UpdateManager.Stage.FAILED -> s.updateFailed
-                },
-                style = manrope(
-                    15.sp,
-                    W.bold,
-                    if (updates.stage == UpdateManager.Stage.FAILED) Theme.accentSoft else Theme.text,
-                ),
-            )
-            Text(
-                text = s.updateCurrent.format(BuildConfig.VERSION_NAME),
-                style = manrope(12.5.sp, W.medium, Theme.textMuted),
-            )
-        }
-
-        val actionable = updates.stage == UpdateManager.Stage.AVAILABLE ||
-            updates.stage == UpdateManager.Stage.FAILED
-        if (actionable) {
-            PrimaryButton(
-                text = s.updateButton,
-                height = 46.dp,
-                cornerRadius = 15.dp,
-                onClick = { updates.retry() },
-                modifier = Modifier.padding(start = 8.dp, end = 8.dp, top = 2.dp, bottom = 10.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun LangButton(title: String, active: Boolean, onClick: () -> Unit) {
-    val haptics = rememberHaptics()
-    val bg by androidx.compose.animation.animateColorAsState(
-        targetValue = if (active) Theme.accent else Color.Transparent,
-        animationSpec = androidx.compose.animation.core.tween(220),
-        label = "langBg",
+        },
     )
-    val fg by androidx.compose.animation.animateColorAsState(
-        targetValue = if (active) Color.White else Theme.text.copy(alpha = 0.5f),
-        animationSpec = androidx.compose.animation.core.tween(220),
-        label = "langFg",
-    )
-    Box(
-        modifier = Modifier
-            .tvFocusHighlight(RoundedCornerShape(9.dp))
-            .clip(RoundedCornerShape(9.dp))
-            .background(bg)
-            .noRippleClickable {
-                haptics.selection()
-                onClick()
-            }
-            .padding(horizontal = 17.dp, vertical = 6.dp),
-    ) {
-        Text(text = title, style = manrope(13.sp, W.bold, fg))
-    }
-}
-
-@Composable
-fun SoftTopOrb() {
-    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
-        val center = androidx.compose.ui.geometry.Offset(size.width * 0.7f, 40.dp.toPx())
-        val radius = 260.dp.toPx()
-        drawCircle(
-            brush = androidx.compose.ui.graphics.Brush.radialGradient(
-                colors = listOf(Theme.accent.copy(alpha = 0.10f), Color.Transparent),
-                center = center,
-                radius = radius,
-            ),
-            radius = radius,
-            center = center,
-        )
-    }
-}
-
-@Composable
-private fun ToggleRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    onChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 13.dp, horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = manrope(15.sp, W.bold, Theme.text))
-            Text(subtitle, style = manrope(12.5.sp, W.medium, Theme.textMuted))
-        }
-
-        Spacer(Modifier.width(14.dp))
-
-        OrangeToggle(checked = checked, onChange = onChange)
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -414,7 +317,6 @@ private fun ToggleRow(
 private fun TunnelFileSheet(state: AppState, onDismiss: () -> Unit) {
     val s = state.s
     val context = LocalContext.current
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     var showImportError by remember { mutableStateOf(false) }
     var fileToDelete by remember { mutableStateOf<TunnelFile?>(null) }
     val haptics = rememberHaptics()
@@ -432,102 +334,53 @@ private fun TunnelFileSheet(state: AppState, onDismiss: () -> Unit) {
         }
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Color.Transparent,
-        dragHandle = null,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        scrimColor = Color.Black.copy(alpha = 0.45f),
-        contentWindowInsets = { WindowInsets(0.dp) },
-    ) {
+    SheetShell(title = s.fileTitle, subtitle = s.fileDesc, onDismiss = onDismiss) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Theme.sheetGradient)
-                .navigationBarsPadding(),
+                .heightIn(max = 320.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .padding(top = 10.dp)
-                    .size(width = 38.dp, height = 5.dp)
-                    .clip(RoundedCornerShape(2.5.dp))
-                    .background(Color.White.copy(alpha = 0.18f))
-                    .align(Alignment.CenterHorizontally),
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp)
-                    .padding(top = 20.dp, bottom = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(s.fileTitle, style = manrope(20.sp, W.extraBold, Theme.text))
-                Text(
-                    text = s.fileDesc,
-                    style = manrope(13.sp, W.medium, Theme.textSecondary).copy(lineHeight = 19.sp),
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f, fill = false)
-                    .heightIn(max = 320.dp)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 22.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                state.tunnelFiles.forEach { file ->
-                    FileRow(
-                        file = file,
-                        meta = fileMeta(file, s),
-                        isActive = file.id == state.activeTunnelFileId,
-                        onSelect = {
-                            haptics.selection()
-                            state.selectTunnelFile(file)
-                        },
-                        onLongPress = {
-                            if (!file.isDefault) fileToDelete = file
-                        },
-                    )
-                }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp)
-                    .padding(top = 6.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Text(
-                    text = s.holdHint,
-                    style = manrope(11.5.sp, W.semibold, Theme.text.copy(alpha = 0.3f)),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                PrimaryButton(
-                    text = s.chooseFile,
-                    icon = Icons.upload,
-                    height = 50.dp,
-                    cornerRadius = 16.dp,
-                    onClick = {
-                        // На ТВ-боксах и урезанных ROM системного пикера может
-                        // не быть — это ActivityNotFoundException и краш.
-                        runCatching {
-                            filePicker.launch(arrayOf("application/json", "text/plain", "text/*"))
-                        }.onFailure { showImportError = true }
+            state.tunnelFiles.forEach { file ->
+                FileRow(
+                    file = file,
+                    meta = fileMeta(file, s),
+                    isActive = file.id == state.activeTunnelFileId,
+                    onSelect = {
+                        haptics.selection()
+                        state.selectTunnelFile(file)
                     },
+                    onLongPress = { if (!file.isDefault) fileToDelete = file },
                 )
             }
         }
+
+        Spacer(Modifier.height(12.dp))
+
+        Text(
+            text = s.holdHint,
+            style = pro(12.sp, W.regular, Theme.textFaint),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        PrimaryPill(
+            text = s.chooseFile,
+            icon = Icons.upload,
+            onClick = {
+                // На ТВ-боксах и урезанных ROM системного пикера может не быть.
+                runCatching {
+                    filePicker.launch(arrayOf("application/json", "text/plain", "text/*"))
+                }.onFailure { showImportError = true }
+            },
+        )
     }
 
     if (showImportError) {
-        WarmAlertDialog(
+        ProDialog(
             title = s.importError,
             message = "",
             confirmText = "OK",
@@ -539,7 +392,7 @@ private fun TunnelFileSheet(state: AppState, onDismiss: () -> Unit) {
     }
 
     fileToDelete?.let { file ->
-        WarmAlertDialog(
+        ProDialog(
             title = "${s.del}?",
             message = file.name,
             confirmText = s.del,
@@ -567,9 +420,9 @@ private fun FileRow(
         modifier = Modifier
             .fillMaxWidth()
             .pressScale(interaction, 0.98f)
-            .tvFocusHighlight(RoundedCornerShape(16.dp))
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (isActive) Theme.accentTint10 else Color.White.copy(alpha = 0.04f))
+            .tvFocusHighlight(RoundedCornerShape(R2.tile))
+            .clip(RoundedCornerShape(R2.tile))
+            .background(if (isActive) Theme.accentWash else Theme.tile.copy(alpha = if (Theme.isLight) 1f else 0.5f))
             .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
@@ -579,34 +432,18 @@ private fun FileRow(
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(Theme.accentTint14),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.doc,
-                contentDescription = null,
-                tint = Theme.accentSoft,
-                modifier = Modifier.size(17.dp),
-            )
-        }
+        IconCircle(icon = Icons.doc, size = 36.dp, iconSize = 17.dp)
 
         Spacer(Modifier.width(12.dp))
 
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 text = file.name,
-                style = manrope(14.sp, W.bold, Theme.text),
+                style = pro(14.sp, W.semibold, Theme.text),
                 maxLines = 1,
                 overflow = TextOverflow.MiddleEllipsis,
             )
-            Text(
-                text = meta,
-                style = manrope(12.sp, W.semibold, Theme.accentSoft),
-            )
+            Text(text = meta, style = pro(12.sp, W.regular, Theme.textFaint))
         }
 
         if (isActive) {
@@ -614,7 +451,7 @@ private fun FileRow(
             Icon(
                 imageVector = Icons.check,
                 contentDescription = null,
-                tint = Theme.link,
+                tint = Theme.accent,
                 modifier = Modifier.size(18.dp),
             )
         }

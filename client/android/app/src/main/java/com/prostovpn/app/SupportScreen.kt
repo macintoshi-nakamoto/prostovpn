@@ -1,6 +1,12 @@
 package com.prostovpn.app
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,185 +20,178 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private const val SITE = "https://prostovpn.cc"
+private const val SUPPORT_SITE = "https://prostovpn.cc"
 
 @Composable
 fun SupportScreen(state: AppState, onBack: () -> Unit) {
     val s = state.s
-    val uriHandler = LocalUriHandler.current
-
-    fun open(url: String) {
-        runCatching { uriHandler.openUri(url) }
-    }
-
-    val backdrop = rememberBackdropState()
+    val context = LocalContext.current
+    var copied by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .backdropSource(backdrop)
-        ) {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Theme.background)
-            )
-            SoftTopOrb()
-        }
+        Box(Modifier.fillMaxSize().background(Theme.canvas))
+        CanvasGlow(
+            color = if (Theme.isLight) Color(0x22FA4C16) else Color.White.copy(alpha = 0.08f),
+        )
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(horizontal = 24.dp)
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp),
+                .padding(horizontal = 16.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-            ) {
-                GlassBackButton(backdrop = backdrop, onBack = onBack)
-            }
+            ScreenHeader(title = s.supportTitle, onBack = onBack)
 
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 30.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                LogoImage(
-                    modifier = Modifier.size(width = 120.dp, height = 80.dp),
-                    glowAlpha = 0.35f,
-                )
+                Spacer(Modifier.height(6.dp))
 
-                Text(
-                    text = "Prosto VPN",
-                    style = manrope(22.sp, W.extraBold, Theme.text),
-                )
+                HeroCard(state)
 
-                Spacer(Modifier.height(2.dp))
+                RowsCard(modifier = Modifier.fadeUp(80)) {
+                    MenuRow(
+                        title = s.mailTitle,
+                        subtitle = "help@prostovpn.cc",
+                        height = 66.dp,
+                        onClick = { openUrl(context, "mailto:help@prostovpn.cc") },
+                    )
+                    HairLine()
+                    MenuRow(
+                        title = s.siteAndCabinet,
+                        subtitle = "prostovpn.cc",
+                        height = 66.dp,
+                        onClick = { openUrl(context, "$SUPPORT_SITE/account") },
+                    )
+                    HairLine()
+                    MenuRow(
+                        title = s.faqTitle,
+                        subtitle = s.faqSub,
+                        height = 66.dp,
+                        onClick = { openUrl(context, "$SUPPORT_SITE/faq") },
+                    )
+                }
 
-                Text(
+                GlassCard(modifier = Modifier.fadeUp(120), padding = 16.dp) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(s.yourLogin, style = pro(13.sp, W.regular, Theme.textFaint))
+                            Text(
+                                text = state.accountName.ifEmpty { "—" },
+                                style = pro(16.sp, W.semibold, Theme.text),
+                                maxLines = 1,
+                            )
+                        }
+                        MiniPill(text = if (copied) s.copied else s.copy) {
+                            copyToClipboard(context, state.accountName)
+                            copied = true
+                        }
+                    }
+                }
 
-                    text = "${s.version} ${BuildConfig.VERSION_NAME}",
-                    style = manrope(13.sp, W.medium, Theme.textMuted),
-                )
-            }
-
-            CardGroup {
-                LinkRow(
-                    icon = Icons.telegram,
-                    title = s.tgTitle,
-                    subtitle = "@prostovpnn_bot",
-                ) { open("https://t.me/prostovpnn_bot") }
-                CardDivider()
-                LinkRow(
-                    icon = Icons.globe,
-                    title = s.siteTitle,
-                    subtitle = "prostovpn.cc",
-                ) { open("$SITE/") }
-                CardDivider()
-                LinkRow(
-                    icon = Icons.help,
-                    title = s.faqTitle,
-                    subtitle = s.faqSub,
-                ) { open("$SITE/faq.html") }
-                CardDivider()
-                LinkRow(
-                    icon = Icons.star,
-                    title = s.rateTitle,
-                    subtitle = s.rateSub,
-                ) { open("$SITE/download.html") }
-            }
-
-            Spacer(Modifier.weight(1f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = s.privacy,
-                    style = manrope(12.sp, W.regular, Theme.text.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .tvFocusHighlight(RoundedCornerShape(8.dp))
-                        .noRippleClickable { open("$SITE/privacy.html") },
-                )
-                Text(
-                    text = " · ",
-                    style = manrope(12.sp, W.regular, Theme.textFaint),
-                )
-                Text(
-                    text = s.terms,
-                    style = manrope(12.sp, W.regular, Theme.text.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .tvFocusHighlight(RoundedCornerShape(8.dp))
-                        .noRippleClickable { open("$SITE/offer.html") },
-                )
+                Spacer(Modifier.navigationBarsPadding().height(24.dp))
             }
         }
     }
 }
 
 @Composable
-private fun LinkRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    onClick: () -> Unit,
-) {
-    Row(
+private fun HeroCard(state: AppState) {
+    val s = state.s
+    val context = LocalContext.current
+    val t = rememberInfiniteTransition(label = "supportDrift")
+    val drift by t.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(6000, easing = Theme.easeStandard), RepeatMode.Reverse),
+        label = "d1",
+    )
+    val drift2 by t.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(7500, easing = Theme.easeStandard), RepeatMode.Reverse),
+        label = "d2",
+    )
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .tvFocusHighlight(RoundedCornerShape(18.dp))
-            .scaleClickable(0.98f, onClick = onClick)
-            .clip(RoundedCornerShape(14.dp))
-            .padding(vertical = 12.dp, horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .glass(R2.plate)
+            .fadeUp(),
     ) {
-        Box(
+        Image(
+            painter = painterResource(R.drawable.obj_ring_chrome),
+            contentDescription = null,
             modifier = Modifier
-                .size(38.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(Theme.accentTint12),
-            contentAlignment = Alignment.Center,
+                .align(Alignment.TopStart)
+                .size(120.dp)
+                .graphicsLayer {
+                    // Объекты — награда за успех, а не помеха тексту: держим их
+                    // на краях и приглушёнными.
+                    alpha = if (Theme.isLight) 0.20f else 0.26f
+                    translationX = (-46).dp.toPx()
+                    translationY = (-40).dp.toPx() - drift * 10.dp.toPx()
+                    rotationZ = -8f + drift * 6f
+                },
+        )
+        Image(
+            painter = painterResource(R.drawable.obj_mask_chrome),
+            contentDescription = null,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .size(98.dp)
+                .graphicsLayer {
+                    alpha = if (Theme.isLight) 0.18f else 0.24f
+                    translationX = 36.dp.toPx()
+                    translationY = 34.dp.toPx() + drift2 * 8.dp.toPx()
+                    rotationZ = 10f - drift2 * 6f
+                },
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 26.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = Theme.accentSoft,
-                modifier = Modifier.size(18.dp),
+            Text(
+                text = s.supportHeadline,
+                style = pro(26.sp, W.bold, Theme.text, tracking = em(26.sp, -0.03f)),
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = s.supportHours,
+                style = pro(14.sp, W.regular, Theme.textMuted, lineHeight = 20.sp),
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(20.dp))
+            PrimaryPill(
+                text = s.writeTelegram,
+                icon = Icons.telegram,
+                onClick = { openUrl(context, "https://t.me/prostovpnn_bot") },
             )
         }
-
-        Spacer(Modifier.width(14.dp))
-
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-            Text(title, style = manrope(15.sp, W.bold, Theme.text))
-            Text(subtitle, style = manrope(12.5.sp, W.medium, Theme.textMuted))
-        }
-
-        Icon(
-            imageVector = Icons.chevronRight,
-            contentDescription = null,
-            tint = Theme.textTertiary,
-            modifier = Modifier.size(16.dp),
-        )
     }
 }

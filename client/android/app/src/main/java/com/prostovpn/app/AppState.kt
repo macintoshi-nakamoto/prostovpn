@@ -39,6 +39,24 @@ data class ServerInfo(
     // на узле нет живой точки Reality либо доступ не выдался.
     val vless: XrayTunnel.Access? = null,
 ) {
+    /**
+     * Куда стучаться, чтобы замерить отклик.
+     *
+     * Панель отдаёт узел конфигом, а не адресом: host у записи из панели
+     * пустой. Берём точку Reality, а если её нет — Endpoint из конфига
+     * AmneziaWG.
+     */
+    val probeHost: String?
+        get() = vless?.host?.takeIf { it.isNotEmpty() }
+            ?: host.takeIf { it.isNotEmpty() }
+            ?: config?.let { text ->
+                Regex("""Endpoint\s*=\s*\[?([^:\]\s]+)\]?:(\d+)""")
+                    .find(text)?.groupValues?.getOrNull(1)
+            }
+
+    val probePort: Int
+        get() = vless?.port ?: 443
+
     fun countryFor(lang: String): String? =
         if (lang == "en") countryEn ?: country else country ?: countryEn
 
@@ -59,6 +77,8 @@ data class DisplayServer(
     val flag: String,
     val name: String,
     val sub: String,
+    val code: String? = null,
+    val host: String? = null,
 )
 
 data class TunnelFile(
@@ -73,6 +93,8 @@ enum class Phase { OFF, CONNECTING, DISCONNECTING, ON }
 /** Чем поднят туннель: основным AmneziaWG или запасным VLESS поверх Reality. */
 enum class Protocol { AWG, VLESS }
 
+enum class ThemeMode { DARK, LIGHT }
+
 private const val ACCOUNT_POLL_MS = 60 * 1000L
 
 class AppState(application: Application) : AndroidViewModel(application) {
@@ -81,7 +103,13 @@ class AppState(application: Application) : AndroidViewModel(application) {
     init {
         migrateToFullTunnel()
         // Недосланные отчёты о подключениях — при первом же запуске.
-        viewModelScope.launch { Telemetry.flush(getApplication(), panelToken) }
+        //
+        // Токен берём прямо из хранилища: блок init выполняется раньше, чем
+        // инициализируются свойства ниже по классу, а корутина на
+        // Main.immediate стартует сразу — обращение к `panelToken` здесь
+        // падало бы с NPE на старте приложения.
+        val savedToken = prefs.getString("panelToken", "").orEmpty()
+        viewModelScope.launch { Telemetry.flush(getApplication(), savedToken) }
     }
 
     /**
@@ -255,6 +283,108 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val tunnelDispatcher = Dispatchers.IO.limitedParallelism(1)
+
+    /**
+     * Тема оформления.
+     *
+     * Тёмная основная — светлую человек выбирает сам, поэтому системную мы не
+     * подслушиваем: переключатель в настройках должен работать однозначно.
+     */
+    var themeMode by mutableStateOf(
+        if (prefs.getString("theme", "dark") == "light") ThemeMode.LIGHT else ThemeMode.DARK
+    )
+        private set
+
+    fun changeTheme(mode: ThemeMode) {
+        themeMode = mode
+        prefs.edit().putString("theme", if (mode == ThemeMode.LIGHT) "light" else "dark").apply()
+    }
+
+    /** Принято и отправлено за текущую сессию — для плиток на главной. */
+    var sessionRx by mutableStateOf(-1L)
+        private set
+    var sessionTx by mutableStateOf(-1L)
+        private set
+
+    /**
+     * «Лучший сервер»: страну выбираем сами по замеренному отклику.
+     *
+     * По умолчанию выключено — у тех, кто уже пользуется приложением, есть
+     * выбранная страна, и менять её на обновлении мы не вправе.
+     */
+    var autoServer by mutableStateOf(prefs.getBoolean("autoServer", false))
+        private set
+
+    fun chooseAuto() {
+        autoServer = true
+        prefs.edit().putBoolean("autoServer", true).apply()
+        applyBestServer()
+    }
+
+    fun chooseServer(index: Int) {
+        autoServer = false
+        prefs.edit().putBoolean("autoServer", false).apply()
+        selectServer(index)
+    }
+
+    /** Переставляем выбор на самый быстрый узел — только пока отключены. */
+    private fun applyBestServer() {
+        if (!autoServer || phase != Phase.OFF) return
+        val best = panelServers
+            .mapIndexedNotNull { index, info -> info.probeHost?.let { h -> pings[h]?.let { index to it } } }
+            .minByOrNull { it.second }
+            ?.first ?: return
+        if (best != selectedServerIndex) selectServer(best)
+    }
+
+    /** Как выглядит плита подключения прямо сейчас. */
+    val plateState: PlateState
+        get() = when {
+            phase == Phase.ON -> PlateState.ON
+            phase == Phase.CONNECTING || phase == Phase.DISCONNECTING -> PlateState.CONNECTING
+            connectionError != null -> PlateState.ERROR
+            else -> PlateState.OFF
+        }
+
+    fun pingFor(server: DisplayServer?): Int? = server?.host?.let { pings[it] }
+
+    /** Отклик узлов, миллисекунды по хосту. Пусто, пока не померили. */
+    val pings = androidx.compose.runtime.mutableStateMapOf<String, Int>()
+    private var pingJob: Job? = null
+
+    /**
+     * Замер отклика.
+     *
+     * Считаем время TCP-рукопожатия с узлом: ICMP на Android недоступен без
+     * прав, а точность здесь и не нужна — важен порядок величины, чтобы
+     * человек выбрал ближнюю страну.
+     */
+    fun refreshPings() {
+        if (pingJob?.isActive == true) return
+        val targets = panelServers.mapNotNull { info ->
+            val host = info.probeHost ?: return@mapNotNull null
+            host to info.probePort
+        }
+        if (targets.isEmpty()) return
+        pingJob = viewModelScope.launch {
+            val measured = withContext(Dispatchers.IO) {
+                targets.map { (host, port) ->
+                    async {
+                        host to runCatching {
+                            val socket = java.net.Socket()
+                            val started = System.nanoTime()
+                            socket.connect(java.net.InetSocketAddress(host, port), 1500)
+                            val elapsed = ((System.nanoTime() - started) / 1_000_000L).toInt()
+                            runCatching { socket.close() }
+                            elapsed
+                        }.getOrNull()
+                    }
+                }.map { it.await() }
+            }
+            measured.forEach { (host, value) -> if (value != null) pings[host] = value }
+            applyBestServer()
+        }
+    }
 
     var lang by mutableStateOf(
         prefs.getString("lang", null)
@@ -468,6 +598,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     flag = item.countryCode?.takeIf { it.isNotEmpty() }?.let { flagEmoji(it) } ?: "🌐",
                     name = item.countryFor(lang).orEmpty(),
                     sub = item.cityFor(lang).orEmpty(),
+                    code = item.countryCode,
+                    host = item.probeHost,
                 )
             }
         }
@@ -479,7 +611,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
             val name = imported.countryFor(lang)?.takeIf { it.isNotEmpty() } ?: imported.host
 
             val sub = imported.cityFor(lang)?.takeIf { it.isNotEmpty() && it != name }.orEmpty()
-            return listOf(DisplayServer(flag, name, sub))
+            return listOf(DisplayServer(flag, name, sub, imported.countryCode, imported.probeHost))
         }
         return demoServers.map { demo ->
             DisplayServer(
@@ -985,6 +1117,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     private fun startTimer() {
         seconds = 0
+        sessionRx = -1L
+        sessionTx = -1L
         val startedAt = System.currentTimeMillis()
         timerJob = viewModelScope.launch {
             var nextWatch = 5
@@ -992,6 +1126,14 @@ class AppState(application: Application) : AndroidViewModel(application) {
                 delay(500)
                 val elapsed = ((System.currentTimeMillis() - startedAt) / 1000L).toInt()
                 if (elapsed != seconds) seconds = elapsed
+
+                // Счётчики берём у самого туннеля: они нарастающие и считают
+                // ровно то, что прошло через нас. У запасного протокола такой
+                // ручки наружу нет — там плитки показывают прочерк.
+                if (activeProtocol == Protocol.AWG) {
+                    sessionRx = tunnel.receivedBytes()
+                    sessionTx = tunnel.sentBytes()
+                }
 
                 // За основным протоколом следит supervision внутри
                 // TunnelManager, а запасной там не виден вовсе: его туннель
@@ -1015,6 +1157,8 @@ class AppState(application: Application) : AndroidViewModel(application) {
         timerJob?.cancel()
         timerJob = null
         connectionError = null
+        sessionRx = -1L
+        sessionTx = -1L
 
         phase = Phase.DISCONNECTING
 

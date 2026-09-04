@@ -191,4 +191,98 @@ object Icons {
             "M8.5 6.7L12 3.2l3.5 3.5",
         )
     }
+
+    val bell: ImageVector by lazy {
+        strokeIcon(
+            "bell",
+            "M18 10a6 6 0 1 0-12 0c0 4.2-1.4 5.6-1.9 6.1a.6.6 0 0 0 .43 1.02h14.94a.6.6 0 0 0 .43-1.02C19.4 15.6 18 14.2 18 10",
+            "M10.3 20.2a2 2 0 0 0 3.4 0",
+        )
+    }
+
+    /** «Ещё» — лучистая точка: не три полоски и не шестерёнка. */
+    val more: ImageVector by lazy {
+        strokeIcon(
+            "more",
+            "M12 9.4a2.6 2.6 0 1 1 0 5.2a2.6 2.6 0 1 1 0-5.2",
+            "M12 2.6v2.6",
+            "M12 18.8v2.6",
+            "M2.6 12h2.6",
+            "M18.8 12h2.6",
+            "M5.4 5.4l1.8 1.8",
+            "M16.8 16.8l1.8 1.8",
+            "M18.6 5.4l-1.8 1.8",
+            "M7.2 16.8l-1.8 1.8",
+            strokeWidth = 1.9f,
+        )
+    }
+
+    val zap: ImageVector by lazy {
+        strokeIcon("zap", "M13.2 2.6L4.8 13.2h6L10.2 21.4l8.4-10.6h-6z", strokeWidth = 1.9f)
+    }
+
+    val mail: ImageVector by lazy {
+        strokeIcon(
+            "mail",
+            "M3 7.6a2.6 2.6 0 0 1 2.6-2.6h12.8A2.6 2.6 0 0 1 21 7.6v8.8a2.6 2.6 0 0 1-2.6 2.6H5.6A2.6 2.6 0 0 1 3 16.4z",
+            "M3.6 7l7.3 5.2a2 2 0 0 0 2.2 0L20.4 7",
+        )
+    }
+
+    val copy: ImageVector by lazy {
+        strokeIcon(
+            "copy",
+            "M9 9.4a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2z",
+            "M15 7.2V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h1.2",
+        )
+    }
+
+    val logout: ImageVector by lazy {
+        strokeIcon(
+            "logout",
+            "M14.5 4.6H17a2.4 2.4 0 0 1 2.4 2.4v10a2.4 2.4 0 0 1-2.4 2.4h-2.5",
+            "M10 15.6L13.6 12L10 8.4",
+            "M13.2 12H4.6",
+        )
+    }
+
+    val shield: ImageVector by lazy {
+        strokeIcon(
+            "shield",
+            "M12 3l7 2.6v5.9c0 4.2-2.8 7.7-7 9.5-4.2-1.8-7-5.3-7-9.5V5.6z",
+            "M9 12.2l2.1 2.1 4-4.2",
+        )
+    }
+
+    val refresh: ImageVector by lazy {
+        strokeIcon(
+            "refresh",
+            "M20 12a8 8 0 1 1-2.4-5.7",
+            "M20.4 4.2v4.4h-4.4",
+            strokeWidth = 2f,
+        )
+    }
+
+    val wifiOff: ImageVector by lazy {
+        strokeIcon(
+            "wifiOff",
+            "M3 4l18 16",
+            "M4.4 9.4a15 15 0 0 1 4.2-2.6",
+            "M19.6 9.4a15 15 0 0 0-6.6-3",
+            "M7.6 13a9.4 9.4 0 0 1 2-1.3",
+            "M16.4 13a9.4 9.4 0 0 0-1.5-1",
+            "M12 18.2v.2",
+        )
+    }
+
+    val sad: ImageVector by lazy {
+        strokeIcon(
+            "sad",
+            "M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0-18",
+            "M8.6 15.6a4.6 4.6 0 0 1 6.8 0",
+            "M9 9.6v.6",
+            "M15 9.6v.6",
+            strokeWidth = 1.9f,
+        )
+    }
 }

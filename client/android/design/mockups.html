@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<style>
+@font-face{font-family:'ProstoDisplay';src:url('assets/prosto.woff2') format('woff2');font-weight:100 900;font-display:swap}
+body{margin:0;background:#0E0E10;font-family:'ProstoDisplay','Onest',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#FA4C16;text-decoration:none}
+a:hover{color:#FF6334}
+@keyframes halo{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:.9;transform:scale(1.06)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes drift{0%,100%{transform:translate3d(0,0,0) rotate(-8deg)}50%{transform:translate3d(0,-14px,0) rotate(-2deg)}}
+@keyframes drift2{0%,100%{transform:translate3d(0,0,0) rotate(10deg)}50%{transform:translate3d(0,10px,0) rotate(4deg)}}
+@keyframes liquid{0%{border-radius:58% 42% 45% 55%/52% 48% 52% 48%;transform:rotate(0deg)}33%{border-radius:44% 56% 62% 38%/58% 42% 58% 42%}66%{border-radius:56% 44% 38% 62%/42% 60% 40% 58%}100%{border-radius:58% 42% 45% 55%/52% 48% 52% 48%;transform:rotate(360deg)}}
+@keyframes liquid2{0%{border-radius:48% 52% 56% 44%/46% 54% 46% 54%;transform:rotate(0deg)}50%{border-radius:60% 40% 42% 58%/58% 44% 56% 42%}100%{border-radius:48% 52% 56% 44%/46% 54% 46% 54%;transform:rotate(-360deg)}}
+@keyframes breathe{0%,100%{transform:scale(1);opacity:.62}50%{transform:scale(1.09);opacity:1}}
+@keyframes wave{0%{transform:scale(.72);opacity:.55}100%{transform:scale(1.5);opacity:0}}
+@keyframes arrive{0%{opacity:0;transform:translate3d(14px,18px,0) scale(.82)}100%{opacity:1;transform:translate3d(0,0,0) scale(1)}}
+@keyframes fillup{0%{height:0}10%{height:22%}26%{height:38%}30%{height:41%}52%{height:44%}70%{height:104%}100%{height:104%}}
+@keyframes wavemove{to{transform:translateX(-64px)}}
+@keyframes waveslide{to{transform:translateX(-328px)}}
+@keyframes wavebob{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
+@keyframes phaseOut{0%,64%{opacity:1}73%,100%{opacity:0}}
+@keyframes phaseIn{0%,70%{opacity:0}80%,100%{opacity:1}}
+@keyframes capA{0%,26%{opacity:1}32%,52%{opacity:0}60%,100%{opacity:1}}
+@keyframes capB{0%,28%{opacity:0}34%,50%{opacity:1}58%,100%{opacity:0}}
+@keyframes objArrive{0%,70%{opacity:0;transform:translate3d(18px,22px,0) scale(.78)}84%,100%{opacity:1;transform:none}}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
+<script>
+(function(){
+  function mount(){
+    if(!window.lottie) return;
+    document.querySelectorAll('[data-lottie]:not([data-lottie-on])').forEach(function(el){
+      el.setAttribute('data-lottie-on','1');
+      window.lottie.loadAnimation({container:el,renderer:'svg',loop:true,autoplay:true,path:el.getAttribute('data-lottie')});
+    });
+  }
+  var t=setInterval(mount,300); setTimeout(function(){clearInterval(t);mount();},6000);
+})();
+</script>
+</helmet>
+
+<div style="padding:56px 64px 40px;display:flex;flex-direction:column;gap:14px;max-width:1100px">
+<div style="font-size:13px;font-weight:700;letter-spacing:.14em;color:#FA4C16">PROSTO VPN · ANDROID</div>
+<div style="font-size:44px;font-weight:700;letter-spacing:-.03em;color:#F2F2F3;line-height:1.05">Приложение в системе кабинета</div>
+<div style="font-size:17px;line-height:1.55;color:#A5A5AA;max-width:640px;text-wrap:pretty">Экраны 360×800 в тёмной и светлой теме, библиотека компонентов, токены для Theme.kt и описание движения. Пластика взята из кабинета: карточки без обводок, пилюли, стеклянная нижняя панель. Главная сущность приложения — плита подключения во всю ширину: её состояние читается цветом всей плоскости, а не иконкой.</div>
+</div>
+
+<div style="padding:0 64px 40px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:baseline;gap:14px"><div style="font-size:26px;font-weight:700;color:#F2F2F3">1 · Экраны, тёмная тема</div><div style="font-size:14px;color:#7C7C82">основная</div></div>
+<div style="display:flex;flex-wrap:wrap;gap:32px">
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Вход</div>
+<div style="width:360px;height:800px;background:#1A1A1C;border-radius:30px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;flex-direction:column">
+  <div style="position:absolute;inset:0 0 auto 0;height:520px;background:radial-gradient(115% 78% at 50% -6%, rgba(250,76,22,.50) 0%, rgba(250,76,22,.14) 40%, rgba(26,26,28,0) 72%)"></div>
+  <div style="position:absolute;inset:auto 0 0 0;height:280px;background:linear-gradient(180deg, rgba(10,10,11,0) 0%, rgba(10,10,11,.55) 100%)"></div>
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;color:#F2F2F3;flex:0 0 auto;position:relative"><span>9:41</span><span style="letter-spacing:.12em;color:#A5A5AA">▮▮▮ ▯</span></div>
+  <div style="flex:1;padding:0 20px 26px;display:flex;flex-direction:column;position:relative">
+    <div style="height:64px;display:flex;align-items:center;justify-content:center"><img src="assets/logo-v3.webp" alt="Prosto" style="height:22px;object-fit:contain"></div>
+    <div style="flex:1"></div>
+    <div style="font-size:38px;font-weight:700;letter-spacing:-.035em;line-height:1.05;text-align:center">Вход</div>
+    <div style="font-size:15px;color:#A5A5AA;margin-top:10px;text-align:center">Логин и пароль от кабинета</div>
+    <div style="background:rgba(255,255,255,.06);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:28px;margin-top:30px;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 24px 56px rgba(0,0,0,.45)">
+      <div style="height:68px;display:flex;flex-direction:column;justify-content:center;gap:3px;padding:0 20px"><div style="font-size:12px;font-weight:600;color:#8E8E95">Логин</div><div style="font-size:16px;font-weight:500">limit-test-20260904</div></div>
+      <div style="height:1px;background:rgba(255,255,255,.08);margin:0 20px"></div>
+      <div style="height:68px;display:flex;align-items:center;justify-content:space-between;padding:0 20px">
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-size:12px;font-weight:600;color:#8E8E95">Пароль</div><div style="font-size:16px;letter-spacing:.2em">••••••••</div></div>
+        <div style="font-size:14px;font-weight:600;color:#8E8E95">Показать</div>
+      </div>
+    </div>
+    <div style="height:58px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:17px;font-weight:600;color:#fff;box-shadow:0 16px 36px rgba(250,76,22,.36), inset 0 1px 0 rgba(255,255,255,.28);margin-top:14px">Войти</div>
+    <div style="display:flex;justify-content:center;gap:20px;font-size:14px;font-weight:500;color:#8E8E95;margin-top:24px"><span>Регистрация</span><span>Забыли пароль?</span></div>
+    <div style="flex:0.32"></div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Главная · выключено</div>
+<div style="width:360px;height:800px;background:#1A1A1C;border-radius:30px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;flex-direction:column">
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#101012 0%,#0B0B0C 46%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0 0 auto 0;height:460px;background:radial-gradient(105% 68% at 50% -8%, rgba(255,255,255,.10) 0%, rgba(255,255,255,.03) 38%, rgba(10,10,11,0) 70%)"></div>
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative"><span>9:41</span><span style="letter-spacing:.12em;color:#A5A5AA">▮▮▮ ▯</span></div>
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <div style="width:36px;height:36px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.35);display:grid;place-items:center;font-size:15px;font-weight:700;color:#fff">L</div>
+      <div style="flex:0 0 auto"><div style="font-size:16px;font-weight:600;white-space:nowrap">prosto_user</div></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.07);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14);display:grid;place-items:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg></div>
+    </div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;flex:1;position:relative">
+
+    <div style="height:222px;border-radius:32px;background:rgba(255,255,255,.05);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);box-shadow:inset 0 1px 0 rgba(255,255,255,.13), 0 24px 60px rgba(0,0,0,.5);position:relative;overflow:hidden;display:grid;place-items:center">
+      <div style="position:absolute;top:14px;right:14px;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.08);font-size:12px;font-weight:600;color:#C9C9CE">14 дней</div>
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:16px">
+        <div style="width:104px;height:104px;border-radius:999px;background:rgba(255,255,255,.06);box-shadow:inset 0 1px 0 rgba(255,255,255,.16), inset 0 0 0 1px rgba(255,255,255,.06);display:grid;place-items:center"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div>
+        <div style="font-size:24px;font-weight:700;letter-spacing:-.025em;color:#F2F2F3">Не подключено</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px">
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:13px;color:#8E8E95">Локация</div>
+          <div style="width:26px;height:26px;border-radius:999px;overflow:hidden;flex:0 0 auto;background:linear-gradient(180deg,#AE1C28 0 33.33%,#F4F4F6 33.33% 66.66%,#21468B 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div>
+        </div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1">NL</div><div style="font-size:12px;color:#8E8E95;margin-top:2px">Нидерланды · 24 мс</div></div>
+      </div>
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;font-size:13px;color:#8E8E95">Подписка</div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums">14 дней</div><div style="font-size:12px;color:#8E8E95;margin-top:2px">до 18 сентября</div></div>
+      </div>
+    </div>
+
+    <div style="height:76px;border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);display:flex;align-items:center;gap:14px;padding:0 18px">
+      <div style="flex:1"><div style="font-size:16px;font-weight:600">Обход для сервисов РФ</div><div style="font-size:13px;color:#8E8E95;margin-top:2px">Банки и Госуслуги мимо VPN</div></div>
+      <div style="width:46px;height:28px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-shadow:0 6px 16px rgba(250,76,22,.35)"><div style="width:22px;height:22px;border-radius:999px;background:#fff"></div></div>
+    </div>
+
+    <div style="border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);overflow:hidden">
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px">
+        <div style="flex:1;font-size:15px;font-weight:600">Настройки</div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>
+      </div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin:0 18px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px">
+        <div style="flex:1;font-size:15px;font-weight:600">Поддержка</div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>
+      </div>
+    </div>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:0;height:104px;background:linear-gradient(180deg,rgba(26,26,28,0),#1A1A1C 62%);pointer-events:none"></div>
+  <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:18px;height:64px;padding:0 8px;border-radius:999px;background:rgba(255,255,255,.06);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 18px 48px rgba(0,0,0,.6);display:flex;align-items:center;gap:2px">
+    <div style="width:98px;height:52px;border-radius:999px;background:rgba(255,255,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.16);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg><div style="font-size:11px;font-weight:600;color:#FA4C16">Подключение</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A5A5AA" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><div style="font-size:11px;font-weight:600;color:#A5A5AA">Страны</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A5A5AA" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.8M12 18.7v2.8M2.5 12h2.8M18.7 12h2.8M5.2 5.2l2 2M16.8 16.8l2 2M18.8 5.2l-2 2M7.2 16.8l-2 2"/></svg><div style="font-size:11px;font-weight:600;color:#A5A5AA">Ещё</div></div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Главная · подключаем</div>
+<div style="width:360px;height:800px;background:#1A1A1C;border-radius:30px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#A5A5AA">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#141315 0%,#0B0B0C 46%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0 0 auto 0;height:470px;background:radial-gradient(105% 70% at 50% -8%, rgba(250,76,22,.26) 0%, rgba(250,76,22,.07) 40%, rgba(10,10,11,0) 72%);animation:halo 1.8s ease-in-out infinite"></div>
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <div style="width:36px;height:36px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.35);display:grid;place-items:center;font-size:15px;font-weight:700;color:#fff">L</div>
+      <div style="flex:0 0 auto"><div style="font-size:16px;font-weight:600;white-space:nowrap">prosto_user</div></div>
+    </div>
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.14);display:grid;place-items:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg></div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;flex:1;position:relative">
+
+    <div style="height:222px;border-radius:32px;background:rgba(255,255,255,.05);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);box-shadow:inset 0 1px 0 rgba(255,255,255,.13), 0 24px 60px rgba(0,0,0,.5);position:relative;overflow:hidden;display:grid;place-items:center">
+      <div style="position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(180deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);animation:fillup 9s cubic-bezier(.5,0,.3,1) infinite">
+        <div style="position:absolute;left:0;right:0;top:-30px;height:40px;animation:wavebob 4.6s ease-in-out infinite"><svg width="656" height="40" viewBox="0 0 656 40" preserveAspectRatio="none" style="position:absolute;left:0;top:0;opacity:.38;animation:waveslide 5.4s linear infinite reverse"><path d="M0 26 C 41 8, 123 8, 164 26 S 287 44, 328 26 S 451 8, 492 26 S 615 44, 656 26 L656 40 L0 40 Z" fill="#FFC0A0"/></svg></div>
+        <div style="position:absolute;left:0;right:0;top:-26px;height:40px;animation:wavebob 3.4s ease-in-out infinite .4s"><svg width="656" height="40" viewBox="0 0 656 40" preserveAspectRatio="none" style="position:absolute;left:0;top:0;opacity:.55;animation:waveslide 3.6s linear infinite"><path d="M0 26 C 41 8, 123 8, 164 26 S 287 44, 328 26 S 451 8, 492 26 S 615 44, 656 26 L656 40 L0 40 Z" fill="#FFA170"/></svg></div>
+        <div style="position:absolute;left:0;right:0;top:-22px;height:40px;animation:wavebob 2.8s ease-in-out infinite .9s"><svg width="656" height="40" viewBox="0 0 656 40" preserveAspectRatio="none" style="position:absolute;left:0;top:0;animation:waveslide 2.4s linear infinite reverse"><path d="M0 24 C 41 6, 123 6, 164 24 S 287 42, 328 24 S 451 6, 492 24 S 615 42, 656 24 L656 40 L0 40 Z" fill="#FF7A3D"/></svg></div>
+      </div>
+      <div style="position:absolute;inset:0;animation:objArrive 9s ease-out infinite">
+        <img src="assets/obj-ring-chrome.png" alt="" style="position:absolute;left:-40px;bottom:-34px;width:150px;height:150px;object-fit:contain;opacity:.55;animation:drift 6s ease-in-out infinite">
+        <img src="assets/obj-mask-chrome.png" alt="" style="position:absolute;right:-24px;top:-26px;width:112px;height:112px;object-fit:contain;opacity:.45;animation:drift2 7.5s ease-in-out infinite">
+      </div>
+      <div style="position:absolute;inset:0;display:grid;place-items:center;animation:phaseOut 9s ease-in-out infinite">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+          <div style="position:relative;width:108px;height:108px;display:grid;place-items:center">
+            <svg width="108" height="108" viewBox="0 0 108 108" style="position:absolute;inset:0;animation:spin 1.6s linear infinite">
+              <circle cx="54" cy="54" r="50" fill="none" stroke="rgba(255,255,255,.16)" stroke-width="4"/>
+              <circle cx="54" cy="54" r="50" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-dasharray="86 228" transform="rotate(-90 54 54)"/>
+            </svg>
+            <div style="position:relative;width:88px;height:88px;border-radius:999px;background:rgba(255,255,255,.10);display:grid;place-items:center"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+            <div style="font-size:24px;font-weight:700;letter-spacing:-.025em;color:#F2F2F3">Подключаем</div>
+            <div style="position:relative;height:20px;width:220px">
+              <div style="position:absolute;inset:0;font-size:14px;color:#C9C9CE;text-align:center;animation:capA 9s ease-in-out infinite">Проверяем узел · Амстердам</div>
+              <div style="position:absolute;inset:0;font-size:14px;color:#C9C9CE;text-align:center;opacity:0;animation:capB 9s ease-in-out infinite">Ждём ответ узла…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="position:absolute;inset:0;display:grid;place-items:center;opacity:0;animation:phaseIn 9s ease-in-out infinite">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+          <div style="width:104px;height:104px;border-radius:999px;background:rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 0 1px rgba(255,255,255,.24);display:grid;place-items:center"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+            <div style="font-size:24px;font-weight:700;letter-spacing:-.025em;color:#fff">Подключено</div>
+            <div style="font-size:14px;color:rgba(255,255,255,.78)">Нидерланды · Амстердам</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px">
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:13px;color:#8E8E95">Локация</div>
+          <div style="width:26px;height:26px;border-radius:999px;overflow:hidden;flex:0 0 auto;background:linear-gradient(180deg,#AE1C28 0 33.33%,#F4F4F6 33.33% 66.66%,#21468B 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div>
+        </div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1">NL</div><div style="font-size:12px;color:#8E8E95;margin-top:2px">Нидерланды · 24 мс</div></div>
+      </div>
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;font-size:13px;color:#8E8E95">Подписка</div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums">3 дня</div><div style="font-size:12px;color:#FFA326;margin-top:2px">скоро закончится</div></div>
+      </div>
+    </div>
+
+    <div style="border-radius:26px;background:rgba(255,163,38,.12);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.10);padding:16px 18px;display:flex;align-items:center;gap:14px">
+      <div style="flex:1"><div style="font-size:15px;font-weight:600;color:#FFB65C">Подписка кончается через 3 дня</div><div style="font-size:13px;color:#8E8E95;line-height:1.4;margin-top:3px">Продлите заранее, чтобы не остаться без доступа</div></div>
+      <div style="height:38px;border-radius:999px;background:rgba(255,163,38,.20);display:flex;align-items:center;padding:0 16px;font-size:14px;font-weight:600;color:#FFB65C;flex:0 0 auto">Продлить</div>
+    </div>
+  </div>
+  <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:18px;height:64px;padding:0 8px;border-radius:999px;background:#29292B;box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),0 14px 44px rgba(0,0,0,.55);display:flex;align-items:center;gap:2px">
+    <div style="width:98px;height:52px;border-radius:999px;background:rgba(255,255,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.16);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg><div style="font-size:11px;font-weight:600;color:#FA4C16">Подключение</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A5A5AA" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><div style="font-size:11px;font-weight:600;color:#A5A5AA">Страны</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A5A5AA" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.8M12 18.7v2.8M2.5 12h2.8M18.7 12h2.8M5.2 5.2l2 2M16.8 16.8l2 2M18.8 5.2l-2 2M7.2 16.8l-2 2"/></svg><div style="font-size:11px;font-weight:600;color:#A5A5AA">Ещё</div></div>
+  </div>
+  <div style="position:absolute;left:16px;bottom:92px;font-size:11px;font-weight:600;color:#7C7C82">панель без блюра · API &lt; 31</div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Главная · подключено</div>
+<div style="width:360px;height:800px;background:#1A1A1C;border-radius:30px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#A5A5AA">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#17110E 0%,#0C0B0B 48%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0 0 auto 0;height:520px;background:radial-gradient(110% 74% at 50% -6%, rgba(250,76,22,.55) 0%, rgba(250,76,22,.16) 40%, rgba(10,10,11,0) 72%)"></div>
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <div style="width:36px;height:36px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.35);display:grid;place-items:center;font-size:15px;font-weight:700;color:#fff">L</div>
+      <div style="flex:0 0 auto"><div style="font-size:16px;font-weight:600;white-space:nowrap">prosto_user</div></div>
+    </div>
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.07);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 rgba(255,255,255,.14);display:grid;place-items:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg></div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;flex:1;position:relative">
+
+    <div style="height:222px;border-radius:32px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);position:relative;overflow:hidden;display:grid;place-items:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 24px 60px rgba(250,76,22,.36)">
+      <div style="position:absolute;inset:0;background:radial-gradient(80% 95% at 50% -10%, rgba(255,255,255,.30), rgba(255,255,255,0) 60%)"></div>
+      <img src="assets/obj-ring-chrome.png" alt="" style="position:absolute;left:-40px;bottom:-34px;width:150px;height:150px;object-fit:contain;opacity:.55;animation:arrive .7s cubic-bezier(.2,.9,.25,1) both, drift 6s ease-in-out .7s infinite">
+      <img src="assets/obj-mask-chrome.png" alt="" style="position:absolute;right:-24px;top:-26px;width:112px;height:112px;object-fit:contain;opacity:.45;animation:arrive .7s cubic-bezier(.2,.9,.25,1) .12s both, drift2 7.5s ease-in-out .82s infinite">
+      <div style="position:absolute;top:14px;right:14px;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.20);font-size:12px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums">00:12:34</div>
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:16px">
+        <div style="width:104px;height:104px;border-radius:999px;background:rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 0 1px rgba(255,255,255,.22);display:grid;place-items:center"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+          <div style="font-size:24px;font-weight:700;letter-spacing:-.025em;color:#fff">Подключено</div>
+          <div style="font-size:14px;color:rgba(255,255,255,.72)">Нидерланды · Амстердам</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px">
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;font-size:13px;color:#8E8E95">Скачано</div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums">1,24 ГБ</div><div style="font-size:12px;color:#8E8E95;margin-top:2px">за сессию</div></div>
+      </div>
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;font-size:13px;color:#8E8E95">Отдано</div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums">208 МБ</div><div style="font-size:12px;color:#8E8E95;margin-top:2px">за сессию</div></div>
+      </div>
+    </div>
+
+    <div style="height:76px;border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);display:flex;align-items:center;gap:14px;padding:0 18px">
+      <div style="width:34px;height:34px;border-radius:999px;overflow:hidden;flex:0 0 auto;background:linear-gradient(180deg,#AE1C28 0 33.33%,#F4F4F6 33.33% 66.66%,#21468B 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div>
+      <div style="flex:1"><div style="font-size:16px;font-weight:600">Нидерланды</div><div style="font-size:13px;color:#8E8E95;margin-top:2px">Амстердам · 24 мс</div></div>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>
+    </div>
+
+    <div style="height:76px;border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);display:flex;align-items:center;gap:14px;padding:0 18px">
+      <div style="flex:1"><div style="font-size:16px;font-weight:600">Обход для сервисов РФ</div><div style="font-size:13px;color:#8E8E95;margin-top:2px">Банки и Госуслуги мимо VPN</div></div>
+      <div style="width:46px;height:28px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-shadow:0 6px 16px rgba(250,76,22,.35)"><div style="width:22px;height:22px;border-radius:999px;background:#fff"></div></div>
+    </div>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:0;height:104px;background:linear-gradient(180deg,rgba(10,10,11,0),#0A0A0B 62%);pointer-events:none"></div>
+  <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:18px;height:64px;padding:0 8px;border-radius:999px;background:rgba(255,255,255,.06);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 18px 48px rgba(0,0,0,.6);display:flex;align-items:center;gap:2px">
+    <div style="width:98px;height:52px;border-radius:999px;background:rgba(255,255,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.16);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg><div style="font-size:11px;font-weight:600;color:#FA4C16">Подключение</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A5A5AA" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><div style="font-size:11px;font-weight:600;color:#A5A5AA">Страны</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A5A5AA" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.8M12 18.7v2.8M2.5 12h2.8M18.7 12h2.8M5.2 5.2l2 2M16.8 16.8l2 2M18.8 5.2l-2 2M7.2 16.8l-2 2"/></svg><div style="font-size:11px;font-weight:600;color:#A5A5AA">Ещё</div></div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Выбор страны · лист</div>
+<div style="width:360px;height:800px;background:#1A1A1C;border-radius:30px;overflow:hidden;position:relative;color:#F2F2F3">
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#17110E 0%,#0C0B0B 48%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0;filter:blur(10px);opacity:.55;padding:100px 16px 0;display:flex;flex-direction:column;gap:12px">
+    <div style="height:222px;background:linear-gradient(118deg,#FF7A3D,#FA4C16 46%,#D93A05);border-radius:32px"></div>
+    <div style="display:flex;gap:12px"><div style="flex:1;height:104px;background:rgba(255,255,255,.06);border-radius:26px"></div><div style="flex:1;height:104px;background:rgba(255,255,255,.06);border-radius:26px"></div></div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(8,8,9,.55)"></div>
+  <div style="position:absolute;left:0;right:0;bottom:0;height:648px;background:#141416;border-radius:32px 32px 0 0;box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 -24px 60px rgba(0,0,0,.6);padding:10px 16px 0;display:flex;flex-direction:column">
+    <div style="width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,.16);margin:0 auto 16px"></div>
+    <div style="font-size:24px;font-weight:700;letter-spacing:-.025em;padding:0 2px">Страна</div>
+    <div style="font-size:14px;color:#8E8E95;padding:4px 2px 16px">Выбранная страна запомнится</div>
+    <div style="background:rgba(250,76,22,.13);border-radius:22px;height:66px;display:flex;align-items:center;gap:13px;padding:0 16px;margin-bottom:12px;box-shadow:inset 0 1px 0 rgba(255,255,255,.10)">
+      <div style="width:38px;height:38px;border-radius:999px;background:rgba(250,76,22,.22);display:grid;place-items:center;flex:0 0 auto"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#FF7A3D" stroke-width="2" stroke-linecap="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg></div>
+      <div style="flex:1"><div style="font-size:16px;font-weight:600">Лучший сервер</div><div style="font-size:13px;color:#8E8E95;margin-top:2px">Выберем сами по скорости</div></div>
+      <div style="width:22px;height:22px;border-radius:999px;background:#FA4C16;display:grid;place-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
+    </div>
+    <div style="background:rgba(255,255,255,.05);border-radius:26px;box-shadow:inset 0 1px 0 rgba(255,255,255,.10);overflow:hidden">
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:linear-gradient(180deg,#AE1C28 0 33.33%,#F4F4F6 33.33% 66.66%,#21468B 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Нидерланды</div><div style="font-size:12px;color:#8E8E95;margin-top:1px">Амстердам</div></div><div style="font-size:13px;font-weight:600;color:#34C759;font-variant-numeric:tabular-nums">24 мс</div></div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin-left:63px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:linear-gradient(180deg,#0D0D0D 0 33.33%,#DD0000 33.33% 66.66%,#FFCE00 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Германия</div><div style="font-size:12px;color:#8E8E95;margin-top:1px">Франкфурт</div></div><div style="font-size:13px;font-weight:600;color:#34C759;font-variant-numeric:tabular-nums">31 мс</div></div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin-left:63px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:linear-gradient(#003580,#003580) no-repeat center/100% 30%, linear-gradient(#003580,#003580) no-repeat 36% 0/24% 100%, #F4F4F6;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Финляндия</div><div style="font-size:12px;color:#8E8E95;margin-top:1px">Хельсинки</div></div><div style="font-size:13px;font-weight:600;color:#34C759;font-variant-numeric:tabular-nums">18 мс</div></div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin-left:63px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:radial-gradient(circle at 58% 50%, #E30A17 0 22%, rgba(227,10,23,0) 22.5%), radial-gradient(circle at 48% 50%, #F4F4F6 0 26%, rgba(244,244,246,0) 26.5%), #E30A17;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Турция</div><div style="font-size:12px;color:#8E8E95;margin-top:1px">Стамбул</div></div><div style="font-size:13px;font-weight:600;color:#FFA326;font-variant-numeric:tabular-nums">64 мс</div></div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin-left:63px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:linear-gradient(#3C3B6E,#3C3B6E) no-repeat 0 0/46% 54%, repeating-linear-gradient(180deg,#B22234 0 14.3%,#F4F4F6 14.3% 28.6%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">США</div><div style="font-size:12px;color:#8E8E95;margin-top:1px">Нью-Йорк</div></div><div style="font-size:13px;font-weight:600;color:#FFA326;font-variant-numeric:tabular-nums">112 мс</div></div>
+    </div>
+    <div style="flex:1"></div>
+    <div style="height:56px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:17px;font-weight:600;color:#fff;box-shadow:0 16px 36px rgba(250,76,22,.36), inset 0 1px 0 rgba(255,255,255,.28);margin-bottom:24px">Подключиться</div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Настройки</div>
+<div style="width:360px;height:800px;background:#1A1A1C;border-radius:30px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#A5A5AA">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#101012 0%,#0B0B0C 46%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0 0 auto 0;height:380px;background:radial-gradient(100% 62% at 50% -10%, rgba(255,255,255,.09) 0%, rgba(10,10,11,0) 70%)"></div>
+  <div style="height:56px;display:flex;align-items:center;gap:12px;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.14);display:grid;place-items:center;flex:0 0 auto"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></div>
+    <div style="font-size:22px;font-weight:700;letter-spacing:-.025em">Настройки</div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;overflow:hidden;position:relative">
+    <div style="border-radius:26px;background:rgba(250,76,22,.13);box-shadow:inset 0 1px 0 rgba(255,255,255,.10);padding:16px 18px;display:flex;align-items:center;gap:14px">
+      <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#FF8A5C">Доступна версия 2.4.0</div><div style="font-size:13px;color:#8E8E95;margin-top:3px">Стало быстрее подключение</div></div>
+      <div style="height:38px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:flex;align-items:center;padding:0 16px;font-size:14px;font-weight:600;color:#fff;flex:0 0 auto;box-shadow:0 8px 20px rgba(250,76,22,.32)">Обновить</div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#8E8E95;padding-left:8px;letter-spacing:.08em;margin-top:4px">ПОДКЛЮЧЕНИЕ</div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.10);overflow:hidden;margin-top:-4px">
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Автозапуск при старте</div><div style="width:46px;height:28px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-shadow:0 6px 16px rgba(250,76,22,.32)"><div style="width:22px;height:22px;border-radius:999px;background:#fff"></div></div></div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin:0 18px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Работать в фоне</div><div style="width:46px;height:28px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-shadow:0 6px 16px rgba(250,76,22,.32)"><div style="width:22px;height:22px;border-radius:999px;background:#fff"></div></div></div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin:0 18px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Уведомления</div><div style="width:46px;height:28px;border-radius:999px;background:rgba(255,255,255,.10);display:flex;align-items:center;padding:0 3px"><div style="width:22px;height:22px;border-radius:999px;background:#8E8E95"></div></div></div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin:0 18px"></div>
+      <div style="height:66px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1"><div style="font-size:15px;font-weight:600">Файл обхода</div><div style="font-size:13px;color:#8E8E95;margin-top:2px">Банки РФ · 412 адресов</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#8E8E95;padding-left:8px;letter-spacing:.08em;margin-top:4px">ПРИЛОЖЕНИЕ</div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.10);overflow:hidden;margin-top:-4px">
+      <div style="height:64px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Язык</div>
+        <div style="height:34px;border-radius:999px;background:rgba(255,255,255,.07);display:flex;align-items:center;padding:3px;gap:2px">
+          <div style="height:28px;padding:0 14px;border-radius:999px;background:#FA4C16;display:grid;place-items:center;font-size:13px;font-weight:600;color:#fff">RU</div>
+          <div style="height:28px;padding:0 14px;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:600;color:#8E8E95">EN</div>
+        </div>
+      </div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin:0 18px"></div>
+      <div style="height:64px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Тема</div>
+        <div style="height:34px;border-radius:999px;background:rgba(255,255,255,.07);display:flex;align-items:center;padding:3px;gap:2px">
+          <div style="height:28px;padding:0 12px;border-radius:999px;background:#FA4C16;display:grid;place-items:center;font-size:13px;font-weight:600;color:#fff">Тёмная</div>
+          <div style="height:28px;padding:0 12px;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:600;color:#8E8E95">Светлая</div>
+        </div>
+      </div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin:0 18px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">О приложении</div><div style="font-size:14px;color:#8E8E95">2.3.1</div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+    </div>
+    <div style="height:52px;border-radius:999px;background:rgba(255,69,58,.12);display:grid;place-items:center;font-size:15px;font-weight:600;color:#FF6B60;margin-top:6px">Выйти из аккаунта</div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Поддержка</div>
+<div style="width:360px;height:800px;background:#1A1A1C;border-radius:30px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#A5A5AA">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#101012 0%,#0B0B0C 46%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0 0 auto 0;height:420px;background:radial-gradient(100% 66% at 50% -8%, rgba(250,76,22,.22) 0%, rgba(10,10,11,0) 70%)"></div>
+  <div style="height:56px;display:flex;align-items:center;gap:12px;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.14);display:grid;place-items:center;flex:0 0 auto"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></div>
+    <div style="font-size:22px;font-weight:700;letter-spacing:-.025em">Поддержка</div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;position:relative">
+    <div style="border-radius:32px;background:rgba(255,255,255,.05);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);box-shadow:inset 0 1px 0 rgba(255,255,255,.13), 0 24px 60px rgba(0,0,0,.5);padding:26px 18px 18px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;position:relative;overflow:hidden">
+      <img src="assets/obj-arc-chrome.png" alt="" style="position:absolute;left:-40px;top:-26px;width:128px;height:128px;object-fit:contain;opacity:.5;animation:drift 6s ease-in-out infinite">
+      <img src="assets/obj-devices-chrome.png" alt="" style="position:absolute;right:-30px;bottom:-24px;width:124px;height:124px;object-fit:contain;opacity:.42;animation:drift2 7.5s ease-in-out infinite">
+      <div style="position:relative;font-size:26px;font-weight:700;letter-spacing:-.03em">Ответим за 10 минут</div>
+      <div style="position:relative;font-size:14px;color:#8E8E95;line-height:1.45;max-width:240px">Каждый день с 9:00 до 23:00 по Москве</div>
+      <div style="position:relative;height:56px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:16px;font-weight:600;color:#fff;align-self:stretch;margin-top:12px;box-shadow:0 16px 36px rgba(250,76,22,.36), inset 0 1px 0 rgba(255,255,255,.28)">Написать в Телеграм</div>
+    </div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);overflow:hidden">
+      <div style="height:66px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1"><div style="font-size:15px;font-weight:600">Почта</div><div style="font-size:13px;color:#8E8E95;margin-top:2px">help@prostovpn.cc</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin:0 18px"></div>
+      <div style="height:66px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1"><div style="font-size:15px;font-weight:600">Сайт и кабинет</div><div style="font-size:13px;color:#8E8E95;margin-top:2px">prostovpn.cc</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div style="height:1px;background:rgba(255,255,255,.07);margin:0 18px"></div>
+      <div style="height:66px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1"><div style="font-size:15px;font-weight:600">Частые вопросы</div><div style="font-size:13px;color:#8E8E95;margin-top:2px">Настройка, оплата, скорость</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+    </div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.05);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div style="min-width:0"><div style="font-size:13px;color:#8E8E95">Ваш логин</div><div style="font-size:16px;font-weight:600;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">prosto_user</div></div>
+      <div style="height:38px;border-radius:999px;background:rgba(255,255,255,.10);display:flex;align-items:center;padding:0 16px;font-size:14px;font-weight:600;color:#F2F2F3;flex:0 0 auto">Копировать</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Ошибка подключения</div>
+<div style="width:360px;height:800px;background:#1A1A1C;border-radius:30px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#A5A5AA">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#161011 0%,#0C0B0B 48%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0 0 auto 0;height:470px;background:radial-gradient(105% 70% at 50% -8%, rgba(255,69,58,.28) 0%, rgba(255,69,58,.07) 40%, rgba(10,10,11,0) 72%)"></div>
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <div style="width:36px;height:36px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.35);display:grid;place-items:center;font-size:15px;font-weight:700;color:#fff">L</div>
+      <div style="flex:0 0 auto"><div style="font-size:16px;font-weight:600;white-space:nowrap">prosto_user</div></div>
+    </div>
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.14);display:grid;place-items:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg></div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;flex:1;position:relative">
+
+    <div style="height:222px;border-radius:32px;background:rgba(255,255,255,.05);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);box-shadow:inset 0 1px 0 rgba(255,255,255,.13), 0 24px 60px rgba(0,0,0,.5);position:relative;overflow:hidden;display:grid;place-items:center">
+      <div style="position:absolute;inset:0;background:radial-gradient(58% 62% at 50% 42%, rgba(255,69,58,.18), rgba(255,69,58,0) 72%)"></div>
+      <div style="position:absolute;top:14px;right:14px;padding:7px 12px;border-radius:999px;background:rgba(255,69,58,.16);font-size:12px;font-weight:600;color:#FF6B60">Ошибка</div>
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:16px">
+        <div data-lottie="assets/cry.json" style="width:124px;height:124px;margin:-10px 0 -6px"></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+          <div style="font-size:22px;font-weight:700;letter-spacing:-.025em">Не удалось подключиться</div>
+          <div style="font-size:14px;color:#8E8E95">Сервер в Нидерландах не отвечает</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px">
+      <div style="flex:1;height:52px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:15px;font-weight:600;color:#fff;box-shadow:0 14px 30px rgba(250,76,22,.34), inset 0 1px 0 rgba(255,255,255,.28)">Попробовать снова</div>
+      <div style="flex:1;height:52px;border-radius:999px;background:rgba(255,255,255,.07);box-shadow:inset 0 1px 0 rgba(255,255,255,.13);display:grid;place-items:center;font-size:15px;font-weight:600;color:#F2F2F3">Сменить страну</div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:#8E8E95;padding-left:8px;letter-spacing:.08em;margin-top:4px">СКЕЛЕТОНЫ ЗАГРУЗКИ</div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:18px;display:flex;flex-direction:column;gap:14px;margin-top:-4px">
+      <div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.08)"></div><div style="flex:1;display:flex;flex-direction:column;gap:7px"><div style="height:12px;width:60%;border-radius:999px;background:rgba(255,255,255,.08)"></div><div style="height:10px;width:38%;border-radius:999px;background:rgba(255,255,255,.08)"></div></div></div>
+      <div style="height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.08)"></div><div style="flex:1;display:flex;flex-direction:column;gap:7px"><div style="height:12px;width:44%;border-radius:999px;background:rgba(255,255,255,.08)"></div><div style="height:10px;width:56%;border-radius:999px;background:rgba(255,255,255,.08)"></div></div></div>
+    </div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:22px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px">
+      <div style="font-size:18px;font-weight:700;letter-spacing:-.02em">Нет интернета</div>
+      <div style="font-size:13px;color:#8E8E95;line-height:1.4">Проверьте Wi-Fi или мобильную сеть</div>
+    </div>
+  </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div style="padding:0 64px 40px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:baseline;gap:14px"><div style="font-size:26px;font-weight:700;color:#F2F2F3">2 · Экраны, светлая тема</div><div style="font-size:14px;color:#7C7C82">канва #EEF0F4, карточки белые, тени вместо волосяных линий по краю</div></div>
+<div style="display:flex;flex-wrap:wrap;gap:32px">
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Вход</div>
+<div style="width:360px;height:800px;background:#EEF0F4;border-radius:30px;overflow:hidden;position:relative;color:#0A0A0A;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#8A9099">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#FFFFFF 0%,#F3F5F9 44%,#DEE2E9 100%);z-index:0"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(85% 55% at 22% 6%, rgba(255,255,255,.95) 0%, rgba(255,255,255,0) 62%), radial-gradient(90% 50% at 80% 0%, rgba(250,76,22,.14) 0%, rgba(250,76,22,0) 60%)"></div>
+  <div style="flex:1;padding:0 20px 26px;display:flex;flex-direction:column;position:relative">
+    <div style="height:64px;display:flex;align-items:center;justify-content:center"><img src="assets/logo-v3.webp" alt="Prosto" style="height:22px;object-fit:contain"></div>
+    <div style="flex:1"></div>
+    <div style="font-size:38px;font-weight:700;letter-spacing:-.035em;line-height:1.05;text-align:center">Вход</div>
+    <div style="font-size:15px;color:#5A6069;margin-top:10px;text-align:center">Логин и пароль от кабинета</div>
+    <div style="background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-radius:28px;margin-top:30px;box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 24px 56px rgba(20,25,35,.13)">
+      <div style="height:68px;display:flex;flex-direction:column;justify-content:center;gap:3px;padding:0 20px"><div style="font-size:12px;font-weight:600;color:#8A9099">Логин</div><div style="font-size:16px;font-weight:500">limit-test-20260904</div></div>
+      <div style="height:1px;background:rgba(10,10,10,.07);margin:0 20px"></div>
+      <div style="height:68px;display:flex;align-items:center;justify-content:space-between;padding:0 20px">
+        <div style="display:flex;flex-direction:column;gap:3px"><div style="font-size:12px;font-weight:600;color:#8A9099">Пароль</div><div style="font-size:16px;letter-spacing:.2em">••••••••</div></div>
+        <div style="font-size:14px;font-weight:600;color:#8A9099">Показать</div>
+      </div>
+    </div>
+    <div style="height:58px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:17px;font-weight:600;color:#fff;box-shadow:0 16px 36px rgba(250,76,22,.30), inset 0 1px 0 rgba(255,255,255,.32);margin-top:14px">Войти</div>
+    <div style="display:flex;justify-content:center;gap:20px;font-size:14px;font-weight:500;color:#8A9099;margin-top:24px"><span>Регистрация</span><span>Забыли пароль?</span></div>
+    <div style="flex:0.32"></div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Главная · выключено</div>
+<div style="width:360px;height:800px;background:#EEF0F4;border-radius:30px;overflow:hidden;position:relative;color:#0A0A0A;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#8A9099">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#FFFFFF 0%,#F3F5F9 44%,#DEE2E9 100%);z-index:0"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(85% 52% at 22% 4%, rgba(255,255,255,.95) 0%, rgba(255,255,255,0) 60%);z-index:0"></div>
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <div style="width:36px;height:36px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.4);display:grid;place-items:center;font-size:15px;font-weight:700;color:#fff">L</div>
+      <div style="flex:0 0 auto"><div style="font-size:16px;font-weight:600;white-space:nowrap">prosto_user</div></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.72);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 8px 22px rgba(20,25,35,.10);display:grid;place-items:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg></div>
+    </div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;flex:1;position:relative">
+
+    <div style="height:222px;border-radius:32px;background:rgba(255,255,255,.72);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 24px 60px rgba(20,25,35,.14);position:relative;overflow:hidden;display:grid;place-items:center">
+      <div style="position:absolute;top:14px;right:14px;padding:7px 12px;border-radius:999px;background:rgba(20,25,35,.06);font-size:12px;font-weight:600;color:#5A6069">14 дней</div>
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:16px">
+        <div style="width:104px;height:104px;border-radius:999px;background:linear-gradient(180deg,#FFFFFF 0%,#EDF0F4 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,1), 0 10px 26px rgba(20,25,35,.10);display:grid;place-items:center"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#8A9099" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div>
+        <div style="font-size:24px;font-weight:700;letter-spacing:-.025em">Не подключено</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px">
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:13px;color:#5A6069">Локация</div>
+          <div style="width:26px;height:26px;border-radius:999px;overflow:hidden;flex:0 0 auto;background:linear-gradient(180deg,#AE1C28 0 33.33%,#FFFFFF 33.33% 66.66%,#21468B 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(20,25,35,.14)"></div>
+        </div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1">NL</div><div style="font-size:12px;color:#8A9099;margin-top:2px">Нидерланды · 24 мс</div></div>
+      </div>
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;font-size:13px;color:#5A6069">Подписка</div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums">14 дней</div><div style="font-size:12px;color:#8A9099;margin-top:2px">до 18 сентября</div></div>
+      </div>
+    </div>
+
+    <div style="height:76px;border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);display:flex;align-items:center;gap:14px;padding:0 18px">
+      <div style="flex:1"><div style="font-size:16px;font-weight:600">Обход для сервисов РФ</div><div style="font-size:13px;color:#5A6069;margin-top:2px">Банки и Госуслуги мимо VPN</div></div>
+      <div style="width:46px;height:28px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-shadow:0 6px 16px rgba(250,76,22,.30)"><div style="width:22px;height:22px;border-radius:999px;background:#fff"></div></div>
+    </div>
+
+    <div style="border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);overflow:hidden">
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px">
+        <div style="flex:1;font-size:15px;font-weight:600">Настройки</div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A9099" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>
+      </div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin:0 18px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px">
+        <div style="flex:1;font-size:15px;font-weight:600">Поддержка</div>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A9099" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>
+      </div>
+    </div>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:0;height:104px;background:linear-gradient(180deg,rgba(222,226,233,0),#DEE2E9 62%);pointer-events:none"></div>
+  <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:18px;height:64px;padding:0 8px;border-radius:999px;background:rgba(255,255,255,.72);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 18px 48px rgba(20,25,35,.18);display:flex;align-items:center;gap:2px">
+    <div style="width:98px;height:52px;border-radius:999px;background:rgba(20,25,35,.06);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg><div style="font-size:11px;font-weight:600;color:#FA4C16">Подключение</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6069" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><div style="font-size:11px;font-weight:600;color:#5A6069">Страны</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6069" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.8M12 18.7v2.8M2.5 12h2.8M18.7 12h2.8M5.2 5.2l2 2M16.8 16.8l2 2M18.8 5.2l-2 2M7.2 16.8l-2 2"/></svg><div style="font-size:11px;font-weight:600;color:#5A6069">Ещё</div></div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Главная · подключено</div>
+<div style="width:360px;height:800px;background:#EEF0F4;border-radius:30px;overflow:hidden;position:relative;color:#0A0A0A;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#8A9099">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#FFF6F2 0%,#F3F5F9 44%,#DEE2E9 100%);z-index:0"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(85% 50% at 50% 0%, rgba(250,76,22,.20) 0%, rgba(250,76,22,0) 62%);z-index:0"></div>
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <div style="width:36px;height:36px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.4);display:grid;place-items:center;font-size:15px;font-weight:700;color:#fff">L</div>
+      <div style="flex:0 0 auto"><div style="font-size:16px;font-weight:600;white-space:nowrap">prosto_user</div></div>
+    </div>
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.72);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 8px 22px rgba(20,25,35,.10);display:grid;place-items:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg></div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;flex:1;position:relative">
+
+    <div style="height:222px;border-radius:32px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);position:relative;overflow:hidden;display:grid;place-items:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.35), 0 24px 60px rgba(250,76,22,.34)">
+      <div style="position:absolute;inset:0;background:radial-gradient(80% 95% at 50% -10%, rgba(255,255,255,.30), rgba(255,255,255,0) 60%)"></div>
+      <img src="assets/obj-ring-chrome.png" alt="" style="position:absolute;left:-40px;bottom:-34px;width:150px;height:150px;object-fit:contain;opacity:.55;animation:arrive .7s cubic-bezier(.2,.9,.25,1) both, drift 6s ease-in-out .7s infinite">
+      <img src="assets/obj-mask-chrome.png" alt="" style="position:absolute;right:-24px;top:-26px;width:112px;height:112px;object-fit:contain;opacity:.45;animation:arrive .7s cubic-bezier(.2,.9,.25,1) .12s both, drift2 7.5s ease-in-out .82s infinite">
+      <div style="position:absolute;top:14px;right:14px;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.22);font-size:12px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums">00:12:34</div>
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:16px">
+        <div style="width:104px;height:104px;border-radius:999px;background:rgba(255,255,255,.20);box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 0 1px rgba(255,255,255,.24);display:grid;place-items:center"><svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+          <div style="font-size:24px;font-weight:700;letter-spacing:-.025em;color:#fff">Подключено</div>
+          <div style="font-size:14px;color:rgba(255,255,255,.78)">Нидерланды · Амстердам</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px">
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;font-size:13px;color:#5A6069">Скачано</div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums">1,24 ГБ</div><div style="font-size:12px;color:#8A9099;margin-top:2px">за сессию</div></div>
+      </div>
+      <div style="flex:1;height:104px;border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="height:28px;display:flex;align-items:center;font-size:13px;color:#5A6069">Отдано</div>
+        <div><div style="font-size:24px;font-weight:700;letter-spacing:-.02em;line-height:1.1;font-variant-numeric:tabular-nums">208 МБ</div><div style="font-size:12px;color:#8A9099;margin-top:2px">за сессию</div></div>
+      </div>
+    </div>
+
+    <div style="height:76px;border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);display:flex;align-items:center;gap:14px;padding:0 18px">
+      <div style="width:34px;height:34px;border-radius:999px;overflow:hidden;flex:0 0 auto;background:linear-gradient(180deg,#AE1C28 0 33.33%,#FFFFFF 33.33% 66.66%,#21468B 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(20,25,35,.14)"></div>
+      <div style="flex:1"><div style="font-size:16px;font-weight:600">Нидерланды</div><div style="font-size:13px;color:#5A6069;margin-top:2px">Амстердам · 24 мс</div></div>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A9099" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg>
+    </div>
+
+    <div style="height:76px;border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);display:flex;align-items:center;gap:14px;padding:0 18px">
+      <div style="flex:1"><div style="font-size:16px;font-weight:600">Обход для сервисов РФ</div><div style="font-size:13px;color:#5A6069;margin-top:2px">Банки и Госуслуги мимо VPN</div></div>
+      <div style="width:46px;height:28px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-shadow:0 6px 16px rgba(250,76,22,.30)"><div style="width:22px;height:22px;border-radius:999px;background:#fff"></div></div>
+    </div>
+  </div>
+  <div style="position:absolute;left:0;right:0;bottom:0;height:104px;background:linear-gradient(180deg,rgba(222,226,233,0),#DEE2E9 62%);pointer-events:none"></div>
+  <div style="position:absolute;left:50%;transform:translateX(-50%);bottom:18px;height:64px;padding:0 8px;border-radius:999px;background:rgba(255,255,255,.72);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.95),0 18px 48px rgba(20,25,35,.18);display:flex;align-items:center;gap:2px">
+    <div style="width:98px;height:52px;border-radius:999px;background:rgba(20,25,35,.06);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg><div style="font-size:11px;font-weight:600;color:#FA4C16">Подключение</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6069" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg><div style="font-size:11px;font-weight:600;color:#5A6069">Страны</div></div>
+    <div style="width:86px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5A6069" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.8M12 18.7v2.8M2.5 12h2.8M18.7 12h2.8M5.2 5.2l2 2M16.8 16.8l2 2M18.8 5.2l-2 2M7.2 16.8l-2 2"/></svg><div style="font-size:11px;font-weight:600;color:#5A6069">Ещё</div></div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Выбор страны · лист</div>
+<div style="width:360px;height:800px;background:#EEF0F4;border-radius:30px;overflow:hidden;position:relative;color:#0A0A0A">
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#FFF6F2 0%,#F3F5F9 44%,#DEE2E9 100%)"></div>
+  <div style="position:absolute;inset:0;filter:blur(10px);opacity:.6;padding:100px 16px 0;display:flex;flex-direction:column;gap:12px">
+    <div style="height:222px;background:linear-gradient(118deg,#FF7A3D,#FA4C16 46%,#D93A05);border-radius:32px"></div>
+    <div style="display:flex;gap:12px"><div style="flex:1;height:104px;background:rgba(255,255,255,.8);border-radius:26px"></div><div style="flex:1;height:104px;background:rgba(255,255,255,.8);border-radius:26px"></div></div>
+  </div>
+  <div style="position:absolute;inset:0;background:rgba(20,25,35,.30)"></div>
+  <div style="position:absolute;left:0;right:0;bottom:0;height:648px;background:#FFFFFF;border-radius:32px 32px 0 0;padding:10px 16px 0;display:flex;flex-direction:column;box-shadow:0 -24px 60px rgba(20,25,35,.22)">
+    <div style="width:38px;height:4px;border-radius:999px;background:rgba(20,25,35,.14);margin:0 auto 16px"></div>
+    <div style="font-size:24px;font-weight:700;letter-spacing:-.025em;padding:0 2px">Страна</div>
+    <div style="font-size:14px;color:#5A6069;padding:4px 2px 16px">Выбранная страна запомнится</div>
+    <div style="background:#FFF1EA;border-radius:22px;height:66px;display:flex;align-items:center;gap:13px;padding:0 16px;margin-bottom:12px">
+      <div style="width:38px;height:38px;border-radius:999px;background:rgba(250,76,22,.16);display:grid;place-items:center;flex:0 0 auto"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2" stroke-linecap="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg></div>
+      <div style="flex:1"><div style="font-size:16px;font-weight:600">Лучший сервер</div><div style="font-size:13px;color:#8A9099;margin-top:2px">Выберем сами по скорости</div></div>
+      <div style="width:22px;height:22px;border-radius:999px;background:#FA4C16;display:grid;place-items:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>
+    </div>
+    <div style="background:#F4F6F9;border-radius:26px;overflow:hidden">
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:linear-gradient(180deg,#AE1C28 0 33.33%,#FFFFFF 33.33% 66.66%,#21468B 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(20,25,35,.14)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Нидерланды</div><div style="font-size:12px;color:#8A9099;margin-top:1px">Амстердам</div></div><div style="font-size:13px;font-weight:600;color:#2AAE4C;font-variant-numeric:tabular-nums">24 мс</div></div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin-left:63px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:linear-gradient(180deg,#0D0D0D 0 33.33%,#DD0000 33.33% 66.66%,#FFCE00 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(20,25,35,.14)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Германия</div><div style="font-size:12px;color:#8A9099;margin-top:1px">Франкфурт</div></div><div style="font-size:13px;font-weight:600;color:#2AAE4C;font-variant-numeric:tabular-nums">31 мс</div></div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin-left:63px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:linear-gradient(#003580,#003580) no-repeat center/100% 30%, linear-gradient(#003580,#003580) no-repeat 36% 0/24% 100%, #FFFFFF;box-shadow:inset 0 0 0 1px rgba(20,25,35,.14)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Финляндия</div><div style="font-size:12px;color:#8A9099;margin-top:1px">Хельсинки</div></div><div style="font-size:13px;font-weight:600;color:#2AAE4C;font-variant-numeric:tabular-nums">18 мс</div></div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin-left:63px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:radial-gradient(circle at 58% 50%, #E30A17 0 22%, rgba(227,10,23,0) 22.5%), radial-gradient(circle at 48% 50%, #FFFFFF 0 26%, rgba(255,255,255,0) 26.5%), #E30A17;box-shadow:inset 0 0 0 1px rgba(20,25,35,.14)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Турция</div><div style="font-size:12px;color:#8A9099;margin-top:1px">Стамбул</div></div><div style="font-size:13px;font-weight:600;color:#E08600;font-variant-numeric:tabular-nums">64 мс</div></div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin-left:63px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:13px;padding:0 16px"><div style="width:34px;height:34px;border-radius:999px;flex:0 0 auto;background:linear-gradient(#3C3B6E,#3C3B6E) no-repeat 0 0/46% 54%, repeating-linear-gradient(180deg,#B22234 0 14.3%,#FFFFFF 14.3% 28.6%);box-shadow:inset 0 0 0 1px rgba(20,25,35,.14)"></div><div style="flex:1"><div style="font-size:15px;font-weight:600">США</div><div style="font-size:12px;color:#8A9099;margin-top:1px">Нью-Йорк</div></div><div style="font-size:13px;font-weight:600;color:#E08600;font-variant-numeric:tabular-nums">112 мс</div></div>
+    </div>
+    <div style="flex:1"></div>
+    <div style="height:56px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:17px;font-weight:600;color:#fff;box-shadow:0 16px 36px rgba(250,76,22,.30), inset 0 1px 0 rgba(255,255,255,.32);margin-bottom:24px">Подключиться</div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Настройки</div>
+<div style="width:360px;height:800px;background:#EEF0F4;border-radius:30px;overflow:hidden;position:relative;color:#0A0A0A;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#8A9099">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#FFFFFF 0%,#F3F5F9 44%,#DEE2E9 100%);z-index:0"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(85% 50% at 22% 4%, rgba(255,255,255,.95) 0%, rgba(255,255,255,0) 60%);z-index:0"></div>
+  <div style="height:56px;display:flex;align-items:center;gap:12px;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.72);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 8px 22px rgba(20,25,35,.10);display:grid;place-items:center;flex:0 0 auto"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></div>
+    <div style="font-size:22px;font-weight:700;letter-spacing:-.025em">Настройки</div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;overflow:hidden;position:relative">
+    <div style="border-radius:26px;background:#FFF1EA;padding:16px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 14px 34px rgba(250,76,22,.12)">
+      <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#C93C0E">Доступна версия 2.4.0</div><div style="font-size:13px;color:#8A6255;margin-top:3px">Стало быстрее подключение</div></div>
+      <div style="height:38px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:flex;align-items:center;padding:0 16px;font-size:14px;font-weight:600;color:#fff;flex:0 0 auto;box-shadow:0 8px 20px rgba(250,76,22,.30)">Обновить</div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#8A9099;padding-left:8px;letter-spacing:.08em;margin-top:4px">ПОДКЛЮЧЕНИЕ</div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);overflow:hidden;margin-top:-4px">
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Автозапуск при старте</div><div style="width:46px;height:28px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-shadow:0 6px 16px rgba(250,76,22,.30)"><div style="width:22px;height:22px;border-radius:999px;background:#fff"></div></div></div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin:0 18px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Работать в фоне</div><div style="width:46px;height:28px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 3px;box-shadow:0 6px 16px rgba(250,76,22,.30)"><div style="width:22px;height:22px;border-radius:999px;background:#fff"></div></div></div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin:0 18px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Уведомления</div><div style="width:46px;height:28px;border-radius:999px;background:#DFE2E8;display:flex;align-items:center;padding:0 3px"><div style="width:22px;height:22px;border-radius:999px;background:#FFFFFF;box-shadow:0 2px 6px rgba(20,25,35,.16)"></div></div></div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin:0 18px"></div>
+      <div style="height:66px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1"><div style="font-size:15px;font-weight:600">Файл обхода</div><div style="font-size:13px;color:#8A9099;margin-top:2px">Банки РФ · 412 адресов</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A9099" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:#8A9099;padding-left:8px;letter-spacing:.08em;margin-top:4px">ПРИЛОЖЕНИЕ</div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);overflow:hidden;margin-top:-4px">
+      <div style="height:64px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Язык</div>
+        <div style="height:34px;border-radius:999px;background:rgba(20,25,35,.06);display:flex;align-items:center;padding:3px;gap:2px">
+          <div style="height:28px;padding:0 14px;border-radius:999px;background:#FA4C16;display:grid;place-items:center;font-size:13px;font-weight:600;color:#fff">RU</div>
+          <div style="height:28px;padding:0 14px;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:600;color:#5A6069">EN</div>
+        </div>
+      </div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin:0 18px"></div>
+      <div style="height:64px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">Тема</div>
+        <div style="height:34px;border-radius:999px;background:rgba(20,25,35,.06);display:flex;align-items:center;padding:3px;gap:2px">
+          <div style="height:28px;padding:0 12px;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:600;color:#5A6069">Тёмная</div>
+          <div style="height:28px;padding:0 12px;border-radius:999px;background:#FA4C16;display:grid;place-items:center;font-size:13px;font-weight:600;color:#fff">Светлая</div>
+        </div>
+      </div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin:0 18px"></div>
+      <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1;font-size:15px;font-weight:600">О приложении</div><div style="font-size:14px;color:#8A9099">2.3.1</div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A9099" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+    </div>
+    <div style="height:52px;border-radius:999px;background:rgba(255,69,58,.10);display:grid;place-items:center;font-size:15px;font-weight:600;color:#E03127;margin-top:6px;box-shadow:none">Выйти из аккаунта</div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Поддержка</div>
+<div style="width:360px;height:800px;background:#EEF0F4;border-radius:30px;overflow:hidden;position:relative;color:#0A0A0A;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#8A9099">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#FFF6F2 0%,#F3F5F9 44%,#DEE2E9 100%);z-index:0"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(85% 48% at 50% 0%, rgba(250,76,22,.16) 0%, rgba(250,76,22,0) 62%);z-index:0"></div>
+  <div style="height:56px;display:flex;align-items:center;gap:12px;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.72);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 8px 22px rgba(20,25,35,.10);display:grid;place-items:center;flex:0 0 auto"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2.2" stroke-linecap="round"><path d="M15 5l-7 7 7 7"/></svg></div>
+    <div style="font-size:22px;font-weight:700;letter-spacing:-.025em">Поддержка</div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;position:relative">
+    <div style="border-radius:32px;background:rgba(255,255,255,.72);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 24px 60px rgba(20,25,35,.14);padding:26px 18px 18px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;position:relative;overflow:hidden">
+      <img src="assets/obj-arc-chrome.png" alt="" style="position:absolute;left:-40px;top:-26px;width:128px;height:128px;object-fit:contain;opacity:.7;animation:drift 6s ease-in-out infinite">
+      <img src="assets/obj-devices-chrome.png" alt="" style="position:absolute;right:-30px;bottom:-24px;width:124px;height:124px;object-fit:contain;opacity:.6;animation:drift2 7.5s ease-in-out infinite">
+      <div style="position:relative;font-size:26px;font-weight:700;letter-spacing:-.03em">Ответим за 10 минут</div>
+      <div style="position:relative;font-size:14px;color:#5A6069;line-height:1.45;max-width:240px">Каждый день с 9:00 до 23:00 по Москве</div>
+      <div style="position:relative;height:56px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:16px;font-weight:600;color:#fff;align-self:stretch;margin-top:12px;box-shadow:0 16px 36px rgba(250,76,22,.30), inset 0 1px 0 rgba(255,255,255,.32)">Написать в Телеграм</div>
+    </div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);overflow:hidden">
+      <div style="height:66px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1"><div style="font-size:15px;font-weight:600">Почта</div><div style="font-size:13px;color:#8A9099;margin-top:2px">help@prostovpn.cc</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A9099" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin:0 18px"></div>
+      <div style="height:66px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1"><div style="font-size:15px;font-weight:600">Сайт и кабинет</div><div style="font-size:13px;color:#8A9099;margin-top:2px">prostovpn.cc</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A9099" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+      <div style="height:1px;background:rgba(20,25,35,.08);margin:0 18px"></div>
+      <div style="height:66px;display:flex;align-items:center;gap:12px;padding:0 18px"><div style="flex:1"><div style="font-size:15px;font-weight:600">Частые вопросы</div><div style="font-size:13px;color:#8A9099;margin-top:2px">Настройка, оплата, скорость</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A9099" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+    </div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.72);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <div style="min-width:0"><div style="font-size:13px;color:#8A9099">Ваш логин</div><div style="font-size:16px;font-weight:600;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">prosto_user</div></div>
+      <div style="height:38px;border-radius:999px;background:rgba(20,25,35,.06);display:flex;align-items:center;padding:0 16px;font-size:14px;font-weight:600;color:#0A0A0A;flex:0 0 auto">Копировать</div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">Ошибка и пустые состояния</div>
+<div style="width:360px;height:800px;background:#EEF0F4;border-radius:30px;overflow:hidden;position:relative;color:#0A0A0A;display:flex;flex-direction:column">
+  <div style="height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:13px;font-weight:600;flex:0 0 auto;position:relative;z-index:2"><span>9:41</span><span style="letter-spacing:.12em;color:#8A9099">▮▮▮ ▯</span></div>
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,#FFF4F3 0%,#F3F5F9 44%,#DEE2E9 100%);z-index:0"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(85% 50% at 50% 0%, rgba(224,51,42,.16) 0%, rgba(224,51,42,0) 62%);z-index:0"></div>
+  <div style="height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex:0 0 auto;position:relative">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0">
+      <div style="width:36px;height:36px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.4);display:grid;place-items:center;font-size:15px;font-weight:700;color:#fff">L</div>
+      <div style="flex:0 0 auto"><div style="font-size:16px;font-weight:600;white-space:nowrap">prosto_user</div></div>
+    </div>
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(255,255,255,.72);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 8px 22px rgba(20,25,35,.10);display:grid;place-items:center"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#0A0A0A" stroke-width="2" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 20a2 2 0 0 0 3.4 0"/></svg></div>
+  </div>
+  <div style="padding:10px 16px 0;display:flex;flex-direction:column;gap:12px;flex:1;position:relative">
+
+    <div style="height:222px;border-radius:32px;background:rgba(255,255,255,.72);backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 24px 60px rgba(20,25,35,.14);position:relative;overflow:hidden;display:grid;place-items:center">
+      <div style="position:absolute;inset:0;background:radial-gradient(58% 62% at 50% 42%, rgba(224,51,42,.12), rgba(224,51,42,0) 72%)"></div>
+      <div style="position:absolute;top:14px;right:14px;padding:7px 12px;border-radius:999px;background:rgba(224,51,42,.12);font-size:12px;font-weight:600;color:#E0332A">Ошибка</div>
+      <div style="position:relative;display:flex;flex-direction:column;align-items:center;gap:16px">
+        <div data-lottie="assets/cry.json" style="width:124px;height:124px;margin:-10px 0 -6px"></div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+          <div style="font-size:22px;font-weight:700;letter-spacing:-.025em">Не удалось подключиться</div>
+          <div style="font-size:14px;color:#5A6069">Сервер в Нидерландах не отвечает</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px">
+      <div style="flex:1;height:52px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:15px;font-weight:600;color:#fff;box-shadow:0 14px 30px rgba(250,76,22,.30), inset 0 1px 0 rgba(255,255,255,.32)">Попробовать снова</div>
+      <div style="flex:1;height:52px;border-radius:999px;background:rgba(255,255,255,.72);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 10px 26px rgba(20,25,35,.10);display:grid;place-items:center;font-size:15px;font-weight:600;color:#0A0A0A">Сменить страну</div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:#8A9099;padding-left:8px;letter-spacing:.08em;margin-top:4px">СКЕЛЕТОНЫ ЗАГРУЗКИ</div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.72);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);padding:18px;display:flex;flex-direction:column;gap:14px;margin-top:-4px">
+      <div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:999px;background:#EAEDF2"></div><div style="flex:1;display:flex;flex-direction:column;gap:7px"><div style="height:12px;width:60%;border-radius:999px;background:#EAEDF2"></div><div style="height:10px;width:38%;border-radius:999px;background:#EAEDF2"></div></div></div>
+      <div style="height:1px;background:rgba(20,25,35,.08)"></div>
+      <div style="display:flex;align-items:center;gap:12px"><div style="width:40px;height:40px;border-radius:999px;background:#EAEDF2"></div><div style="flex:1;display:flex;flex-direction:column;gap:7px"><div style="height:12px;width:44%;border-radius:999px;background:#EAEDF2"></div><div style="height:10px;width:56%;border-radius:999px;background:#EAEDF2"></div></div></div>
+    </div>
+    <div style="border-radius:26px;background:rgba(255,255,255,.72);box-shadow:inset 0 1px 0 rgba(255,255,255,.95), 0 14px 34px rgba(20,25,35,.10);padding:22px 20px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px">
+      <div style="font-size:18px;font-weight:700;letter-spacing:-.02em">Нет интернета</div>
+      <div style="font-size:13px;color:#8A9099;line-height:1.4">Проверьте Wi-Fi или мобильную сеть</div>
+    </div>
+  </div>
+</div>
+</div>
+
+</div>
+</div>
+
+<div style="padding:0 64px 40px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:baseline;gap:14px"><div style="font-size:26px;font-weight:700;color:#F2F2F3">3 · Библиотека компонентов</div><div style="font-size:14px;color:#7C7C82">тёмная тема, ширина контента 328 (360 − 2×16)</div></div>
+<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start">
+
+<div style="width:360px;background:#1A1A1C;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:12px">
+  <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#FA4C16">AP-CARD · СТАТУС</div>
+  <div style="background:#29292B;border-radius:24px;padding:18px;display:flex;flex-direction:column;gap:14px;color:#F2F2F3">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div style="width:64px;height:64px;border-radius:999px;background:radial-gradient(circle at 50% 40%, rgba(250,76,22,.34), rgba(250,76,22,.12));display:grid;place-items:center;flex:0 0 auto"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2" stroke-linecap="round"><path d="M12 3l7.5 3.2v5.5c0 4.6-3.1 7.9-7.5 9.3-4.4-1.4-7.5-4.7-7.5-9.3V6.2z"/></svg></div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+        <div style="display:flex;align-items:center;gap:8px"><div style="font-size:19px;font-weight:700;letter-spacing:-.02em">Prosto VPN</div><div style="padding:4px 9px;border-radius:999px;background:#343437;font-size:11px;font-weight:600;color:#A5A5AA">Пробный</div></div>
+        <div style="display:flex;align-items:center;gap:7px"><div style="width:7px;height:7px;border-radius:999px;background:#34C759"></div><div style="font-size:13px;color:#A5A5AA">Работает</div></div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:baseline;gap:9px"><div style="font-size:34px;font-weight:700;letter-spacing:-.03em">14 дней</div><div style="font-size:13px;color:#7C7C82">до 18 сентября 2026</div></div>
+    <div style="display:flex;gap:10px">
+      <div style="flex:1;height:48px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:15px;font-weight:600;color:#fff">Продлить</div>
+      <div style="flex:1;height:48px;border-radius:999px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.13);display:grid;place-items:center;font-size:15px;font-weight:600">Установка</div>
+    </div>
+    <div style="height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-size:13px;color:#7C7C82">Устройства <span style="color:#F2F2F3;font-weight:600">1 из 3</span> · Трафик <span style="color:#F2F2F3;font-weight:600">1,4 ГБ</span></div>
+  </div>
+</div>
+
+<div style="width:360px;background:#1A1A1C;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:12px">
+  <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#FA4C16">AP-ROWS · СТРОКИ</div>
+  <div style="background:#29292B;border-radius:24px;overflow:hidden;color:#F2F2F3">
+    <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 16px"><div style="width:40px;height:40px;border-radius:999px;background:#FA4C16;display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Строка с шевроном</div><div style="font-size:13px;color:#7C7C82">Подпись</div></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7C7C82" stroke-width="2" stroke-linecap="round"><path d="M9 5l7 7-7 7"/></svg></div>
+    <div style="height:1px;background:rgba(255,255,255,.07);margin-left:68px"></div>
+    <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 16px;background:rgba(255,255,255,.04)"><div style="width:40px;height:40px;border-radius:999px;background:#343437;display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/></svg></div><div style="flex:1"><div style="font-size:15px;font-weight:600">Нажатая (вспышка)</div></div><div style="font-size:14px;color:#A5A5AA">значение</div></div>
+    <div style="height:1px;background:rgba(255,255,255,.07);margin-left:68px"></div>
+    <div style="height:62px;display:flex;align-items:center;gap:12px;padding:0 16px"><div style="width:40px;height:40px;border-radius:999px;background:#343437;display:grid;place-items:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div><div style="flex:1"><div style="font-size:15px;font-weight:600">С переключателем</div></div><div style="width:44px;height:26px;border-radius:999px;background:#3D3D41;display:flex;align-items:center;padding:0 3px"><div style="width:20px;height:20px;border-radius:999px;background:#A5A5AA"></div></div></div>
+  </div>
+</div>
+
+<div style="width:360px;background:#1A1A1C;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:12px;color:#F2F2F3">
+  <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#FA4C16">ПИЛЮЛИ И УПРАВЛЕНИЕ</div>
+  <div style="height:52px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:grid;place-items:center;font-size:17px;font-weight:600;color:#fff">Основное действие · 52</div>
+  <div style="height:52px;border-radius:999px;box-shadow:inset 0 0 0 1px rgba(255,255,255,.13);display:grid;place-items:center;font-size:17px;font-weight:600">Призрак · 52</div>
+  <div style="height:44px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;font-size:15px;font-weight:600;color:#FA4C16">Мягкая · 44</div>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+    <div style="padding:6px 11px;border-radius:999px;background:rgba(250,76,22,.14);font-size:12px;font-weight:600;color:#FA4C16">Хит</div>
+    <div style="padding:6px 11px;border-radius:999px;background:rgba(52,199,89,.16);font-size:12px;font-weight:600;color:#34C759">Работает</div>
+    <div style="padding:6px 11px;border-radius:999px;background:rgba(255,163,38,.16);font-size:12px;font-weight:600;color:#FFA326">Пауза</div>
+    <div style="padding:6px 11px;border-radius:999px;background:rgba(255,69,58,.16);font-size:12px;font-weight:600;color:#FF453A">Ошибка</div>
+    <div style="padding:6px 11px;border-radius:999px;background:#343437;font-size:12px;font-weight:600;color:#A5A5AA">Пробный</div>
+  </div>
+  <div style="display:flex;gap:14px;align-items:center">
+    <div style="width:44px;height:26px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 3px"><div style="width:20px;height:20px;border-radius:999px;background:#fff"></div></div>
+    <div style="width:44px;height:26px;border-radius:999px;background:#3D3D41;display:flex;align-items:center;padding:0 3px"><div style="width:20px;height:20px;border-radius:999px;background:#A5A5AA"></div></div>
+    <div style="height:34px;border-radius:999px;background:#343437;display:flex;align-items:center;padding:3px;gap:2px"><div style="height:28px;padding:0 14px;border-radius:999px;background:#FA4C16;display:grid;place-items:center;font-size:13px;font-weight:600;color:#fff">RU</div><div style="height:28px;padding:0 14px;border-radius:999px;display:grid;place-items:center;font-size:13px;font-weight:600;color:#A5A5AA">EN</div></div>
+  </div>
+  <div style="height:52px;background:#343437;border-radius:14px;display:flex;align-items:center;padding:0 16px;font-size:16px;color:#7C7C82">Поле · покой</div>
+  <div style="height:52px;background:#343437;border-radius:14px;display:flex;align-items:center;padding:0 16px;font-size:16px;box-shadow:inset 0 0 0 2px #FA4C16">Поле · фокус</div>
+</div>
+
+<div style="width:360px;background:#1A1A1C;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:12px;color:#F2F2F3">
+  <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#FA4C16">ПЛИТКИ ТАРИФОВ · БАННЕРЫ</div>
+  <div style="display:flex;gap:12px">
+    <div style="flex:1;background:#29292B;border-radius:24px;padding:16px;position:relative;overflow:hidden">
+      <div style="font-size:16px;font-weight:700">Базовый</div>
+      <div style="font-size:13px;color:#7C7C82;margin-top:2px">на месяц</div>
+      <div style="font-size:28px;font-weight:700;letter-spacing:-.03em;margin-top:10px">199 ₽</div>
+    </div>
+    <div style="flex:1;background:#29292B;border-radius:24px;padding:16px;position:relative;overflow:hidden;box-shadow:inset 0 0 0 2px #FA4C16">
+      <div style="position:absolute;top:11px;right:-30px;width:110px;transform:rotate(45deg);background:#FA4C16;color:#fff;font-size:11px;font-weight:700;text-align:center;padding:4px 0">Хит</div>
+      <div style="font-size:16px;font-weight:700">Годовая</div>
+      <div style="font-size:13px;color:#FA4C16;font-weight:600;margin-top:2px">выгода 38%</div>
+      <div style="font-size:28px;font-weight:700;letter-spacing:-.03em;margin-top:10px">1 499 ₽</div>
+      <div style="font-size:12px;color:#7C7C82">≈ 123 ₽ / мес</div>
+    </div>
+  </div>
+  <div style="background:rgba(255,163,38,.13);border-radius:24px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#FFA326" stroke-width="2" stroke-linecap="round" style="flex:0 0 auto;margin-top:1px"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17.4v.2"/></svg>
+    <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#FFA326">Баннер-предупреждение</div><div style="font-size:13px;color:#A5A5AA;margin-top:2px">Тот же радиус 24, подложка статуса, без обводки.</div></div>
+  </div>
+  <div style="background:rgba(91,157,255,.13);border-radius:24px;padding:14px 16px;display:flex;gap:12px;align-items:flex-start">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#5B9DFF" stroke-width="2" stroke-linecap="round" style="flex:0 0 auto;margin-top:1px"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.2"/></svg>
+    <div style="flex:1"><div style="font-size:14px;font-weight:600;color:#5B9DFF">Баннер-инфо</div><div style="font-size:13px;color:#A5A5AA;margin-top:2px">Панель недоступна — работаем на прошлых настройках.</div></div>
+  </div>
+</div>
+
+<div style="width:360px;background:#1A1A1C;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:14px;color:#F2F2F3">
+  <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#FA4C16">НИЖНЯЯ ПАНЕЛЬ · ДВА ВАРИАНТА</div>
+  <div style="height:112px;border-radius:20px;background:linear-gradient(118deg,#FF7A3D,#FA4C16 46%,#D93A05);display:grid;place-items:center;position:relative">
+    <div style="height:64px;padding:0 8px;border-radius:999px;background:rgba(255,255,255,.06);backdrop-filter:blur(28px) saturate(1.4);-webkit-backdrop-filter:blur(28px) saturate(1.4);box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 18px 48px rgba(0,0,0,.6);display:flex;align-items:center;gap:2px">
+      <div style="width:96px;height:52px;border-radius:999px;background:rgba(250,76,22,.20);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg><div style="font-size:11px;font-weight:600;color:#FA4C16">Подключение</div></div>
+      <div style="width:82px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17"/></svg><div style="font-size:11px;font-weight:600;color:#F2F2F3">Страны</div></div>
+      <div style="width:82px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F2F2F3" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21"/></svg><div style="font-size:11px;font-weight:600;color:#F2F2F3">Ещё</div></div>
+    </div>
+  </div>
+  <div style="font-size:13px;color:#7C7C82;line-height:1.45">Сверху: стекло, API ≥ 31 (<span style="color:#A5A5AA">RenderEffect.createBlurEffect(22f, 22f)</span>). Снизу: API 24–30 — сплошная <span style="color:#A5A5AA">#29292B</span>, та же геометрия, тень чуть плотнее.</div>
+  <div style="height:112px;border-radius:20px;background:#1A1A1C;box-shadow:inset 0 0 0 1px rgba(255,255,255,.07);display:grid;place-items:center">
+    <div style="height:64px;padding:0 8px;border-radius:999px;background:#29292B;box-shadow:inset 0 0 0 1px rgba(255,255,255,.09),0 14px 44px rgba(0,0,0,.55);display:flex;align-items:center;gap:2px">
+      <div style="width:96px;height:52px;border-radius:999px;background:rgba(250,76,22,.14);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg><div style="font-size:11px;font-weight:600;color:#FA4C16">Подключение</div></div>
+      <div style="width:82px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A5A5AA" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17"/></svg><div style="font-size:11px;font-weight:600;color:#A5A5AA">Страны</div></div>
+      <div style="width:82px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A5A5AA" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21"/></svg><div style="font-size:11px;font-weight:600;color:#A5A5AA">Ещё</div></div>
+    </div>
+  </div>
+</div>
+
+<div style="width:360px;background:#1A1A1C;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:12px;color:#F2F2F3">
+  <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#FA4C16">ПЛИТА ПОДКЛЮЧЕНИЯ · 4 СОСТОЯНИЯ</div>
+  <div style="display:flex;gap:12px">
+    <div style="flex:1;height:120px;border-radius:24px;background:#29292B;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="width:52px;height:52px;border-radius:999px;background:#343437;box-shadow:inset 0 0 0 2px rgba(250,76,22,.55);display:grid;place-items:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FA4C16" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div><div style="font-size:13px;font-weight:600">Выключено</div></div>
+    <div style="flex:1;height:120px;border-radius:24px;background:#29292B;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="width:52px;height:52px;border-radius:999px;background:conic-gradient(#FA4C16 0 62%, rgba(255,255,255,.09) 62% 100%);display:grid;place-items:center;animation:spin 1.4s linear infinite"><div style="width:44px;height:44px;border-radius:999px;background:#29292B"></div></div><div style="font-size:13px;font-weight:600">Подключаем</div></div>
+  </div>
+  <div style="display:flex;gap:12px">
+    <div style="flex:1;height:120px;border-radius:24px;background:linear-gradient(118deg,#FF7A3D,#FA4C16 46%,#D93A05);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="width:52px;height:52px;border-radius:999px;background:rgba(255,255,255,.18);box-shadow:inset 0 0 0 2px rgba(255,255,255,.32);display:grid;place-items:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div><div style="font-size:13px;font-weight:600;color:#fff">Включено</div></div>
+    <div style="flex:1;height:120px;border-radius:24px;background:#29292B;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="width:52px;height:52px;border-radius:999px;background:#343437;box-shadow:inset 0 0 0 2px rgba(255,69,58,.4);display:grid;place-items:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF453A" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div><div style="font-size:13px;font-weight:600">Ошибка</div></div>
+  </div>
+</div>
+
+<div style="width:360px;background:#1A1A1C;border-radius:24px;padding:16px;display:flex;flex-direction:column;gap:12px;color:#F2F2F3">
+  <div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#FA4C16">SHEETSHELL · КАРКАС ЛИСТА</div>
+  <div style="background:#29292B;border-radius:28px 28px 24px 24px;padding:10px 16px 16px;display:flex;flex-direction:column;gap:10px">
+    <div style="width:38px;height:4px;border-radius:999px;background:rgba(255,255,255,.18);margin:0 auto 6px"></div>
+    <div style="font-size:20px;font-weight:700;letter-spacing:-.02em">Заголовок листа</div>
+    <div style="font-size:13px;color:#A5A5AA">Подзаголовок одной строкой</div>
+    <div style="height:74px;border-radius:18px;background:#343437;margin-top:4px"></div>
+    <div style="height:52px;border-radius:999px;background:linear-gradient(118deg,#FF7A3D,#FA4C16 46%,#D93A05);display:grid;place-items:center;font-size:16px;font-weight:600;color:#fff;margin-top:4px">Действие</div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<div style="padding:0 64px 40px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:baseline;gap:14px"><div style="font-size:26px;font-weight:700;color:#F2F2F3">4 · ТВ</div><div style="font-size:14px;color:#7C7C82">1280×720, фокус читается с 3 метров</div></div>
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">ТВ · главная, подключено</div>
+<div style="width:1280px;height:720px;border-radius:22px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;transform-origin:top left;box-shadow:0 30px 90px rgba(0,0,0,.5)">
+  <div style="position:absolute;inset:0;background:linear-gradient(160deg,#17110E 0%,#0C0B0B 46%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(60% 80% at 42% -12%, rgba(250,76,22,.34) 0%, rgba(10,10,11,0) 68%)"></div>
+  <div style="width:300px;padding:40px 24px;display:flex;flex-direction:column;gap:10px;position:relative;background:rgba(255,255,255,.03);box-shadow:inset -1px 0 0 rgba(255,255,255,.06)">
+    <img src="assets/logo-v3.webp" alt="Prosto" style="height:26px;object-fit:contain;align-self:flex-start;margin-bottom:26px">
+    <div style="height:64px;border-radius:999px;background:rgba(250,76,22,.16);box-shadow:inset 0 0 0 2px #FA4C16;display:flex;align-items:center;gap:14px;padding:0 22px;font-size:19px;font-weight:600;color:#FF8A5C"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF8A5C" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>Подключение</div>
+    <div style="height:64px;border-radius:999px;display:flex;align-items:center;gap:14px;padding:0 22px;font-size:19px;font-weight:600;color:#8E8E95"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>Страны</div>
+    <div style="height:64px;border-radius:999px;display:flex;align-items:center;gap:14px;padding:0 22px;font-size:19px;font-weight:600;color:#8E8E95"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.8M12 18.7v2.8M2.5 12h2.8M18.7 12h2.8"/></svg>Настройки</div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:42px;height:42px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.35);display:grid;place-items:center;font-size:17px;font-weight:700;color:#fff">L</div>
+      <div style="font-size:17px;font-weight:600">prosto_user</div>
+    </div>
+  </div>
+  <div style="flex:1;padding:44px 48px;display:flex;flex-direction:column;gap:22px;position:relative">
+    <div style="display:flex;align-items:center;gap:16px">
+      <div style="font-size:44px;font-weight:700;letter-spacing:-.035em">Подключено</div>
+      <div style="padding:9px 18px;border-radius:999px;background:rgba(255,255,255,.08);font-size:16px;font-weight:600;color:#C9C9CE">14 дней</div>
+    </div>
+    <div style="display:flex;gap:22px;flex:1">
+      <div style="flex:1.4;border-radius:32px;background:linear-gradient(118deg,#FF7A3D 0%,#FA4C16 46%,#D93A05 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;position:relative;overflow:hidden;box-shadow:0 0 0 4px rgba(255,255,255,.92),0 24px 70px rgba(250,76,22,.4)">
+        <img src="assets/obj-ring-chrome.png" alt="" style="position:absolute;left:-46px;bottom:-40px;width:200px;height:200px;object-fit:contain;opacity:.5;animation:drift 6s ease-in-out infinite">
+        <img src="assets/obj-mask-chrome.png" alt="" style="position:absolute;right:-34px;top:-32px;width:160px;height:160px;object-fit:contain;opacity:.42;animation:drift2 7.5s ease-in-out infinite">
+        <div style="position:relative;width:150px;height:150px;border-radius:999px;background:rgba(255,255,255,.18);box-shadow:inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 0 1px rgba(255,255,255,.24);display:grid;place-items:center"><svg width="66" height="66" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></div>
+        <div style="position:relative;font-size:32px;font-weight:700;letter-spacing:-.025em;color:#fff">Отключить</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:18px">
+        <div style="flex:1;border-radius:32px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:28px;display:flex;flex-direction:column;justify-content:center;gap:10px">
+          <div style="font-size:17px;color:#8E8E95">Страна</div>
+          <div style="display:flex;align-items:center;gap:14px"><div style="width:44px;height:44px;border-radius:999px;flex:0 0 auto;background:linear-gradient(180deg,#AE1C28 0 33.33%,#F4F4F6 33.33% 66.66%,#21468B 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="font-size:30px;font-weight:700;letter-spacing:-.025em">Нидерланды</div></div>
+          <div style="font-size:17px;color:#8E8E95">Амстердам · 24 мс</div>
+        </div>
+        <div style="flex:1;border-radius:32px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:28px;display:flex;flex-direction:column;justify-content:center;gap:10px">
+          <div style="font-size:17px;color:#8E8E95">На связи</div>
+          <div style="font-size:38px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums">00:12:34</div>
+          <div style="font-size:17px;color:#8E8E95">1,24 ГБ принято</div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:16px;color:#8E8E95">Фокус: белая обводка 4px + подъём на 2px + масштаб 1.02. Стрелки пульта переключают карточки, ОК — действие.</div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">ТВ · страны</div>
+<div style="width:1280px;height:720px;border-radius:22px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;transform-origin:top left;box-shadow:0 30px 90px rgba(0,0,0,.5)">
+  <div style="position:absolute;inset:0;background:linear-gradient(160deg,#131315 0%,#0B0B0C 46%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(60% 80% at 42% -12%, rgba(255,255,255,.09) 0%, rgba(10,10,11,0) 68%)"></div>
+  <div style="width:300px;padding:40px 24px;display:flex;flex-direction:column;gap:10px;position:relative;background:rgba(255,255,255,.03);box-shadow:inset -1px 0 0 rgba(255,255,255,.06)">
+    <img src="assets/logo-v3.webp" alt="Prosto" style="height:26px;object-fit:contain;align-self:flex-start;margin-bottom:26px">
+    <div style="height:64px;border-radius:999px;display:flex;align-items:center;gap:14px;padding:0 22px;font-size:19px;font-weight:600;color:#8E8E95"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>Подключение</div>
+    <div style="height:64px;border-radius:999px;background:rgba(250,76,22,.16);box-shadow:inset 0 0 0 2px #FA4C16;display:flex;align-items:center;gap:14px;padding:0 22px;font-size:19px;font-weight:600;color:#FF8A5C"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF8A5C" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>Страны</div>
+    <div style="height:64px;border-radius:999px;display:flex;align-items:center;gap:14px;padding:0 22px;font-size:19px;font-weight:600;color:#8E8E95"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.8M12 18.7v2.8M2.5 12h2.8M18.7 12h2.8"/></svg>Настройки</div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:42px;height:42px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.35);display:grid;place-items:center;font-size:17px;font-weight:700;color:#fff">L</div>
+      <div style="font-size:17px;font-weight:600">prosto_user</div>
+    </div>
+  </div>
+  <div style="flex:1;padding:44px 48px;display:flex;flex-direction:column;gap:24px;position:relative">
+    <div style="display:flex;align-items:baseline;gap:16px">
+      <div style="font-size:44px;font-weight:700;letter-spacing:-.035em">Страны</div>
+      <div style="font-size:18px;color:#8E8E95">Выбор запомнится для следующих подключений</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px">
+      <div style="height:150px;border-radius:32px;background:rgba(250,76,22,.14);box-shadow:0 0 0 4px rgba(255,255,255,.92), inset 0 1px 0 rgba(255,255,255,.14);padding:24px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="width:46px;height:46px;border-radius:999px;background:rgba(250,76,22,.24);display:grid;place-items:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF8A5C" stroke-width="2" stroke-linecap="round"><path d="M13 2L4.5 13H11l-1 9 8.5-11H12z"/></svg></div><div style="width:28px;height:28px;border-radius:999px;background:#FA4C16;display:grid;place-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div></div>
+        <div><div style="font-size:26px;font-weight:700;letter-spacing:-.025em">Лучший сервер</div><div style="font-size:16px;color:#C9A092;margin-top:2px">Выберем сами по скорости</div></div>
+      </div>
+      <div style="height:150px;border-radius:32px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:24px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="width:46px;height:46px;border-radius:999px;background:linear-gradient(180deg,#AE1C28 0 33.33%,#F4F4F6 33.33% 66.66%,#21468B 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="font-size:17px;font-weight:600;color:#34C759;font-variant-numeric:tabular-nums">24 мс</div></div>
+        <div><div style="font-size:26px;font-weight:700;letter-spacing:-.025em">Нидерланды</div><div style="font-size:16px;color:#8E8E95;margin-top:2px">Амстердам</div></div>
+      </div>
+      <div style="height:150px;border-radius:32px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:24px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="width:46px;height:46px;border-radius:999px;background:linear-gradient(180deg,#0D0D0D 0 33.33%,#DD0000 33.33% 66.66%,#FFCE00 66.66% 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="font-size:17px;font-weight:600;color:#34C759;font-variant-numeric:tabular-nums">31 мс</div></div>
+        <div><div style="font-size:26px;font-weight:700;letter-spacing:-.025em">Германия</div><div style="font-size:16px;color:#8E8E95;margin-top:2px">Франкфурт</div></div>
+      </div>
+      <div style="height:150px;border-radius:32px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:24px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="width:46px;height:46px;border-radius:999px;background:linear-gradient(#003580,#003580) no-repeat center/100% 30%, linear-gradient(#003580,#003580) no-repeat 36% 0/24% 100%, #F4F4F6;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="font-size:17px;font-weight:600;color:#34C759;font-variant-numeric:tabular-nums">18 мс</div></div>
+        <div><div style="font-size:26px;font-weight:700;letter-spacing:-.025em">Финляндия</div><div style="font-size:16px;color:#8E8E95;margin-top:2px">Хельсинки</div></div>
+      </div>
+      <div style="height:150px;border-radius:32px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:24px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="width:46px;height:46px;border-radius:999px;background:radial-gradient(circle at 58% 50%, #E30A17 0 22%, rgba(227,10,23,0) 22.5%), radial-gradient(circle at 48% 50%, #F4F4F6 0 26%, rgba(244,244,246,0) 26.5%), #E30A17;box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="font-size:17px;font-weight:600;color:#FFA326;font-variant-numeric:tabular-nums">64 мс</div></div>
+        <div><div style="font-size:26px;font-weight:700;letter-spacing:-.025em">Турция</div><div style="font-size:16px;color:#8E8E95;margin-top:2px">Стамбул</div></div>
+      </div>
+      <div style="height:150px;border-radius:32px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:24px;display:flex;flex-direction:column;justify-content:space-between">
+        <div style="display:flex;align-items:center;justify-content:space-between"><div style="width:46px;height:46px;border-radius:999px;background:linear-gradient(#3C3B6E,#3C3B6E) no-repeat 0 0/46% 54%, repeating-linear-gradient(180deg,#B22234 0 14.3%,#F4F4F6 14.3% 28.6%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18)"></div><div style="font-size:17px;font-weight:600;color:#FFA326;font-variant-numeric:tabular-nums">112 мс</div></div>
+        <div><div style="font-size:26px;font-weight:700;letter-spacing:-.025em">США</div><div style="font-size:16px;color:#8E8E95;margin-top:2px">Нью-Йорк</div></div>
+      </div>
+    </div>
+    <div style="flex:1"></div>
+    <div style="font-size:16px;color:#8E8E95">Выбранная страна помечена оранжевой галочкой, сфокусированная — белой обводкой. Это разные состояния и они могут совпадать.</div>
+  </div>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="font-size:13px;font-weight:600;color:#7C7C82">ТВ · настройки</div>
+<div style="width:1280px;height:720px;border-radius:22px;overflow:hidden;position:relative;color:#F2F2F3;display:flex;transform-origin:top left;box-shadow:0 30px 90px rgba(0,0,0,.5)">
+  <div style="position:absolute;inset:0;background:linear-gradient(160deg,#131315 0%,#0B0B0C 46%,#0A0A0B 100%)"></div>
+  <div style="position:absolute;inset:0;background:radial-gradient(60% 80% at 42% -12%, rgba(255,255,255,.09) 0%, rgba(10,10,11,0) 68%)"></div>
+  <div style="width:300px;padding:40px 24px;display:flex;flex-direction:column;gap:10px;position:relative;background:rgba(255,255,255,.03);box-shadow:inset -1px 0 0 rgba(255,255,255,.06)">
+    <img src="assets/logo-v3.webp" alt="Prosto" style="height:26px;object-fit:contain;align-self:flex-start;margin-bottom:26px">
+    <div style="height:64px;border-radius:999px;display:flex;align-items:center;gap:14px;padding:0 22px;font-size:19px;font-weight:600;color:#8E8E95"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><path d="M12 3.5v8.2"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>Подключение</div>
+    <div style="height:64px;border-radius:999px;display:flex;align-items:center;gap:14px;padding:0 22px;font-size:19px;font-weight:600;color:#8E8E95"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8E8E95" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3.5 12h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>Страны</div>
+    <div style="height:64px;border-radius:999px;background:rgba(250,76,22,.16);box-shadow:inset 0 0 0 2px #FA4C16;display:flex;align-items:center;gap:14px;padding:0 22px;font-size:19px;font-weight:600;color:#FF8A5C"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#FF8A5C" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.8M12 18.7v2.8M2.5 12h2.8M18.7 12h2.8"/></svg>Настройки</div>
+    <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div style="width:42px;height:42px;border-radius:999px;flex:0 0 auto;background:linear-gradient(140deg,#FF7A3D 0%,#FA4C16 55%,#D93A05 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.35);display:grid;place-items:center;font-size:17px;font-weight:700;color:#fff">L</div>
+      <div style="font-size:17px;font-weight:600">prosto_user</div>
+    </div>
+  </div>
+  <div style="flex:1;padding:44px 48px;display:flex;flex-direction:column;gap:24px;position:relative">
+    <div style="font-size:44px;font-weight:700;letter-spacing:-.035em">Настройки</div>
+    <div style="display:flex;gap:22px;flex:1">
+      <div style="flex:1.5;display:flex;flex-direction:column;gap:14px">
+        <div style="height:88px;border-radius:28px;background:rgba(255,255,255,.05);box-shadow:0 0 0 4px rgba(255,255,255,.92), inset 0 1px 0 rgba(255,255,255,.12);display:flex;align-items:center;gap:18px;padding:0 26px">
+          <div style="flex:1"><div style="font-size:22px;font-weight:600">Автозапуск при старте ТВ</div><div style="font-size:16px;color:#8E8E95;margin-top:3px">Включать VPN сразу после включения</div></div>
+          <div style="width:64px;height:36px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 4px;flex:0 0 auto;box-shadow:0 8px 20px rgba(250,76,22,.35)"><div style="width:28px;height:28px;border-radius:999px;background:#fff"></div></div>
+        </div>
+        <div style="height:88px;border-radius:28px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);display:flex;align-items:center;gap:18px;padding:0 26px">
+          <div style="flex:1"><div style="font-size:22px;font-weight:600">Обход для сервисов РФ</div><div style="font-size:16px;color:#8E8E95;margin-top:3px">Банки и Госуслуги мимо VPN</div></div>
+          <div style="width:64px;height:36px;border-radius:999px;background:#FA4C16;display:flex;align-items:center;justify-content:flex-end;padding:0 4px;flex:0 0 auto;box-shadow:0 8px 20px rgba(250,76,22,.35)"><div style="width:28px;height:28px;border-radius:999px;background:#fff"></div></div>
+        </div>
+        <div style="height:88px;border-radius:28px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);display:flex;align-items:center;gap:18px;padding:0 26px">
+          <div style="flex:1"><div style="font-size:22px;font-weight:600">Уведомления</div></div>
+          <div style="width:64px;height:36px;border-radius:999px;background:rgba(255,255,255,.10);display:flex;align-items:center;padding:0 4px;flex:0 0 auto"><div style="width:28px;height:28px;border-radius:999px;background:#8E8E95"></div></div>
+        </div>
+        <div style="height:88px;border-radius:28px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);display:flex;align-items:center;gap:18px;padding:0 26px">
+          <div style="flex:1"><div style="font-size:22px;font-weight:600">Язык</div></div>
+          <div style="height:48px;border-radius:999px;background:rgba(255,255,255,.07);display:flex;align-items:center;padding:4px;gap:4px;flex:0 0 auto">
+            <div style="height:40px;padding:0 22px;border-radius:999px;background:#FA4C16;display:grid;place-items:center;font-size:17px;font-weight:600;color:#fff">RU</div>
+            <div style="height:40px;padding:0 22px;border-radius:999px;display:grid;place-items:center;font-size:17px;font-weight:600;color:#8E8E95">EN</div>
+          </div>
+        </div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:14px">
+        <div style="flex:1;border-radius:32px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:28px;display:flex;flex-direction:column;justify-content:center;gap:8px">
+          <div style="font-size:17px;color:#8E8E95">Подписка</div>
+          <div style="font-size:38px;font-weight:700;letter-spacing:-.03em;font-variant-numeric:tabular-nums">14 дней</div>
+          <div style="font-size:17px;color:#8E8E95">до 18 сентября · продлить в кабинете</div>
+        </div>
+        <div style="border-radius:32px;background:rgba(255,255,255,.05);box-shadow:inset 0 1px 0 rgba(255,255,255,.11);padding:24px 28px;display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:17px;color:#8E8E95">Версия</div>
+          <div style="font-size:22px;font-weight:600">2.3.1 · до 18 сентября</div>
+        </div>
+        <div style="height:76px;border-radius:999px;background:rgba(255,69,58,.12);display:grid;place-items:center;font-size:20px;font-weight:600;color:#FF6B60">Выйти из аккаунта</div>
+      </div>
+    </div>
+    <div style="font-size:16px;color:#8E8E95">На ТВ переключатели крупнее (64×36) и строки выше 88 — палец не участвует, но фокус должен попадать без промаха.</div>
+  </div>
+</div>
+</div>
+</div>
+
+<div style="padding:0 64px 40px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:baseline;gap:14px"><div style="font-size:26px;font-weight:700;color:#F2F2F3">5 · Токены для Theme.kt</div><div style="font-size:14px;color:#7C7C82">имена готовы к вставке, значения — как в кабинете</div></div>
+
+<div style="max-width:1100px;background:#29292B;border-radius:24px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+  <div style="font-size:13px;font-weight:700;letter-spacing:.08em;color:#FA4C16">ЦВЕТ</div>
+  <div style="display:grid;grid-template-columns:1.1fr 1.25fr 1.25fr 1.4fr;gap:0 18px;font-size:13px;color:#7C7C82;font-weight:600;padding-bottom:8px"><div>Токен</div><div>Тёмная</div><div>Светлая</div><div>Где</div></div>
+  <div style="display:grid;grid-template-columns:1.1fr 1.25fr 1.25fr 1.4fr;gap:11px 18px;font-size:14px;align-items:center">
+    <div style="font-weight:600;color:#F2F2F3">canvas</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#1A1A1C</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#EEF0F4</div><div style="color:#7C7C82">фон экрана</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">card</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#29292B</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#FFFFFF</div><div style="color:#7C7C82">карточки, плита, листы</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">tile</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#343437</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#F2F3F7</div><div style="color:#7C7C82">поля, кружки иконок, вложенное</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">tileDeep</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#3D3D41</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#E7E9EF</div><div style="color:#7C7C82">трек выключенного переключателя</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">hairline</div><div style="color:#A5A5AA">rgba(255,255,255,0.07)</div><div style="color:#A5A5AA">rgba(10,10,10,0.07)</div><div style="color:#7C7C82">разделители внутри карточки</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">ghostStroke</div><div style="color:#A5A5AA">rgba(255,255,255,0.13)</div><div style="color:#A5A5AA">rgba(10,10,10,0.14)</div><div style="color:#7C7C82">только пилюля-призрак</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">textPrimary</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#F2F2F3</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#0A0A0A</div><div style="color:#7C7C82">заголовки, значения</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">textMuted</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#A5A5AA</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#5A6069</div><div style="color:#7C7C82">подписи, тело</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">textFaint</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#7C7C82</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#8A9099</div><div style="color:#7C7C82">даты, шевроны, метки</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#FA4C16">accent</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#FA4C16</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#FA4C16</div><div style="color:#7C7C82">действия, активная вкладка</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">accentPressed</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#FF6334</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#FF6334</div><div style="color:#7C7C82">нажатие, ховер на ТВ</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">accentWash</div><div style="color:#A5A5AA">rgba(250,76,22,0.14)</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#FFF1EA</div><div style="color:#7C7C82">капля вкладки, чипы, мягкая пилюля</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">brandGradient</div><div style="color:#A5A5AA;grid-column:2/4">linear-gradient(118°, #FF7A3D 0%, #FA4C16 46%, #D93A05 100%)</div><div style="color:#7C7C82">плита «вкл», главные пилюли</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">glassFill</div><div style="color:#A5A5AA">rgba(41,41,43,0.66)</div><div style="color:#A5A5AA">rgba(255,255,255,0.72)</div><div style="color:#7C7C82">нижняя панель, кружки шапки</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">glassStroke</div><div style="color:#A5A5AA">rgba(255,255,255,0.09)</div><div style="color:#A5A5AA">rgba(10,10,10,0.06)</div><div style="color:#7C7C82">кант стекла</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">glassOpaque</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#29292B</div><div style="color:#A5A5AA;font-variant-numeric:tabular-nums">#FFFFFF</div><div style="color:#7C7C82">замена стекла на API 24–30</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">shadowLift</div><div style="color:#A5A5AA">0 14 44 rgba(0,0,0,0.55)</div><div style="color:#A5A5AA">0 14 44 rgba(20,25,35,0.16)</div><div style="color:#7C7C82">панель, листы, карточки светлой темы</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#34C759">success</div><div style="color:#A5A5AA;grid-column:2/4;font-variant-numeric:tabular-nums">#34C759 · подложка 16%</div><div style="color:#7C7C82">точка «работает»</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#FF453A">error</div><div style="color:#A5A5AA;grid-column:2/4;font-variant-numeric:tabular-nums">#FF453A · подложка 13%</div><div style="color:#7C7C82">ошибка подключения, текст под полем</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#FFA326">warning</div><div style="color:#A5A5AA;grid-column:2/4;font-variant-numeric:tabular-nums">#FFA326 · подложка 13%</div><div style="color:#7C7C82">баннеры «продлите», «мало трафика»</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#5B9DFF">info</div><div style="color:#A5A5AA;grid-column:2/4;font-variant-numeric:tabular-nums">#5B9DFF · подложка 13%</div><div style="color:#7C7C82">«панель недоступна»</div>
+  </div>
+</div>
+
+<div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;max-width:1100px">
+  <div style="flex:1 1 340px;background:#29292B;border-radius:24px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13px;font-weight:700;letter-spacing:.08em;color:#FA4C16">РАДИУСЫ И РАЗМЕРЫ · dp</div>
+    <div style="display:grid;grid-template-columns:auto 1fr auto;gap:11px 16px;font-size:14px;align-items:center">
+      <div style="font-weight:600;color:#F2F2F3">radiusPlate</div><div style="color:#7C7C82">плита подключения, листы, крупные карточки</div><div style="color:#A5A5AA;font-weight:600">28</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">radiusCard</div><div style="color:#7C7C82">карточки, баннеры, плитки тарифов</div><div style="color:#A5A5AA;font-weight:600">24</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">radiusTile</div><div style="color:#7C7C82">вложенные блоки внутри листа</div><div style="color:#A5A5AA;font-weight:600">18</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">radiusField</div><div style="color:#7C7C82">поля ввода</div><div style="color:#A5A5AA;font-weight:600">14</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">radiusPill</div><div style="color:#7C7C82">все действия, чипы, переключатели, панель</div><div style="color:#A5A5AA;font-weight:600">999</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">screenPadding</div><div style="color:#7C7C82">поля экрана; контент 328 при 360</div><div style="color:#A5A5AA;font-weight:600">16</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">cardGap</div><div style="color:#7C7C82">между карточками в колонке</div><div style="color:#A5A5AA;font-weight:600">12</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">cardPadding</div><div style="color:#7C7C82">внутри карточки (16 строки / 18 статус)</div><div style="color:#A5A5AA;font-weight:600">16–18</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">rowHeight</div><div style="color:#7C7C82">строка-меню; разделитель с отступом 68</div><div style="color:#A5A5AA;font-weight:600">62</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">iconCircle</div><div style="color:#7C7C82">в строках 40 · герой карточки 64</div><div style="color:#A5A5AA;font-weight:600">40 / 64</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">ctaHeight</div><div style="color:#7C7C82">пилюля основного действия (48 в паре)</div><div style="color:#A5A5AA;font-weight:600">52</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">plateHeight</div><div style="color:#7C7C82">плита подключения на главной</div><div style="color:#A5A5AA;font-weight:600">196</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">tabBar</div><div style="color:#7C7C82">капсула 64, пункт 52, отступ снизу 18</div><div style="color:#A5A5AA;font-weight:600">64 / 52</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">touchMin</div><div style="color:#7C7C82">минимальная область нажатия</div><div style="color:#A5A5AA;font-weight:600">48</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">strokeIcon</div><div style="color:#7C7C82">линейные иконки (2.2 в плите и на ТВ)</div><div style="color:#A5A5AA;font-weight:600">2.0</div>
+    </div>
+  </div>
+
+  <div style="flex:1 1 340px;background:#29292B;border-radius:24px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13px;font-weight:700;letter-spacing:.08em;color:#FA4C16">ТИПОГРАФИКА · ProstoDisplay</div>
+    <div style="font-size:13px;color:#7C7C82;line-height:1.5">Вариативный TTF в <span style="color:#A5A5AA">res/font/prosto_display.ttf</span>, запасной Onest. Трекинг отрицательный только на крупных начертаниях.</div>
+    <div style="display:grid;grid-template-columns:auto 1fr;gap:11px 16px;font-size:14px;align-items:baseline">
+      <div style="font-weight:600;color:#F2F2F3">display</div><div style="color:#7C7C82">34 / 700 / −0.03em — дни, таймер, цена</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">h1</div><div style="color:#7C7C82">26 / 700 / −0.02em — заголовок экрана</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">plate</div><div style="color:#7C7C82">21 / 700 / −0.02em — подпись плиты</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">h2</div><div style="color:#7C7C82">19 / 700 / −0.02em — статус, титул карточки</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">sheetTitle</div><div style="color:#7C7C82">20 / 700 / −0.02em — заголовок листа</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">button</div><div style="color:#7C7C82">17 / 600 — пилюля 52; 15 / 600 — пилюля 48</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">field</div><div style="color:#7C7C82">16 / 500 — введённое значение</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">rowTitle</div><div style="color:#7C7C82">15 / 600 — заголовок строки</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">body</div><div style="color:#7C7C82">14 / 400 / 1.45 — тело баннера</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">caption</div><div style="color:#7C7C82">13 / 400 — подпись строки, дата</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">chip</div><div style="color:#7C7C82">12 / 600 — чипы и ярлыки</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">tab</div><div style="color:#7C7C82">11 / 600 — подпись вкладки</div>
+      <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+      <div style="font-weight:600;color:#F2F2F3">overline</div><div style="color:#7C7C82">12 / 700 / +0.08em — метки разделов</div>
+    </div>
+    <div style="font-size:13px;color:#7C7C82;line-height:1.5;margin-top:2px">Все цифры, которые меняются на месте (таймер, трафик, пинг) — <span style="color:#A5A5AA">tabular-nums</span>, иначе строка дёргается.</div>
+  </div>
+</div>
+</div>
+
+<div style="padding:0 64px 40px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:baseline;gap:14px"><div style="font-size:26px;font-weight:700;color:#F2F2F3">6 · Движение</div><div style="font-size:14px;color:#7C7C82">кривые Compose, без пружин</div></div>
+<div style="max-width:1100px;background:#29292B;border-radius:24px;padding:20px 22px;display:flex;flex-direction:column;gap:14px">
+  <div style="display:grid;grid-template-columns:1.05fr .5fr .85fr 1.6fr;gap:0 18px;font-size:13px;color:#7C7C82;font-weight:600;padding-bottom:8px"><div>Что</div><div>Длит.</div><div>Кривая</div><div>Что именно анимируется</div></div>
+  <div style="display:grid;grid-template-columns:1.05fr .5fr .85fr 1.6fr;gap:11px 18px;font-size:14px;align-items:center">
+    <div style="font-weight:600;color:#F2F2F3">Капля вкладки</div><div style="color:#A5A5AA">240 мс</div><div style="color:#A5A5AA">FastOutSlowIn</div><div style="color:#7C7C82">смещение и ширина подложки едут к новому пункту; цвет иконки и подписи кроссфейдом</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Иконка вкладки</div><div style="color:#A5A5AA">180 мс</div><div style="color:#A5A5AA">EaseOut</div><div style="color:#7C7C82">масштаб 1 → 1.08 → 1 при активации, как в NavIcons кабинета</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Нажатие строки</div><div style="color:#A5A5AA">90 / 160</div><div style="color:#A5A5AA">Linear / EaseOut</div><div style="color:#7C7C82">вспышка фона: белый 6% появляется быстро, гаснет медленнее; без Material-ripple</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Нажатие пилюли</div><div style="color:#A5A5AA">120 мс</div><div style="color:#A5A5AA">EaseOut</div><div style="color:#7C7C82">scale 0.98 и заливка к accentPressed; отпускание — обратно за 160 мс</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Плита: вкл ↔ выкл</div><div style="color:#A5A5AA">280 мс</div><div style="color:#A5A5AA">FastOutSlowIn</div><div style="color:#7C7C82">фон card → brandGradient кроссфейдом, подпись меняется по alpha, ореол внутри гаснет</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Плита: подключаем</div><div style="color:#A5A5AA">1400 мс ∞</div><div style="color:#A5A5AA">Linear</div><div style="color:#7C7C82">кольцо-прогресс вращается вокруг иконки; дуга 62%, толщина 4</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Плита: включено</div><div style="color:#A5A5AA">2600 мс ∞</div><div style="color:#A5A5AA">EaseInOut</div><div style="color:#7C7C82">единственная живая деталь экрана: ореол opacity .55 → .9, scale 1 → 1.06</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Таймер</div><div style="color:#A5A5AA">1 с</div><div style="color:#A5A5AA">—</div><div style="color:#7C7C82">только текст, без анимации; tabular-nums, чтобы не дрожал</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Лист снизу</div><div style="color:#A5A5AA">220 / 180</div><div style="color:#A5A5AA">EaseOut / EaseIn</div><div style="color:#7C7C82">translateY 100% → 0; фон под ним: блюр 0 → 9 и затемнение до 45%</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Переход экранов</div><div style="color:#A5A5AA">240 / 180</div><div style="color:#A5A5AA">FastOutSlowIn</div><div style="color:#7C7C82">входящий: X 33% → 0 + alpha 0 → 1; уходящий: X 0 → −12% + alpha 1 → 0</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Переключатель</div><div style="color:#A5A5AA">200 мс</div><div style="color:#A5A5AA">FastOutSlowIn</div><div style="color:#7C7C82">кружок едет, трек tileDeep → accent, кружок textMuted → белый</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Скелетон</div><div style="color:#A5A5AA">1200 мс ∞</div><div style="color:#A5A5AA">Linear</div><div style="color:#7C7C82">блик по фону tile слева направо; спиннеров нет нигде, кроме кольца плиты</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Фокус на ТВ</div><div style="color:#A5A5AA">160 мс</div><div style="color:#A5A5AA">EaseOut</div><div style="color:#7C7C82">обводка 4 + подъём 2 + scale 1.02; тень усиливается</div>
+    <div style="grid-column:1/-1;height:1px;background:rgba(255,255,255,.07)"></div>
+    <div style="font-weight:600;color:#F2F2F3">Хаптика</div><div style="color:#A5A5AA">—</div><div style="color:#A5A5AA">—</div><div style="color:#7C7C82">TextHandleMove на вкладке и переключателе, LongPress на подключении и отключении</div>
+  </div>
+</div>
+</div>
+
+<div style="padding:0 64px 72px;display:flex;flex-direction:column;gap:24px">
+<div style="display:flex;align-items:baseline;gap:14px"><div style="font-size:26px;font-weight:700;color:#F2F2F3">7 · Где отступили от кабинета и почему</div></div>
+<div style="max-width:1100px;display:flex;flex-direction:column;gap:12px">
+
+  <div style="background:#29292B;border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;flex:0 0 auto;font-size:15px;font-weight:700;color:#FA4C16">1</div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#F2F2F3">Круглая кнопка питания заменена плитой 328×196</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">В кабинете круглых кнопок нет вообще — там пилюли и карточки. Но условие брифа «состояние читается с вытянутой руки» круг решает плохо: он держит один цвет и меняет только иконку. Плита меняет всю плоскость — серую на градиент, — и это видно раньше, чем читается текст. Геометрия остаётся кабинетной: радиус 28, ширина контента, никакой обводки.</div></div>
+  </div>
+
+  <div style="background:#29292B;border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;flex:0 0 auto;font-size:15px;font-weight:700;color:#FA4C16">2</div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#F2F2F3">Три вкладки вместо четырёх</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">Кабинет несёт четыре раздела (Аккаунт, Подписка, Установка, Друзья) — это его работа. У приложения одна: подключить. Подписка, установка и друзья остаются в кабинете, приложение уводит туда строкой «Подписка», а не вкладкой. Капсула панели от этого короче, но пластика та же.</div></div>
+  </div>
+
+  <div style="background:#29292B;border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;flex:0 0 auto;font-size:15px;font-weight:700;color:#FA4C16">3</div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#F2F2F3">На главной у карточки статуса кружок 44, а не герой-иконка 64</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">Два крупных акцента подряд — герой-иконка с ореолом и плита с ореолом — соперничают. Герой 64 сохранён в библиотеке (<span style="color:#F2F2F3">ap-card</span>) и работает на экранах подписки, где карточка главная.</div></div>
+  </div>
+
+  <div style="background:#29292B;border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;flex:0 0 auto;font-size:15px;font-weight:700;color:#FA4C16">4</div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#F2F2F3">Пиксельные 3D-объекты кабинета — только на входе</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">В кабинете почти у каждой карточки свой объект (огонь, кролик, собаки). В приложении экран открывают десятки раз в день, и картинка на нём быстро становится шумом. Оставили 3D-ключ на входе — там он и знакомит с брендом, — а внутри работают линейные иконки в кружках. Выбор страны — круглые эмодзи-флаги, как в кабинете.</div></div>
+  </div>
+
+  <div style="background:#29292B;border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;flex:0 0 auto;font-size:15px;font-weight:700;color:#FA4C16">5</div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#F2F2F3">Единственная обводка в системе — пилюля-призрак</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">Бриф запрещает серые обводки вокруг всего, и карточки их не имеют. Но второе действие в ряду нужно отличать от первого без второй заливки: внутренний кант <span style="color:#F2F2F3">ghostStroke</span> 1dp даёт это дешевле, чем плашка. Выбранная плитка тарифа тоже подсвечена внутренним кантом 2dp (inset, не border), чтобы сетка не сдвигалась при выборе.</div></div>
+  </div>
+
+  <div style="background:#29292B;border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;flex:0 0 auto;font-size:15px;font-weight:700;color:#FA4C16">6</div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#F2F2F3">Шапка приложения без языка, темы и аватара</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">В кабинете шапка несёт переключатель RU/EN, солнце и аккаунт — это веб-нужды. В приложении язык и тема живут в настройках, аккаунт — за кружком профиля. В шапке остались логотип и два стеклянных кружка 38: уведомления и профиль.</div></div>
+  </div>
+
+  <div style="background:#29292B;border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;flex:0 0 auto;font-size:15px;font-weight:700;color:#FA4C16">7</div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#F2F2F3">Стекло — не гарантия, а улучшение</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">minSdk 24: <span style="color:#F2F2F3">RenderEffect</span> есть с API 31. Ниже панель и кружки шапки заливаются <span style="color:#F2F2F3">glassOpaque</span> с той же геометрией и тенью — в разделе 3 показаны оба варианта рядом. Градиент под панелью (растяжка canvas) обязателен в обоих: он отделяет панель от прокрутки без обводки.</div></div>
+  </div>
+
+  <div style="background:#29292B;border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;flex:0 0 auto;font-size:15px;font-weight:700;color:#FA4C16">8</div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#F2F2F3">Светлая тема опирается на тень, а не на линии</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">На светлом фоне белая карточка без обводки исчезает. Вместо канта — мягкая <span style="color:#F2F2F3">shadowLift</span> и канва <span style="color:#F2F2F3">#EEF0F4</span> вместо белой: та же плоскость, что в кабинете, отделяется яркостью. Стеклянная панель в светлой теме — белая на 72% с почти невидимым кантом.</div></div>
+  </div>
+
+  <div style="background:#29292B;border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(250,76,22,.14);display:grid;place-items:center;flex:0 0 auto;font-size:15px;font-weight:700;color:#FA4C16">9</div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#F2F2F3">На ТВ капля уступает обводке</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">Подложка accentWash с трёх метров не читается, а фокус пультом обязан быть однозначным. Поэтому на ТВ активный пункт — кант accent 2dp плюс подъём, а фокус на плите — белый кант 4dp. Это единственное место, где мы сознательно вводим заметную линию.</div></div>
+  </div>
+
+  <div style="background:rgba(91,157,255,.13);border-radius:24px;padding:18px 20px;display:flex;gap:16px;align-items:flex-start">
+    <div style="width:40px;height:40px;border-radius:999px;background:rgba(91,157,255,.16);display:grid;place-items:center;flex:0 0 auto"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5B9DFF" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.6v.2"/></svg></div>
+    <div style="flex:1"><div style="font-size:16px;font-weight:600;color:#5B9DFF">Что осталось сделать на стороне разработки</div><div style="font-size:14px;color:#A5A5AA;line-height:1.5;margin-top:4px;text-wrap:pretty">Сконвертировать <span style="color:#F2F2F3">prosto.woff2</span> в TTF (вариативный поддерживается с API 26; ниже — статические 400/500/600/700). Отключить Material-ripple глобально (<span style="color:#F2F2F3">LocalIndication</span> на свою вспышку), убрать <span style="color:#F2F2F3">OutlinedTextField</span> и <span style="color:#F2F2F3">Button</span> в пользу своих <span style="color:#F2F2F3">Surface</span> + <span style="color:#F2F2F3">clickable</span>, и заменить палитру Manrope-темы целиком, а не поверх: остатки старого <span style="color:#F2F2F3">ColorScheme</span> вылезают в диалогах и снекбарах.</div></div>
+  </div>
+
+</div>
+</div>
+</x-dc>
+</body>
+</html>

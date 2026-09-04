@@ -174,6 +174,7 @@ fun Modifier.liquidGlass(
                 as? android.app.ActivityManager)?.isLowRamDevice == true
     }
 
+    val opaque = Theme.glassOpaque
     val delta = remember {
         androidx.compose.runtime.derivedStateOf {
             backdrop.positionInWindow - position.value
@@ -236,14 +237,9 @@ fun Modifier.liquidGlass(
                         cornerRadius = corner,
                     )
                 } else {
-                    drawRoundRect(
-                        color = Color(0xFF241710).copy(alpha = 0.55f),
-                        cornerRadius = corner,
-                    )
-                    drawRoundRect(
-                        color = Color.White.copy(alpha = 0.07f),
-                        cornerRadius = corner,
-                    )
+                    // API < 31 или слабый GPU: сплошная подложка вместо
+                    // размытия — та же геометрия, тень чуть плотнее.
+                    drawRoundRect(color = opaque, cornerRadius = corner)
                 }
                 val strokeW = 1.2.dp.toPx()
                 drawRoundRect(

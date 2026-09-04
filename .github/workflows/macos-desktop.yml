@@ -1,0 +1,58 @@
+name: macos-desktop
+
+# Клиент для macOS собирается только на маке, а мак есть не всегда под рукой.
+# Этот прогон хотя бы компилирует приложение и помощника на каждом изменении:
+# без него правки в Swift уходят в репозиторий непроверенными.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['macos/**', '.github/workflows/macos-desktop.yml']
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: macos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Версия Xcode
+        run: xcodebuild -version
+
+      - name: Движок AmneziaWG на месте
+        run: |
+          test -s Engine/bin/prostovpn-awg || { echo "нет Engine/bin/prostovpn-awg"; exit 1; }
+          file Engine/bin/prostovpn-awg
+
+      # Подпись пропускаем: у раннера нет наших сертификатов, а проверить
+      # надо компиляцию. Настоящая подпись и нотаризация — в make-dmg.sh
+      # на машине с ключами.
+      - name: Сборка приложения и помощника
+        run: |
+          xcodebuild \
+            -project ProstoVPN.xcodeproj \
+            -target ProstoVPNHelper \
+            -configuration Release \
+            -derivedDataPath build \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            build
+          xcodebuild \
+            -project ProstoVPN.xcodeproj \
+            -target ProstoVPN \
+            -configuration Release \
+            -derivedDataPath build \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Что собралось
+        run: |
+          APP="build/Build/Products/Release/ProstoVPN.app"
+          test -d "$APP" || { echo "приложение не собралось"; exit 1; }
+          /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist"
+          lipo -info "$APP/Contents/MacOS/ProstoVPN"
+          ls -la "$APP/Contents/Resources" | head -20

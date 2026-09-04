@@ -6,16 +6,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -29,99 +28,71 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 /**
- * Выбор страны.
+ * Выбор страны — лист снизу.
  *
- * Отдельная вкладка, а не лист: в приложении это второе по частоте действие
- * после подключения, и прятать его за строкой на главной незачем.
+ * Отдельной вкладки у него нет намеренно: страну меняют редко, а место в
+ * нижней панели стоит дорого. Лист вызывается со строки текущей страны и с
+ * плитки локации на главной.
  */
 @Composable
-fun CountriesPage(state: AppState, onDone: () -> Unit) {
+fun CountrySheet(state: AppState, onDismiss: () -> Unit) {
     val s = state.s
     val servers = state.displayServers()
 
     LaunchedEffect(Unit) { state.refreshPings() }
 
-    Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().background(Theme.canvas))
-        if (Theme.isLight) LightSheen()
-        CanvasGlow(
-            color = if (Theme.isLight) {
-                Color(0xFFFA4C16).copy(alpha = 0.10f)
-            } else {
-                Color.White.copy(alpha = 0.09f)
-            },
-        )
+    SheetShell(title = s.countryTitle, subtitle = s.countrySub, onDismiss = onDismiss) {
+        BestServerCard(state = state)
+
+        Spacer(Modifier.height(12.dp))
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp),
+                .fillMaxWidth()
+                .heightIn(max = 420.dp)
+                .verticalScroll(rememberScrollState()),
         ) {
-            Column(
-                modifier = Modifier.padding(top = 18.dp, bottom = 18.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = s.countryTitle,
-                    style = pro(24.sp, W.bold, Theme.text, tracking = em(24.sp, -0.025f)),
-                )
-                Text(text = s.countrySub, style = pro(14.sp, W.regular, Theme.textMuted))
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                BestServerCard(state = state, modifier = Modifier.fadeUp())
-
-                RowsCard(modifier = Modifier.fadeUp(60)) {
-                    servers.forEachIndexed { index, server ->
-                        if (index > 0) HairLine(inset = 63.dp)
-                        CountryRow(
-                            state = state,
-                            server = server,
-                            active = !state.autoServer && index == state.selectedServerIndex,
-                            onClick = { state.chooseServer(index) },
-                        )
-                    }
-                    if (servers.isEmpty()) {
-                        Text(
-                            text = s.errNoServers,
-                            style = pro(14.sp, W.regular, Theme.textMuted, lineHeight = 20.sp),
-                            modifier = Modifier.padding(18.dp),
-                        )
-                    }
+            RowsCard {
+                servers.forEachIndexed { index, server ->
+                    if (index > 0) HairLine(inset = 63.dp)
+                    CountryRow(
+                        state = state,
+                        server = server,
+                        active = !state.autoServer && index == state.selectedServerIndex,
+                        onClick = { state.chooseServer(index) },
+                    )
                 }
-
-                Spacer(Modifier.height(8.dp))
+                if (servers.isEmpty()) {
+                    Text(
+                        text = s.errNoServers,
+                        style = pro(14.sp, W.regular, Theme.textMuted, lineHeight = 20.sp),
+                        modifier = Modifier.padding(18.dp),
+                    )
+                }
             }
-
-            PrimaryPill(
-                text = if (state.phase == Phase.ON) s.applyDone else s.connect,
-                modifier = Modifier.padding(top = 12.dp),
-                onClick = {
-                    if (state.phase != Phase.ON) state.toggleConnection()
-                    onDone()
-                },
-            )
-
-            Spacer(Modifier.navigationBarsPadding().height(86.dp))
         }
+
+        Spacer(Modifier.height(16.dp))
+
+        PrimaryPill(
+            text = if (state.phase == Phase.ON) s.applyDone else s.connect,
+            onClick = {
+                if (state.phase != Phase.ON) state.toggleConnection()
+                onDismiss()
+            },
+        )
     }
 }
 
 @Composable
-private fun BestServerCard(state: AppState, modifier: Modifier = Modifier) {
+private fun BestServerCard(state: AppState) {
     val s = state.s
     val active = state.autoServer
     Row(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
             .height(66.dp)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(R2.card))
+            .clip(RoundedCornerShape(R2.card))
             .background(Theme.accentWash)
             .flashClickable { state.chooseAuto() }
             .padding(horizontal = 14.dp),

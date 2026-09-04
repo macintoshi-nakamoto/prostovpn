@@ -45,7 +45,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-enum class Tab { CONNECT, COUNTRIES, MORE }
+enum class Tab { CONNECT, MORE }
 
 private sealed interface Route {
     data object Tabs : Route
@@ -54,10 +54,11 @@ private sealed interface Route {
 }
 
 /**
- * Оболочка приложения: три вкладки и два экрана, которые выезжают поверх.
+ * Оболочка приложения: две вкладки и два экрана, которые выезжают поверх.
  *
- * Вкладок три, а не четыре как в кабинете: у приложения одна работа —
- * подключить. Тарифы, установка и друзья живут в кабинете, туда уводит строка.
+ * У приложения одна работа — подключить, поэтому в панели только «подключение»
+ * и «ещё». Выбор страны живёт в листе снизу: его открывают редко, а место в
+ * панели стоит дорого. Тарифы и друзья остаются в кабинете.
  */
 @Composable
 fun AppShell(state: AppState) {
@@ -140,11 +141,9 @@ private fun TabsHost(
             when (current) {
                 Tab.CONNECT -> MainPage(
                     state = state,
-                    onOpenCountries = { onTab(Tab.COUNTRIES) },
                     onOpenSettings = onSettings,
                     onOpenSupport = onSupport,
                 )
-                Tab.COUNTRIES -> CountriesPage(state, onDone = { onTab(Tab.CONNECT) })
                 Tab.MORE -> MorePage(
                     state = state,
                     onOpenSettings = onSettings,
@@ -178,11 +177,10 @@ fun BottomNav(
     val haptics = rememberHaptics()
     val items = listOf(
         NavItem(Tab.CONNECT, Icons.power, s.tabConnect),
-        NavItem(Tab.COUNTRIES, Icons.globe, s.tabCountries),
         NavItem(Tab.MORE, Icons.more, s.tabMore),
     )
     val index = items.indexOfFirst { it.tab == current }.coerceAtLeast(0)
-    val itemWidth = 96.dp
+    val itemWidth = 116.dp
     val pillOffset by animateDpAsState(
         targetValue = itemWidth * index,
         animationSpec = tween(240, easing = Theme.easeStandard),

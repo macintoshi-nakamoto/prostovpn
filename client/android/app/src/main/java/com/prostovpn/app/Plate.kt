@@ -53,6 +53,40 @@ import kotlin.math.sin
 
 enum class PlateState { OFF, CONNECTING, ON, ERROR }
 
+/**
+ * База канвы под свечением.
+ *
+ * Состояние несёт не только плита, но и весь фон: у выключенного он
+ * нейтральный, у включённого — тёплый, у ошибки — с красниной. На телефоне
+ * экран открывают десятки раз в день, и он должен читаться мгновенно.
+ */
+@Composable
+fun stateCanvas(state: PlateState): Brush = if (Theme.isLight) {
+    Brush.verticalGradient(
+        0f to Color(0xFFFFFFFF),
+        0.44f to Color(0xFFF3F5F9),
+        1f to Color(0xFFDEE2E9),
+    )
+} else when (state) {
+    PlateState.OFF -> Brush.verticalGradient(
+        0f to Color(0xFF101012),
+        0.46f to Color(0xFF0B0B0C),
+        1f to Color(0xFF0A0A0B),
+    )
+    PlateState.CONNECTING -> Brush.verticalGradient(
+        0f to Color(0xFF141315),
+        1f to Color(0xFF0A0A0B),
+    )
+    PlateState.ON -> Brush.verticalGradient(
+        0f to Color(0xFF17110E),
+        1f to Color(0xFF0A0A0B),
+    )
+    PlateState.ERROR -> Brush.verticalGradient(
+        0f to Color(0xFF161011),
+        1f to Color(0xFF0A0A0B),
+    )
+}
+
 private const val CYCLE = 9000
 
 /**
@@ -476,11 +510,9 @@ private fun ChromeObjects() {
                 .align(Alignment.BottomStart)
                 .size(150.dp)
                 .graphicsLayer {
-                    // Держим объекты по краям: в центре плиты стоит текст
-                    // состояния, и перечёркивать его нельзя.
-                    alpha = 0.42f * arrive
-                    translationX = (-62).dp.toPx() + (1f - arrive) * 14.dp.toPx()
-                    translationY = 62.dp.toPx() - drift * 12.dp.toPx() + (1f - arrive) * 18.dp.toPx()
+                    alpha = 0.55f * arrive
+                    translationX = (-30).dp.toPx() + (1f - arrive) * 14.dp.toPx()
+                    translationY = 42.dp.toPx() - drift * 14.dp.toPx() + (1f - arrive) * 18.dp.toPx()
                     rotationZ = -8f + drift * 6f
                     scaleX = 0.82f + arrive * 0.18f
                     scaleY = 0.82f + arrive * 0.18f
@@ -491,11 +523,11 @@ private fun ChromeObjects() {
             contentDescription = null,
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .size(104.dp)
+                .size(112.dp)
                 .graphicsLayer {
-                    alpha = 0.36f * arrive
-                    translationX = 48.dp.toPx() + (1f - arrive) * 14.dp.toPx()
-                    translationY = (-40).dp.toPx() + drift2 * 8.dp.toPx() + (1f - arrive) * 18.dp.toPx()
+                    alpha = 0.45f * arrive
+                    translationX = 26.dp.toPx() + (1f - arrive) * 14.dp.toPx()
+                    translationY = (-26).dp.toPx() + drift2 * 10.dp.toPx() + (1f - arrive) * 18.dp.toPx()
                     rotationZ = 10f - drift2 * 6f
                     scaleX = 0.82f + arrive * 0.18f
                     scaleY = 0.82f + arrive * 0.18f

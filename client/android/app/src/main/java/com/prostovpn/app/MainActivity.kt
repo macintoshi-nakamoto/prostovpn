@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.content.ContextCompat
@@ -103,15 +104,16 @@ fun RootView(state: AppState = viewModel()) {
     }
 
     CompositionLocalProvider(LocalIndication provides FlashIndication) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Theme.canvas)
-        ) {
-            AnimatedContent(
-                targetState = state.isLoggedIn,
-                label = "root",
-                transitionSpec = {
+        DesignScale {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Theme.canvas)
+            ) {
+                AnimatedContent(
+                    targetState = state.isLoggedIn,
+                    label = "root",
+                    transitionSpec = {
                     if (targetState) {
                         (fadeIn(tween(320)) + scaleIn(initialScale = 0.96f, animationSpec = tween(320)))
                             .togetherWith(
@@ -124,13 +126,38 @@ fun RootView(state: AppState = viewModel()) {
                             )
                     }
                 },
-            ) { loggedIn ->
-                if (loggedIn) {
-                    AppShell(state)
-                } else {
-                    LoginScreen(state)
+                ) { loggedIn ->
+                    if (loggedIn) {
+                        AppShell(state)
+                    } else {
+                        LoginScreen(state)
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Приводит экран к ширине макета.
+ *
+ * Все размеры нарисованы на 360 dp, а у телефона обычно 393–411: с жёсткими
+ * dp композиция мельчает и снизу остаётся дыра. Двигаем плотность так, чтобы
+ * ширина всегда была 360 dp — тогда на любом телефоне экран выглядит ровно
+ * как макет. Планшеты не растягиваем: там ограничение сверху.
+ */
+@Composable
+private fun DesignScale(content: @Composable () -> Unit) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val base = androidx.compose.ui.platform.LocalDensity.current
+        val factor = (maxWidth / 360.dp).coerceIn(1f, 1.22f)
+        CompositionLocalProvider(
+            androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(
+                density = base.density * factor,
+                fontScale = base.fontScale,
+            ),
+        ) {
+            content()
         }
     }
 }

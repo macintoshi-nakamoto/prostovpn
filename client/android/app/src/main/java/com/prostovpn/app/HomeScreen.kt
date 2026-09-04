@@ -59,8 +59,9 @@ fun MainPage(
     LaunchedEffect(state.panelServers.size) { state.refreshPings() }
 
     Box(Modifier.fillMaxSize()) {
-        Box(Modifier.fillMaxSize().background(Theme.canvas))
-        CanvasGlow(color = plateGlow(plate), strength = 1f)
+        Box(Modifier.fillMaxSize().background(stateCanvas(plate)))
+        if (Theme.isLight) LightSheen()
+        CanvasGlow(color = plateGlow(plate))
 
         Column(
             modifier = Modifier
@@ -126,18 +127,12 @@ fun MainPage(
             Banners(state)
 
             if (plate != PlateState.ON) {
+                // Строки на главной идут без иконок: на этом экране всё
+                // внимание держит плита, кружки рядом с ней только шумят.
                 RowsCard {
-                    MenuRow(
-                        title = s.settings,
-                        icon = Icons.gear,
-                        onClick = onOpenSettings,
-                    )
+                    MenuRow(title = s.settings, onClick = onOpenSettings)
                     HairLine()
-                    MenuRow(
-                        title = s.supportTitle,
-                        icon = Icons.help,
-                        onClick = onOpenSupport,
-                    )
+                    MenuRow(title = s.supportTitle, onClick = onOpenSupport)
                 }
             }
 
@@ -454,10 +449,11 @@ private fun NoticesSheet(state: AppState, items: List<NoticeItem>, onDismiss: ()
 
 @Composable
 private fun plateGlow(state: PlateState): Color = when (state) {
-    PlateState.OFF -> if (Theme.isLight) Color(0x22FA4C16) else Color.White.copy(alpha = 0.10f)
-    PlateState.CONNECTING -> Theme.accent.copy(alpha = 0.26f)
-    PlateState.ON -> Theme.accent.copy(alpha = 0.55f)
-    PlateState.ERROR -> Theme.error.copy(alpha = 0.28f)
+    PlateState.OFF ->
+        if (Theme.isLight) Color(0xFFFA4C16).copy(alpha = 0.10f) else Color.White.copy(alpha = 0.10f)
+    PlateState.CONNECTING -> Color(0xFFFA4C16).copy(alpha = 0.26f)
+    PlateState.ON -> Color(0xFFFA4C16).copy(alpha = 0.55f)
+    PlateState.ERROR -> Color(0xFFFF453A).copy(alpha = 0.28f)
 }
 
 private fun plateTitle(state: AppState, plate: PlateState): String = when (plate) {

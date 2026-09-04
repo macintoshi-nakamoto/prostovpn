@@ -120,7 +120,10 @@ fun LoginScreen(state: AppState) {
         val viewportHeight = maxHeight
 
         Box(Modifier.fillMaxSize().background(Theme.canvas))
-        CanvasGlow(color = Theme.accent.copy(alpha = if (Theme.isLight) 0.16f else 0.30f))
+        if (Theme.isLight) LightSheen()
+        CanvasGlow(
+            color = Color(0xFFFA4C16).copy(alpha = if (Theme.isLight) 0.14f else 0.34f),
+        )
 
         Column(
             modifier = Modifier

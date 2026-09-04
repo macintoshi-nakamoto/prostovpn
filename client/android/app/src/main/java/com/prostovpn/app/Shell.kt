@@ -182,7 +182,7 @@ fun BottomNav(
         NavItem(Tab.MORE, Icons.more, s.tabMore),
     )
     val index = items.indexOfFirst { it.tab == current }.coerceAtLeast(0)
-    val itemWidth = 86.dp
+    val itemWidth = 96.dp
     val pillOffset by animateDpAsState(
         targetValue = itemWidth * index,
         animationSpec = tween(240, easing = Theme.easeStandard),

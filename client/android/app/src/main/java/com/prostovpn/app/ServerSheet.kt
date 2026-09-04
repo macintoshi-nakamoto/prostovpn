@@ -43,8 +43,13 @@ fun CountriesPage(state: AppState, onDone: () -> Unit) {
 
     Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().background(Theme.canvas))
+        if (Theme.isLight) LightSheen()
         CanvasGlow(
-            color = if (Theme.isLight) Color(0x22FA4C16) else Color.White.copy(alpha = 0.08f),
+            color = if (Theme.isLight) {
+                Color(0xFFFA4C16).copy(alpha = 0.10f)
+            } else {
+                Color.White.copy(alpha = 0.09f)
+            },
         )
 
         Column(

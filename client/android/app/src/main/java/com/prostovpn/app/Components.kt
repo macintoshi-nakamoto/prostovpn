@@ -67,6 +67,7 @@ import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -947,18 +948,46 @@ fun ProDialog(
     }
 }
 
-/** Свечение канвы — цветное пятно из-под верхнего края экрана. */
+/**
+ * Свечение канвы — цветное пятно из-под верхнего края экрана.
+ *
+ * В макете это `radial-gradient(105% 68% at 50% -8%)`: эллипс шире экрана и
+ * почти во всю его высоту. Круг радиусом в ширину гаснет втрое быстрее и
+ * читается как тусклая полоска у самого верха — поэтому рисуем именно эллипс.
+ */
 @Composable
-fun CanvasGlow(color: Color, strength: Float = 1f, modifier: Modifier = Modifier) {
+fun CanvasGlow(color: Color, modifier: Modifier = Modifier) {
     val animated by animateColorAsState(color, tween(420), label = "glowColor")
-    val power by animateFloatAsState(strength, tween(420), label = "glowPower")
     androidx.compose.foundation.Canvas(modifier.fillMaxSize()) {
-        if (power <= 0.01f) return@Canvas
-        val radius = size.width * 1.05f
+        if (animated.alpha <= 0.004f) return@Canvas
+        val rx = size.width * 1.05f
+        val ry = size.height * 0.68f
         val center = Offset(size.width / 2f, -size.height * 0.08f)
+        scale(1f, ry / rx, center) {
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to animated,
+                    0.7f to Color.Transparent,
+                    center = center,
+                    radius = rx,
+                ),
+                radius = rx,
+                center = center,
+            )
+        }
+    }
+}
+
+/** Белый блик слева сверху — светлая тема опирается на него, а не на линии. */
+@Composable
+fun LightSheen(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier.fillMaxSize()) {
+        val radius = size.width * 0.9f
+        val center = Offset(size.width * 0.1f, -size.height * 0.04f)
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(animated.copy(alpha = animated.alpha * power), Color.Transparent),
+                0f to Color.White,
+                0.75f to Color.Transparent,
                 center = center,
                 radius = radius,
             ),

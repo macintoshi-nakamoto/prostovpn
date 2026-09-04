@@ -1,0 +1,514 @@
+/*
+  Фирменный слой поверх кита: та же пластика, что в кабинете пользователя —
+  карточки без обводок с радиусом 24, действия-пилюли, оранжевый акцент,
+  стекло в шапке и нижней панели, скользящая «капля» под активным пунктом.
+  Грузится последним (main.jsx), поэтому перебивает shell.css и kit.css.
+*/
+
+/* ---------- оболочка ---------- */
+.ax-root {
+  font-size: 14.5px;
+  letter-spacing: -0.005em;
+}
+.ax-sidebar {
+  background: var(--ax-bg);
+  border-right: 0;
+  padding: 0 10px;
+}
+html[data-theme="light"] .ax-sidebar {
+  background: var(--ax-bg);
+}
+.ax-brand {
+  align-items: center;
+  gap: 10px;
+  padding: 24px 14px 14px;
+}
+.ax-brand-logo {
+  height: 17px;
+}
+.ax-brand-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ax-accent);
+  background: var(--ax-accent-dim);
+  padding: 3px 9px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+.ax-nav {
+  position: relative;
+  padding: 0 4px 12px;
+}
+.ax-nav-group-label {
+  padding: 18px 14px 6px;
+  color: var(--ax-text-faint);
+  letter-spacing: 0.08em;
+}
+.ax-nav-item {
+  position: relative;
+  z-index: 1;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ax-text-dim);
+  transition: color 0.16s ease;
+}
+.ax-nav-item:hover {
+  background: none;
+  color: var(--ax-text);
+}
+html[data-theme="light"] .ax-nav-item:hover {
+  background: none;
+}
+.ax-nav-item.active {
+  background: none;
+  color: var(--ax-accent);
+}
+.ax-nav-item svg {
+  opacity: 1;
+}
+/* Капля под активным пунктом: едет между разделами, как в кабинете. */
+.ax-nav-pill {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  top: 0;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--ax-accent-dim);
+  transition: transform 0.28s cubic-bezier(0.19, 1, 0.22, 1), height 0.2s ease;
+  will-change: transform;
+  pointer-events: none;
+  z-index: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ax-nav-pill {
+    transition: none;
+  }
+}
+.ax-nav-badge {
+  font-family: var(--ax-sans);
+  color: #fff;
+  background: var(--ax-accent);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+.ax-sidebar-foot {
+  margin: 0 4px 14px;
+  padding: 8px 8px 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ax-surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ax-text);
+}
+.ax-sidebar-foot .gd-btn {
+  border-radius: 999px;
+}
+
+.ax-main {
+  background: var(--ax-bg);
+}
+.ax-topbar {
+  padding: 12px 24px;
+  background: color-mix(in srgb, var(--ax-bg) 78%, transparent);
+  border-bottom: 0;
+  backdrop-filter: blur(22px) saturate(1.3);
+  -webkit-backdrop-filter: blur(22px) saturate(1.3);
+}
+.ax-topbar-title {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+/* Переключалка темы — стеклянная капсула 36px, как в шапке кабинета. */
+.ax-theme-toggle {
+  height: 36px;
+  min-width: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--ax-glass-line);
+  border-radius: 999px;
+  background: var(--ax-surface);
+  color: var(--ax-text);
+  font-family: var(--ax-sans);
+  font-weight: 600;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+html[data-theme="light"] .ax-theme-toggle {
+  box-shadow: 0 6px 20px rgba(15, 20, 30, 0.14);
+}
+@supports ((backdrop-filter: blur(1px))) or ((-webkit-backdrop-filter: blur(1px))) {
+  .ax-theme-toggle {
+    background: var(--ax-glass);
+    -webkit-backdrop-filter: blur(28px) saturate(1.1);
+    backdrop-filter: blur(28px) saturate(1.1);
+  }
+}
+.ax-theme-toggle:hover {
+  background: var(--ax-surface-2);
+  border-color: var(--ax-glass-line);
+}
+.ax-live-badge {
+  font-size: 12.5px;
+  padding: 0 12px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--ax-surface);
+  color: var(--ax-text-dim);
+}
+.ax-content {
+  padding: 8px 24px 40px;
+}
+
+/* ---------- заголовки страниц ---------- */
+.gd-title {
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.gd-sub {
+  font-size: 13.5px;
+  color: var(--gd-dim);
+}
+
+/* ---------- карточки и плитки ---------- */
+.gd-card {
+  border-radius: 24px;
+}
+.gd-pad {
+  padding: 20px 20px 18px;
+}
+.gd-tile {
+  border-radius: 20px;
+  padding: 16px 18px;
+}
+.gd-tile-v {
+  font-size: 22px;
+  letter-spacing: -0.025em;
+}
+.gd-badge {
+  width: 40px;
+  height: 40px;
+  background: var(--ax-accent-dim);
+  color: var(--gd-gold);
+}
+/* Главная плитка сводки — фирменный градиент, как CTA в кабинете. */
+.gd-gold {
+  background: var(--ax-brand-gradient);
+  color: #fff;
+  border-radius: 24px;
+}
+.gd-gold .l {
+  color: rgba(255, 255, 255, 0.78);
+}
+.gd-cream {
+  border-radius: 20px;
+}
+.gd-cream .cv,
+.gd-cream .cl {
+  color: var(--gd-gold);
+}
+html[data-theme="light"] .gd-cream .cv,
+html[data-theme="light"] .gd-cream .cl {
+  color: #d93a05;
+}
+
+/* ---------- кнопки: пилюли ---------- */
+.gd-btn {
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+.gd-btn.sm {
+  border-radius: 999px;
+  padding: 7px 13px;
+}
+.gd-btn.primary {
+  background: var(--gd-gold);
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(250, 76, 22, 0.28);
+}
+.gd-btn.primary:hover:not(:disabled) {
+  background: var(--gd-gold-2);
+}
+.gd-btn.primary:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.gd-btn.ghost {
+  border: 1px solid var(--ax-hair-2);
+}
+.gd-btn.danger {
+  background: color-mix(in srgb, var(--gd-neg) 12%, transparent);
+}
+.gd-x {
+  border-radius: 999px;
+}
+
+/* ---------- поля ---------- */
+.gd-input,
+.gd-select,
+.gd-textarea {
+  height: 42px;
+  border-radius: 14px;
+  background: var(--gd-tile);
+  font-size: 14px;
+}
+.gd-input:focus,
+.gd-select:focus,
+.gd-textarea:focus {
+  box-shadow: 0 0 0 2px var(--gd-gold);
+}
+.gd-card .gd-input,
+.gd-card .gd-select,
+.gd-card .gd-textarea,
+.gd-modal .gd-input,
+.gd-modal .gd-select,
+.gd-modal .gd-textarea,
+.gd-drawer .gd-input,
+.gd-drawer .gd-select,
+.gd-drawer .gd-textarea {
+  background: var(--gd-tile);
+}
+.gd-search {
+  border-radius: 999px;
+}
+.gd-search .gd-input,
+.gd-search input {
+  border-radius: 999px;
+}
+.gd-sw {
+  border-radius: 999px;
+}
+.gd-sw.on {
+  background: var(--gd-gold);
+}
+.gd-sw.on::after {
+  background: #fff;
+}
+
+/* ---------- переключатели: пилюли с активной оранжевой ---------- */
+.gd-seg {
+  border-radius: 999px;
+  padding: 4px;
+  gap: 2px;
+  background: var(--gd-card);
+}
+.gd-card .gd-seg,
+.gd-modal .gd-seg,
+.gd-drawer .gd-seg {
+  background: var(--gd-tile);
+}
+.gd-seg button {
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.gd-seg button.active {
+  background: var(--gd-tile-2);
+}
+.gd-seg.gold button.active {
+  background: var(--gd-gold);
+  color: #fff;
+}
+.gd-tabs {
+  border-radius: 999px;
+  padding: 4px;
+}
+.gd-tab {
+  border-radius: 999px;
+  font-weight: 600;
+}
+.gd-tab.active {
+  background: var(--gd-gold);
+  color: #fff;
+}
+
+/* ---------- таблицы и строки ---------- */
+.gd-table th {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.gd-table tbody tr td:first-child {
+  border-radius: 16px 0 0 16px;
+}
+.gd-table tbody tr td:last-child {
+  border-radius: 0 16px 16px 0;
+}
+.gd-table tbody tr + tr td {
+  box-shadow: 0 -1px 0 var(--ax-hair);
+}
+.gd-r + .gd-r {
+  border-top-color: var(--ax-hair);
+}
+.gd-chip {
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-weight: 600;
+}
+.gd-cellsub {
+  color: var(--gd-faint);
+}
+
+/* ---------- шторка и модалки ---------- */
+.gd-overlay,
+.gd-modal-overlay {
+  background: rgba(10, 10, 12, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.gd-drawer {
+  border-radius: 28px 0 0 28px;
+  background: var(--gd-bg);
+}
+.gd-modal {
+  border-radius: 28px;
+  padding: 24px;
+}
+.gd-modal-title {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.gd-menu {
+  border-radius: 20px;
+}
+.gd-tip {
+  border-radius: 14px;
+  background: var(--gd-tile-2);
+}
+
+/* ---------- страница входа ---------- */
+.lg-root {
+  background: radial-gradient(1200px 800px at 70% -10%, rgba(250, 76, 22, 0.12) 0%, var(--ax-bg) 60%);
+}
+.lg-orb-1 {
+  background: radial-gradient(circle, rgba(250, 76, 22, 0.22), transparent 70%);
+}
+.lg-orb-2 {
+  background: radial-gradient(circle, rgba(250, 76, 22, 0.12), transparent 70%);
+}
+.lg-card {
+  border-radius: 28px;
+  box-shadow: var(--ax-shadow);
+}
+.lg-mark {
+  background: var(--ax-brand-gradient);
+  color: #fff;
+  box-shadow: 0 10px 28px rgba(250, 76, 22, 0.35);
+}
+.lg-title {
+  font-size: 24px;
+}
+.lg-input {
+  border-radius: 14px;
+}
+.lg-input:focus-within {
+  box-shadow: 0 0 0 2px var(--gd-gold);
+}
+.lg-root .gd-btn.primary {
+  border-radius: 999px !important;
+  height: 50px !important;
+  font-size: 15.5px !important;
+}
+
+/* ---------- мобильный: стеклянная капсула внизу, как в кабинете ---------- */
+@media (max-width: 960px) {
+  .ax-bottombar {
+    left: 0;
+    right: 0;
+    margin-inline: auto;
+    width: max-content;
+    max-width: calc(100% - 24px);
+    padding: 4px;
+    gap: 2px;
+    border-radius: 999px;
+    background: var(--ax-surface);
+    border: 1px solid var(--ax-glass-line);
+    box-shadow: var(--ax-shadow);
+  }
+  @supports ((backdrop-filter: blur(1px))) or ((-webkit-backdrop-filter: blur(1px))) {
+    .ax-bottombar {
+      background: var(--ax-glass);
+      -webkit-backdrop-filter: blur(22px) saturate(1.6);
+      backdrop-filter: blur(22px) saturate(1.6);
+    }
+  }
+  html[data-theme="light"] .ax-bottombar {
+    background: var(--ax-glass);
+    border-color: var(--ax-glass-line);
+  }
+  .ax-bb-item {
+    min-width: 68px;
+    min-height: 58px;
+    padding: 8px 10px 7px;
+    border-radius: 999px;
+    color: var(--ax-text-dim);
+  }
+  .ax-bb-item.active {
+    color: var(--ax-accent);
+  }
+  .ax-bb-pill {
+    top: 4px;
+    bottom: 4px;
+    padding: 0 2px;
+  }
+  .ax-bb-glass {
+    border-radius: 999px;
+    background: var(--ax-accent-dim);
+    border: 0;
+    box-shadow: none;
+  }
+  .ax-sidebar {
+    padding: 0;
+    background: var(--ax-surface);
+    border-radius: 28px 28px 0 0;
+  }
+  html[data-theme="light"] .ax-sidebar {
+    background: var(--ax-surface);
+  }
+  .ax-nav-item {
+    border-radius: 999px;
+  }
+  .ax-content {
+    padding: 4px 16px calc(96px + env(safe-area-inset-bottom));
+  }
+  .ax-topbar-title {
+    font-size: 18px;
+  }
+}
+
+/* Экран входа рендерится вне .ax-root — свой box-sizing, иначе карточка
+   с паддингами вылезает за узкий экран. */
+.lg-root,
+.lg-root * {
+  box-sizing: border-box;
+}
+
+/* ---------- адаптив: сетки, заданные inline на страницах ---------- */
+@media (max-width: 960px) {
+  .gd-hero-wrap,
+  .fn-two {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .gd-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+@media (max-width: 420px) {
+  .gd-tiles {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+.gd-root,
+.gd-card,
+.gd-pad {
+  min-width: 0;
+  max-width: 100%;
+}

@@ -102,10 +102,38 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
     except Exception as exc:
         log.warning("узел %s: счётчики Hysteria2 не сняты: %s", server.name, exc)
         return {"server_id": server.id, "error": str(exc)}
-    if not isinstance(data, dict) or not data:
-        return {"server_id": server.id, "peers": 0, "added_bytes": 0}
+    if not isinstance(data, dict):
+        data = {}
+
+    # Кто подключён прямо сейчас: /online отдаёт label → число соединений.
+    # Отдельно от трафика: сессия QUIC может висеть без единого байта, и
+    # человек при этом подключён — раньше он через три минуты «пропадал».
+    online: set[str] = set()
+    try:
+        raw_online = _api(server, endpoint, "/online")
+        for label, count in (json.loads(raw_online or "{}") or {}).items():
+            if int(count or 0) > 0:
+                online.add(str(label))
+    except Exception as exc:
+        log.warning("узел %s: онлайн Hysteria2 не снят: %s", server.name, exc)
 
     now = utcnow()
+    live_now = 0
+    if online:
+        for cred in db.scalars(
+            select(UserEndpointCred).where(
+                UserEndpointCred.server_id == server.id,
+                UserEndpointCred.revoked_at.is_(None),
+                UserEndpointCred.label.in_(sorted(online)),
+            )
+        ):
+            cred.last_seen_at = now
+            live_now += 1
+
+    if not data:
+        db.commit()
+        return {"server_id": server.id, "peers": 0, "added_bytes": 0, "online": live_now}
+
     updated = 0
     added_bytes = 0
     for label, pair in data.items():
@@ -148,4 +176,9 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
         added_bytes += delta
 
     db.commit()
-    return {"server_id": server.id, "peers": updated, "added_bytes": added_bytes}
+    return {
+        "server_id": server.id,
+        "peers": updated,
+        "added_bytes": added_bytes,
+        "online": live_now,
+    }

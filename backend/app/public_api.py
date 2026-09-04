@@ -307,13 +307,22 @@ def current_user(
 
 
 class DeviceOut(BaseModel):
+    """
+    Одно место из лимита тарифа. kind: «app» — вход приложения,
+    «ios_key» — ключ iPhone (слот), «sub_link» — ссылка-подписка для Happ и
+    подобных. У ключа и ссылки id отрицательный, чтобы не путаться с
+    сессиями; ссылку отзывают по key_id.
+    """
+
     id: int
     kind: str = "app"
     slot: int | None = None
+    key_id: int | None = None
     name: str | None = None
     platform: str | None = None
     app_version: str | None = None
-    last_seen_at: dt.datetime
+    # Пусто у ключа или ссылки, которыми ещё не пользовались.
+    last_seen_at: dt.datetime | None = None
     created_at: dt.datetime
     is_current: bool = False
     is_connected: bool = False
@@ -446,6 +455,9 @@ class AccountOut(BaseModel):
     expires_total_at: dt.datetime | None = None
     upcoming: list[UpcomingOut] = []
     device_limit: int
+    # Та же цифра, что в списке ниже, в админке и у бота.
+    devices_used: int = 0
+    devices_left: int = 0
     devices: list[DeviceOut]
     traffic_used_bytes: int = 0
     traffic_limit_bytes: int | None = None
@@ -562,7 +574,11 @@ def _ios_out(db: OrmSession, user: User, now: dt.datetime) -> IosOut:
         disconnected_keys=off,
         max_keys=IOS_MAX_KEYS,
         keys_count=used,
-        can_add=user.has_access(now) and services.ios.free_slot(user) is not None,
+        can_add=(
+            user.has_access(now)
+            and services.ios.free_slot(user) is not None
+            and user.devices_left(now) > 0
+        ),
         servers=servers,
         guide_url=settings().guide_link,
         notice=notice,
@@ -585,21 +601,67 @@ def _tunnel_out(db: OrmSession) -> TunnelFileOut:
 
 
 def _ios_device_rows(user: User, now: dt.datetime) -> list[DeviceOut]:
-    """iPhone с ключами, которыми пользовались, — по строке на слот."""
+    """iPhone с выданными ключами — по строке на слот. Ключ, которым ещё
+    не пользовались, тоже здесь: место он уже занимает, и человек должен
+    видеть, чем занят его лимит."""
+    seen = user.ios_slots_in_use()
     rows: list[DeviceOut] = []
-    for number, last in sorted(user.ios_slots_in_use().items()):
+    for number in user.ios_slots_live():
         slot_keys = [
             k for k in user.keys if k.revoked_at is None and ios_slot_number(k.device_id) == number
         ]
+        slot_creds = [
+            c
+            for c in user.endpoint_creds
+            if c.revoked_at is None and ios_slot_number(c.device_id) == number
+        ]
+        created = min(
+            [k.created_at for k in slot_keys] + [c.created_at for c in slot_creds],
+            default=now,
+        )
         rows.append(
             DeviceOut(
                 id=-number,
                 kind="ios_key",
                 slot=number,
                 platform="amnezia",
-                last_seen_at=last,
-                created_at=min((k.created_at for k in slot_keys), default=last),
+                last_seen_at=seen.get(number),
+                created_at=created,
                 is_connected=user.device_connected(ios_slot(number), now),
+            )
+        )
+    return rows
+
+
+def _sub_link_rows(user: User, now: dt.datetime) -> list[DeviceOut]:
+    """Ссылки-подписки (Happ, Hiddify…) — по строке на ссылку ext-N.
+    Подключение и «последний раз» — по учёткам VLESS/Hysteria2 этой ссылки."""
+    rows: list[DeviceOut] = []
+    for tok in user.subscription_links_live(now):
+        device_id = tok.device_id or ""
+        creds = [
+            c
+            for c in user.endpoint_creds
+            if c.revoked_at is None and (c.device_id or "") == device_id
+        ]
+        stamps = [c.last_seen_at for c in creds if c.last_seen_at is not None]
+        if tok.last_used_at is not None:
+            stamps.append(tok.last_used_at)
+        try:
+            number = int(device_id[len(EXTERNAL_SLOT_PREFIX) :])
+        except ValueError:
+            number = 0
+        rows.append(
+            DeviceOut(
+                id=-(100 + number),
+                kind="sub_link",
+                slot=number,
+                key_id=tok.id,
+                name=tok.label,
+                platform="happ",
+                last_seen_at=max(stamps, default=None),
+                created_at=tok.created_at,
+                is_connected=user.device_connected(device_id, now),
             )
         )
     return rows
@@ -611,9 +673,10 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
     now = utcnow()
 
     # Устройство — это вход приложения, по одному на device_id (повторный
-    # вход с того же телефона — то же устройство), плюс каждый iPhone с
-    # ключом, которым пользовались (слот = устройство, «по ключу на
-    # устройство»). Выданный, но не подключавшийся ключ не считается.
+    # вход с того же телефона — то же устройство), плюс каждый выданный
+    # ключ iPhone (слот = устройство, «по ключу на устройство»), плюс каждая
+    # ссылка-подписка для стороннего приложения. Список и цифра
+    # devices_used считаются одним правилом — User.devices_used.
     devices = [
         DeviceOut(
             id=session.id,
@@ -626,8 +689,9 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
             is_connected=_device_connected(user, session.device_key, now),
         )
         for session in user.devices(now).values()
-    ] + _ios_device_rows(user, now)
-    devices.sort(key=lambda d: d.last_seen_at, reverse=True)
+    ] + _ios_device_rows(user, now) + _sub_link_rows(user, now)
+    floor = dt.datetime(1970, 1, 1)
+    devices.sort(key=lambda d: d.last_seen_at or floor, reverse=True)
 
     return AccountOut(
         login=user.login,
@@ -655,6 +719,8 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
             for s in user.upcoming_subscriptions(now)
         ],
         device_limit=user.device_limit(now),
+        devices_used=user.devices_used(now),
+        devices_left=user.devices_left(now),
         devices=devices,
         traffic_used_bytes=user.traffic_used_bytes,
         traffic_limit_bytes=user.effective_traffic_limit(now),
@@ -738,12 +804,16 @@ def enable_ios(
         if not user.ios_access:
             warnings = services.ios.enable(db, user, server_id=body.server_id)
         elif not services.ios.keys(user):
+            if not user.ios_slots_live():
+                services.ios.require_free_device(user)
             warnings = services.ios.sync(db, user, home=services.ios.home_id(db, body.server_id))
         else:
             warnings = []
     except services.PanelError as exc:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": "ios_add_failed"}
+            status.HTTP_400_BAD_REQUEST,
+            str(exc),
+            headers={"X-Error-Code": exc.code or "ios_add_failed"},
         ) from exc
 
     for warning in warnings:
@@ -808,7 +878,9 @@ def add_ios_key(
         number, warnings = services.ios.add_key(db, user, server_id=body.server_id)
     except services.PanelError as exc:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": "ios_add_failed"}
+            status.HTTP_400_BAD_REQUEST,
+            str(exc),
+            headers={"X-Error-Code": exc.code or "ios_add_failed"},
         ) from exc
 
     for warning in warnings:
@@ -881,7 +953,9 @@ def enable_ios_key(
         warnings = services.ios.reconnect_key(db, user, slot)
     except services.PanelError as exc:
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": "ios_on_failed"}
+            status.HTTP_400_BAD_REQUEST,
+            str(exc),
+            headers={"X-Error-Code": exc.code or "ios_on_failed"},
         ) from exc
 
     for warning in warnings:
@@ -1056,7 +1130,8 @@ def subscription_keys(
     — они вернутся без url, и человеку останется выпустить новую.
 
     Первую ссылку заводим сами: человек пришёл на экран установки не для
-    того, чтобы нажать «создать», а чтобы взять ключ.
+    того, чтобы нажать «создать», а чтобы взять ключ. Но только если по
+    тарифу есть свободное место: ссылка — это устройство.
     """
     user, _session = who
 
@@ -1065,7 +1140,7 @@ def subscription_keys(
         for tok in services.subscription.active_for_user(db, user.id)
         if (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
     ]
-    if not mine:
+    if not mine and user.devices_left() > 0:
         services.subscription.mint(db, user.id, f"{EXTERNAL_SLOT_PREFIX}1", label=None)
         mine = [
             tok
@@ -1104,6 +1179,13 @@ def issue_subscription_key(
             status.HTTP_400_BAD_REQUEST,
             f"уже выпущено {len(existing)} ссылок — отзовите ненужную",
             headers={"X-Error-Code": "too_many_keys"},
+        )
+    # Ссылка — это устройство: сверх лимита тарифа не выпускаем.
+    if user.devices_left() <= 0:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            services.ios.device_limit_error(user),
+            headers={"X-Error-Code": "device_limit"},
         )
 
     taken = {tok.device_id for tok in existing}

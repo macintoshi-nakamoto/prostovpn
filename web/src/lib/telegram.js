@@ -324,6 +324,41 @@ export function tmaOpenApp(url) {
   } catch {}
 }
 
+// Deep link приложения-подписки (happ://add/… и подобные) из мини-аппа.
+//
+// Вебвью Telegram ведёт себя по-разному: где-то схему отдаёт системе и
+// приложение открывается, где-то молча глотает. Поэтому сначала пробуем
+// напрямую и смотрим, ушла ли страница в фон (открылось другое приложение).
+// Не ушла — значит заглушили, и тогда уводим во внешний браузер на трамплин
+// /open.html: там ссылка копируется в буфер, и есть кнопка «Открыть».
+export function tmaOpenDeep(url) {
+  if (!isTma()) {
+    try {
+      window.location.href = url;
+    } catch {}
+    return;
+  }
+  let left = false;
+  const onHide = () => {
+    if (document.visibilityState === "hidden") left = true;
+  };
+  const onGone = () => {
+    left = true;
+  };
+  document.addEventListener("visibilitychange", onHide);
+  window.addEventListener("pagehide", onGone);
+  window.addEventListener("blur", onGone);
+  try {
+    window.location.href = url;
+  } catch {}
+  setTimeout(() => {
+    document.removeEventListener("visibilitychange", onHide);
+    window.removeEventListener("pagehide", onGone);
+    window.removeEventListener("blur", onGone);
+    if (!left && document.visibilityState === "visible") tmaOpenApp(url);
+  }, 1500);
+}
+
 // Открыть t.me-ссылку внутри самого Telegram (чат поддержки и т.п.).
 export function tmaOpenTg(url) {
   try {

@@ -127,10 +127,13 @@ def test_default_lineup_matches_the_announced_prices():
     assert lineup["trial"][2] == 0
     assert lineup["trial"][3] == 2
 
-    assert all(row[4] is None for row in DEFAULT_PLANS), "трафик где-то ограничен"
+    # Пробный — 15 ГБ и одно устройство (04.09.2026), платные — без
+    # ограничения трафика, устройств тем больше, чем дольше срок.
+    assert lineup["trial"][4] == 15 * GB
+    assert all(row[4] is None for row in DEFAULT_PLANS if row[0] != "trial"), "трафик где-то ограничен"
 
-    assert (lineup["trial"][6], lineup["basic"][6]) == (5, 5)
-    assert (lineup["3months"][6], lineup["preyear"][6], lineup["year"][6]) == (10, 10, 10)
+    assert (lineup["trial"][6], lineup["daily"][6], lineup["basic"][6]) == (1, 1, 3)
+    assert (lineup["3months"][6], lineup["preyear"][6], lineup["year"][6]) == (5, 7, 10)
 
     assert (lineup["daily"][2], lineup["daily"][3]) == (1_000, 1)
 
@@ -141,7 +144,8 @@ def test_trial_is_on_the_shelf_but_not_for_sale(client):
     trial = plans["trial"]
     assert trial["purchasable"] is False
     assert trial["duration_days"] == 2
-    assert trial["traffic_limit_bytes"] is None
+    assert trial["traffic_limit_bytes"] == 15 * 1024**3
+    assert trial["device_limit"] == 1
     assert plans["basic"]["purchasable"] is True
 
     r = client.post("/api/v1/orders", json={"plan_code": "trial", "email": "t@example.com"})

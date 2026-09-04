@@ -785,7 +785,9 @@ function Sessions({ user, onChanged }) {
               </div>
             </div>
             <div className="r" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              {ago(row.lastHandshakeAt)}
+              <span style={row.lastHandshakeAt ? undefined : { color: "var(--gd-faint)" }}>
+                {row.lastHandshakeAt ? ago(row.lastHandshakeAt) : "не подключался"}
+              </span>
               <Button
                 size="sm"
                 variant="danger"
@@ -838,16 +840,22 @@ function credDeviceLabel(user, deviceId) {
 
 function iosDeviceRows(user) {
   const bySlot = new Map();
+  // Выданный ключ занимает место в лимите с момента выдачи, поэтому строка
+  // есть и у ключа, которым ещё не пользовались, — та же цифра, что
+  // «устройств N из M».
   for (const key of user.iosKeys || []) {
-    if (!key.isActive || !key.lastHandshakeAt) continue;
+    if (!key.isActive) continue;
     const row = bySlot.get(key.slot) || {
       slot: key.slot,
       connected: false,
-      lastHandshakeAt: key.lastHandshakeAt,
+      lastHandshakeAt: key.lastHandshakeAt || null,
       createdAt: key.createdAt,
     };
     row.connected = row.connected || Boolean(key.isConnected);
-    if (Date.parse(key.lastHandshakeAt) > Date.parse(row.lastHandshakeAt)) {
+    if (
+      key.lastHandshakeAt &&
+      (!row.lastHandshakeAt || Date.parse(key.lastHandshakeAt) > Date.parse(row.lastHandshakeAt))
+    ) {
       row.lastHandshakeAt = key.lastHandshakeAt;
     }
     if (Date.parse(key.createdAt) < Date.parse(row.createdAt)) {

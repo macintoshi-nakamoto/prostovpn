@@ -477,6 +477,10 @@ class User(Base):
     # Учётки VLESS/Hysteria2 — только для чтения: их жизнью управляют
     # сервисы xray/hy2, а здесь они нужны, чтобы понять, подключён ли человек.
     endpoint_creds: Mapped[list["UserEndpointCred"]] = relationship(viewonly=True)
+    # Ссылки-подписки (Happ, Hiddify…) — тоже только для чтения: выпуском
+    # и отзывом занимается services/subscription, а здесь они считаются
+    # устройствами.
+    subscription_tokens: Mapped[list["SubscriptionToken"]] = relationship(viewonly=True)
 
     @property
     def is_frozen(self) -> bool:
@@ -710,11 +714,68 @@ class User(Base):
                 seen[number] = max(seen.get(number, cred.last_seen_at), cred.last_seen_at)
         return seen
 
+    def ios_slots_live(self) -> list[int]:
+        """
+        Слоты ключей iPhone, которые сейчас выданы: есть живой ключ или
+        живая запасная учётка VLESS, и слот не отключён человеком.
+
+        Выданный ключ — это уже занятое место, даже если им ещё не
+        пользовались: иначе на тарифе с одним устройством можно было
+        выпустить пять ключей, а кабинет показывал «0 из 1».
+        """
+        live: set[int] = set()
+        off: set[int] = set()
+        for key in self.keys:
+            number = ios_slot_number(key.device_id)
+            if number <= 0:
+                continue
+            if key.disconnected_at is not None:
+                off.add(number)
+            elif key.revoked_at is None:
+                live.add(number)
+        for cred in self.endpoint_creds:
+            number = ios_slot_number(cred.device_id)
+            if number > 0 and cred.revoked_at is None and cred.disconnected_at is None:
+                live.add(number)
+        return sorted(live - off)
+
+    def subscription_links_live(self, now: dt.datetime | None = None) -> list["SubscriptionToken"]:
+        """Ссылки-подписки, выпущенные руками (ext-N) и ещё живые — по
+        одной на устройство со сторонним приложением."""
+        moment = now or utcnow()
+        return sorted(
+            (
+                tok
+                for tok in self.subscription_tokens
+                if tok.revoked_at is None
+                and (tok.expires_at is None or tok.expires_at > moment)
+                and (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
+            ),
+            key=lambda tok: tok.id,
+        )
+
     def devices_used(self, now: dt.datetime | None = None) -> int:
-        """Сколько устройств занято: входы приложения по одному на device_id
-        плюс iPhone с ключами, которыми пользовались. Одна цифра для кабинета,
-        админки и лимита тарифа."""
-        return len(self.devices(now)) + len(self.ios_slots_in_use())
+        """
+        Сколько устройств занято. Одна цифра для кабинета, админки, бота и
+        лимита тарифа:
+
+          входы приложения — по одному на device_id;
+          ключи iPhone     — по одному на выданный слот;
+          ссылки-подписки  — по одной на выпущенную ссылку ext-N.
+        """
+        return (
+            len(self.devices(now))
+            + len(self.ios_slots_live())
+            + len(self.subscription_links_live(now))
+        )
+
+    def devices_left(self, now: dt.datetime | None = None) -> int:
+        """Сколько устройств ещё можно добавить по тарифу. Ноль у тарифа без
+        лимита не бывает: лимит ≤ 0 значит «без ограничения»."""
+        limit = self.device_limit(now)
+        if limit <= 0:
+            return 10**6
+        return max(0, limit - self.devices_used(now))
 
     def device_connected(self, device_id: str, now: dt.datetime | None = None) -> bool:
         """

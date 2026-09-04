@@ -253,7 +253,16 @@ def build_config(db: OrmSession, server: Server) -> dict:
         "api": {"tag": "api", "services": ["HandlerService", "StatsService"]},
         "stats": {},
         "policy": {
-            "levels": {"0": {"statsUserUplink": True, "statsUserDownlink": True}},
+            # statsUserOnline — счётчик живых соединений на учётку
+            # (активность за последние 20 секунд): по нему панель видит
+            # «в VPN» у Happ и подобных даже без заметного трафика.
+            "levels": {
+                "0": {
+                    "statsUserUplink": True,
+                    "statsUserDownlink": True,
+                    "statsUserOnline": True,
+                }
+            },
             "system": {"statsInboundUplink": True, "statsInboundDownlink": True},
         },
         "inbounds": inbounds,
@@ -722,6 +731,36 @@ def _parse_stats(raw: str) -> dict[str, tuple[int, int]]:
     return {label: (values[0], values[1]) for label, values in out.items()}
 
 
+ONLINE_MARK = "@@ONLINE@@"
+
+
+def _parse_online(raw: str) -> set[str]:
+    """
+    Учётки с живым соединением прямо сейчас — ответ `xray api
+    statsgetallonlineusers`: `{"users": ["user>>><label>>>>online", …]}`
+    (нужна политика statsUserOnline в конфиге; обычный statsquery эти
+    счётчики не отдаёт — проверено на Xray 26.3.27).
+    """
+    try:
+        data = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return set()
+    online: set[str] = set()
+    for name in (data.get("users") if isinstance(data, dict) else None) or []:
+        parts = str(name).split(">>>")
+        if len(parts) == 3 and parts[0] == "user" and parts[2] == "online" and parts[1]:
+            online.add(parts[1])
+    return online
+
+
+def _split_stats(raw: str) -> tuple[str, str]:
+    """Две выдачи одной командой: счётчики трафика и список онлайна."""
+    if ONLINE_MARK not in (raw or ""):
+        return raw or "", ""
+    head, tail = raw.split(ONLINE_MARK, 1)
+    return head, tail
+
+
 def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
     from sqlalchemy import update as sql_update
 
@@ -741,19 +780,26 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
         raw = provisioning.run_over_ssh(
             server,
             f"{XRAY_BIN} api statsquery --server=127.0.0.1:{API_PORT} "
-            f"-pattern 'user>>>' -reset=false",
+            f"-pattern 'user>>>' -reset=false; echo '{ONLINE_MARK}'; "
+            f"{XRAY_BIN} api statsgetallonlineusers --server=127.0.0.1:{API_PORT} 2>/dev/null",
         )
     except Exception as exc:
         log.warning("узел %s: счётчики VLESS не сняты: %s", server.name, exc)
         return {"server_id": server.id, "error": str(exc)}
 
-    counters = _parse_stats(raw)
-    if not counters:
+    stats_raw, online_raw = _split_stats(raw)
+    counters = _parse_stats(stats_raw)
+    # Живые соединения — тем же заходом по SSH. Трафик за минуту может быть
+    # нулевым (открытая вкладка, ничего не грузится), а соединение при
+    # этом есть — раньше такой человек через три минуты «отключался».
+    online = _parse_online(online_raw)
+    if not counters and not online:
         return {"server_id": server.id, "peers": 0, "added_bytes": 0}
 
     now = utcnow()
     updated = 0
     added_bytes = 0
+    live_now = 0
     creds = db.scalars(
         select(UserEndpointCred).where(
             UserEndpointCred.server_id == server.id,
@@ -761,6 +807,9 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
         )
     )
     for cred in creds:
+        if cred.label and cred.label in online:
+            cred.last_seen_at = now
+            live_now += 1
         pair = counters.get(cred.label or "")
         if pair is None:
             continue
@@ -794,7 +843,12 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
         updated += 1
 
     db.commit()
-    return {"server_id": server.id, "peers": updated, "added_bytes": added_bytes}
+    return {
+        "server_id": server.id,
+        "peers": updated,
+        "added_bytes": added_bytes,
+        "online": live_now,
+    }
 
 
 def share_link(endpoint: NodeEndpoint, cred: UserEndpointCred, server: Server) -> str | None:

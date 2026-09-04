@@ -124,7 +124,23 @@
     $("note").textContent = "";
     var goApp = function () { window.location.href = deep ? deep[0] : v2[0]; };
     $("open").addEventListener("click", goApp);
-    setTimeout(goApp, 350);
+    if (ios) {
+      // Сюда с iPhone попадают из встроенного браузера Telegram, а он схемы
+      // приложений не отдаёт системе — кнопка «Открыть» там молчит. Рабочий
+      // путь тот же, что у AmneziaVPN: ссылка в буфер, приложение само
+      // предложит её добавить. Копирование — главное действие.
+      $("em").textContent = "📋";
+      $("title").textContent = en ? "Add the link to " + subApp : "Добавьте ссылку в " + subApp;
+      $("sub").textContent = en
+        ? "1. Copy the link with the button below.\n2. Open " + subApp + " and tap “+” — the app will pick the link up from the clipboard."
+        : "1. Скопируйте ссылку кнопкой ниже.\n2. Откройте " + subApp + " и нажмите «+» — приложение подхватит ссылку из буфера обмена.";
+      $("sub").style.textAlign = "left";
+      $("open").className = "btn alt";
+      $("copy").className = "btn";
+      $("open").parentNode.insertBefore($("copy"), $("open"));
+    } else {
+      setTimeout(goApp, 350);
+    }
   } else if (ios) {
     // На iOS vpn:// некому обработать — Safari скажет «адрес недействителен».
     // Правильный путь: ключ в буфер → открыть приложение → импорт из буфера.

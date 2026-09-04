@@ -113,11 +113,13 @@ function toCards(list, t, f) {
 
 const GB = 1024 * 1024 * 1024;
 const FALLBACK_PLANS = [
-  { code: "basic", duration_days: 30, price_kopecks: 24900, intro_price_kopecks: 5000, intro_applies: true, currency: "RUB", traffic_limit_bytes: 250 * GB, device_limit: 2, server_limit: 3 },
-  { code: "3months", duration_days: 90, price_kopecks: 49900, currency: "RUB", traffic_limit_bytes: null, device_limit: 4, server_limit: 3 },
-  { code: "preyear", duration_days: 180, price_kopecks: 89900, currency: "RUB", traffic_limit_bytes: null, device_limit: 6, server_limit: 3 },
+  // Запасной список на случай, если API тарифов не ответил; цифры — как в
+  // панели на 04.09.2026: пробный — одно устройство и 15 ГБ.
+  { code: "basic", duration_days: 30, price_kopecks: 19900, intro_price_kopecks: 5000, intro_applies: true, currency: "RUB", traffic_limit_bytes: null, device_limit: 3, server_limit: 3 },
+  { code: "3months", duration_days: 90, price_kopecks: 49900, currency: "RUB", traffic_limit_bytes: null, device_limit: 5, server_limit: 3 },
+  { code: "preyear", duration_days: 180, price_kopecks: 89900, currency: "RUB", traffic_limit_bytes: null, device_limit: 7, server_limit: 3 },
   { code: "year", duration_days: 365, price_kopecks: 149900, currency: "RUB", traffic_limit_bytes: null, device_limit: 10, server_limit: 3 },
-  { code: "trial", duration_days: 7, price_kopecks: 0, currency: "RUB", traffic_limit_bytes: 10 * GB, device_limit: 1, server_limit: 3 },
+  { code: "trial", duration_days: 2, price_kopecks: 0, currency: "RUB", traffic_limit_bytes: 15 * GB, device_limit: 1, server_limit: 3 },
 ];
 
 function Feature({ icon, plain, title, text, delay }) {

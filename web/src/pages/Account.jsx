@@ -1502,7 +1502,10 @@ function TmaRefHistoryScreen({ open, onClose, friends }) {
 
 function AccountTab({ data, onManage, onSetup, onFriends, onPassword, onChanged, onApply }) {
   const { t, f } = useI18n();
-  const used = data.devices.length;
+  // Цифра приходит с сервера тем же правилом, что и список: входы
+  // приложения + выданные ключи iPhone + ссылки для Happ. Старый ответ без
+  // поля — считаем по списку.
+  const used = data.devices_used ?? data.devices.length;
   const free = Math.max(0, data.device_limit - used);
 
   // Карточный формат — один для сайта и Telegram; старый веб-вид ниже
@@ -2177,6 +2180,7 @@ function DeviceRow({ device, onChanged, onApply }) {
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
   const isKey = device.kind === "ios_key";
+  const isLink = device.kind === "sub_link";
 
   const unlink = async () => {
     setBusy(true);
@@ -2184,6 +2188,11 @@ function DeviceRow({ device, onChanged, onApply }) {
     try {
       if (isKey) {
         onApply(await api.disconnectIosKey(device.slot));
+      } else if (isLink) {
+        // Ссылку отзываем: приложения, куда её вставили, перестанут
+        // получать ключи, а место по тарифу освободится.
+        await api.revokeSubscriptionKey(device.key_id);
+        onChanged();
       } else {
         const result = await api.unlinkDevice(device.id);
         if (result?.problems?.length) setError(t("account.disconnectPartly"));
@@ -2203,12 +2212,15 @@ function DeviceRow({ device, onChanged, onApply }) {
     ios: "iOS",
     macos: "macOS",
     amnezia: "AmneziaVPN",
+    happ: t("account.platformHapp"),
     web: t("account.platformWeb"),
   };
 
   const name = isKey
     ? t("account.iosDeviceName", { n: device.slot })
-    : device.name || platform[device.platform] || t("account.deviceFallback");
+    : isLink
+      ? device.name || t("account.subLinkName", { n: device.slot })
+      : device.name || platform[device.platform] || t("account.deviceFallback");
 
   return (
     <div className="ac-device">
@@ -2226,7 +2238,9 @@ function DeviceRow({ device, onChanged, onApply }) {
           {(platform[device.platform] || device.platform || "").toString()}
           {device.is_current
             ? ` · ${t("account.thisDevice")}`
-            : ` · ${f.ago(device.last_seen_at)}`}
+            : device.last_seen_at
+              ? ` · ${f.ago(device.last_seen_at)}`
+              : ` · ${t("account.neverConnected")}`}
         </span>
         {error && <span className="ac-device-error">{error}</span>}
       </span>

@@ -204,6 +204,9 @@ export function TmaExternalKeys({ open, onClose, initialTab = "sub" }) {
   }, [open, initialTab]);
   const [keys, setKeys] = useState(null);
   const [ios, setIos] = useState(null);
+  // Сколько устройств ещё можно добавить по тарифу: ключ и ссылка — это
+  // устройство, и сверх лимита сервер их не выпустит.
+  const [devLeft, setDevLeft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
@@ -222,7 +225,10 @@ export function TmaExternalKeys({ open, onClose, initialTab = "sub" }) {
   const loadIos = () =>
     api
       .account()
-      .then((r) => setIos(r?.ios || {}))
+      .then((r) => {
+        setIos(r?.ios || {});
+        setDevLeft(typeof r?.devices_left === "number" ? r.devices_left : null);
+      })
       .catch(() => setIos({}));
 
   useEffect(() => {
@@ -272,7 +278,8 @@ export function TmaExternalKeys({ open, onClose, initialTab = "sub" }) {
 
   // ── ссылки-подписки ───────────────────────────────────────────────────
   const subs = keys || [];
-  const subLeft = Math.max(limit - subs.length, 0);
+  const byPlan = (n) => (devLeft == null ? n : Math.min(n, devLeft));
+  const subLeft = byPlan(Math.max(limit - subs.length, 0));
 
   const issueSub = () => {
     setBusy(true);
@@ -280,7 +287,7 @@ export function TmaExternalKeys({ open, onClose, initialTab = "sub" }) {
     tmaHaptic("light");
     api
       .issueSubscriptionKey(t("keys.autoName", { n: subs.length + 1 }))
-      .then(loadSubs)
+      .then(() => Promise.all([loadSubs(), loadIos()]))
       .catch(fail)
       .finally(() => setBusy(false));
   };
@@ -293,7 +300,7 @@ export function TmaExternalKeys({ open, onClose, initialTab = "sub" }) {
     else groups.push({ slot: key.slot, links: [key] });
   }
   const servers = ios?.servers || [];
-  const vpnLeft = Math.max(limit - groups.length, 0);
+  const vpnLeft = byPlan(Math.max(limit - groups.length, 0));
 
   const issueVpn = (serverId) => {
     setBusy(true);
@@ -370,7 +377,7 @@ export function TmaExternalKeys({ open, onClose, initialTab = "sub" }) {
                 setBusy(true);
                 api
                   .revokeSubscriptionKey(item.id)
-                  .then(loadSubs)
+                  .then(() => Promise.all([loadSubs(), loadIos()]))
                   .catch(() => {})
                   .finally(() => setBusy(false));
               }}

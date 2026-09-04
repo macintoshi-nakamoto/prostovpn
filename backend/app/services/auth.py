@@ -187,14 +187,31 @@ def _enforce_device_limit(db: OrmSession, user: User, current: Session) -> None:
         db.commit()
         return
 
+    # В лимит входят не только входы приложения: ключи iPhone и ссылки для
+    # Happ занимают по месту каждый. Лишние входы приложения снимаем — новый
+    # вход побеждает старый, так было всегда. А ключ или ссылку с телефона
+    # снять отсюда нельзя (человек их вставлял руками), поэтому если мест
+    # не хватает даже после этого — вход не проходит, и приложение говорит,
+    # что освободить.
     devices = [s for s in live if s.is_device]
-    excess = len(devices) + 1 - limit
+    fixed = len(user.ios_slots_live()) + len(user.subscription_links_live(now))
+    excess = len(devices) + fixed + 1 - limit
     if excess > 0:
-        for session in sorted(devices, key=lambda s: s.last_seen_at)[:excess]:
-            from .devices import disconnect
+        from .devices import disconnect
 
+        for session in sorted(devices, key=lambda s: s.last_seen_at)[:excess]:
             disconnect(db, session, reason="лимит тарифа")
             log.info("устройство отвязано по лимиту тарифа: пользователь %s", user.public_id)
+            excess -= 1
+    if excess > 0:
+        current.revoked_at = now
+        db.commit()
+        log.info("вход отклонён по лимиту устройств: пользователь %s", user.public_id)
+        raise PanelError(
+            f"по тарифу доступно устройств: {limit}, и все заняты. Отключите "
+            "ненужное устройство в кабинете или выберите тариф больше",
+            "device_limit",
+        )
     db.commit()
 
 

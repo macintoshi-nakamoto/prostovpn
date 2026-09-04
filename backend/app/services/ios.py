@@ -35,9 +35,10 @@ slot_number = ios_slot_number
 def _prefer_awg2() -> None:
     """
     Ключи vpn:// из кабинета и бота: версия приложения неизвестна, поэтому
-    поколение задаётся настройкой PANEL_AWG_KEYS_LEVEL (по умолчанию 2 —
-    AmneziaVPN с 4.8.12.9; 3 требует 5.0.0.5 и несовместим со старыми).
-    Кабинет говорит, какая версия нужна.
+    поколение задаётся настройкой PANEL_AWG_KEYS_LEVEL. С 04.09.2026 по
+    умолчанию 3 — AmneziaWG 3.0 с шифрованием заголовков: рукопожатие не
+    видно даже по типу пакета. Требует AmneziaVPN 5.0.0.5 (iOS 5.0.1.5,
+    вышла 21.08.2026); 2 — с 4.8.12.9. Кабинет говорит, какая версия нужна.
     """
     from ..config import settings
     from . import compat
@@ -101,9 +102,31 @@ def sync(db: OrmSession, user: User, home: int | None = None) -> list[str]:
     return warnings
 
 
+def device_limit_error(user: User) -> str:
+    limit = user.device_limit()
+    used = user.devices_used()
+    return (
+        f"по тарифу доступно устройств: {limit}, занято {used}. Отключите "
+        "ненужное устройство на главной или выберите тариф больше"
+    )
+
+
+def require_free_device(user: User) -> None:
+    """
+    Новый ключ — новое устройство, и он должен уместиться в лимит тарифа.
+    Раньше лимит только показывался, и человек на тарифе с одним
+    устройством спокойно выпускал пять ключей.
+    """
+    if user.devices_left() <= 0:
+        raise PanelError(device_limit_error(user), "device_limit")
+
+
 def enable(db: OrmSession, user: User, server_id: int | None = None) -> list[str]:
     _prefer_awg2()
     home = home_id(db, server_id)
+    if not user.ios_slots_live():
+        # Первый ключ занимает место наравне с входом приложения.
+        require_free_device(user)
     user.ios_access = True
     user.ios_blocked = False
     for key in user.keys:
@@ -158,6 +181,7 @@ def add_key(db: OrmSession, user: User, server_id: int | None = None) -> tuple[i
     number = free_slot(user)
     if number is None:
         raise PanelError(f"на учётку выдаём не больше {IOS_MAX_KEYS} ключей")
+    require_free_device(user)
 
     home = home_id(db, server_id)
 
@@ -201,6 +225,11 @@ def reconnect_key(db: OrmSession, user: User, number: int) -> list[str]:
     rows = [key for key in user.keys if (key.device_id or "") == slot]
     if not rows:
         raise PanelError(f"ключа {number} у этой учётки нет")
+
+    # Отключённый ключ место не занимает — включить его обратно можно только
+    # в свободное.
+    if number not in user.ios_slots_live():
+        require_free_device(user)
 
     user.ios_access = True
     for key in rows:

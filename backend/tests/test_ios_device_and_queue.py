@@ -224,8 +224,8 @@ def test_unknown_country_is_refused(server_id, node):
 
 
 def test_ios_key_becomes_a_device_only_after_traffic(server_id, node):
-    """Слот ключа — устройство, но считается им только после первого
-    подключения; подключение видно и на самом ключе."""
+    """Слот ключа — устройство с момента выдачи (место в лимите занято),
+    а подключение видно и на строке устройства, и на самом ключе."""
     user_id = _paid_user("ios-dev-1")
     with SessionLocal() as db:
         user = db.get(User, user_id)
@@ -233,8 +233,10 @@ def test_ios_key_becomes_a_device_only_after_traffic(server_id, node):
         db.refresh(user)
         now = utcnow()
 
-        assert _ios_device_rows(user, now) == []
-        assert user.devices_used(now) == 0
+        rows = _ios_device_rows(user, now)
+        assert len(rows) == 1 and rows[0].kind == "ios_key" and rows[0].slot == 1
+        assert rows[0].last_seen_at is None and rows[0].is_connected is False
+        assert user.devices_used(now) == 1
         assert [k.is_connected for k in _ios_out(db, user, now).keys] == [False]
 
         key = _slot_keys(db, user_id, server_id)[0]
@@ -245,6 +247,7 @@ def test_ios_key_becomes_a_device_only_after_traffic(server_id, node):
         rows = _ios_device_rows(user, now)
         assert len(rows) == 1 and rows[0].kind == "ios_key" and rows[0].slot == 1
         assert rows[0].id == -1 and rows[0].is_connected is True
+        assert rows[0].last_seen_at is not None
         assert user.devices_used(now) == 1
         assert [k.is_connected for k in _ios_out(db, user, now).keys] == [True]
         assert user.is_vpn_connected(now) is True
@@ -553,7 +556,12 @@ def test_account_api_shows_ios_device_and_disconnect_cycle(server_id, node):
         account = client.post("/api/v1/account/ios/keys/1/enable", headers=headers).json()
         assert account["ios"]["disconnected_keys"] == []
         assert account["ios"]["keys"][0]["vpn_url"] == link_before
-        assert [d for d in account["devices"] if d["kind"] == "ios_key"] == []
+        # Включённый обратно ключ снова занимает место — строкой без даты:
+        # после отключения рукопожатие обнулено, подключения ещё не было.
+        rows = [d for d in account["devices"] if d["kind"] == "ios_key"]
+        assert len(rows) == 1 and rows[0]["slot"] == 1
+        assert rows[0]["is_connected"] is False and rows[0]["last_seen_at"] is None
+        assert account["devices_used"] == 1 and account["devices_left"] == account["device_limit"] - 1
 
 
 def test_purchase_during_trial_starts_immediately(server_id):

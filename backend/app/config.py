@@ -33,7 +33,8 @@ class Settings(BaseSettings):
     subscription_token_days: int = 180
     # Поколение AmneziaWG для ключей vpn:// из кабинета и бота (версия
     # приложения там неизвестна): 1, 2 или 3. См. services/compat.py.
-    awg_keys_level: int = 2
+    # 3 — заголовки под ключом, нужна AmneziaVPN 5.0 (с 04.09.2026).
+    awg_keys_level: int = 3
     subscription_url: str = ""
 
     currency: str = "RUB"

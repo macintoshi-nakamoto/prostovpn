@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ScreenShell } from "./ScreenShell.jsx";
 import { Flag } from "./Flags.jsx";
 import { api, ApiError } from "../lib/api";
-import { isTma, tmaHaptic, tmaOpenApp, tmaOpenLink } from "../lib/telegram.js";
+import { isTma, tmaHaptic, tmaOpenApp, tmaOpenDeep, tmaOpenLink } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 
 /**
@@ -507,7 +507,7 @@ export function SetupScreen({ open, onClose, onKeys }) {
                 />
                 <button
                   type="button"
-                  className="ap-cta su-cta su-cta-alt"
+                  className="ap-cta su-cta"
                   onClick={() => {
                     tmaHaptic("light");
                     tmaOpenApp(vpn.vpn_url);
@@ -515,35 +515,34 @@ export function SetupScreen({ open, onClose, onKeys }) {
                 >
                   {t("su.openIn", { app: meta.name })}
                 </button>
+                {/* Второй iPhone — второй ключ: слот на устройство. Кнопка
+                    стоит сразу под открытием ключа и залита, как остальные
+                    действия: раньше она была серой и в самом низу, и люди
+                    думали, что добавить устройство нельзя. */}
+                <button
+                  type="button"
+                  className="ap-cta su-cta"
+                  onClick={() => {
+                    tmaHaptic("light");
+                    onKeys?.("vpn");
+                  }}
+                >
+                  {t("su.addDevice")}
+                </button>
+                {/* Запасная ссылка того же узла по Reality — на случай,
+                    если основной ключ режут на мобильном интернете.
+                    Без объяснений: кому нужна, тот знает. */}
                 {vpn.vless_url && (
-                  <>
-                    <span className="su-step-s">{t("su.amneziaVlessHint")}</span>
-                    <Field
-                      label={t("su.amneziaVlessLabel")}
-                      value={vpn.vless_url}
-                      copied={copied === "vless"}
-                      onCopy={() => copy(vpn.vless_url, "vless")}
-                      t={t}
-                    />
-                  </>
+                  <Field
+                    label={t("su.amneziaVlessLabel")}
+                    value={vpn.vless_url}
+                    copied={copied === "vless"}
+                    onCopy={() => copy(vpn.vless_url, "vless")}
+                    t={t}
+                  />
                 )}
               </>
             ) : null}
-            {/* Второй iPhone — второй ключ: слот на устройство. Раньше
-                это пряталось за «Ключи для других устройств» внизу, и люди
-                думали, что добавить ключ нельзя. */}
-            {vpn && (
-              <button
-                type="button"
-                className="ap-cta su-cta su-cta-alt"
-                onClick={() => {
-                  tmaHaptic("light");
-                  onKeys?.("vpn");
-                }}
-              >
-                {t("su.addKey")}
-              </button>
-            )}
             {vpnKeys === null || issue === "busy" || vpn ? null : issue === "error" ? (
               <>
                 <span className="su-wait">{issueError || t("su.keyFailed")}</span>
@@ -580,23 +579,31 @@ export function SetupScreen({ open, onClose, onKeys }) {
                   t={t}
                 />
                 {meta.deep && (
-                  // Из вебвью Telegram кастомная схема уходит в приложение
-                  // искалеченной («URL подписки не валидна» в Happ), поэтому
-                  // там — через трамплин /open.html во внешнем браузере.
+                  // Внутри Telegram схему сначала дёргаем прямо из вебвью —
+                  // если приложение открылось, страница уйдёт в фон. Не ушла
+                  // за полторы секунды — значит вебвью схему заглушил, и
+                  // тогда идём через трамплин /open.html во внешнем браузере
+                  // (там — копирование ссылки и кнопка «Открыть»).
                   <a
-                    className="ap-cta su-cta su-cta-alt"
+                    className="ap-cta su-cta"
                     href={meta.deep(deepUrl)}
                     onClick={(e) => {
                       if (!isTma()) return;
                       e.preventDefault();
                       tmaHaptic("light");
-                      tmaOpenApp(meta.deep(deepUrl));
+                      tmaOpenDeep(meta.deep(deepUrl));
                     }}
                   >
                     {t("su.openIn", { app: meta.name })}
                   </a>
                 )}
               </>
+            ) : account && account.devices_left === 0 ? (
+              // Ссылка — это устройство, и мест по тарифу не осталось:
+              // сама она не выпустится, объясняем словами.
+              <span className="su-wait">
+                {t("su.deviceLimit", { used: account.devices_used, total: account.device_limit })}
+              </span>
             ) : (
               <span className="su-wait">{t("su.noKey")}</span>
             )}

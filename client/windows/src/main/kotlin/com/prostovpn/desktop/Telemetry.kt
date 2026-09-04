@@ -24,7 +24,7 @@ object Telemetry {
     private val prefs = Preferences.userRoot().node("com/prostovpn/desktop")
 
     /** Тип сети — по имени активного адаптера. Оператора Windows не знает. */
-    private fun networkKind(): String {
+    fun networkKind(): String {
         val names = runCatching {
             NetworkInterface.getNetworkInterfaces().toList()
                 .filter { it.isUp && !it.isLoopback && !it.isVirtual }

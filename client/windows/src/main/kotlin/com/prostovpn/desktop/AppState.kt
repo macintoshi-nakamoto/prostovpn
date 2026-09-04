@@ -994,6 +994,17 @@ class AppState(private val scope: CoroutineScope) {
             var lastFailure: WindowsTunnel.Result.Failure? = null
             var triedVless = false
 
+            // На этой сети в прошлый раз спас Reality — начинаем с него, без
+            // минуты перебора портов. Не вышло — память стираем и идём
+            // обычным порядком.
+            val netKey = ProtocolMemory.networkKey()
+            if (server?.vless != null && ProtocolMemory.prefersVless(netKey)) {
+                triedVless = true
+                if (tryVless()) return@launch
+                if (phase != Phase.CONNECTING) return@launch
+                ProtocolMemory.forget(netKey)
+            }
+
             for ((index, port) in candidates.withIndex()) {
                 if (phase != Phase.CONNECTING) return@launch
 
@@ -1013,6 +1024,7 @@ class AppState(private val scope: CoroutineScope) {
                 val result = withContext(Dispatchers.IO) { tunnel.connect(prepared) }
                 if (result is WindowsTunnel.Result.Success) {
                     if (port > 0) rememberPort(port)
+                    ProtocolMemory.forget(netKey)
                     phase = Phase.ON
                     startTimer()
                     reportAttempt("awg", true, startedAt, index + 1, port = port)
@@ -1046,7 +1058,10 @@ class AppState(private val scope: CoroutineScope) {
                 // после того, как человек уже нажал «нет», — издевательство.
                 if (index == 0 && !triedVless && server?.vless != null) {
                     triedVless = true
-                    if (tryVless()) return@launch
+                    if (tryVless()) {
+                        ProtocolMemory.rememberVless(netKey)
+                        return@launch
+                    }
                     if (phase != Phase.CONNECTING) return@launch
                 }
             }
@@ -1056,7 +1071,10 @@ class AppState(private val scope: CoroutineScope) {
             // Второй протокол ещё не пробовали (порт был один, и молчал он) —
             // пробуем сейчас, на тех же условиях.
             if (!triedVless && (lastFailure == null || lastFailure.reason == WindowsTunnel.Reason.NoHandshake)) {
-                if (tryVless()) return@launch
+                if (tryVless()) {
+                    ProtocolMemory.rememberVless(netKey)
+                    return@launch
+                }
             }
 
             val result = lastFailure

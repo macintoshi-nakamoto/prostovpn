@@ -819,15 +819,30 @@ class AppState(application: Application) : AndroidViewModel(application) {
             // связи это обычное дело, а раньше до него доходили только после
             // полутора минут перебора портов. Смена протокола дешевле смены
             // страны: человек остаётся там, где выбрал.
+            // На этой сети в прошлый раз спас Reality — начинаем с него, не
+            // заставляя человека снова ждать перебор портов. Не вышло —
+            // память стираем и идём обычным порядком.
+            val netKey = ProtocolMemory.networkKey(getApplication())
+            var triedVless = false
+            if (hasVless && ProtocolMemory.prefersVless(getApplication(), netKey)) {
+                triedVless = true
+                if (tryVless()) return@launch
+                if (phase != Phase.CONNECTING) return@launch
+                ProtocolMemory.forget(getApplication(), netKey)
+            }
+
             var startedAt = System.currentTimeMillis()
             var result = tunnel.connect(
                 prepared,
                 ports,
-                if (hasVless) TunnelManager.Stage.FIRST else TunnelManager.Stage.ALL,
+                if (hasVless && !triedVless) TunnelManager.Stage.FIRST else TunnelManager.Stage.ALL,
             )
-            reportTunnelResult(result, startedAt, if (hasVless) 1 else maxOf(1, ports.size))
-            if (result == TunnelManager.Result.NO_HANDSHAKE && hasVless) {
-                if (tryVless()) return@launch
+            reportTunnelResult(result, startedAt, if (hasVless && !triedVless) 1 else maxOf(1, ports.size))
+            if (result == TunnelManager.Result.NO_HANDSHAKE && hasVless && !triedVless) {
+                if (tryVless()) {
+                    ProtocolMemory.rememberVless(getApplication(), netKey)
+                    return@launch
+                }
                 if (phase != Phase.CONNECTING) return@launch
                 startedAt = System.currentTimeMillis()
                 result = tunnel.connect(prepared, ports, TunnelManager.Stage.REST)
@@ -835,6 +850,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
             }
             when (result) {
                 TunnelManager.Result.CONNECTED -> {
+                    ProtocolMemory.forget(getApplication(), netKey)
                     phase = Phase.ON
                     startForegroundNotice()
                     startTimer()

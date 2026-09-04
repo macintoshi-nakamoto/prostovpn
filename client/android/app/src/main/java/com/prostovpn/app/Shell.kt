@@ -4,8 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,15 +38,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-enum class Tab { CONNECT, MORE }
+enum class Tab { CONNECT, PROFILE }
 
 private sealed interface Route {
     data object Tabs : Route
@@ -144,7 +146,7 @@ private fun TabsHost(
                     onOpenSettings = onSettings,
                     onOpenSupport = onSupport,
                 )
-                Tab.MORE -> MorePage(
+                Tab.PROFILE -> ProfilePage(
                     state = state,
                     onOpenSettings = onSettings,
                     onOpenSupport = onSupport,
@@ -163,7 +165,7 @@ private fun TabsHost(
     }
 }
 
-private data class NavItem(val tab: Tab, val icon: ImageVector, val label: String)
+private data class NavItem(val tab: Tab, val label: String)
 
 @Composable
 fun BottomNav(
@@ -176,8 +178,8 @@ fun BottomNav(
     val s = strings
     val haptics = rememberHaptics()
     val items = listOf(
-        NavItem(Tab.CONNECT, Icons.power, s.tabConnect),
-        NavItem(Tab.MORE, Icons.more, s.tabMore),
+        NavItem(Tab.CONNECT, s.tabConnect),
+        NavItem(Tab.PROFILE, s.tabProfile),
     )
     val index = items.indexOfFirst { it.tab == current }.coerceAtLeast(0)
     val itemWidth = 116.dp
@@ -254,11 +256,6 @@ private fun NavCell(item: NavItem, active: Boolean, width: Dp, onClick: () -> Un
         animationSpec = tween(240),
         label = "navTint",
     )
-    val bump by animateFloatAsState(
-        targetValue = if (active) 1.08f else 1f,
-        animationSpec = tween(180, easing = Theme.easeOut),
-        label = "navBump",
-    )
     Column(
         modifier = Modifier
             .width(width)
@@ -268,18 +265,101 @@ private fun NavCell(item: NavItem, active: Boolean, width: Dp, onClick: () -> Un
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            imageVector = item.icon,
-            contentDescription = item.label,
-            tint = tint,
-            modifier = Modifier
-                .size(21.dp)
-                .graphicsLayer {
-                    scaleX = bump
-                    scaleY = bump
-                },
-        )
+        NavGlyph(tab = item.tab, active = active, tint = tint, modifier = Modifier.size(22.dp))
         Spacer(Modifier.height(3.dp))
         Text(item.label, style = pro(11.sp, W.semibold, tint))
     }
+}
+
+/**
+ * Иконка вкладки со своей анимацией включения.
+ *
+ * Общий scale-бамп одинаково безлик для всех вкладок, поэтому иконки
+ * нарисованы вручную: у подключения дуга обегает круг и снизу выстреливает
+ * черта — жест включения питания; у профиля голова выскакивает с лёгким
+ * перелётом, а плечи прочерчиваются от середины наружу.
+ */
+@Composable
+private fun NavGlyph(tab: Tab, active: Boolean, tint: Color, modifier: Modifier = Modifier) {
+    val progress = remember { Animatable(1f) }
+    LaunchedEffect(active) {
+        if (active) {
+            progress.snapTo(0f)
+            progress.animateTo(1f, tween(520, easing = Theme.easeStandard))
+        } else {
+            progress.snapTo(1f)
+        }
+    }
+
+    androidx.compose.foundation.Canvas(modifier) {
+        val u = size.minDimension / 24f
+        val stroke = Stroke(
+            width = 2f * u,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round,
+            join = androidx.compose.ui.graphics.StrokeJoin.Round,
+        )
+        val p = progress.value
+
+        when (tab) {
+            Tab.CONNECT -> {
+                val arc = ease((p / 0.72f).coerceIn(0f, 1f))
+                val stem = ease(((p - 0.42f) / 0.58f).coerceIn(0f, 1f))
+                if (arc > 0.01f) {
+                    drawArc(
+                        color = tint,
+                        startAngle = -55f,
+                        sweepAngle = 290f * arc,
+                        useCenter = false,
+                        topLeft = Offset(4f * u, 4.8f * u),
+                        size = Size(16f * u, 16f * u),
+                        style = stroke,
+                    )
+                }
+                if (stem > 0.01f) {
+                    val bottom = 11.6f * u
+                    drawLine(
+                        color = tint,
+                        start = Offset(12f * u, bottom),
+                        end = Offset(12f * u, bottom - 8.4f * u * stem),
+                        strokeWidth = 2f * u,
+                        cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                    )
+                }
+            }
+
+            Tab.PROFILE -> {
+                val head = backOut((p / 0.6f).coerceIn(0f, 1f))
+                val body = ease(((p - 0.3f) / 0.7f).coerceIn(0f, 1f))
+                val headCenter = Offset(12f * u, 8.4f * u)
+                if (head > 0.01f) {
+                    drawCircle(
+                        color = tint,
+                        radius = 3.7f * u * head,
+                        center = headCenter,
+                        style = stroke,
+                    )
+                }
+                if (body > 0.01f) {
+                    drawArc(
+                        color = tint,
+                        startAngle = 270f - 76f * body,
+                        sweepAngle = 152f * body,
+                        useCenter = false,
+                        topLeft = Offset(3.4f * u, 12.6f * u),
+                        size = Size(17.2f * u, 17.2f * u),
+                        style = stroke,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Плавный выход: быстро стартует, мягко тормозит. */
+private fun ease(t: Float): Float = 1f - (1f - t) * (1f - t) * (1f - t)
+
+/** Тот же выход, но с лёгким перелётом — голова «выскакивает». */
+private fun backOut(t: Float): Float {
+    val x = t - 1f
+    return 1f + 2.2f * x * x * x + 1.4f * x * x
 }

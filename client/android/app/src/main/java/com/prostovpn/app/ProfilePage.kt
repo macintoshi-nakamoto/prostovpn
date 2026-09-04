@@ -37,11 +37,11 @@ import androidx.compose.ui.unit.sp
 private const val SITE = "https://prostovpn.cc"
 
 /**
- * «Ещё» — всё, что не подключение: учётка, настройки, поддержка и переход в
- * кабинет. Подписку и тарифы приложение не показывает, только уводит туда.
+ * «Профиль» — всё, что не подключение: учётка, настройки, поддержка и переход
+ * в кабинет. Подписку и тарифы приложение не показывает, только уводит туда.
  */
 @Composable
-fun MorePage(state: AppState, onOpenSettings: () -> Unit, onOpenSupport: () -> Unit) {
+fun ProfilePage(state: AppState, onOpenSettings: () -> Unit, onOpenSupport: () -> Unit) {
     val s = state.s
     val context = LocalContext.current
     var copied by remember { mutableStateOf(false) }
@@ -66,7 +66,7 @@ fun MorePage(state: AppState, onOpenSettings: () -> Unit, onOpenSupport: () -> U
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = s.tabMore,
+                text = s.tabProfile,
                 style = pro(24.sp, W.bold, Theme.text, tracking = em(24.sp, -0.025f)),
                 modifier = Modifier.padding(top = 18.dp, bottom = 6.dp),
             )

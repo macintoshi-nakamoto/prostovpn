@@ -92,7 +92,7 @@ data class Strings(
     // Вкладки и новые экраны редизайна.
     val tabConnect: String,
     val tabCountries: String,
-    val tabMore: String,
+    val tabProfile: String,
     val locationLabel: String,
     val subscriptionLabel: String,
     val downloaded: String,
@@ -234,7 +234,7 @@ private val RU = Strings(
 
     tabConnect = "Подключение",
     tabCountries = "Страны",
-    tabMore = "Ещё",
+    tabProfile = "Профиль",
     locationLabel = "Локация",
     subscriptionLabel = "Подписка",
     downloaded = "Скачано",
@@ -376,7 +376,7 @@ private val EN = Strings(
 
     tabConnect = "Connect",
     tabCountries = "Countries",
-    tabMore = "More",
+    tabProfile = "Profile",
     locationLabel = "Location",
     subscriptionLabel = "Plan",
     downloaded = "Received",

@@ -10,10 +10,12 @@ export function setToken(token) {
 }
 
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, code = "") {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    // Машинный код ошибки из заголовка X-Error-Code (например, totp_required).
+    this.code = code;
   }
 }
 
@@ -70,7 +72,11 @@ async function request(path, { method = "GET", body, params, signal, expectAuth 
   if (!response.ok) {
     const detail =
       (payload && (payload.detail || payload.message)) || `Ошибка ${response.status}`;
-    throw new ApiError(typeof detail === "string" ? detail : "Ошибка запроса", response.status);
+    throw new ApiError(
+      typeof detail === "string" ? detail : "Ошибка запроса",
+      response.status,
+      response.headers.get("X-Error-Code") || "",
+    );
   }
 
   return payload;

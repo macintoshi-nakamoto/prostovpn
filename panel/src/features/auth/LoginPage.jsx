@@ -8,6 +8,10 @@ export function LoginPage() {
   const { signIn } = useSession();
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  // Второй фактор: поле кода показываем только тем, у кого он включён, —
+  // панель говорит об этом кодом totp_required после верного пароля.
+  const [needCode, setNeedCode] = useState(false);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -17,9 +21,13 @@ export function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await signIn(login.trim(), password);
+      await signIn(login.trim(), password, needCode ? code : undefined);
     } catch (err) {
-      setError(err.message || "Не удалось войти");
+      if (err.code === "totp_required") {
+        setNeedCode(true);
+      } else {
+        setError(err.message || "Не удалось войти");
+      }
       setBusy(false);
     }
   };
@@ -68,6 +76,25 @@ export function LoginPage() {
               />
             </div>
           </Field>
+
+          {needCode && (
+            <Field label="Код из приложения">
+              <div className="lg-input">
+                <ShieldCheck size={17} />
+                <input
+                  value={code}
+                  onChange={(e) => {
+                    setCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                    setError(null);
+                  }}
+                  placeholder="000000"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                />
+              </div>
+            </Field>
+          )}
         </div>
 
         {error && <div className="lg-error">{error}</div>}
@@ -75,7 +102,7 @@ export function LoginPage() {
         <Button
           variant="primary"
           type="submit"
-          disabled={busy || !login.trim() || !password}
+          disabled={busy || !login.trim() || !password || (needCode && code.length !== 6)}
           style={{ width: "100%", height: 46, borderRadius: 15, fontSize: 14.5 }}
         >
           {busy ? "Входим…" : "Войти"}

@@ -80,7 +80,27 @@ def _server_id(db) -> int:
 
 
 @pytest.fixture(scope="module")
-def people(client):
+def baseline(client):
+    """Снимок воронки ДО наших людей: база тестов общая на весь прогон, и
+    другие модули оставляют в ней своих пользователей."""
+    with SessionLocal() as db:
+        return {"all": funnel.build(db, None), "week": funnel.build(db, 7)}
+
+
+def _delta(after: dict, before: dict, key: str) -> int:
+    return _stage(after, key)["count"] - _stage(before, key)["count"]
+
+
+def _by_source(data: dict) -> dict:
+    return {s["source"]: s for s in data["sources"]}
+
+
+def _src(after: dict, before: dict, source: str, field: str) -> int:
+    return _by_source(after).get(source, {}).get(field, 0) - _by_source(before).get(source, {}).get(field, 0)
+
+
+@pytest.fixture(scope="module")
+def people(client, baseline):
     """Пять судеб: только регистрация; ключ без подключения; подключился;
     оплатил один раз (по приглашению); платит повторно (с сайта)."""
     with SessionLocal() as db:
@@ -177,43 +197,48 @@ def _stage(data: dict, key: str) -> dict:
     return next(s for s in data["stages"] if s["key"] == key)
 
 
-def test_stages_count_each_person_once(people):
+def test_stages_count_each_person_once(people, baseline):
     with SessionLocal() as db:
         data = funnel.build(db, None)
+    before = baseline["all"]
 
-    assert _stage(data, "registered")["count"] == 5
+    assert _delta(data, before, "registered") == 5
     # Доступ: ключ, ссылка и входы приложения (payer, loyal); idle — нет.
-    assert _stage(data, "setup")["count"] == 4
-    assert _stage(data, "connected")["count"] == 3
-    assert _stage(data, "paid")["count"] == 2
-    assert _stage(data, "repeat")["count"] == 1
-    assert _stage(data, "paid")["pct_prev"] == pytest.approx(66.7, abs=0.1)
-    assert _stage(data, "connected")["pct_total"] == 60.0
+    assert _delta(data, before, "setup") == 4
+    assert _delta(data, before, "connected") == 3
+    assert _delta(data, before, "paid") == 2
+    assert _delta(data, before, "repeat") == 1
+    if before["users"] == 0:
+        assert _stage(data, "paid")["pct_prev"] == pytest.approx(66.7, abs=0.1)
+        assert _stage(data, "connected")["pct_total"] == 60.0
 
 
-def test_period_cuts_by_registration_date(people):
+def test_period_cuts_by_registration_date(people, baseline):
     with SessionLocal() as db:
         recent = funnel.build(db, 7)
-    logins = {u["login"] for u in recent["stuck"]}
-    assert _stage(recent, "registered")["count"] == 4, "loyal зарегистрирован 40 дней назад"
-    assert _stage(recent, "repeat")["count"] == 0
+    before = baseline["week"]
+    ours = {u["login"] for u in recent["stuck"] if u["login"].startswith("fn-")}
+    assert _delta(recent, before, "registered") == 4, "loyal зарегистрирован 40 дней назад"
+    assert _delta(recent, before, "repeat") == 0
     # Застряли: idle и keyed — больше суток без подключения.
-    assert recent["stuck_count"] == 2
-    assert logins == {"fn-idle", "fn-keyed"}
+    assert recent["stuck_count"] - before["stuck_count"] == 2
+    assert ours == {"fn-idle", "fn-keyed"}
     keyed = next(u for u in recent["stuck"] if u["login"] == "fn-keyed")
     assert keyed["has_setup"] is True and keyed["source"] == "telegram"
 
 
-def test_sources_and_cohorts(people):
+def test_sources_and_cohorts(people, baseline):
     with SessionLocal() as db:
         data = funnel.build(db, None)
-    by_source = {s["source"]: s for s in data["sources"]}
-    assert by_source["referral"]["registered"] == 1 and by_source["referral"]["paid"] == 1
-    assert by_source["site"]["registered"] == 1 and by_source["site"]["paid"] == 1
-    assert by_source["telegram"]["registered"] == 3 and by_source["telegram"]["paid"] == 0
-    assert sum(c["registered"] for c in data["cohorts"]) == 5
-    assert data["median_hours_to_connect"] == pytest.approx(3.0, abs=0.5)
-    assert data["median_days_to_pay"] == pytest.approx(1.5, abs=0.1)
+    before = baseline["all"]
+    assert _src(data, before, "referral", "registered") == 1 and _src(data, before, "referral", "paid") == 1
+    assert _src(data, before, "site", "registered") == 1 and _src(data, before, "site", "paid") == 1
+    assert _src(data, before, "telegram", "registered") == 3 and _src(data, before, "telegram", "paid") == 0
+    ours = sum(c["registered"] for c in data["cohorts"]) - sum(c["registered"] for c in before["cohorts"])
+    assert ours == 5
+    if before["users"] == 0:
+        assert data["median_hours_to_connect"] == pytest.approx(3.0, abs=0.5)
+        assert data["median_days_to_pay"] == pytest.approx(1.5, abs=0.1)
 
 
 def test_admin_endpoint_returns_camel_case(client, auth, people):
@@ -222,7 +247,7 @@ def test_admin_endpoint_returns_camel_case(client, auth, people):
     body = r.json()
     assert body["periodDays"] is None
     assert [s["key"] for s in body["stages"]] == ["registered", "setup", "connected", "paid", "repeat"]
-    assert body["stuckCount"] >= 2 and body["stuck"][0]["publicId"]
+    assert body["stuckCount"] >= 2 and all(u["publicId"] for u in body["stuck"])
     assert client.get("/api/admin/funnel", params={"days": 7}, headers=auth).json()["periodDays"] == 7
 
 

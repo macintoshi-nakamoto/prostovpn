@@ -5,6 +5,7 @@ import { useAsync, usePolling } from "../../lib/hooks";
 import { bytes, money, moneyShort, num } from "../../lib/format";
 import { useFreshness } from "../../layout/AdminLayout";
 import { Bars, Card, ErrorBox, Loading, PageHead, Spark, Tile, Trend } from "../../ui";
+import { TotpCard } from "./TotpCard";
 
 function ServersAlarm({ data }) {
   const usable = data.serversUsable ?? 0;
@@ -59,6 +60,7 @@ export function DashboardPage() {
       <PageHead title="Сводка" sub="Деньги, клиенты и серверы за один взгляд" />
 
       <ServersAlarm data={data} />
+      <TotpCard />
 
       <div
         className="gd-hero-wrap"

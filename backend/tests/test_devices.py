@@ -162,7 +162,15 @@ def test_device_without_its_own_peer_falls_back_to_the_account_key(server_id, no
         user = db.get(User, user_id)
         out = _servers_out(db, user, db.get(Session, session_id))
         mine = [s for s in out if s.id == server_id]
-        assert [s.config for s in mine] == [shared.config], "устройство осталось без конфига"
+        # В базе приватный ключ только под шифром (в config — заглушка);
+        # клиенту уходит собранный конфиг с настоящим ключом.
+        from app import provisioning
+        from app.models import UserKey
+
+        stored = db.get(UserKey, shared.id)
+        served = provisioning.serving_config(db.get(Server, server_id), stored)
+        assert [s.config for s in mine] == [served], "устройство осталось без конфига"
+        assert "__ENCRYPTED__" not in served and "__ENCRYPTED__" in (stored.config or "")
 
 
 def test_parallel_traffic_sync_does_not_double_count(server_id, node, monkeypatch):

@@ -146,7 +146,15 @@ def issue_key(
 
     provisioning.add_peer_over_ssh(server, public_key, address, interface=interface)
 
-    key.config = config
+    # Открытый текст приватного ключа в базе не храним: в config остаётся
+    # заглушка, настоящий ключ — только под шифром (serving_config подставит).
+    # Без ключа шифрования — как раньше, открытым текстом: иначе клиент
+    # останется без конфига вовсе.
+    key.config = (
+        provisioning.with_private_key(config, provisioning.ENCRYPTED_PLACEHOLDER)
+        if crypto.available()
+        else config
+    )
     if endpoint is not None:
         key.endpoint_id = endpoint.id
     key.private_key_enc = crypto.encrypt(private_key) if crypto.available() else None

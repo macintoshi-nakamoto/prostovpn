@@ -3,11 +3,15 @@ import { http, setToken } from "./client";
 const BASE = "/api/admin";
 
 export const authApi = {
-  login: async (login, password) => {
-    const data = await http.post(`${BASE}/login`, { login, password }, { expectAuth: false });
+  login: async (login, password, code) => {
+    const data = await http.post(`${BASE}/login`, { login, password, code: code || null }, { expectAuth: false });
     setToken(data.token);
     return data;
   },
+  totp: () => http.get(`${BASE}/totp`),
+  totpSetup: () => http.post(`${BASE}/totp/setup`),
+  totpEnable: (code) => http.post(`${BASE}/totp/enable`, { code }),
+  totpDisable: (code) => http.post(`${BASE}/totp/disable`, { code }),
   logout: () => http.post(`${BASE}/logout`).finally(() => setToken(null)),
   me: () => http.get(`${BASE}/me`),
 };

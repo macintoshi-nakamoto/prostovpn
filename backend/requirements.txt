@@ -1,24 +1,24 @@
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-sqlalchemy==2.0.36
-pydantic==2.10.4
-pydantic-settings==2.7.0
-jinja2==3.1.5
-python-multipart==0.0.20
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+sqlalchemy==2.0.52
+pydantic==2.13.5
+pydantic-settings==2.15.0
+jinja2==3.1.6
+python-multipart==0.0.32
 
 # Шифрование сохранённого пароля клиента (AES-GCM), см. app/crypto.py
-cryptography==44.0.0
+cryptography==50.0.1
 # Хэширование паролей argon2id. Панель поднимется и без него — откатится на
 # scrypt из стандартной библиотеки, — но на боевом сервере ставить нужно.
-argon2-cffi==23.1.0
+argon2-cffi==25.1.0
 # Запросы к платёжным и почтовым сервисам
 httpx==0.28.1
 
 # Нужен только для автогенерации ключей по SSH; без него панель работает
 # в режиме общего ключа.
-paramiko==3.5.0
+paramiko==4.0.0
 # Драйвер PostgreSQL — по умолчанию используется SQLite и он не требуется
-psycopg[binary]==3.2.3
+psycopg[binary]==3.3.5
 
 # Тесты
-pytest==8.3.4
+pytest==9.1.1

@@ -14,12 +14,29 @@ class Schema(BaseModel):
 class LoginRequest(Schema):
     login: str = Field(min_length=1, max_length=64)
     password: str = Field(min_length=1, max_length=256)
+    # Код второго фактора — только у тех, кто его включил.
+    code: str | None = Field(default=None, max_length=16)
 
 
 class LoginResponse(Schema):
     token: str
     expires_at: dt.datetime
     login: str
+
+
+class TotpStatus(Schema):
+    enabled: bool
+    enabled_at: dt.datetime | None = None
+    pending: bool = False
+
+
+class TotpSetupOut(Schema):
+    secret: str
+    otpauth_url: str
+
+
+class TotpCodeIn(Schema):
+    code: str = Field(min_length=6, max_length=16)
 
 
 class PlanOut(Schema):

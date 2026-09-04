@@ -24,6 +24,7 @@ def backfill(db: OrmSession) -> None:
     _encrypt_legacy_passwords(db)
     _encrypt_legacy_emails(db)
     _encrypt_key_private_keys(db)
+    _strip_plaintext_private_keys(db)
     _encrypt_server_ssh_secrets(db)
     _seed_node_endpoints(db)
     _measure_published_releases(db)
@@ -343,6 +344,40 @@ def _encrypt_key_private_keys(db: OrmSession) -> None:
             "(открытый текст пока оставлен как аварийная копия)",
             changed,
         )
+
+
+def _strip_plaintext_private_keys(db: OrmSession) -> None:
+    """
+    Убирает «аварийную копию» приватного ключа из user_keys.config: у кого
+    ключ уже под шифром, открытый текст рядом — лишний. Утечка базы без
+    PANEL_SECRETS_KEY теперь не отдаёт ключи клиентов.
+    """
+    from . import crypto, provisioning
+
+    if not crypto.available():
+        return
+    rows = list(
+        db.scalars(
+            select(UserKey).where(UserKey.private_key_enc.isnot(None), UserKey.config.isnot(None))
+        )
+    )
+    changed = 0
+    for key in rows:
+        current = provisioning.interface_params(key.config or "").get("PrivateKey", "")
+        if not current or current == provisioning.ENCRYPTED_PLACEHOLDER:
+            continue
+        # Шифротекст обязан читаться — иначе оставляем как есть, чтобы не
+        # потерять единственную копию.
+        try:
+            if crypto.decrypt(key.private_key_enc) != current:
+                key.private_key_enc = crypto.encrypt(current)
+        except Exception:
+            continue
+        key.config = provisioning.with_private_key(key.config, provisioning.ENCRYPTED_PLACEHOLDER)
+        changed += 1
+    if changed:
+        db.commit()
+        log.info("миграция: открытый текст приватных ключей убран из %d записей", changed)
 
 
 def _encrypt_server_ssh_secrets(db: OrmSession) -> None:

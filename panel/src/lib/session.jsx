@@ -33,8 +33,8 @@ export function SessionProvider({ children }) {
     };
   }, [token, signOut]);
 
-  const signIn = useCallback(async (login, password) => {
-    const data = await authApi.login(login, password);
+  const signIn = useCallback(async (login, password, code) => {
+    const data = await authApi.login(login, password, code);
     setTokenState(data.token);
     setAdmin({ login: data.login });
     return data;

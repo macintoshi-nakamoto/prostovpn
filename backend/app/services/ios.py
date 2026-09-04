@@ -314,8 +314,16 @@ def reissue(db: OrmSession, user: User) -> list[str]:
     return problems
 
 
-def _vpn_url(server: Server, key: UserKey, name: str) -> str:
-    config = provisioning.serving_config(server, key) or key.config
+def _vpn_url(server: Server, key: UserKey, name: str) -> str | None:
+    config = provisioning.serving_config(server, key)
+    if not config:
+        # Отключённый (отозванный) ключ serving_config не отдаёт; в config
+        # приватного ключа больше нет — только заглушка, настоящий под
+        # шифром. Без него ссылку не собрать — такой ключ не показываем.
+        private_key = provisioning.private_key_for(key)
+        if not private_key or not key.config:
+            return None
+        config = provisioning.with_private_key(key.config, private_key)
     # Ключ уходит в AmneziaVPN: с 4.8.5 приложение понимает I1–I5, а более
     # старое незнакомые поля vpn:// просто не читает — сигнатурные пакеты
     # ему не мешают. Значения берём из точки входа, а не из текста ключа.
@@ -352,6 +360,8 @@ def keys(
         slot = slot_number(key.device_id)
         name = key_name(user, slot)
         url = _vpn_url(server, key, name)
+        if not url:
+            continue
         out.append(
             IosKey(
                 id=key.id,

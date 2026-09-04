@@ -250,7 +250,7 @@ def _admin_ip_key(ip: str | None) -> str:
 
 
 def authenticate_admin(
-    db: OrmSession, login: str, password: str, ip: str | None = None
+    db: OrmSession, login: str, password: str, ip: str | None = None, code: str | None = None
 ) -> tuple[Admin, str, dt.datetime]:
     config = settings()
     key = _admin_key(login, ip)
@@ -295,6 +295,34 @@ def authenticate_admin(
             raise LoginThrottled(name_verdict.retry_after)
         raise PanelError("неверный логин или пароль")
 
+    # Учётка с ограничением по адресам (служебная учётка бота): с чужого
+    # адреса верный пароль ничего не даёт — и не говорит, что он верный.
+    if not admin.ip_allowed(ip):
+        log.warning("вход в панель под %s с адреса вне списка", admin.login)
+        raise PanelError("неверный логин или пароль")
+
+    # Второй фактор: пароль верен, но без кода из приложения сессии нет.
+    # Неверный код бьёт по тем же счётчикам, что и неверный пароль, — иначе
+    # шесть цифр перебираются за вечер.
+    if admin.totp_enabled:
+        from . import totp
+        from .. import crypto
+
+        if not (code or "").strip():
+            raise PanelError("нужен код из приложения-аутентификатора", "totp_required")
+        step = totp.verify(crypto.decrypt(admin.totp_secret_enc), code)
+        if step is None or step <= (admin.totp_last_step or 0):
+            ratelimit.hit(
+                db,
+                ip_key,
+                limit=config.login_max_attempts * BY_IP_FACTOR,
+                window_minutes=config.login_window_minutes,
+                lock_minutes=config.login_lock_minutes,
+            )
+            db.commit()
+            raise PanelError("неверный код", "totp_invalid")
+        admin.totp_last_step = step
+
     ratelimit.clear(db, key)
     ratelimit.clear(db, name_key)
 
@@ -303,6 +331,54 @@ def authenticate_admin(
     db.add(AdminSession(admin_id=admin.id, token_hash=token_hash(token), expires_at=expires_at))
     db.commit()
     return admin, token, expires_at
+
+
+def totp_begin(db: OrmSession, admin: Admin) -> tuple[str, str]:
+    """Новый секрет в ожидании подтверждения. Возвращает секрет и otpauth-ссылку."""
+    from . import totp
+    from .. import crypto
+
+    if not crypto.available():
+        raise PanelError("для второго фактора нужен PANEL_SECRETS_KEY")
+    secret = totp.generate_secret()
+    admin.totp_pending_enc = crypto.encrypt(secret)
+    db.commit()
+    return secret, totp.otpauth_uri(admin.login, secret)
+
+
+def totp_enable(db: OrmSession, admin: Admin, code: str | None) -> None:
+    """Подтверждение кодом из приложения — только тогда фактор включается."""
+    from . import totp
+    from .. import crypto
+
+    if not admin.totp_pending_enc:
+        raise PanelError("сначала запросите секрет")
+    secret = crypto.decrypt(admin.totp_pending_enc)
+    step = totp.verify(secret, code)
+    if step is None:
+        raise PanelError("код не подошёл — проверьте время на телефоне и попробуйте снова", "totp_invalid")
+    admin.totp_secret_enc = admin.totp_pending_enc
+    admin.totp_pending_enc = None
+    admin.totp_enabled_at = utcnow()
+    admin.totp_last_step = step
+    db.commit()
+
+
+def totp_disable(db: OrmSession, admin: Admin, code: str | None) -> None:
+    """Выключить можно только с действующим кодом: украденной сессии этого мало."""
+    from . import totp
+    from .. import crypto
+
+    if not admin.totp_enabled:
+        admin.totp_pending_enc = None
+        db.commit()
+        return
+    if totp.verify(crypto.decrypt(admin.totp_secret_enc), code) is None:
+        raise PanelError("неверный код", "totp_invalid")
+    admin.totp_secret_enc = None
+    admin.totp_pending_enc = None
+    admin.totp_enabled_at = None
+    db.commit()
 
 
 def admin_session_for_token(db: OrmSession, token: str) -> AdminSession | None:

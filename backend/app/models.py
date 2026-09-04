@@ -121,6 +121,25 @@ class Admin(Base):
     login: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+    # Второй фактор (TOTP): секрет только под шифром; pending — выдан, но
+    # ещё не подтверждён кодом; last_step — чтобы код не прошёл дважды.
+    totp_secret_enc: Mapped[str | None] = mapped_column(Text, default=None)
+    totp_pending_enc: Mapped[str | None] = mapped_column(Text, default=None)
+    totp_enabled_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    totp_last_step: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Откуда этой учётке можно входить (адреса через запятую); пусто — отовсюду.
+    # Для служебной учётки бота — только с самого сервера.
+    ip_allowlist: Mapped[str | None] = mapped_column(String(255), default=None)
+
+    @property
+    def totp_enabled(self) -> bool:
+        return bool(self.totp_secret_enc)
+
+    def ip_allowed(self, ip: str | None) -> bool:
+        allowed = [x.strip() for x in (self.ip_allowlist or "").split(",") if x.strip()]
+        if not allowed:
+            return True
+        return (ip or "") in allowed
 
 
 class AdminSession(Base):

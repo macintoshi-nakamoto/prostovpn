@@ -163,6 +163,10 @@ def cabinet_menu(active: bool, ios: bool = False, freeze=None) -> InlineKeyboard
         # выпустится при первом нажатии.
         rows.append([make_btn("Ключ для iPhone", callback_data="ioskey", emoji="unlock")])
 
+    # Устройства: посмотреть, что занимает места в тарифе, и удалить лишнее
+    # прямо отсюда — раньше это умел только кабинет.
+    rows.append([make_btn("Устройства", callback_data="devices", emoji="profile")])
+
     # Файл нужен тем, кто сидит с iPhone: в наших приложениях список
     # уже внутри. Строка на всю ширину и прямо над поддержкой — сюда и
     # приходят с вопросом «почему не открывается сбербанк».
@@ -364,6 +368,44 @@ def docs_menu(authorized: bool) -> InlineKeyboardMarkup:
     )
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def ios_menu() -> InlineKeyboardMarkup:
+    """Под ключами для iPhone: без смены региона App Store их некуда вставить."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [make_btn("Регион App Store", callback_data="appstore", emoji="ios")],
+            [make_btn("Назад", callback_data="cabinet", emoji="back", style=DANGER)],
+        ]
+    )
+
+
+def devices_menu(account) -> InlineKeyboardMarkup:
+    """По кнопке «Удалить» на устройство; текущий вход бота удалять нечего."""
+    rows = []
+    for index, device in enumerate(account.device_rows, start=1):
+        if device.is_current:
+            continue
+        rows.append(
+            [
+                make_btn(
+                    f"Удалить {index}: {device.title}"[:60],
+                    callback_data=f"devdel:{device.kind}:{device.id}",
+                    emoji="cross",
+                )
+            ]
+        )
+    rows.append([make_btn("Назад", callback_data="cabinet", emoji="back", style=DANGER)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def device_confirm_menu(kind: str, device_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [make_btn("Да, удалить", callback_data=f"devyes:{kind}:{device_id}", emoji="cross", style=DANGER)],
+            [make_btn("Назад", callback_data="devices", emoji="back")],
+        ]
+    )
 
 
 def back_menu(target: str = "home", title: str = "Назад") -> InlineKeyboardMarkup:

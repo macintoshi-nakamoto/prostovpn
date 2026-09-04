@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ScreenShell } from "./ScreenShell.jsx";
 import { Flag } from "./Flags.jsx";
+import { AppStoreSheet } from "./AppStoreSheet.jsx";
 import { api, ApiError } from "../lib/api";
 import { isTma, tmaHaptic, tmaOpenApp, tmaOpenDeep, tmaOpenLink } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
@@ -283,6 +284,7 @@ export function SetupScreen({ open, onClose, onKeys }) {
   const [subError, setSubError] = useState(null);
   const [country, setCountry] = useState(0);
   const [copied, setCopied] = useState("");
+  const [storeOpen, setStoreOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -461,9 +463,25 @@ export function SetupScreen({ open, onClose, onKeys }) {
               <span className="su-wait">{t("su.noFile")}</span>
             )
           ) : (
-            <a className="ap-cta su-cta" href={meta.store?.[device]} target="_blank" rel="noreferrer noopener">
-              {t("su.install", { app: meta.name })}
-            </a>
+            <>
+              <a className="ap-cta su-cta" href={meta.store?.[device]} target="_blank" rel="noreferrer noopener">
+                {t("su.install", { app: meta.name })}
+              </a>
+              {/* В российском App Store этих приложений нет — подсказка о
+                  смене региона стоит там же, где ставят приложение. */}
+              {device === "ios" && (
+                <button
+                  type="button"
+                  className="su-more su-more-inline"
+                  onClick={() => {
+                    tmaHaptic("light");
+                    setStoreOpen(true);
+                  }}
+                >
+                  {t("su.appStoreBtn")}
+                </button>
+              )}
+            </>
           )}
         </Step>
 
@@ -540,10 +558,9 @@ export function SetupScreen({ open, onClose, onKeys }) {
                 >
                   {t("su.openIn", { app: meta.name })}
                 </button>
-                {/* Второй iPhone — второй ключ: слот на устройство. Кнопка
-                    стоит сразу под открытием ключа и залита, как остальные
-                    действия: раньше она была серой и в самом низу, и люди
-                    думали, что добавить устройство нельзя. */}
+                {/* Все ключи — в одном листе: там и добавить устройство, и
+                    запасная ссылка каждого ключа. На шаге остаётся только
+                    то, что нужно прямо сейчас. */}
                 <button
                   type="button"
                   className="ap-cta su-cta"
@@ -552,20 +569,8 @@ export function SetupScreen({ open, onClose, onKeys }) {
                     onKeys?.("vpn");
                   }}
                 >
-                  {t("su.addDevice")}
+                  {t("su.viewKeys")}
                 </button>
-                {/* Запасная ссылка того же узла по Reality — на случай,
-                    если основной ключ режут на мобильном интернете.
-                    Без объяснений: кому нужна, тот знает. */}
-                {vpn.vless_url && (
-                  <Field
-                    label={t("su.amneziaVlessLabel")}
-                    value={vpn.vless_url}
-                    copied={copied === "vless"}
-                    onCopy={() => copy(vpn.vless_url, "vless")}
-                    t={t}
-                  />
-                )}
               </>
             ) : null}
             {vpnKeys === null || issue === "busy" || vpn ? null : issue === "error" ? (
@@ -653,6 +658,7 @@ export function SetupScreen({ open, onClose, onKeys }) {
           {t("su.moreKeys")}
         </button>
       </div>
+      <AppStoreSheet open={storeOpen} onClose={() => setStoreOpen(false)} />
     </ScreenShell>
   );
 }

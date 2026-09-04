@@ -1256,6 +1256,10 @@ def revoke_subscription_key(
 
     tok.revoked_at = utcnow()
     db.commit()
+    # Учётки VLESS/Hysteria2 этой ссылки снимаются с узлов сразу, а живые
+    # сессии — рвутся: иначе приложение, куда ссылку вставили, продолжало
+    # бы работать по старому конфигу до самого истечения подписки.
+    services.xray.revoke_for_user(db, user.id, device_id=tok.device_id or "")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

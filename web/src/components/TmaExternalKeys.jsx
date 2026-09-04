@@ -139,7 +139,18 @@ function SubRow({ item, busy, copied, onCopy, onRename, onRevoke, t }) {
  */
 function VpnRow({ group, busy, copied, onCopy, onRevoke, t }) {
   const [at, setAt] = useState(0);
+  const [copiedBackup, setCopiedBackup] = useState(false);
   const link = group.links[Math.min(at, group.links.length - 1)];
+
+  const copyBackup = async () => {
+    if (!link.vless_url) return;
+    try {
+      await navigator.clipboard.writeText(link.vless_url);
+      tmaHaptic("light");
+      setCopiedBackup(true);
+      setTimeout(() => setCopiedBackup(false), 1400);
+    } catch {}
+  };
 
   return (
     <div className="kx-row">
@@ -184,6 +195,19 @@ function VpnRow({ group, busy, copied, onCopy, onRevoke, t }) {
           </label>
         }
       />
+
+      {/* Запасная ссылка того же узла по Reality — если основной ключ
+          режут на мобильном интернете. Вставляется в AmneziaVPN как
+          обычный ключ. */}
+      {link.vless_url && (
+        <Link
+          value={link.vless_url}
+          copied={copiedBackup}
+          onCopy={copyBackup}
+          t={t}
+          lead={<span className="kx-link-k">{t("keys.backup")}</span>}
+        />
+      )}
 
       <span className="kx-when">
         {(link.country || link.server) +

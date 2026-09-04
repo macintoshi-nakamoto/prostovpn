@@ -3,7 +3,13 @@ from aiogram.types import BufferedInputFile, CallbackQuery
 
 from database import models
 from handlers.common import fetch_account, show_cabinet, show_error, show_screen
-from keyboards.menus import back_menu, freeze_confirm_menu
+from keyboards.menus import (
+    back_menu,
+    device_confirm_menu,
+    devices_menu,
+    freeze_confirm_menu,
+    ios_menu,
+)
 from middlewares.auth import AuthMiddleware
 from utils import assets, panel, render, screens, texts
 from utils.logger import logger
@@ -107,14 +113,90 @@ async def ios_key(callback: CallbackQuery) -> None:
             await callback.answer(str(error), show_alert=True)
             return
 
-    await render.show(
-        callback, lambda: (texts.ios_keys_text(account), back_menu("cabinet", "Назад"))
-    )
+    await render.show(callback, lambda: (texts.ios_keys_text(account), ios_menu()))
 
     for key in account.ios_keys[:IOS_KEYS_LIMIT]:
         await callback.message.answer(texts.ios_key_text(key))
 
     await callback.answer()
+
+
+@router.callback_query(F.data == "appstore")
+async def appstore(callback: CallbackQuery) -> None:
+    """Как сменить регион App Store — иначе AmneziaVPN и Happ не поставить."""
+    await render.show(callback, lambda: (texts.appstore_text(), back_menu("ioskey", "К ключам")))
+    await callback.answer()
+
+
+# --------------------------------------------------------------------------
+# Устройства
+# --------------------------------------------------------------------------
+#
+# Список — всё, что занимает место в лимите тарифа: входы приложения, ключи
+# iPhone, ссылки для Happ. Удаление с подтверждением: оно настоящее — пир и
+# учётки снимаются с узлов, а не только исчезают из списка.
+
+
+@router.callback_query(F.data == "devices")
+async def devices(callback: CallbackQuery) -> None:
+    session = await models.get_session(callback.from_user.id)
+    account = await fetch_account(callback, session) if session else None
+    if not account:
+        return
+    await render.show(callback, lambda: (texts.devices_text(account), devices_menu(account)))
+    await callback.answer()
+
+
+def _find_device(account, kind: str, device_id: int):
+    return next(
+        (d for d in account.device_rows if d.kind == kind and d.id == device_id),
+        None,
+    )
+
+
+@router.callback_query(F.data.startswith("devdel:"))
+async def device_delete_ask(callback: CallbackQuery) -> None:
+    _, kind, raw_id = callback.data.split(":", 2)
+    session = await models.get_session(callback.from_user.id)
+    account = await fetch_account(callback, session) if session else None
+    if not account:
+        return
+    device = _find_device(account, kind, int(raw_id))
+    if device is None:
+        await callback.answer("Этого устройства уже нет", show_alert=True)
+        await render.show(callback, lambda: (texts.devices_text(account), devices_menu(account)))
+        return
+    await render.show(
+        callback,
+        lambda: (texts.device_confirm_text(device), device_confirm_menu(kind, device.id)),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("devyes:"))
+async def device_delete(callback: CallbackQuery) -> None:
+    _, kind, raw_id = callback.data.split(":", 2)
+    session = await models.get_session(callback.from_user.id)
+    account = await fetch_account(callback, session) if session else None
+    if not account:
+        return
+    device = _find_device(account, kind, int(raw_id))
+    if device is not None:
+        try:
+            await panel.delete_device(session.token, device)
+        except panel.PanelUnavailable:
+            await callback.answer("Панель не отвечает, попробуйте через минуту", show_alert=True)
+            return
+        except panel.PanelError as error:
+            await callback.answer(str(error), show_alert=True)
+            return
+        logger.info("устройство удалено из бота: %s %s", kind, raw_id)
+
+    account = await fetch_account(callback, session)
+    if not account:
+        return
+    await render.show(callback, lambda: (texts.devices_text(account), devices_menu(account)))
+    await callback.answer("Удалено" if device is not None else "Уже удалено")
 
 
 # --------------------------------------------------------------------------

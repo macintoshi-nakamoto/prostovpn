@@ -19,7 +19,7 @@ from ..models import (
     utcnow,
 )
 from .errors import PanelError
-from .keys import active_servers, ensure_keys, issue_key, revoke_key
+from .keys import active_servers, ensure_keys, issue_key, revoke_key, xray_revoke
 
 log = logging.getLogger("panel.ios")
 
@@ -211,6 +211,8 @@ def disconnect_key(db: OrmSession, user: User, number: int) -> list[str]:
         key.disconnected_at = now
         key.last_handshake_at = None
     db.commit()
+    # Запасная учётка Reality того же слота — тоже с узлов.
+    xray_revoke(db, user.id, slot)
     db.refresh(user)
     return problems
 
@@ -247,7 +249,9 @@ def remove_key(db: OrmSession, user: User, number: int) -> list[str]:
     if not rows:
         raise PanelError(f"ключа {number} у этой учётки нет")
     if len(user.ios_slot_numbers()) <= 1:
-        raise PanelError("это единственный ключ — перевыпустите его или уберите доступ целиком")
+        # Последний ключ удаляется вместе с доступом: человек хочет убрать
+        # устройство, а не получить отказ. Новый ключ выпустится по кнопке.
+        return remove(db, user)
 
     problems: list[str] = []
     for key in rows:
@@ -260,6 +264,7 @@ def remove_key(db: OrmSession, user: User, number: int) -> list[str]:
     for key in rows:
         db.delete(key)
     db.commit()
+    xray_revoke(db, user.id, slot)
     db.refresh(user)
     return problems
 
@@ -272,12 +277,15 @@ def remove(db: OrmSession, user: User) -> list[str]:
         except Exception as exc:
             problems.append(f"{key.server.name}: {exc}")
 
+    slots = {k.device_id for k in user.keys if is_ios_slot(k.device_id)}
     for key in [k for k in user.keys if is_ios_slot(k.device_id)]:
         db.delete(key)
 
     user.ios_access = False
     user.ios_blocked = False
     db.commit()
+    for slot in slots:
+        xray_revoke(db, user.id, slot)
     db.refresh(user)
     return problems
 

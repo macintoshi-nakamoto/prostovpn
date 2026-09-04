@@ -173,6 +173,74 @@ def ios_keys_text(account: Account) -> str:
     )
 
 
+def appstore_text() -> str:
+    """Как сменить регион App Store: без него AmneziaVPN и Happ не поставить."""
+    return (
+        f'{tg("ios")} <b>Регион App Store</b>\n\n'
+        "AmneziaVPN, Happ и другие VPN-приложения недоступны в российском "
+        "App Store. Регион меняется за пару минут, Apple ID остаётся тот же.\n\n"
+        "1. «Настройки» → ваше имя → «Медиаматериалы и покупки» → "
+        "«Просмотреть учётную запись».\n"
+        "2. «Страна/регион» → «Изменить страну или регион» → например, "
+        "Казахстан, Турция или США.\n"
+        "3. Примите условия. Способ оплаты — «Нет»; адрес и индекс — любые "
+        "из этой страны, телефон — свой.\n"
+        "4. Вернитесь в App Store и установите AmneziaVPN или Happ. Регион "
+        "можно вернуть тем же путём — приложения останутся.\n\n"
+        "Если на аккаунте есть остаток баланса, подписка или семейный доступ, "
+        "Apple не даст сменить регион — тогда проще завести отдельный Apple ID "
+        "на другую страну и войти им только в App Store."
+    )
+
+
+def devices_text(account: Account) -> str:
+    """Список устройств с местом в лимите. Удаление — кнопками под текстом."""
+    head = (
+        f'{tg("profile")} <b>Устройства</b>\n\n'
+        f"Занято {account.devices} из {account.device_limit}. "
+        "Удалённое устройство отключается от VPN: ключ снимается с серверов, "
+        "вход в приложение закрывается.\n"
+    )
+    if not account.device_rows:
+        return head + "\nПока ни одного устройства."
+
+    lines = []
+    for index, device in enumerate(account.device_rows, start=1):
+        state = "в сети" if device.is_connected else (
+            "это устройство" if device.is_current else (
+                f"было {fmt_ago(device.last_seen_at)}" if device.last_seen_at else "ещё не подключалось"
+            )
+        )
+        lines.append(f"{index}. <b>{escape(device.title)}</b> — {state}")
+    return head + "\n" + "\n".join(lines)
+
+
+def device_confirm_text(device) -> str:
+    return (
+        f'{tg("warn")} <b>Удалить «{escape(device.title)}»?</b>\n\n'
+        "Оно сразу отключится от VPN. Ключ или ссылку придётся выпускать заново."
+    )
+
+
+def fmt_ago(moment) -> str:
+    """«3 мин назад», «2 ч назад», «вчера», «5 дн назад»."""
+    import datetime as _dt
+
+    if moment is None:
+        return "давно"
+    now = _dt.datetime.now(_dt.timezone.utc)
+    stamp = moment if moment.tzinfo else moment.replace(tzinfo=_dt.timezone.utc)
+    delta = max(0, int((now - stamp).total_seconds()))
+    if delta < 60:
+        return "только что"
+    if delta < 3600:
+        return f"{delta // 60} мин назад"
+    if delta < 86400:
+        return f"{delta // 3600} ч назад"
+    days = delta // 86400
+    return "вчера" if days == 1 else f"{days} дн назад"
+
+
 def ios_key_text(key: IosKey) -> str:
     """Один ключ одним сообщением: нажатие на него копирует ссылку целиком."""
     where = f" · {escape(key.server)}" if key.server else ""

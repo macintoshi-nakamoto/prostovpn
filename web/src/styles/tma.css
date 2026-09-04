@@ -3498,3 +3498,125 @@ html.app .su-cta-alt {
   color: var(--ink);
   box-shadow: none;
 }
+
+/* ── Регион App Store (лист) ─────────────────────────────────────────── */
+html.app .as {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+html.app .as-steps {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+html.app .as-note {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--tma-inset);
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+html.app .as-never {
+  align-self: center;
+  border: 0;
+  background: none;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-faint);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+html.app .su-more-inline {
+  margin-top: 2px;
+}
+
+/* ── Устройства (лист) ───────────────────────────────────────────────── */
+html.app .dv {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+html.app .dv-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px 12px 14px;
+  border-radius: 14px;
+  background: var(--tma-inset);
+}
+html.app .dv-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+html.app .dv-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html.app .dv-live {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(52, 199, 89, 0.16);
+  color: #34c759;
+  font-size: 12px;
+  font-weight: 600;
+}
+html.app .dv-sub {
+  font-size: 13px;
+  color: var(--text-faint);
+}
+html.app .dv-del {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(255, 69, 58, 0.12);
+  color: #ff453a;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+html.app .dv-del svg {
+  width: 18px;
+  height: 18px;
+}
+html.app .dv-del:disabled {
+  opacity: 0.5;
+}
+html.app .dv-empty,
+html.app .dv-hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+html.app .dv-error {
+  margin: 0;
+  font-size: 13px;
+  color: #ff453a;
+}
+html.app .kx-link-k {
+  flex: none;
+  font-size: 13px;
+  color: var(--text-faint);
+}

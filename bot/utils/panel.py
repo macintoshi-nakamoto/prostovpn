@@ -131,6 +131,37 @@ class IosKey:
 
 
 @dataclass(frozen=True)
+class Device:
+    """Одно место из лимита тарифа: вход приложения, ключ iPhone или
+    ссылка для Happ. Удаляются по-разному — см. delete_device."""
+
+    id: int
+    kind: str  # app | ios_key | sub_link
+    slot: int | None
+    key_id: int | None
+    name: str
+    platform: str
+    is_connected: bool
+    is_current: bool
+    last_seen_at: dt.datetime | None
+
+    @property
+    def title(self) -> str:
+        if self.kind == "ios_key":
+            return f"iPhone · ключ {self.slot}"
+        if self.kind == "sub_link":
+            return self.name or f"Ссылка {self.slot} · Happ и др."
+        labels = {
+            "windows": "Windows",
+            "android": "Android",
+            "macos": "macOS",
+            "ios": "iOS",
+            "web": "Браузер",
+        }
+        return self.name or labels.get(self.platform, self.platform or "Устройство")
+
+
+@dataclass(frozen=True)
 class TunnelFile:
     """Файл раздельного туннелирования — общий для всех, вход не нужен."""
 
@@ -177,6 +208,8 @@ class Account:
     devices: int
     traffic_used_bytes: int
     traffic_limit_bytes: int | None
+    devices_left: int = 0
+    device_rows: list["Device"] = field(default_factory=list)
     payments: list[Payment] = field(default_factory=list)
     # Ключи для iPhone. Пустой список у всех, кому этот доступ не выдан, —
     # то есть у большинства: остальные ходят через приложение.
@@ -261,6 +294,9 @@ async def _request(
             json=payload,
             headers=headers,
         ) as response:
+            # Пустой успешный ответ (204 на удаление) — разбирать нечего.
+            if response.status == 204:
+                return {}
             try:
                 body = await response.json(content_type=None)
             except (ValueError, aiohttp.ContentTypeError):
@@ -375,6 +411,16 @@ async def enable_ios(token: str) -> Account:
     )
 
 
+async def delete_device(token: str, device: "Device") -> None:
+    """Удаляет устройство целиком: пир и учётки снимаются с узлов панелью."""
+    if device.kind == "ios_key":
+        await _request("DELETE", f"{CLIENT}/account/ios/keys/{device.slot}", token=token)
+    elif device.kind == "sub_link":
+        await _request("DELETE", f"{CLIENT}/account/subscriptions/{device.key_id}", token=token)
+    else:
+        await _request("DELETE", f"{CLIENT}/account/devices/{device.id}", token=token)
+
+
 async def freeze(token: str) -> Account:
     """Ставит подписку на паузу. Панель отвечает аккаунтом целиком."""
     return _account(await _request("POST", f"{CLIENT}/account/freeze", token=token))
@@ -399,7 +445,22 @@ def _account(body: dict) -> Account:
         expires_at=_parse_time(body.get("expires_at")),
         days_left=body.get("days_left"),
         device_limit=body.get("device_limit", 0),
-        devices=len(body.get("devices", [])),
+        devices=body.get("devices_used", len(body.get("devices", []))),
+        devices_left=body.get("devices_left", 0),
+        device_rows=[
+            Device(
+                id=int(row.get("id", 0)),
+                kind=row.get("kind") or "app",
+                slot=row.get("slot"),
+                key_id=row.get("key_id"),
+                name=row.get("name") or "",
+                platform=row.get("platform") or "",
+                is_connected=bool(row.get("is_connected")),
+                is_current=bool(row.get("is_current")),
+                last_seen_at=_parse_time(row.get("last_seen_at")),
+            )
+            for row in body.get("devices", [])
+        ],
         traffic_used_bytes=body.get("traffic_used_bytes", 0),
         traffic_limit_bytes=body.get("traffic_limit_bytes"),
         payments=[

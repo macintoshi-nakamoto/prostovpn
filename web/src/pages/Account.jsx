@@ -12,6 +12,8 @@ import { TgsEmoji } from "../components/TgsEmoji.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
 import { SetupScreen } from "../components/SetupScreen.jsx";
 import { TmaExternalKeys } from "../components/TmaExternalKeys.jsx";
+import { TmaDevicesSheet } from "../components/TmaDevicesSheet.jsx";
+import { AppStoreSheet, appStoreAutoAllowed, markAppStoreShown } from "../components/AppStoreSheet.jsx";
 import { Referrals } from "../components/Referrals.jsx";
 import { Picture } from "../components/Picture.jsx";
 import { PasswordDialog } from "../components/PasswordDialog.jsx";
@@ -1087,6 +1089,18 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
   const [emailOpen, setEmailOpen] = useState(false);
   const [bypassOpen, setBypassOpen] = useState(false);
   const [bypassGuide, setBypassGuide] = useState(false);
+  const [devicesOpen, setDevicesOpen] = useState(false);
+  // Подсказка про регион App Store: сама показывается один раз за заход
+  // и уходит, если её не трогать; «Больше не показывать» гасит навсегда.
+  const [storeOpen, setStoreOpen] = useState(false);
+  useEffect(() => {
+    if (!appStoreAutoAllowed()) return undefined;
+    const id = setTimeout(() => {
+      markAppStoreShown();
+      setStoreOpen(true);
+    }, 900);
+    return () => clearTimeout(id);
+  }, []);
 
   // Иерархия карты: статус — точкой и словом, дни — крупной цифрой,
   // тариф — чипом, точная дата — мелко. Никаких предложений из данных.
@@ -1176,6 +1190,12 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
           onClick={onSetup}
         />
         <ApRow
+          icon="phone"
+          title={t("account.tmaDevicesRow")}
+          sub={t("account.tmaDevicesRowSub", { used, total: data.device_limit })}
+          onClick={() => setDevicesOpen(true)}
+        />
+        <ApRow
           icon="file"
           title={t("account.tmaBypassTitle")}
           sub={t("account.tmaBypassSub")}
@@ -1218,6 +1238,14 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         onClose={() => setEmailOpen(false)}
         onChanged={onChanged}
       />
+      <TmaDevicesSheet
+        open={devicesOpen}
+        data={data}
+        onClose={() => setDevicesOpen(false)}
+        onChanged={onChanged}
+        onApply={onApply}
+      />
+      <AppStoreSheet open={storeOpen} auto onClose={() => setStoreOpen(false)} />
       <TmaBypassSheet
         open={bypassOpen}
         file={file}

@@ -588,7 +588,14 @@ class User(Base):
         if self.traffic_limit_bytes is not None:
             return self.traffic_limit_bytes
         sub = self.active_subscription(now)
-        if sub is not None and sub.plan_ref is not None:
+        if sub is None:
+            return None
+        # Подарочные дни (промокод, приглашение) — без ограничения трафика:
+        # и сам подарочный период, и пробный, за которым он стоит в очереди.
+        # 15 ГБ — только у обычной двухдневной пробы (04.09.2026).
+        if sub.is_bonus or any(s.is_bonus for s in self.upcoming_subscriptions(now)):
+            return None
+        if sub.plan_ref is not None:
             return sub.plan_ref.traffic_limit_bytes
         return None
 

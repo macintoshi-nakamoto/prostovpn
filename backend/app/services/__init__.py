@@ -8,6 +8,7 @@ from . import (
     devices,
     diagnostics,
     freeze,
+    funnel,
     ios,
     letters,
     orders,

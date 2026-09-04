@@ -2,6 +2,7 @@ import {
   BarChart3,
   CalendarDays,
   Download,
+  Filter,
   Route,
   KeyRound,
   Receipt,
@@ -16,6 +17,7 @@ export const NAV_GROUPS = [
     label: "Обзор",
     items: [
       { to: "/", label: "Сводка", title: "Сводка", icon: BarChart3, end: true },
+      { to: "/funnel", label: "Воронка", title: "Воронка: от регистрации до оплаты", icon: Filter },
       { to: "/calendar", label: "Календарь", title: "Календарь прибыли", icon: CalendarDays },
     ],
   },

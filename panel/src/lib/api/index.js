@@ -120,6 +120,7 @@ export const financeApi = {
   calendar: (year, month) => http.get(`${BASE}/calendar`, { year, month }),
   revenue: () => http.get(`${BASE}/revenue`),
   dashboard: () => http.get(`${BASE}/dashboard`),
+  funnel: (days) => http.get(`${BASE}/funnel`, { days }),
   addPayment: (payload) => http.post(`${BASE}/payments`, payload),
 };
 

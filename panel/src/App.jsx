@@ -4,6 +4,7 @@ import { useSession } from "./lib/session";
 import { Loading } from "./ui";
 import { LoginPage } from "./features/auth/LoginPage";
 import { DashboardPage } from "./features/dashboard/DashboardPage";
+import { FunnelPage } from "./features/funnel/FunnelPage";
 import { UsersPage } from "./features/users/UsersPage";
 import { CalendarPage } from "./features/calendar/CalendarPage";
 import { ServersPage } from "./features/servers/ServersPage";
@@ -41,6 +42,7 @@ export function App() {
         <Route index element={<DashboardPage />} />
         <Route path="users" element={<UsersPage />} />
         <Route path="users/:userId" element={<UsersPage />} />
+        <Route path="funnel" element={<FunnelPage />} />
         <Route path="calendar" element={<CalendarPage />} />
         <Route path="servers" element={<ServersPage />} />
         <Route path="keys" element={<KeysPage />} />

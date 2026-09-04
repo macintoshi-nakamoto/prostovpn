@@ -508,6 +508,60 @@ class Dashboard(Schema):
     monthly: list[SeriesPoint]
 
 
+class FunnelStage(Schema):
+    key: str
+    label: str
+    count: int
+    pct_total: float
+    pct_prev: float
+
+
+class FunnelSource(Schema):
+    source: str
+    label: str
+    registered: int
+    setup: int
+    connected: int
+    paid: int
+
+
+class FunnelCohort(Schema):
+    week: str
+    label: str
+    registered: int
+    setup: int
+    connected: int
+    paid: int
+
+
+class FunnelStuckUser(Schema):
+    id: int
+    public_id: str
+    login: str
+    name: str | None = None
+    telegram_username: str | None = None
+    created_at: dt.datetime
+    source: str
+    has_setup: bool
+    access_active: bool
+
+
+class FunnelOut(Schema):
+    """Воронка регистрация → доступ → подключение → оплата; см. services/funnel.py."""
+
+    period_days: int | None = None
+    users: int
+    stages: list[FunnelStage]
+    sources: list[FunnelSource]
+    cohorts: list[FunnelCohort]
+    stuck_count: int
+    stuck: list[FunnelStuckUser]
+    cooled_count: int
+    median_hours_to_connect: float | None = None
+    median_days_to_pay: float | None = None
+    generated_at: dt.datetime
+
+
 class OrderStats(Schema):
 
     pending: int

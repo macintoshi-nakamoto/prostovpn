@@ -52,6 +52,17 @@ def dashboard(
     )
 
 
+@router.get("/funnel", response_model=schemas.FunnelOut)
+def funnel(
+    days: int | None = Query(default=30, ge=0, le=3650),
+    db: OrmSession = Depends(get_db),
+    _: Admin = Depends(current_admin),
+) -> schemas.FunnelOut:
+    """Воронка по людям, зарегистрированным за последние `days` дней;
+    0 — за всё время."""
+    return schemas.FunnelOut.model_validate(services.funnel.build(db, days or None))
+
+
 @router.post("/payments", response_model=schemas.PaymentOut, status_code=status.HTTP_201_CREATED)
 def add_payment(
     body: schemas.PaymentIn,

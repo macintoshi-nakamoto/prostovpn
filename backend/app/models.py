@@ -1005,6 +1005,40 @@ class SubscriptionToken(Base):
     user: Mapped[User] = relationship()
 
 
+class ConnectReport(Base):
+    """
+    Отчёт приложения об одной попытке подключиться (services/telemetry.py).
+    Ни адресов, ни содержимого — только протокол, узел, сеть и исход.
+    """
+
+    __tablename__ = "connect_reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, default=None
+    )
+    session_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sessions.id", ondelete="SET NULL"), index=True, default=None
+    )
+    platform: Mapped[str] = mapped_column(String(32), default="unknown")
+    app_version: Mapped[str | None] = mapped_column(String(32), default=None)
+    network_kind: Mapped[str] = mapped_column(String(16), default="unknown")
+    operator: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
+    country: Mapped[str | None] = mapped_column(String(2), default=None)
+    protocol: Mapped[str] = mapped_column(String(16), index=True)
+    server_id: Mapped[int | None] = mapped_column(
+        ForeignKey("servers.id", ondelete="SET NULL"), index=True, default=None
+    )
+    host: Mapped[str | None] = mapped_column(String(128), default=None)
+    port: Mapped[int | None] = mapped_column(Integer, default=None)
+    ok: Mapped[bool] = mapped_column(Boolean, default=False)
+    stage: Mapped[str] = mapped_column(String(16), default="other")
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    attempts: Mapped[int] = mapped_column(Integer, default=1)
+    error: Mapped[str | None] = mapped_column(String(160), default=None)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
 class PasswordReset(Base):
 
     __tablename__ = "password_resets"

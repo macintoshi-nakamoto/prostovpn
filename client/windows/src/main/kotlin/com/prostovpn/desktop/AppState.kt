@@ -564,10 +564,52 @@ class AppState(private val scope: CoroutineScope) {
         persistServer()
     }
 
+    /**
+     * Отчёт панели об одной попытке протокола. После удачи сразу отправляем
+     * накопленное: сеть только что появилась.
+     */
+    private fun reportAttempt(
+        protocol: String,
+        ok: Boolean,
+        startedAt: Long,
+        attempts: Int,
+        port: Int? = null,
+        stage: String = "handshake",
+        error: String? = null,
+    ) {
+        Telemetry.record(
+            protocol,
+            server?.host,
+            port,
+            ok,
+            stage,
+            System.currentTimeMillis() - startedAt,
+            attempts,
+            error,
+        )
+        if (ok) scope.launch { Telemetry.flush(panelToken) }
+    }
+
+    private fun reportFailure(failure: WindowsTunnel.Result.Failure, startedAt: Long, port: Int) {
+        val stage = when (failure.reason) {
+            WindowsTunnel.Reason.NoHandshake -> "handshake"
+            WindowsTunnel.Reason.AddressInUse -> "route"
+            else -> "engine"
+        }
+        val error = listOfNotNull(
+            failure.reason.name,
+            failure.diag?.name,
+            failure.detail.takeIf { it.isNotBlank() },
+        ).joinToString(" · ")
+        reportAttempt("awg", false, startedAt, 1, port = port, stage = stage, error = error)
+    }
+
     /** Перечитывает страны: подписку могли продлить или закрыть. */
     fun refreshPanelServers() {
         val token = panelToken
         if (token.isEmpty()) return
+        // Недосланные отчёты о подключениях — заодно с обновлением списка.
+        scope.launch { Telemetry.flush(token) }
         scope.launch {
             val result = PanelApi.servers(token)
             // Пока запрос был в пути (до 15 секунд), человек мог выйти и даже
@@ -967,16 +1009,19 @@ class AppState(private val scope: CoroutineScope) {
                     return@launch
                 }
 
+                val startedAt = System.currentTimeMillis()
                 val result = withContext(Dispatchers.IO) { tunnel.connect(prepared) }
                 if (result is WindowsTunnel.Result.Success) {
                     if (port > 0) rememberPort(port)
                     phase = Phase.ON
                     startTimer()
+                    reportAttempt("awg", true, startedAt, index + 1, port = port)
                     return@launch
                 }
 
                 val failure = result as WindowsTunnel.Result.Failure
                 lastFailure = failure
+                reportFailure(failure, startedAt, port)
                 // Дальше по списку идти есть смысл только когда молчит порт.
                 // Отказ в правах, отсутствие движка или занятый адрес на
                 // другом порту повторятся слово в слово — незачем тратить
@@ -1209,17 +1254,27 @@ class AppState(private val scope: CoroutineScope) {
         // маршрут по умолчанию, и выиграет неизвестно кто.
         withContext(Dispatchers.IO) { runCatching { tunnel.disconnect() } }
 
+        val startedAt = System.currentTimeMillis()
         val result = withContext(Dispatchers.IO) { XrayTunnel.connect(access) }
         if (result is XrayTunnel.Result.Success) {
             activeProtocol = Protocol.VLESS
             phase = Phase.ON
             startTimer()
+            reportAttempt("vless", true, startedAt, 1, port = access.port)
             return true
         }
 
         // Не вышло — прибираем за собой, иначе повисший xray займёт порт и
         // следующая попытка упрётся уже в него.
         withContext(Dispatchers.IO) { XrayTunnel.disconnect(access.host) }
+        reportAttempt(
+            "vless",
+            false,
+            startedAt,
+            1,
+            port = access.port,
+            error = (result as? XrayTunnel.Result.Failure)?.let { it.toString().take(160) } ?: "vless failed",
+        )
         return false
     }
 

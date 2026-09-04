@@ -562,6 +562,77 @@ class FunnelOut(Schema):
     generated_at: dt.datetime
 
 
+class TelemetryCell(Schema):
+    attempts: int
+    ok: int
+    ok_pct: float
+    median_ms: int | None = None
+
+
+class TelemetryProtocol(TelemetryCell):
+    protocol: str
+
+
+class TelemetryOperator(TelemetryCell):
+    operator: str
+    protocol: str
+
+
+class TelemetryKind(TelemetryCell):
+    kind: str
+    protocol: str
+
+
+class TelemetryServer(TelemetryCell):
+    server_id: int | None = None
+    server: str
+    protocol: str
+
+
+class TelemetryPlatform(TelemetryCell):
+    platform: str
+    app_version: str
+
+
+class TelemetryError(Schema):
+    error: str
+    count: int
+
+
+class TelemetryFailure(Schema):
+    at: dt.datetime
+    platform: str
+    app_version: str | None = None
+    network_kind: str
+    operator: str | None = None
+    protocol: str
+    server: str
+    port: int | None = None
+    stage: str
+    duration_ms: int
+    attempts: int
+    error: str | None = None
+
+
+class TelemetryOut(Schema):
+    """Сводка телеметрии подключений; см. services/telemetry.py."""
+
+    period_days: int
+    reports: int
+    ok: int
+    ok_pct: float
+    users_reporting: int
+    users_never_ok: int
+    protocols: list[TelemetryProtocol]
+    operators: list[TelemetryOperator]
+    kinds: list[TelemetryKind]
+    servers: list[TelemetryServer]
+    platforms: list[TelemetryPlatform]
+    errors: list[TelemetryError]
+    recent_failures: list[TelemetryFailure]
+    generated_at: dt.datetime
+
+
 class OrderStats(Schema):
 
     pending: int

@@ -17,6 +17,7 @@ from . import (
     recurring,
     referrals,
     subscription,
+    telemetry,
     ton_watcher,
     transfers,
     telegram,

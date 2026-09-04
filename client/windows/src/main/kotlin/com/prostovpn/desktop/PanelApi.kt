@@ -2,6 +2,7 @@ package com.prostovpn.desktop
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -101,6 +102,11 @@ object PanelApi {
     suspend fun logout(token: String) = withContext(Dispatchers.IO) {
         runCatching { request("POST", "/api/v1/logout", JSONObject(), token) }
         Unit
+    }
+
+    /** Отчёты о попытках подключиться — см. Telemetry. Зовётся из IO. */
+    fun telemetry(token: String, reports: JSONArray) {
+        request("POST", "/api/v1/telemetry/connect", JSONObject().put("reports", reports), token)
     }
 
     private fun optLongOrNull(json: JSONObject, key: String): Long? =

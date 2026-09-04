@@ -80,6 +80,36 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
     init {
         migrateToFullTunnel()
+        // Недосланные отчёты о подключениях — при первом же запуске.
+        viewModelScope.launch { Telemetry.flush(getApplication(), panelToken) }
+    }
+
+    /**
+     * Отчёт панели об одной попытке протокола. После удачи сразу отправляем
+     * накопленное: сеть только что появилась.
+     */
+    private fun reportAttempt(
+        protocol: String,
+        ok: Boolean,
+        startedAt: Long,
+        attempts: Int,
+        host: String? = server?.host,
+        port: Int? = null,
+        stage: String = "handshake",
+        error: String? = null,
+    ) {
+        Telemetry.record(
+            getApplication(),
+            protocol,
+            host,
+            port,
+            ok,
+            stage,
+            System.currentTimeMillis() - startedAt,
+            attempts,
+            error,
+        )
+        if (ok) viewModelScope.launch { Telemetry.flush(getApplication(), panelToken) }
     }
 
     private fun observeTunnel() {
@@ -789,15 +819,19 @@ class AppState(application: Application) : AndroidViewModel(application) {
             // связи это обычное дело, а раньше до него доходили только после
             // полутора минут перебора портов. Смена протокола дешевле смены
             // страны: человек остаётся там, где выбрал.
+            var startedAt = System.currentTimeMillis()
             var result = tunnel.connect(
                 prepared,
                 ports,
                 if (hasVless) TunnelManager.Stage.FIRST else TunnelManager.Stage.ALL,
             )
+            reportTunnelResult(result, startedAt, if (hasVless) 1 else maxOf(1, ports.size))
             if (result == TunnelManager.Result.NO_HANDSHAKE && hasVless) {
                 if (tryVless()) return@launch
                 if (phase != Phase.CONNECTING) return@launch
+                startedAt = System.currentTimeMillis()
                 result = tunnel.connect(prepared, ports, TunnelManager.Stage.REST)
+                reportTunnelResult(result, startedAt, maxOf(1, ports.size - 1))
             }
             when (result) {
                 TunnelManager.Result.CONNECTED -> {
@@ -836,6 +870,18 @@ class AppState(application: Application) : AndroidViewModel(application) {
      * ним отдельно не нужно. Узел его не дал — тихо уходим: отсутствие
      * запасного пути не ошибка, просто пробовать нечего.
      */
+    /** Итог перебора портов AmneziaWG — в телеметрию; отмену не считаем. */
+    private fun reportTunnelResult(result: TunnelManager.Result, startedAt: Long, attempts: Int) {
+        when (result) {
+            TunnelManager.Result.CONNECTED -> reportAttempt("awg", true, startedAt, attempts)
+            TunnelManager.Result.NO_HANDSHAKE ->
+                reportAttempt("awg", false, startedAt, attempts, error = "no handshake")
+            TunnelManager.Result.FAILED ->
+                reportAttempt("awg", false, startedAt, attempts, stage = "engine", error = "tunnel failed")
+            TunnelManager.Result.CANCELLED -> Unit
+        }
+    }
+
     private suspend fun tryVless(): Boolean {
         val access = server?.vless ?: return false
 
@@ -843,6 +889,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         // приложение, и вторая служба просто не получит дескриптор.
         withContext(tunnelDispatcher) { runCatching { tunnel.disconnect() } }
 
+        val startedAt = System.currentTimeMillis()
         VlessVpnService.start(getApplication(), access)
 
         // Ждём, пока служба доложит. Пятнадцати секунд хватает с запасом:
@@ -855,16 +902,19 @@ class AppState(application: Application) : AndroidViewModel(application) {
                     phase = Phase.ON
                     startForegroundNotice()
                     startTimer()
+                    reportAttempt("vless", true, startedAt, 1, port = access.port)
                     return true
                 }
                 VlessVpnService.State.FAILED -> {
                     connectionError = null
+                    reportAttempt("vless", false, startedAt, 1, port = access.port, error = "vless failed")
                     return false
                 }
                 else -> delay(250)
             }
         }
         VlessVpnService.stop(getApplication())
+        reportAttempt("vless", false, startedAt, 1, port = access.port, error = "vless timeout")
         return false
     }
 
@@ -890,7 +940,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
             server = info
             selectedServerIndex = candidate
             val prepared = buildConfigForConnect(config)
-            if (tunnel.connect(prepared, info.altPorts) == TunnelManager.Result.CONNECTED) {
+            val startedAt = System.currentTimeMillis()
+            val outcome = tunnel.connect(prepared, info.altPorts)
+            reportTunnelResult(outcome, startedAt, maxOf(1, info.altPorts.size))
+            if (outcome == TunnelManager.Result.CONNECTED) {
                 prefs.edit().putInt("selectedServer", candidate).apply()
                 persistServer()
                 phase = Phase.ON

@@ -927,6 +927,22 @@ def heartbeat(
     return {"ok": True, "active": user.has_access(), "subscription": _subscription_out(user).model_dump()}
 
 
+class TelemetryIn(BaseModel):
+    """Пачка отчётов о попытках подключиться — см. services/telemetry.py."""
+
+    reports: list[dict] = Field(default_factory=list, max_length=50)
+
+
+@router.post("/telemetry/connect")
+def telemetry_connect(
+    body: TelemetryIn,
+    session: Session = Depends(current_session),
+    db: OrmSession = Depends(get_db),
+) -> dict[str, object]:
+    accepted = services.telemetry.store(db, session, body.reports)
+    return {"ok": True, "accepted": accepted}
+
+
 class UpdateOut(BaseModel):
 
     update_available: bool

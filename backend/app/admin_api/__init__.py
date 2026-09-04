@@ -14,6 +14,7 @@ from . import (
     referrals,
     releases,
     servers,
+    telemetry,
     transfers,
     tunnel,
     users,
@@ -37,5 +38,6 @@ router.include_router(recurring.router)
 router.include_router(referrals.router)
 router.include_router(transfers.router)
 router.include_router(audit.router)
+router.include_router(telemetry.router)
 
 __all__ = ["router"]

@@ -1,5 +1,6 @@
 package com.prostovpn.app
 
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -111,6 +112,11 @@ object PanelApi {
 
     fun logout(token: String) {
         runCatching { post("/api/v1/logout", JSONObject(), token) }
+    }
+
+    /** Отчёты о попытках подключиться — см. Telemetry. */
+    fun telemetry(token: String, reports: JSONArray) {
+        post("/api/v1/telemetry/connect", JSONObject().put("reports", reports), token)
     }
 
     fun checkUpdate(currentVersion: String): UpdateInfo {

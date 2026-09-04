@@ -92,6 +92,7 @@ def _delivery_once(tick: int) -> None:
         if tick % 100 == 1:
             services.expire_stale(db)
             services.ratelimit.sweep(db)
+            services.telemetry.prune(db)
 
 
 async def _ton_loop(seconds: int) -> None:

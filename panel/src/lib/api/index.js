@@ -121,6 +121,7 @@ export const financeApi = {
   revenue: () => http.get(`${BASE}/revenue`),
   dashboard: () => http.get(`${BASE}/dashboard`),
   funnel: (days) => http.get(`${BASE}/funnel`, { days }),
+  telemetry: (days) => http.get(`${BASE}/telemetry`, { days }),
   addPayment: (payload) => http.post(`${BASE}/payments`, payload),
 };
 

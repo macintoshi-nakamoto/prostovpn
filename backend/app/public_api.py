@@ -1129,9 +1129,12 @@ def subscription_keys(
     хранится шифротекст (token_enc). У ссылок, выпущенных до этого, его нет
     — они вернутся без url, и человеку останется выпустить новую.
 
-    Первую ссылку заводим сами: человек пришёл на экран установки не для
-    того, чтобы нажать «создать», а чтобы взять ключ. Но только если по
-    тарифу есть свободное место: ссылка — это устройство.
+    Список ничего не выпускает. Раньше первая ссылка заводилась прямо
+    здесь, «чтобы человек пришёл и взял ключ», но экран установки
+    спрашивает список при каждом открытии — и на тарифе с одним
+    устройством ссылка для Happ занимала место у того, кто пришёл за
+    ключом AmneziaVPN. Теперь первую ссылку просит сам экран, когда выбрано
+    приложение с подпиской (POST).
     """
     user, _session = who
 
@@ -1140,14 +1143,6 @@ def subscription_keys(
         for tok in services.subscription.active_for_user(db, user.id)
         if (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
     ]
-    if not mine and user.devices_left() > 0:
-        services.subscription.mint(db, user.id, f"{EXTERNAL_SLOT_PREFIX}1", label=None)
-        mine = [
-            tok
-            for tok in services.subscription.active_for_user(db, user.id)
-            if (tok.device_id or "").startswith(EXTERNAL_SLOT_PREFIX)
-        ]
-
     return [_key_out(tok, services.subscription.reveal(tok)) for tok in mine]
 
 

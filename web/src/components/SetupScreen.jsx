@@ -277,6 +277,10 @@ export function SetupScreen({ open, onClose, onKeys }) {
   // Выпуск ключа AmneziaVPN прямо здесь: idle → busy → done | error.
   const [issue, setIssue] = useState("idle");
   const [issueError, setIssueError] = useState("");
+  // Ссылка для Happ и подобных: idle → busy → done | error. Раньше её
+  // выпускал сам список (GET) при любом открытии экрана.
+  const [subIssue, setSubIssue] = useState("idle");
+  const [subError, setSubError] = useState(null);
   const [country, setCountry] = useState(0);
   const [copied, setCopied] = useState("");
 
@@ -333,25 +337,46 @@ export function SetupScreen({ open, onClose, onKeys }) {
     if (!open || meta.kind !== "vpn" || issue !== "idle") return undefined;
     if (vpnKeys === null || vpnKeys.length > 0) return undefined;
     if (!account?.active || account?.ios?.blocked) return undefined;
-    let alive = true;
+    // Итог выпуска применяем всегда: эффект перезапускается, когда
+    // подгружается account, и «живость» первого запуска здесь ни при чём —
+    // иначе ответ терялся, и экран навсегда оставался на «Выпускаем ключ…».
     setIssue("busy");
     api
       .enableIos()
       .then((r) => {
-        if (!alive) return;
         setAccount(r);
         setVpnKeys(r?.ios?.keys || []);
         setIssue("done");
       })
       .catch((err) => {
-        if (!alive) return;
         setIssueError(err instanceof ApiError ? err.message : "");
         setIssue("error");
       });
-    return () => {
-      alive = false;
-    };
+    return undefined;
   }, [open, meta.kind, issue, vpnKeys, account]);
+
+  // Ссылка для приложений с подпиской выпускается, когда выбрано такое
+  // приложение и ссылок ещё нет. Отказ по лимиту устройств показываем
+  // словами (код device_limit), остальное — сообщением сервера.
+  useEffect(() => {
+    if (!open || meta.kind !== "sub" || subIssue !== "idle") return undefined;
+    if (keys === null || keys.length > 0) return undefined;
+    if (!account?.active) return undefined;
+    setSubIssue("busy");
+    api
+      .issueSubscriptionKey(t("keys.autoName", { n: 1 }))
+      .then(() => api.subscriptionKeys())
+      .then((r) => {
+        setKeys(Array.isArray(r) ? r : []);
+        return api.account().then((a) => setAccount(a)).catch(() => {});
+      })
+      .then(() => setSubIssue("done"))
+      .catch((err) => {
+        setSubError(err instanceof ApiError ? err : null);
+        setSubIssue("error");
+      });
+    return undefined;
+  }, [open, meta.kind, subIssue, keys, account, t]);
   const file = (downloads || []).find((r) => r.platform === OUR_BUILD[device]);
   const key = (keys || []).find((k) => k.url) || null;
   // Копируют — отдаём с явным форматом: вставить могут во что угодно, а
@@ -567,8 +592,8 @@ export function SetupScreen({ open, onClose, onKeys }) {
 
         {meta.kind === "sub" && (
           <Step icon={IC_KEY} title={t("su.stepKey")} text={t("su.vlessLead")}>
-            {keys === null ? (
-              <span className="su-wait">{t("su.waitFile")}</span>
+            {keys === null || subIssue === "busy" ? (
+              <span className="su-wait">{t(subIssue === "busy" ? "su.issuingKey" : "su.waitFile")}</span>
             ) : subUrl ? (
               <>
                 <Field
@@ -598,12 +623,19 @@ export function SetupScreen({ open, onClose, onKeys }) {
                   </a>
                 )}
               </>
-            ) : account && account.devices_left === 0 ? (
+            ) : subIssue === "error" && subError?.code === "device_limit" ? (
               // Ссылка — это устройство, и мест по тарифу не осталось:
-              // сама она не выпустится, объясняем словами.
+              // объясняем словами, откуда взять место.
               <span className="su-wait">
-                {t("su.deviceLimit", { used: account.devices_used, total: account.device_limit })}
+                {t("su.deviceLimit", {
+                  used: account?.devices_used ?? "",
+                  total: account?.device_limit ?? "",
+                })}
               </span>
+            ) : subIssue === "error" ? (
+              <span className="su-wait">{subError?.message || t("su.keyFailed")}</span>
+            ) : account && !account.active ? (
+              <span className="su-wait">{t("su.noVpnKeyInactive")}</span>
             ) : (
               <span className="su-wait">{t("su.noKey")}</span>
             )}

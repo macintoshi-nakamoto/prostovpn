@@ -6,7 +6,6 @@ import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -37,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -60,15 +58,7 @@ fun MainPage(
 
     LaunchedEffect(state.panelServers.size) { state.refreshPings() }
 
-    // Пока лист открыт, главная уходит в расфокус — так в макете. Ниже
-    // Android 12 размытия нет, там остаётся только затемнение самого листа.
-    val backdropBlur by animateDpAsState(
-        targetValue = if (showCountries) 9.dp else 0.dp,
-        animationSpec = tween(220),
-        label = "sheetBlur",
-    )
-
-    Box(Modifier.fillMaxSize().blur(backdropBlur)) {
+    Box(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize().background(stateCanvas(plate)))
         if (Theme.isLight) LightSheen()
         CanvasGlow(color = plateGlow(plate))

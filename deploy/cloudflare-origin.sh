@@ -24,12 +24,18 @@ BIN=/usr/local/bin/prosto-cloudflare-origin
 install -d -m 0755 "$CACHE"
 
 if [[ "${1:-}" == "--open" ]]; then
+    # Сначала открываем для всех, потом убираем правила Cloudflare — по тем
+    # же диапазонам, что добавляли (кэш), остатки добираем по номерам.
+    ufw allow 80/tcp comment 'HTTP (редирект и ACME)' >/dev/null
+    ufw allow 443/tcp comment 'HTTPS: сайт, кабинет, API' >/dev/null
+    for net in $(cat "$CACHE/ips-v4" "$CACHE/ips-v6" 2>/dev/null); do
+        ufw --force delete allow from "$net" to any port 443 proto tcp >/dev/null 2>&1 || true
+        ufw --force delete allow from "$net" to any port 80 proto tcp >/dev/null 2>&1 || true
+    done
     for rule in $(ufw status numbered | grep -E "Cloudflare" | sed -E 's/^\[ *([0-9]+)\].*/\1/' | sort -rn); do
         yes | ufw delete "$rule" >/dev/null
     done
-    ufw allow 80/tcp comment 'HTTP (редирект и ACME)' >/dev/null
-    ufw allow 443/tcp comment 'HTTPS: сайт, кабинет, API' >/dev/null
-    echo "80/443 снова открыты для всех"
+    echo "80/443 снова открыты для всех; правил Cloudflare осталось: $(ufw status | grep -c Cloudflare)"
     exit 0
 fi
 
@@ -62,10 +68,17 @@ for net in $V4 $V6; do
     ufw allow from "$net" to any port 443 proto tcp comment 'Cloudflare' >/dev/null
     ufw allow from "$net" to any port 80 proto tcp comment 'Cloudflare' >/dev/null
 done
-for rule in $(ufw status numbered | grep -E "^\[ *[0-9]+\] (80|443)/tcp .*ALLOW IN +Anywhere" | sed -E 's/^\[ *([0-9]+)\].*/\1/' | sort -rn); do
-    yes | ufw delete "$rule" >/dev/null
-done
+# Общие правила снимаем по их же тексту, а не по номерам строк: номера
+# плывут после каждого удаления, а по тексту ufw убирает v4 и v6 разом.
+# 05.09.2026 цикл по номерам ничего не нашёл, и вход остался открытым —
+# заметили только проверкой напрямую в IP.
+ufw --force delete allow 80/tcp >/dev/null 2>&1 || true
+ufw --force delete allow 443/tcp >/dev/null 2>&1 || true
 echo "  правил Cloudflare: $(ufw status | grep -c Cloudflare)"
+if ufw status | grep -qE "^(80|443)/tcp( \(v6\))? +ALLOW +Anywhere"; then
+    echo "  ВНИМАНИЕ: общее правило на 80/443 осталось — смотреть ufw status numbered"
+    exit 1
+fi
 
 if [[ "$(readlink -f "$0")" != "$BIN" ]]; then
     install -m 0755 "$(readlink -f "$0")" "$BIN"

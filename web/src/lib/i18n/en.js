@@ -898,7 +898,7 @@ export const en = {
     support: "Contact support",
     faq: "Questions & answers",
     adblock: "Ad blocking",
-    adblockSub: "Ads and trackers are cut on the server. Applies on the next connection; re-issue the iPhone key.",
+    adblockSub: "Ads and trackers are cut on the server. Applies on the next connection.",
     on: "On",
     off: "Off",
     appearance: "Appearance",

@@ -248,6 +248,10 @@ export const faqEn = {
           "Download the APK on a computer, copy it to a USB stick, install through the TV's file manager and sign in with login and password. Step by step, with the on-screen keyboard and remote, in the guide, “TV” tab.",
         ],
         [
+          "How do I remove ads?",
+          "Dashboard → profile → “Ad blocking”, or in the app: Settings → “Ad blocking”. Ads and trackers are cut on our servers using a large daily-updated list; sites and apps keep working as usual. Applies on the next connection. The iPhone key carries the setting inside — re-issue it after turning this on.",
+        ],
+        [
           "What is auto-connect?",
           "Settings → “Start with the system”: the app connects on its own when the phone or computer starts. On Android you can also enable the system Always-on VPN — then no internet flows without the tunnel.",
         ],

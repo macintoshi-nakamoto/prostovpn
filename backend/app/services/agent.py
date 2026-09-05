@@ -32,6 +32,16 @@ from .alerts import BR, _human, _notify, _where, admin_chats
 
 log = logging.getLogger("panel.agent")
 
+# Панель не настраивает логи: без своего обработчика в журнал попадают
+# только WARNING и выше. Сверка «агент vs SSH» — INFO, и ради неё у этого
+# журнала свой вывод; остальных логгеров это не касается.
+if not log.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("panel.agent: %(message)s"))
+    log.addHandler(_handler)
+    log.propagate = False
+log.setLevel(logging.INFO)
+
 # Снимок с сотнями пиров — десятки килобайт; мегабайты сюда не приходят.
 MAX_REPORT_BYTES = 2 * 1024 * 1024
 

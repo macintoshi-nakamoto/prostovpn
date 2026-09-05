@@ -1080,6 +1080,7 @@ export const en = {
     appSub: "Takes a subscription link from the Keys section and refreshes it itself.",
     keysTitle: "Keys",
     keysLead: "The app is installed — next you need a key. All keys and their management live in their own section.",
+    keysLeadOurs: "Our app needs no key — you sign in with your login. Keys here are for third-party apps.",
     toKeys: "Open keys",
     appStoreBtn: "How to change the App Store region",
     install: "Install {app}",

@@ -36,10 +36,10 @@ STAGES = ("handshake", "auth", "route", "engine", "other")
 # ASN — «Mobile TeleSystems PJSC». Сводим к одному имени, иначе в таблице
 # он же трижды.
 OPERATOR_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("МТС", ("mts", "мтс", "mobile telesystems", "mobile tele")),
+    ("МТС", ("mts", "мтс", "mobile telesystems", "mobile tele", "mts rus")),
     ("МегаФон", ("megafon", "мегафон")),
     ("Билайн", ("beeline", "билайн", "vimpelcom", "вымпелком")),
-    ("Tele2", ("tele2", "t2 mobile", "t2 rtk", "теле2", "т2 ")),
+    ("Tele2", ("tele2", "t2 mobile", "t2 rtk", "теле2", "т2", "t2")),
     ("Yota", ("yota", "йота", "scartel")),
     ("Ростелеком", ("rostelecom", "ростелеком")),
     ("Дом.ру", ("er-telecom", "ertelecom", "dom.ru", "домру", "дом.ру")),
@@ -61,12 +61,18 @@ _drop_alerted: dict[tuple[str, str], dt.datetime] = {}
 
 
 def normalize_operator(name: str | None) -> str | None:
+    """
+    Имя оператора к одному виду. Телефон отдаёт имя как настроил человек —
+    бывает «t2💕»: сравниваем по словам, без эмодзи и знаков.
+    """
     text = (name or "").strip()
     if not text:
         return None
-    low = text.lower()
+    import re
+
+    clean = " " + re.sub(r"[^a-zа-яё0-9]+", " ", text.lower()).strip() + " "
     for canonical, needles in OPERATOR_ALIASES:
-        if any(n in low for n in needles):
+        if any(f" {n.strip()} " in clean or (" " in n.strip() and n.strip() in clean) for n in needles):
             return canonical
     return text[:64]
 

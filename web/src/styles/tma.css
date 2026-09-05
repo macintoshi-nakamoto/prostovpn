@@ -3757,3 +3757,12 @@ html.app .fq-screen-cta {
   background: var(--tma-card);
   font-weight: 600;
 }
+
+/* Кнопка-ссылка в блоке «Не нашли ответа?»: у <a> нет центровки кнопки,
+   текст прилипал к верхнему левому углу пилюли. */
+html.app .fq-screen-cta .ap-cta {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  padding: 0 20px;
+}

@@ -34,12 +34,13 @@ export const en = {
     upTo: "up to {value}",
 
     hero: {
-      line1: "The internet",
-      line2: "kept private",
+      eyebrow: "Your internet, your freedom",
+      line1: "The internet,",
+      line2: "unblocked",
       lead:
-        "One tap to connect, 60+ countries and speeds up to 1 Gbps. No logs, no " +
-        "complicated setup, no fuss.",
-      primary: "Get started",
+        "You decide what to watch, where to talk and what to read. One tap to connect, " +
+        "60+ countries and speeds up to 1 Gbps. No logs, no fuss.",
+      primary: "Get your internet back",
       ghost: "How it works",
       platforms: "iOS · Android · macOS · Windows · TV",
     },
@@ -66,8 +67,9 @@ export const en = {
       line2: "that simply",
       line3: "works",
       text:
-        "One button on the home screen. Everything else is automatic: the best server, " +
-        "a stable connection and staying protected when you switch to Wi-Fi.",
+        "One button on the home screen — and everything that was blocked opens again. The rest " +
+        "is automatic: the best server, a stable connection and switching from Wi-Fi to mobile " +
+        "data without drops.",
       laptopAlt: "Prosto VPN on a laptop",
       button: "Download the app",
     },

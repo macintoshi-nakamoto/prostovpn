@@ -81,6 +81,16 @@
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
 }
+/* Строка-девиз над заголовком: та же роль, что у «ПРИВАТНОСТЬ» ниже по
+   странице, но на оранжевом фоне — белым, а не акцентом. */
+.ld-hero-eyebrow {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.86);
+  margin-bottom: -6px;
+}
 .ld-hero-plats {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.82);

@@ -14,6 +14,10 @@ export const faqEn = {
       h: "Getting started",
       items: [
         [
+          "What does Prosto VPN open?",
+          "Everything that stopped opening: video, social networks, messengers, games and ordinary sites. Tap “Connect” and use them as before, no setup. You decide what to watch. Banks, marketplaces and government services keep working directly — they never go through the VPN.",
+        ],
+        [
           "I've paid. What now?",
           "Download the app for your device and sign in with the same login and password as in the dashboard. The app takes the rest from your account: countries, keys, settings — nothing to paste. On iPhone there's no app of ours: connect through AmneziaVPN or Happ with a key from the dashboard, section “Keys”.",
         ],

@@ -179,6 +179,9 @@ export function Landing() {
         <HeroOrbit />
         <div className="wrap ld-hero-in">
           <div className="ld-hero-body">
+            <Reveal as="span" className="ld-hero-eyebrow" delay={0}>
+              {t("landing.hero.eyebrow")}
+            </Reveal>
             <h1>
               <Reveal as="span" className="ld-hero-line" delay={60}>
                 {t("landing.hero.line1")}

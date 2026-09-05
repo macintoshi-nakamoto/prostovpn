@@ -63,7 +63,9 @@ export function SiteFooter() {
         <FooterStatus t={t} />
 
         <div className="sf-bottom">
-          <span>© {new Date().getFullYear()} {BRAND.name}</span>
+          <span>
+            © {new Date().getFullYear()} {BRAND.name} · {t("landing.hero.eyebrow")}
+          </span>
           <div>
             <Link to="/terms">{t("footer.terms")}</Link>
             <Link to="/privacy">{t("footer.privacy")}</Link>

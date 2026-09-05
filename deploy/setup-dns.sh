@@ -13,7 +13,7 @@
 #   sudo bash setup-dns.sh --status
 #
 # Список обновляется раз в сутки таймером prosto-dns-update; проверить:
-#   dig @<ip узла> doubleclick.net   → NXDOMAIN
+#   dig @<ip узла> mc.yandex.ru       → NXDOMAIN
 #   dig @<ip узла> ya.ru             → адрес
 set -euo pipefail
 
@@ -27,7 +27,7 @@ UPDATER="/usr/local/bin/prosto-dns-update"
 if [[ "${1:-}" == "--status" ]]; then
     systemctl --no-pager --lines=3 status unbound prosto-dns-update.timer || true
     PUB=$(ip -4 route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)
-    echo; echo "реклама:"; dig +short @"$PUB" doubleclick.net | head -2 || true
+    echo; echo "реклама (ждём пусто):"; dig +short @"$PUB" mc.yandex.ru | head -2 || true
     echo "обычный сайт:"; dig +short @"$PUB" ya.ru | head -2 || true
     exit 0
 fi
@@ -143,6 +143,7 @@ sleep 2
 systemctl is-active unbound
 
 echo "== проверка"
-echo "  реклама → $(dig +short +time=3 @"$PUBLIC_IP" doubleclick.net | head -1 || true) (пусто = NXDOMAIN, так и надо)"
+# mc.yandex.ru — счётчик Метрики, он в списке всегда; апекс doubleclick.net в списке нет.
+echo "  реклама → $(dig +short +time=3 @"$PUBLIC_IP" mc.yandex.ru | head -1 || true) (пусто = NXDOMAIN, так и надо)"
 echo "  ya.ru   → $(dig +short +time=3 @"$PUBLIC_IP" ya.ru | head -1)"
 echo "готово: DNS без рекламы на $PUBLIC_IP"

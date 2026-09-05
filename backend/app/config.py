@@ -140,6 +140,8 @@ class Settings(BaseSettings):
     # что ADMIN_IDS у бота. Пусто — оповещений нет вовсе. Списка
     # пользователей здесь нет и быть не может: адресаты только отсюда.
     alert_chat_ids: str = ""
+    # Как часто агент на узле присылает снимок (панель сообщает ему в ответе).
+    agent_interval_seconds: int = 15
 
     delivery_poll_seconds: int = 15
     delivery_max_attempts: int = 8

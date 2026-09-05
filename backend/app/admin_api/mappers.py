@@ -350,10 +350,13 @@ def tunnel_file_out(entry: TunnelFile, with_content: bool = False) -> schemas.Tu
 
 
 def server_out(db: OrmSession, server: Server) -> schemas.ServerOut:
+    from ..services import agent as node_agent
     from ..services.diagnostics import can_serve
 
     keys = server.keys
+    summary = node_agent.health(server)
     return schemas.ServerOut(
+        agent=schemas.AgentOut(**summary) if summary else None,
         health_ok=server.health_ok,
         health_summary=server.health_summary,
         health_checked_at=server.health_checked_at,

@@ -399,6 +399,9 @@ export function ServersPage() {
                 <KV k="Шаблон конфига">
                   {server.hasTemplate ? "задан" : <span style={{ color: "var(--gd-warn)" }}>не задан</span>}
                 </KV>
+                <KV k="Агент узла">
+                  <AgentLine agent={server.agent} />
+                </KV>
                 <KV k="Последний ответ узла">
                   {server.provisioning !== "ssh" ? (
                     "не отслеживается"
@@ -497,5 +500,41 @@ export function ServersPage() {
         />
       )}
     </div>
+  );
+}
+
+
+/*
+  Сводка агента на узле: версия, давность снимка и живость по каждому
+  протоколу отдельно. Раньше «жив» значило «SSH ответил»; агент видит
+  xray, Hysteria2 и интерфейсы AmneziaWG по одному.
+*/
+function AgentLine({ agent }) {
+  if (!agent) return <span style={{ color: "var(--gd-muted)" }}>не установлен</span>;
+  const mark = (ok, label) => (
+    <span style={{ color: ok ? "var(--gd-pos)" : "var(--gd-neg)", marginRight: 10 }}>
+      {ok ? "✓" : "✗"} {label}
+    </span>
+  );
+  return (
+    <span>
+      <span style={{ color: agent.stale ? "var(--gd-neg)" : "var(--gd-muted)" }}>
+        v{agent.version || "?"} · снимок {ago(agent.seenAt)}
+        {agent.stale ? " — молчит" : ""}
+      </span>
+      <br />
+      {mark(agent.awgOk, "AmneziaWG")}
+      {mark(agent.xrayOk, "Reality")}
+      {mark(agent.hy2Ok, "Hysteria2")}
+      <span style={{ color: "var(--gd-muted)" }}>
+        · пиров {agent.peers} · онлайн {agent.onlineVless + agent.onlineHy2} · load {Number(agent.load1 || 0).toFixed(2)} · свободно {agent.memAvailMb} МБ
+      </span>
+      {agent.trouble ? (
+        <>
+          <br />
+          <span style={{ color: "var(--gd-neg)" }}>{agent.trouble}</span>
+        </>
+      ) : null}
+    </span>
   );
 }

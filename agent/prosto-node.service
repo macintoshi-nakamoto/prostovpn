@@ -1,0 +1,24 @@
+[Unit]
+Description=Prosto VPN — агент узла (снимки для панели)
+After=network-online.target prosto-xray.service prosto-hy2.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/prosto-node
+Restart=always
+RestartSec=5
+
+# От root: `awg show` и секрет Hysteria2 доступны только ему. Всё остальное
+# зажато: файловая система только для чтения, дом закрыт, новых прав нет.
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

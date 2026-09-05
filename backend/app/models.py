@@ -256,6 +256,16 @@ class Server(Base):
 
     health_ok: Mapped[bool | None] = mapped_column(Boolean, default=None)
     health_summary: Mapped[str | None] = mapped_column(Text, default=None)
+
+    # Агент на узле (agent/): узел сам присылает снимки по HTTPS с токеном.
+    # Хранится хеш токена, последний снимок целиком (JSON) и с какого
+    # момента в снимках что-то не так — см. services/agent.py.
+    agent_token_hash: Mapped[str | None] = mapped_column(String(64), default=None, index=True)
+    agent_seen_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    agent_version: Mapped[str | None] = mapped_column(String(32), default=None)
+    agent_snapshot: Mapped[str | None] = mapped_column(Text, default=None)
+    agent_trouble_since: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    agent_alert_sent_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
     health_checked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     facts: Mapped[dict | None] = mapped_column(JSON, default=None)

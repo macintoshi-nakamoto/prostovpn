@@ -353,6 +353,26 @@ class ServerFacts(Schema):
     awg_service: str | None = None
 
 
+class AgentOut(Schema):
+    """Сводка по последнему снимку агента на узле (services/agent.py)."""
+
+    version: str | None = None
+    seen_at: dt.datetime | None = None
+    stale: bool = True
+    awg_ok: bool = False
+    xray_ok: bool = False
+    hy2_ok: bool = False
+    peers: int = 0
+    online_vless: int = 0
+    online_hy2: int = 0
+    load1: float = 0.0
+    mem_avail_mb: int = 0
+    uptime_s: int = 0
+    took_ms: int = 0
+    trouble: str | None = None
+    trouble_since: dt.datetime | None = None
+
+
 class ServerOut(Schema):
     id: int
     name: str
@@ -387,6 +407,7 @@ class ServerOut(Schema):
     health_checked_at: dt.datetime | None = None
     can_serve: bool = False
     facts: ServerFacts | None = None
+    agent: AgentOut | None = None
 
 
 class ServerIn(Schema):

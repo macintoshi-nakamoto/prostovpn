@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 
-from . import admin_api, api_client, hy2_api, public_api, services, subscription_api
+from . import admin_api, agent_api, api_client, hy2_api, public_api, services, subscription_api
 from .config import settings
 from .db import SessionLocal, init_db
 
@@ -80,6 +80,14 @@ def _sync_once() -> None:
                 log.info("оповещения о узлах: %s", ", ".join(sent))
         except Exception:
             log.exception("оповещение о состоянии узлов не удалось")
+
+        # Живость по протоколам — из снимков агентов, где они стоят.
+        try:
+            troubled = services.agent.check_agents(db)
+            if troubled:
+                log.info("оповещения о службах узлов: %s", ", ".join(troubled))
+        except Exception:
+            log.exception("проверка снимков агентов не удалась")
 
         try:
             shared = services.alerts.check_sharing(db, ips_by_user)
@@ -311,6 +319,7 @@ app.include_router(public_api.router)
 app.include_router(admin_api.router)
 app.include_router(subscription_api.router)
 app.include_router(hy2_api.router)
+app.include_router(agent_api.router)
 
 
 if PANEL_DIST.is_dir():

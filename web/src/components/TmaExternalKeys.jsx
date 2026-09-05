@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useState } from "react";
 import { Sheet } from "./Sheet.jsx";
 import { Flag } from "./Flags.jsx";
 import { api, ApiError } from "../lib/api";
-import { tmaHaptic } from "../lib/telegram.js";
+import { isTma, tmaHaptic, tmaOpenApp, tmaOpenDeep } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 
 /**
@@ -122,7 +122,25 @@ function SubRow({ item, busy, copied, onCopy, onRename, onRevoke, t }) {
       </div>
 
       {item.url_vless ? (
-        <Link value={item.url_vless} copied={copied} onCopy={onCopy} t={t} />
+        <>
+          <Link value={item.url_vless} copied={copied} onCopy={onCopy} t={t} />
+          {/* Внутри Telegram схему сначала дёргаем прямо из вебвью — если
+              приложение открылось, страница уйдёт в фон. Не ушла за полторы
+              секунды — значит вебвью схему заглушил, и тогда идём через
+              трамплин /open.html во внешнем браузере. */}
+          <a
+            className="kx-open"
+            href={`happ://add/${item.url_vless}`}
+            onClick={(e) => {
+              if (!isTma()) return;
+              e.preventDefault();
+              tmaHaptic("light");
+              tmaOpenDeep(`happ://add/${item.url_vless}`);
+            }}
+          >
+            {t("su.openIn", { app: "Happ" })}
+          </a>
+        </>
       ) : (
         <span className="kx-gone">{t("keys.gone")}</span>
       )}
@@ -195,6 +213,17 @@ function VpnRow({ group, busy, copied, onCopy, onRevoke, t }) {
           </label>
         }
       />
+
+      <button
+        type="button"
+        className="kx-open"
+        onClick={() => {
+          tmaHaptic("light");
+          tmaOpenApp(link.vpn_url);
+        }}
+      >
+        {t("su.openIn", { app: "AmneziaVPN" })}
+      </button>
 
       {/* Запасная ссылка того же узла по Reality — если основной ключ
           режут на мобильном интернете. Вставляется в AmneziaVPN как

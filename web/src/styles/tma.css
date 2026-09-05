@@ -3161,6 +3161,28 @@ html.app .kx-error {
   font-size: 13.5px;
   color: #ff6b6b;
 }
+/* Открыть ключ в приложении — второе по частоте действие после копирования,
+   поэтому кнопка стоит прямо под ссылкой и залита акцентом. */
+html.app .kx-open {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+}
+html.app .kx-open:active {
+  transform: scale(0.98);
+}
+
 /* Пунктир: место, куда добавится ещё одна строка, а не готовая карточка. */
 html.app .kx-add {
   display: flex;

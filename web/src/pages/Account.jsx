@@ -10,7 +10,7 @@ import { CryptoIcon, SbpIcon, TelegramIcon, TonIcon } from "../components/PayIco
 import { starsPayUrl } from "../lib/contacts.js";
 import { TgsEmoji } from "../components/TgsEmoji.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
-import { SetupScreen } from "../components/SetupScreen.jsx";
+import { AppsScreen } from "../components/AppsScreen.jsx";
 import { TmaExternalKeys } from "../components/TmaExternalKeys.jsx";
 import { TmaDevicesSheet } from "../components/TmaDevicesSheet.jsx";
 import { AppStoreSheet, appStoreAutoAllowed, markAppStoreShown } from "../components/AppStoreSheet.jsx";
@@ -102,7 +102,6 @@ export function Account() {
   // Установка и список ключей — экраны поверх кабинета, а не вкладки.
   const [setupOpen, setSetupOpen] = useState(false);
   const [keysOpen, setKeysOpen] = useState(false);
-  const [keysTab, setKeysTab] = useState("sub");
 
   useEffect(() => {
     const known = section === undefined || TAB_BY_SECTION[section] !== undefined;
@@ -280,6 +279,7 @@ export function Account() {
             data={data}
             onManage={() => navigate(sectionPath("plan"))}
             onSetup={() => setSetupOpen(true)}
+            onKeys={() => setKeysOpen(true)}
             onFriends={() => navigate(sectionPath("friends"))}
             onPassword={() => setPwOpen(true)}
             onChanged={load}
@@ -320,15 +320,12 @@ export function Account() {
         )}
       </ScreenShell>
 
-      <SetupScreen
+      <AppsScreen
         open={setupOpen}
         onClose={() => setSetupOpen(false)}
-        onKeys={(tab) => {
-          setKeysTab(tab === "vpn" ? "vpn" : "sub");
-          setKeysOpen(true);
-        }}
+        onKeys={() => setKeysOpen(true)}
       />
-      <TmaExternalKeys open={keysOpen} initialTab={keysTab} onClose={() => setKeysOpen(false)} />
+      <TmaExternalKeys open={keysOpen} onClose={() => setKeysOpen(false)} />
 
       <WalletSheet open={walletOpen} onClose={() => setWalletOpen(false)} />
 
@@ -1081,7 +1078,7 @@ function TmaBypassSheet({ open, file, onGuide, onClose }) {
 
 // Главная мини-аппа: карта статуса с круглой CTA, пауза, действия и
 // аккаунт — группами строк. Стиль нативных мини-аппов, наш цвет.
-function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChanged, onApply }) {
+function TmaHome({ data, used, onManage, onSetup, onKeys, onFriends, onPassword, onChanged, onApply }) {
   const { t, f } = useI18n();
   const frozen = Boolean(data.freeze?.frozen);
   const file = data.tunnel_file;
@@ -1185,9 +1182,9 @@ function TmaHome({ data, used, onManage, onSetup, onFriends, onPassword, onChang
         />
         <ApRow
           icon="key"
-          title={t("account.tmaIosTitle")}
-          sub={t("account.tmaIosSub")}
-          onClick={onSetup}
+          title={t("account.tmaKeysTitle")}
+          sub={t("account.tmaKeysSub")}
+          onClick={onKeys}
         />
         <ApRow
           icon="phone"
@@ -1528,7 +1525,7 @@ function TmaRefHistoryScreen({ open, onClose, friends }) {
   );
 }
 
-function AccountTab({ data, onManage, onSetup, onFriends, onPassword, onChanged, onApply }) {
+function AccountTab({ data, onManage, onSetup, onKeys, onFriends, onPassword, onChanged, onApply }) {
   const { t, f } = useI18n();
   // Цифра приходит с сервера тем же правилом, что и список: входы
   // приложения + выданные ключи iPhone + ссылки для Happ. Старый ответ без
@@ -1545,6 +1542,7 @@ function AccountTab({ data, onManage, onSetup, onFriends, onPassword, onChanged,
         used={used}
         onManage={onManage}
         onSetup={onSetup}
+        onKeys={onKeys}
         onFriends={onFriends}
         onPassword={onPassword}
         onChanged={onChanged}

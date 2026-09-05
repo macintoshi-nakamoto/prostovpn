@@ -20,3 +20,13 @@ def telemetry(
 ) -> schemas.TelemetryOut:
     """Сводка отчётов о подключениях из приложений за последние `days` дней."""
     return schemas.TelemetryOut.model_validate(services.telemetry.summary(db, days))
+
+
+@router.get("/telemetry/changes", response_model=schemas.TelemetryChangesOut)
+def telemetry_changes(
+    hours: int = Query(default=24, ge=1, le=168),
+    db: OrmSession = Depends(get_db),
+    _: Admin = Depends(current_admin),
+) -> schemas.TelemetryChangesOut:
+    """Последние `hours` часов против таких же перед ними: что просело."""
+    return schemas.TelemetryChangesOut.model_validate(services.telemetry.changes(db, hours))

@@ -41,7 +41,11 @@ function ms(value) {
 export function TelemetryPage() {
   const [days, setDays] = useState(7);
   const { data, loading, error, reload } = useAsync(() => financeApi.telemetry(days), [days]);
-  usePolling(() => reload(true), 60000);
+  const changes = useAsync(() => financeApi.telemetryChanges(24), []);
+  usePolling(() => {
+    reload(true);
+    changes.reload(true);
+  }, 60000);
   useFreshness(data, error);
 
   if (loading && !data) return <Loading text="Собираем отчёты" />;
@@ -97,6 +101,8 @@ export function TelemetryPage() {
           sub="по доле удачных попыток"
         />
       </div>
+
+      <ChangesCard data={changes.data} />
 
       <Card pad style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Оператор × протокол</div>
@@ -264,5 +270,76 @@ function Matrix({ rows, cols, get, rowLabel }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+
+/*
+  Что изменилось за сутки: те же пары оператор × протокол, но против
+  предыдущих суток. Просадки — наверху и красным: именно так узнают о
+  новой волне блокировок раньше, чем по обращениям. Та же сводка раз в
+  день уходит админам в Telegram.
+*/
+function ChangesCard({ data }) {
+  if (!data || !data.reports) return null;
+  const withDelta = data.items.filter((i) => i.delta != null);
+  const drops = withDelta.filter((i) => i.delta <= -15);
+  const shown = (drops.length ? drops : withDelta).slice(0, 8);
+  const deltaColor = (d) => (d <= -15 ? "var(--gd-neg)" : d >= 15 ? "var(--gd-pos)" : "var(--gd-dim)");
+  const fmt = (d) => (d == null ? "—" : `${d > 0 ? "+" : ""}${d}`);
+
+  return (
+    <Card pad style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 4 }}>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>Что изменилось за сутки</div>
+        <div className="gd-sub">
+          {num(data.reports)} попыток · {data.okPct}%
+          {data.prevOkPct != null ? ` (вчера ${data.prevOkPct}%)` : ""}
+        </div>
+      </div>
+      <div className="gd-sub" style={{ marginBottom: 12 }}>
+        {drops.length
+          ? `Просело у ${drops.length} ${plural(drops.length, "пары", "пар", "пар")} оператор × протокол — похоже на новую волну.`
+          : "Заметных просадок нет: сегодня как вчера."}
+      </div>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 12 }}>
+        {data.protocols.map((p) => (
+          <Chip key={p.protocol}>
+            {PROTO[p.protocol] || p.protocol}: <b style={{ color: okColor(p.okPct, p.attempts) }}>{p.okPct}%</b>
+            {p.prevOkPct != null ? <span style={{ color: "var(--gd-dim)" }}> · вчера {p.prevOkPct}%</span> : null}
+          </Chip>
+        ))}
+      </div>
+      {shown.length ? (
+        <table className="gd-table" style={{ width: "100%" }}>
+          <thead>
+            <tr>
+              <th>Оператор</th>
+              <th>Протокол</th>
+              <th>Сегодня</th>
+              <th>Вчера</th>
+              <th>Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((i) => (
+              <tr key={i.operator + i.protocol}>
+                <td>{i.operator}</td>
+                <td>{PROTO[i.protocol] || i.protocol}</td>
+                <td style={{ color: okColor(i.okPct, i.attempts) }}>
+                  {i.okPct}% <span style={{ color: "var(--gd-dim)" }}>из {i.attempts}</span>
+                </td>
+                <td style={{ color: "var(--gd-dim)" }}>
+                  {i.prevOkPct != null ? `${i.prevOkPct}% из ${i.prevAttempts}` : "—"}
+                </td>
+                <td style={{ color: deltaColor(i.delta), fontWeight: 600 }}>{fmt(i.delta)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="gd-sub">Пар с достаточным числом попыток за оба дня пока нет.</div>
+      )}
+    </Card>
   );
 }

@@ -142,6 +142,10 @@ class Settings(BaseSettings):
     alert_chat_ids: str = ""
     # Как часто агент на узле присылает снимок (панель сообщает ему в ответе).
     agent_interval_seconds: int = 15
+    # Рабочие данные панели, которые не база: база ASN, отметка дайджеста.
+    data_dir: str = "./data"
+    # В котором часу (UTC) слать админам сводку по связи за сутки.
+    telemetry_digest_hour_utc: int = 6
 
     delivery_poll_seconds: int = 15
     delivery_max_attempts: int = 8

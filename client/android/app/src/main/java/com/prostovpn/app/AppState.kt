@@ -217,6 +217,13 @@ class AppState(application: Application) : AndroidViewModel(application) {
         private set
     var avatar by mutableStateOf<ImageBitmap?>(null)
         private set
+
+    // «Без рекламы» — настройка учётки в панели: DNS в конфигах ведёт на
+    // резолвер узла. Здесь только зеркало для экрана; правда — на сервере.
+    var adblock by mutableStateOf(prefs.getBoolean("adblock", false))
+        private set
+    var adblockBusy by mutableStateOf(false)
+        private set
     var subscriptionDaysLeft by mutableIntStateOf(prefs.getInt("daysLeft", 0))
         private set
     var trafficUsedBytes by mutableStateOf(prefs.getLong("trafficUsed", 0L))
@@ -773,6 +780,28 @@ class AppState(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Тумблер «Без рекламы». Настройка живёт в панели: она подставляет DNS
+     * узла в конфиг, поэтому после переключения перечитываем серверы и, если
+     * подключены, поднимаем туннель заново — иначе новый DNS не применится.
+     */
+    fun changeAdblock(on: Boolean) {
+        val token = panelToken
+        if (token.isEmpty() || adblockBusy || adblock == on) return
+        adblockBusy = true
+        viewModelScope.launch {
+            val applied = withContext(Dispatchers.IO) {
+                runCatching { PanelApi.setAdblock(token, on) }.getOrNull()
+            }
+            adblockBusy = false
+            if (applied == null) return@launch
+            adblock = applied
+            prefs.edit().putBoolean("adblock", applied).apply()
+            refreshPanelServers()
+            reconnectIfActive()
+        }
+    }
+
     private fun avatarFile(): File = File(getApplication<Application>().filesDir, "avatar.jpg")
 
     /**
@@ -838,12 +867,14 @@ class AppState(application: Application) : AndroidViewModel(application) {
         accountName = session.name ?: session.login
         accountPublicId = session.publicId
         avatarUrl = session.avatarUrl.orEmpty()
+        adblock = session.adblock
 
         prefs.edit()
             .putString("panelToken", session.token)
             .putString("accountName", accountName)
             .putString("accountPublicId", accountPublicId)
             .putString("avatarUrl", avatarUrl)
+            .putBoolean("adblock", adblock)
             .apply()
 
         loadAvatar(force = true)

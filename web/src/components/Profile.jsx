@@ -323,7 +323,7 @@ function DocBlock({ block }) {
   }
 }
 
-export function ProfileTab({ data, tgPhoto, onPassword, onSignOut, onOpenWallet }) {
+export function ProfileTab({ data, tgPhoto, onPassword, onSignOut, onOpenWallet, onAdblock }) {
   const { t, lang, setLang } = useI18n();
   const { dark, setTheme } = useTheme();
   const wallet = useTonWallet();
@@ -387,6 +387,45 @@ export function ProfileTab({ data, tgPhoto, onPassword, onSignOut, onOpenWallet 
         <Row icon="community" label={t("profile.community")} onClick={() => openTg(COMMUNITY_TG)} />
         <Row icon="support" label={t("profile.support")} onClick={() => openTg(SUPPORT_TG)} />
         <Row icon="support" label={t("profile.faq")} onClick={() => setFaqOpen(true)} />
+      </section>
+
+      <section className="pf-card">
+        <div className="pf-row pf-static">
+          <span className="pf-ric">{ICONS.support}</span>
+          <span className="pf-label">
+            {t("profile.adblock")}
+            <span className="pf-sub">{t("profile.adblockSub")}</span>
+          </span>
+          <span
+            className={`pf-seg${data?.adblock ? " pf-seg-b" : ""}`}
+            role="group"
+            aria-label={t("profile.adblock")}
+          >
+            <span className="pf-thumb" aria-hidden="true" />
+            <button
+              type="button"
+              className={data?.adblock ? "" : "on"}
+              aria-pressed={!data?.adblock}
+              onClick={() => {
+                tmaHaptic("select");
+                onAdblock && onAdblock(false);
+              }}
+            >
+              {t("profile.off")}
+            </button>
+            <button
+              type="button"
+              className={data?.adblock ? "on" : ""}
+              aria-pressed={Boolean(data?.adblock)}
+              onClick={() => {
+                tmaHaptic("select");
+                onAdblock && onAdblock(true);
+              }}
+            >
+              {t("profile.on")}
+            </button>
+          </span>
+        </div>
       </section>
 
       <section className="pf-card">

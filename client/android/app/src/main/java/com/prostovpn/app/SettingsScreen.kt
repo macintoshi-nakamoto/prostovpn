@@ -115,6 +115,20 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
                         onClick = { showAppsSheet = true },
                     )
                     HairLine()
+                    if (state.isLoggedIn) {
+                        MenuRow(
+                            title = s.adblockTitle,
+                            subtitle = s.adblockDesc,
+                            height = 70.dp,
+                            chevron = false,
+                            trailing = {
+                                ProToggle(checked = state.adblock, enabled = !state.adblockBusy) {
+                                    state.changeAdblock(it)
+                                }
+                            },
+                        )
+                        HairLine()
+                    }
                     BackgroundWorkRow(state)
                     NotificationsRow(state)
                     HairLine()

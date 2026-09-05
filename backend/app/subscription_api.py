@@ -67,6 +67,8 @@ def _endpoints_for(db: OrmSession, server: Server, key: UserKey | None) -> list[
     base = provisioning.serving_config(server, key)
     if not base:
         return []
+    if key is not None and key.user is not None and key.user.adblock_dns:
+        base = provisioning.with_dns(base, server.host)
     # JSON читают приложения, которые не назвали версию, — I1–I5 им не
     # отдаём: незнакомую строку старый движок отвергает вместе с ключом.
     primary = provisioning.without_special_junk(_with_chosen_port(db, server, key, base))

@@ -679,6 +679,30 @@ class TelemetryOut(Schema):
     generated_at: dt.datetime
 
 
+class TelemetryChange(Schema):
+    operator: str | None = None
+    protocol: str
+    attempts: int
+    ok_pct: float
+    prev_attempts: int
+    prev_ok_pct: float | None = None
+    delta: float | None = None
+
+
+class TelemetryChangesOut(Schema):
+    """Сегодня против вчера по операторам и протоколам; см. telemetry.changes."""
+
+    hours: int
+    reports: int
+    ok_pct: float
+    prev_reports: int
+    prev_ok_pct: float | None = None
+    items: list[TelemetryChange]
+    protocols: list[TelemetryChange]
+    errors: list[TelemetryError]
+    generated_at: dt.datetime
+
+
 class OrderStats(Schema):
 
     pending: int

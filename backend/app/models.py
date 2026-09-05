@@ -477,6 +477,9 @@ class User(Base):
     credentials_set_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # «Без рекламы»: DNS в конфигах этого человека указывает на резолвер
+    # узла со списком рекламных доменов (deploy/setup-dns.sh).
+    adblock_dns: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     is_blocked: Mapped[bool] = mapped_column(Boolean, default=False)
     blocked_reason: Mapped[str | None] = mapped_column(Text, default=None)
     blocked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)

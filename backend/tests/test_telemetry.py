@@ -97,7 +97,7 @@ def test_reports_are_stored_with_session_facts(client, app_token, node):
         assert len(rows) == 3
         assert {row.platform for row in rows} == {"android"}
         assert {row.app_version for row in rows} == {"1.1.11"}
-        assert rows[0].server_id is not None and rows[0].operator == "MTS"
+        assert rows[0].server_id is not None and rows[0].operator == "МТС"
         assert rows[1].protocol == "vless" and rows[1].ok is True
         assert rows[2].network_kind == "wifi" and rows[2].operator is None
 
@@ -106,8 +106,8 @@ def test_summary_builds_operator_matrix(client, auth, app_token):
     body = client.get("/api/admin/telemetry", params={"days": 7}, headers=auth).json()
     assert body["reports"] == 3 and body["ok"] == 2
     cells = {(o["operator"], o["protocol"]): o for o in body["operators"]}
-    assert cells[("MTS", "awg")]["okPct"] == 0.0
-    assert cells[("MTS", "vless")]["okPct"] == 100.0 and cells[("MTS", "vless")]["medianMs"] == 1800
+    assert cells[("МТС", "awg")]["okPct"] == 0.0
+    assert cells[("МТС", "vless")]["okPct"] == 100.0 and cells[("МТС", "vless")]["medianMs"] == 1800
     assert cells[("Wi-Fi", "awg")]["ok"] == 1
     assert body["errors"][0]["error"] == "no handshake"
     assert body["recentFailures"][0]["server"] == "Нидерланды"

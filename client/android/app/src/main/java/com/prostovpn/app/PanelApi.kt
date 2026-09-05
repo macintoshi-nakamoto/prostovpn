@@ -25,6 +25,9 @@ object PanelApi {
         // Фото профиля из Telegram. Панель даёт адрес только привязанным
         // учёткам; остальным — буква, как и раньше.
         val avatarUrl: String? = null,
+
+        // «Без рекламы» включено в кабинете: DNS в конфигах ведёт на узел.
+        val adblock: Boolean = false,
     )
 
     data class Subscription(
@@ -148,7 +151,14 @@ object PanelApi {
             servers = parseServers(body),
             notice = body.optStringOrNull("notice"),
             avatarUrl = account.optStringOrNull("avatar_url"),
+            adblock = account.optBoolean("adblock"),
         )
+    }
+
+    /** Тумблер «Без рекламы» — тот же, что в кабинете. Возвращает новое значение. */
+    fun setAdblock(token: String, on: Boolean): Boolean {
+        val body = post("/api/v1/account/adblock", JSONObject().put("on", on), token)
+        return body.optBoolean("adblock", on)
     }
 
     /**
@@ -219,6 +229,7 @@ object PanelApi {
             serverName = item.optString("server_name"),
             fingerprint = item.optString("fingerprint").ifEmpty { "chrome" },
             flow = item.optString("flow"),
+            dns = item.optStringOrNull("dns"),
         )
     }
 

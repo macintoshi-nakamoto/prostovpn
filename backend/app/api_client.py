@@ -70,6 +70,8 @@ class VlessOut(BaseModel):
     fingerprint: str = "chrome"
     flow: str = ""
     url: str = ""
+    # Резолвер без рекламы — адрес узла, только когда человек это включил.
+    dns: str | None = None
 
 
 class ServerOut(BaseModel):
@@ -115,6 +117,8 @@ class AccountOut(BaseModel):
     # фото отдаёт /account/avatar, здесь лишь адрес, чтобы приложение не
     # ходило за картинкой к тем, у кого её заведомо нет.
     avatar_url: str | None = None
+    # «Без рекламы» включено — DNS в конфигах ведёт на резолвер узла.
+    adblock: bool = False
 
 
 def _account_out(user: User, password: str | None = None) -> AccountOut:
@@ -127,6 +131,7 @@ def _account_out(user: User, password: str | None = None) -> AccountOut:
         name=user.name,
         password=password,
         avatar_url=avatar,
+        adblock=bool(user.adblock_dns),
     )
 
 
@@ -339,6 +344,8 @@ def _servers_out(
     out: list[ServerOut] = []
     for server, key in _serve_targets(db, user, device_id, background):
         config = serving_config(server, key)
+        if config and user.adblock_dns:
+            config = provisioning.with_dns(config, server.host)
         if not config:
             continue
         main_port, spare_ports = _ports_for(db, server, key)
@@ -402,6 +409,7 @@ def _vless_out(
         extra = cred.extra or {}
         names = params.get("server_names") or [""]
         return VlessOut(
+            dns=server.host if user.adblock_dns else None,
             host=endpoint.public_host(server),
             port=params.get("advertise_port") or endpoint.listen_port,
             id=identity,
@@ -975,10 +983,11 @@ class TelemetryIn(BaseModel):
 @router.post("/telemetry/connect")
 def telemetry_connect(
     body: TelemetryIn,
+    request: Request,
     session: Session = Depends(current_session),
     db: OrmSession = Depends(get_db),
 ) -> dict[str, object]:
-    accepted = services.telemetry.store(db, session, body.reports)
+    accepted = services.telemetry.store(db, session, body.reports, ip=client_ip(request))
     return {"ok": True, "accepted": accepted}
 
 

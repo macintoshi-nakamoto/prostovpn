@@ -53,8 +53,15 @@ class VlessVpnService : VpnService() {
             .setSession("ProstoVPN")
             .setMtu(core.mtu)
             .addAddress(TUN_ADDRESS, TUN_PREFIX)
-            .addDnsServer("1.1.1.1")
-            .addDnsServer("1.0.0.1")
+            .apply {
+                // «Без рекламы»: резолвер узла вместо публичного. Он отвечает
+                // только из туннеля, поэтому и адрес — самого узла.
+                val dns = access.dns?.takeIf { it.isNotBlank() }
+                if (dns != null) addDnsServer(dns) else {
+                    addDnsServer("1.1.1.1")
+                    addDnsServer("1.0.0.1")
+                }
+            }
 
         // Весь трафик в туннель — двумя половинами вместо 0.0.0.0/0. Так
         // принято на Android: половинки перебивают маршрут по умолчанию, не
@@ -125,6 +132,7 @@ class VlessVpnService : VpnService() {
             serverName = intent.getStringExtra(EXTRA_SERVER_NAME).orEmpty(),
             fingerprint = intent.getStringExtra(EXTRA_FINGERPRINT).orEmpty().ifEmpty { "chrome" },
             flow = intent.getStringExtra(EXTRA_FLOW).orEmpty(),
+            dns = intent.getStringExtra(EXTRA_DNS),
         )
     }
 
@@ -149,6 +157,7 @@ class VlessVpnService : VpnService() {
         private const val EXTRA_SERVER_NAME = "serverName"
         private const val EXTRA_FINGERPRINT = "fingerprint"
         private const val EXTRA_FLOW = "flow"
+        private const val EXTRA_DNS = "dns"
 
         /**
          * Состояние службы. Через статическое поле, а не через привязку:
@@ -175,6 +184,7 @@ class VlessVpnService : VpnService() {
                 .putExtra(EXTRA_SERVER_NAME, access.serverName)
                 .putExtra(EXTRA_FINGERPRINT, access.fingerprint)
                 .putExtra(EXTRA_FLOW, access.flow)
+                .putExtra(EXTRA_DNS, access.dns)
             context.startService(intent)
         }
 

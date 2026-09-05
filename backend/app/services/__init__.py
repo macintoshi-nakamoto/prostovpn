@@ -3,6 +3,7 @@ from __future__ import annotations
 from . import (
     agent,
     alerts,
+    asn,
     avatars,
     billing_webhook,
     compat,

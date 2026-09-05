@@ -127,6 +127,26 @@ def _delivery_once(tick: int) -> None:
             services.telemetry.prune(db)
 
 
+async def _telemetry_loop() -> None:
+    """Раз в час: база провайдеров, тревога о просадках, суточная сводка."""
+    while True:
+        try:
+            await asyncio.to_thread(_telemetry_once)
+        except Exception:
+            log.exception("часовой цикл телеметрии не удался")
+        await asyncio.sleep(3600)
+
+
+def _telemetry_once() -> None:
+    services.asn.refresh_if_stale()
+    with SessionLocal() as db:
+        dropped = services.telemetry.check_drops(db)
+        if dropped:
+            log.warning("похоже на блокировку: %s", ", ".join(dropped))
+        if services.telemetry.daily_digest(db):
+            log.warning("сводка по связи отправлена админам")
+
+
 async def _ton_loop(seconds: int) -> None:
     while True:
         await asyncio.sleep(seconds)
@@ -168,6 +188,7 @@ async def lifespan(_app: FastAPI):
         tasks.append(asyncio.create_task(_traffic_loop(config.traffic_interval_seconds)))
     if config.delivery_poll_seconds > 0:
         tasks.append(asyncio.create_task(_delivery_loop(config.delivery_poll_seconds)))
+        tasks.append(asyncio.create_task(_telemetry_loop()))
     if config.ton_wallet_address.strip() and config.ton_poll_seconds > 0:
         tasks.append(asyncio.create_task(_ton_loop(config.ton_poll_seconds)))
 

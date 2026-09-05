@@ -320,6 +320,13 @@ export function Account() {
             onPassword={() => setPwOpen(true)}
             onSignOut={logout}
             onOpenWallet={() => setWalletOpen(true)}
+            onAdblock={async (on) => {
+              try {
+                setData(await api.setAdblock(on));
+              } catch {
+                // не сохранилось — на экране останется прежнее значение
+              }
+            }}
           />
         ) : (
           <TmaSkeleton variant="profile" />

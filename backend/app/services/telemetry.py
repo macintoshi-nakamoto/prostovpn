@@ -19,7 +19,10 @@ from collections import defaultdict
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session as OrmSession
 
+from ..config import settings
 from ..models import ConnectReport, Server, Session, utcnow
+from . import asn
+from .alerts import BR, _notify, admin_chats
 
 PROTOCOLS = ("awg", "vless", "hy2")
 KINDS = ("wifi", "cellular", "ethernet", "other", "unknown", "none")
@@ -29,14 +32,58 @@ MAX_PER_SESSION_DAY = 300
 KEEP_DAYS = 90
 STAGES = ("handshake", "auth", "route", "engine", "other")
 
+# Одного оператора называют по-разному: телефон говорит «MTS RUS», база
+# ASN — «Mobile TeleSystems PJSC». Сводим к одному имени, иначе в таблице
+# он же трижды.
+OPERATOR_ALIASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("МТС", ("mts", "мтс", "mobile telesystems", "mobile tele")),
+    ("МегаФон", ("megafon", "мегафон")),
+    ("Билайн", ("beeline", "билайн", "vimpelcom", "вымпелком")),
+    ("Tele2", ("tele2", "t2 mobile", "t2 rtk", "теле2", "т2 ")),
+    ("Yota", ("yota", "йота", "scartel")),
+    ("Ростелеком", ("rostelecom", "ростелеком")),
+    ("Дом.ру", ("er-telecom", "ertelecom", "dom.ru", "домру", "дом.ру")),
+    ("МГТС", ("mgts", "мгтс")),
+    ("Tinkoff Mobile", ("tinkoff",)),
+    ("СберМобайл", ("sbermobile", "сбермобайл")),
+)
+
+# Меньше попыток — не статистика, а случай.
+MIN_ATTEMPTS = 8
+# Тревога «похоже на блокировку»: окно, порог, сколько молчим после.
+DROP_WINDOW_HOURS = 3
+DROP_NOW_MAX_PCT = 40.0
+DROP_BEFORE_MIN_PCT = 75.0
+DROP_MIN_ATTEMPTS = 12
+DROP_COOLDOWN = dt.timedelta(hours=12)
+
+_drop_alerted: dict[tuple[str, str], dt.datetime] = {}
+
+
+def normalize_operator(name: str | None) -> str | None:
+    text = (name or "").strip()
+    if not text:
+        return None
+    low = text.lower()
+    for canonical, needles in OPERATOR_ALIASES:
+        if any(n in low for n in needles):
+            return canonical
+    return text[:64]
+
 
 def _clip(value: object, limit: int) -> str | None:
     text = str(value or "").strip()
     return text[:limit] if text else None
 
 
-def store(db: OrmSession, session: Session, reports: list[dict]) -> int:
-    """Записывает отчёты сессии, возвращает сколько принято."""
+def store(db: OrmSession, session: Session, reports: list[dict], ip: str | None = None) -> int:
+    """
+    Записывает отчёты сессии, возвращает сколько принято.
+
+    Оператора на сотовой сети называет сам телефон. На Wi-Fi он видит
+    только «Wi-Fi» — тогда провайдера берём по адресу: свежему адресу
+    этого запроса, если он не наш узел, иначе адресу сессии.
+    """
     if not reports:
         return 0
     now = utcnow()
@@ -54,6 +101,9 @@ def store(db: OrmSession, session: Session, reports: list[dict]) -> int:
         row.host: row.id
         for row in db.execute(select(Server.host, Server.id)).all()
     }
+    real_ip = ip if ip and ip not in hosts else session.ip
+    isp: str | None = None
+    isp_known = False
     accepted = 0
     for raw in reports[:MAX_PER_REQUEST]:
         if accepted >= room:
@@ -71,6 +121,12 @@ def store(db: OrmSession, session: Session, reports: list[dict]) -> int:
         if stage not in STAGES:
             stage = "other"
         host = _clip(raw.get("host"), 128)
+        operator = normalize_operator(_clip(network.get("operator"), 64))
+        if not operator and kind != "cellular":
+            if not isp_known:
+                isp_known = True
+                isp = normalize_operator(asn.isp_name(real_ip))
+            operator = isp
         try:
             duration = max(0, min(int(raw.get("duration_ms") or 0), 10**7))
             attempts = max(0, min(int(raw.get("attempts") or 1), 100))
@@ -84,7 +140,7 @@ def store(db: OrmSession, session: Session, reports: list[dict]) -> int:
                 platform=_clip(session.platform, 32) or "unknown",
                 app_version=_clip(session.app_version, 32),
                 network_kind=kind,
-                operator=_clip(network.get("operator"), 64),
+                operator=operator,
                 country=_clip(network.get("country"), 2),
                 protocol=protocol,
                 server_id=hosts.get(host) if host else None,
@@ -240,3 +296,247 @@ def summary(db: OrmSession, days: int = 7) -> dict:
         "recent_failures": recent_failures,
         "generated_at": now,
     }
+
+
+
+# ───────────────────────── что изменилось: сегодня против вчера
+
+
+def _pct(bucket: dict) -> float:
+    return round(bucket["ok"] / bucket["attempts"] * 100, 1) if bucket["attempts"] else 0.0
+
+
+def changes(db: OrmSession, hours: int = 24) -> dict:
+    """
+    Последние `hours` часов против таких же часов перед ними, по парам
+    оператор × протокол. Отсортировано от худшего изменения к лучшему:
+    то, что просело, — наверху.
+    """
+    now = utcnow()
+    hours = max(1, min(int(hours), 24 * 7))
+    mid = now - dt.timedelta(hours=hours)
+    start = mid - dt.timedelta(hours=hours)
+    rows = list(
+        db.scalars(select(ConnectReport).where(ConnectReport.created_at >= start))
+    )
+
+    cur: dict[tuple[str, str], dict] = defaultdict(_bucket)
+    prev: dict[tuple[str, str], dict] = defaultdict(_bucket)
+    cur_proto: dict[str, dict] = defaultdict(_bucket)
+    prev_proto: dict[str, dict] = defaultdict(_bucket)
+    errors: dict[str, int] = defaultdict(int)
+    cur_total = _bucket()
+    prev_total = _bucket()
+
+    for r in rows:
+        operator = (r.operator or "").strip() or ("Wi-Fi" if r.network_kind == "wifi" else "—")
+        recent = r.created_at >= mid
+        targets = (
+            (cur[(operator, r.protocol)], cur_proto[r.protocol], cur_total)
+            if recent
+            else (prev[(operator, r.protocol)], prev_proto[r.protocol], prev_total)
+        )
+        for bucket in targets:
+            bucket["attempts"] += 1
+            if r.ok:
+                bucket["ok"] += 1
+        if recent and not r.ok and r.error:
+            errors[r.error] += 1
+
+    items = []
+    for key in set(cur) | set(prev):
+        c, p = cur[key], prev[key]
+        if c["attempts"] < MIN_ATTEMPTS and p["attempts"] < MIN_ATTEMPTS:
+            continue
+        delta = None
+        if c["attempts"] >= MIN_ATTEMPTS and p["attempts"] >= MIN_ATTEMPTS:
+            delta = round(_pct(c) - _pct(p), 1)
+        items.append(
+            {
+                "operator": key[0],
+                "protocol": key[1],
+                "attempts": c["attempts"],
+                "ok_pct": _pct(c),
+                "prev_attempts": p["attempts"],
+                "prev_ok_pct": _pct(p) if p["attempts"] else None,
+                "delta": delta,
+            }
+        )
+    items.sort(key=lambda x: (x["delta"] if x["delta"] is not None else 1000, -x["attempts"]))
+
+    protocols = []
+    for proto in PROTOCOLS:
+        c, p = cur_proto.get(proto), prev_proto.get(proto)
+        if not c and not p:
+            continue
+        c = c or _bucket()
+        p = p or _bucket()
+        protocols.append(
+            {
+                "protocol": proto,
+                "attempts": c["attempts"],
+                "ok_pct": _pct(c),
+                "prev_attempts": p["attempts"],
+                "prev_ok_pct": _pct(p) if p["attempts"] else None,
+                "delta": round(_pct(c) - _pct(p), 1) if c["attempts"] and p["attempts"] else None,
+            }
+        )
+
+    return {
+        "hours": hours,
+        "reports": cur_total["attempts"],
+        "ok_pct": _pct(cur_total),
+        "prev_reports": prev_total["attempts"],
+        "prev_ok_pct": _pct(prev_total) if prev_total["attempts"] else None,
+        "items": items,
+        "protocols": protocols,
+        "errors": [
+            {"error": text, "count": count}
+            for text, count in sorted(errors.items(), key=lambda kv: -kv[1])[:8]
+        ],
+        "generated_at": now,
+    }
+
+
+PROTOCOL_TITLES = {"awg": "AmneziaWG", "vless": "Reality", "hy2": "Hysteria2"}
+
+
+def _arrow(delta: float | None) -> str:
+    if delta is None:
+        return ""
+    if delta <= -15:
+        return " ⬇"
+    if delta >= 15:
+        return " ⬆"
+    return ""
+
+
+def digest_text(db: OrmSession, site: str) -> str:
+    """Сводка за сутки для Telegram — коротко, самое важное первым."""
+    data = changes(db, 24)
+    lines = ["📊 <b>Связь за сутки</b>", ""]
+    if data["reports"] == 0:
+        lines.append("Отчётов от приложений не было.")
+        return BR.join(lines)
+
+    was = f" (вчера {data['prev_ok_pct']}%)" if data["prev_ok_pct"] is not None else ""
+    lines.append(f"Попыток {data['reports']}, удачных {data['ok_pct']}%{was}.")
+
+    protos = []
+    for p in data["protocols"]:
+        if not p["attempts"]:
+            continue
+        before = f" ({p['prev_ok_pct']}%)" if p["prev_ok_pct"] is not None else ""
+        protos.append(f"{PROTOCOL_TITLES.get(p['protocol'], p['protocol'])} {p['ok_pct']}%{before}{_arrow(p['delta'])}")
+    if protos:
+        lines.append("По протоколам: " + ", ".join(protos) + ".")
+
+    drops = [i for i in data["items"] if i["delta"] is not None and i["delta"] <= -15]
+    if drops:
+        lines.append("")
+        lines.append("<b>Просело:</b>")
+        for i in drops[:6]:
+            lines.append(
+                f"• {i['operator']} · {PROTOCOL_TITLES.get(i['protocol'], i['protocol'])}: "
+                f"{i['ok_pct']}% (было {i['prev_ok_pct']}%), попыток {i['attempts']}"
+            )
+    else:
+        lines.append("Заметных просадок по операторам нет.")
+
+    bad = [i for i in data["items"] if i["attempts"] >= MIN_ATTEMPTS and i["ok_pct"] < 60 and i not in drops]
+    if bad:
+        lines.append("")
+        lines.append("<b>Плохо и вчера, и сегодня:</b>")
+        for i in bad[:4]:
+            lines.append(f"• {i['operator']} · {PROTOCOL_TITLES.get(i['protocol'], i['protocol'])}: {i['ok_pct']}% из {i['attempts']}")
+
+    if data["errors"]:
+        lines.append("")
+        lines.append("Ошибки: " + ", ".join(f"{e['error']} ×{e['count']}" for e in data["errors"][:4]))
+
+    lines.append("")
+    lines.append(f"Подробнее: {site.rstrip('/')}/admin/telemetry")
+    return BR.join(lines)
+
+
+def _digest_marker() -> "Path":
+    from pathlib import Path
+
+    return Path(settings().data_dir) / "telemetry_digest.date"
+
+
+def daily_digest(db: OrmSession) -> bool:
+    """Раз в сутки в заданный час — сводка админам. Отметка на диске переживает перезапуск."""
+    now = utcnow()
+    if now.hour != int(settings().telemetry_digest_hour_utc):
+        return False
+    marker = _digest_marker()
+    today = now.strftime("%Y-%m-%d")
+    try:
+        if marker.exists() and marker.read_text().strip() == today:
+            return False
+    except OSError:
+        pass
+    chats = admin_chats()
+    if not chats:
+        return False
+    if _notify(chats, digest_text(db, settings().site_url)):
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text(today)
+        except OSError:
+            pass
+        return True
+    return False
+
+
+def check_drops(db: OrmSession) -> list[str]:
+    """
+    Похоже на блокировку: за последние часы у пары оператор × протокол
+    успех упал ниже порога, хотя сутки до того всё было хорошо. Одно
+    сообщение на пару, потом молчим DROP_COOLDOWN.
+    """
+    now = utcnow()
+    window_start = now - dt.timedelta(hours=DROP_WINDOW_HOURS)
+    before_start = window_start - dt.timedelta(hours=24)
+    rows = list(db.scalars(select(ConnectReport).where(ConnectReport.created_at >= before_start)))
+
+    recent: dict[tuple[str, str], dict] = defaultdict(_bucket)
+    before: dict[tuple[str, str], dict] = defaultdict(_bucket)
+    for r in rows:
+        operator = (r.operator or "").strip() or ("Wi-Fi" if r.network_kind == "wifi" else "—")
+        target = recent if r.created_at >= window_start else before
+        bucket = target[(operator, r.protocol)]
+        bucket["attempts"] += 1
+        if r.ok:
+            bucket["ok"] += 1
+
+    chats = admin_chats()
+    sent: list[str] = []
+    for key, c in recent.items():
+        p = before.get(key)
+        if c["attempts"] < DROP_MIN_ATTEMPTS or not p or p["attempts"] < DROP_MIN_ATTEMPTS:
+            continue
+        if _pct(c) > DROP_NOW_MAX_PCT or _pct(p) < DROP_BEFORE_MIN_PCT:
+            continue
+        last = _drop_alerted.get(key)
+        if last and now - last < DROP_COOLDOWN:
+            continue
+        operator, proto = key
+        others = [
+            f"{PROTOCOL_TITLES.get(k[1], k[1])} {_pct(b)}%"
+            for k, b in recent.items()
+            if k[0] == operator and k[1] != proto and b["attempts"] >= MIN_ATTEMPTS
+        ]
+        text = (
+            "🔻 <b>Похоже на блокировку</b>" + BR + BR
+            + f"{operator} · {PROTOCOL_TITLES.get(proto, proto)}: за {DROP_WINDOW_HOURS} ч удачных "
+            + f"{_pct(c)}% из {c['attempts']}, сутки до этого — {_pct(p)}%."
+            + (BR + "Там же: " + ", ".join(others) + "." if others else "")
+        )
+        if not chats:
+            continue
+        if _notify(chats, text):
+            _drop_alerted[key] = now
+            sent.append(f"{operator}/{proto}")
+    return sent

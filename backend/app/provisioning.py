@@ -423,6 +423,20 @@ def with_special_junk(config: str, params: dict | None) -> str:
     return head + "\n" + lines + "\n\n" + base[match.start() :]
 
 
+DNS_LINE = re.compile(r"(?im)^([ \t]*DNS[ \t]*=[ \t]*)(.*)$")
+
+
+def with_dns(config: str, servers: str) -> str:
+    """Подменяет DNS в [Interface]; строки нет — добавляет после Address."""
+    if DNS_LINE.search(config):
+        return DNS_LINE.sub(lambda m: f"{m.group(1)}{servers}", config, count=1)
+    address = re.search(r"(?im)^[ \t]*Address[ \t]*=.*$", config)
+    if not address:
+        return config
+    end = address.end()
+    return config[:end] + f"\nDNS = {servers}" + config[end:]
+
+
 def with_endpoint_host(config: str, host: str) -> str:
     if not config:
         return config

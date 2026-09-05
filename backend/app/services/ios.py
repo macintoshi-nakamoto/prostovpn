@@ -316,6 +316,8 @@ def reissue(db: OrmSession, user: User) -> list[str]:
 
 def _vpn_url(server: Server, key: UserKey, name: str) -> str | None:
     config = provisioning.serving_config(server, key)
+    if config and key.user is not None and key.user.adblock_dns:
+        config = provisioning.with_dns(config, server.host)
     if not config:
         # Отключённый (отозванный) ключ serving_config не отдаёт; в config
         # приватного ключа больше нет — только заглушка, настоящий под

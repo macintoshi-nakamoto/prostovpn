@@ -465,6 +465,7 @@ class AccountOut(BaseModel):
     ios: IosOut = IosOut()
     tunnel_file: TunnelFileOut = TunnelFileOut()
     freeze: FreezeOut = FreezeOut()
+    adblock: bool = False
 
 
 def _device_connected(user: User, device_id: str, now: dt.datetime) -> bool:
@@ -694,6 +695,7 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
     devices.sort(key=lambda d: d.last_seen_at or floor, reverse=True)
 
     return AccountOut(
+        adblock=bool(user.adblock_dns),
         login=user.login,
         email=user.email_plain,
         public_id=user.public_id,
@@ -818,6 +820,30 @@ def enable_ios(
 
     for warning in warnings:
         log.warning("ключ AmneziaVPN для %s: %s", user.public_id, warning)
+    return _account_out(db, user, session)
+
+
+class AdblockIn(BaseModel):
+    on: bool
+
+
+@router.post("/account/adblock", response_model=AccountOut)
+def set_adblock(
+    body: AdblockIn,
+    response: Response,
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> AccountOut:
+    """
+    «Без рекламы»: DNS в конфигах человека переключается на резолвер узла
+    со списком рекламных доменов. В наших приложениях подхватывается при
+    следующем подключении; ключ AmneziaVPN на iPhone несёт DNS в себе —
+    его надо выпустить заново.
+    """
+    user, session = who
+    response.headers["Cache-Control"] = "no-store"
+    user.adblock_dns = bool(body.on)
+    db.commit()
     return _account_out(db, user, session)
 
 

@@ -133,7 +133,7 @@ def authenticate(
         user.password_hash = hash_password(password)
 
     token = open_session(
-        db, user, platform=platform, app_version=app_version, device_id=device_id
+        db, user, platform=platform, app_version=app_version, device_id=device_id, ip=ip
     )
     session = db.scalar(select(Session).where(Session.token_hash == token_hash(token)))
     _enforce_device_limit(db, user, session)
@@ -147,6 +147,7 @@ def open_session(
     platform: str | None = None,
     app_version: str | None = None,
     device_id: str | None = None,
+    ip: str | None = None,
 ) -> str:
     """Выдаёт токен сессии без проверки пароля — для входов, где личность
     уже удостоверена иначе (подпись Telegram). Лимит устройств здесь не
@@ -158,7 +159,7 @@ def open_session(
             token_hash=token_hash(token),
             platform=platform,
             app_version=app_version,
-            ip=None,
+            ip=_real_ip(db, ip),
             device_id=sanitize_device_id(device_id),
             device_name=None,
             expires_at=utcnow() + dt.timedelta(days=settings().client_token_days),
@@ -224,9 +225,29 @@ def session_for_token(db: OrmSession, token: str) -> Session | None:
     return session
 
 
+def _real_ip(db: OrmSession, ip: str | None) -> str | None:
+    """
+    Адрес человека, а не нашего узла.
+
+    Приложение ходит в панель и через поднятый туннель — тогда запрос
+    приходит с адреса узла, и провайдера по нему не узнать. Такой адрес
+    не запоминаем: прежний, настоящий, полезнее.
+    """
+    if not ip:
+        return None
+    from ..models import Server
+
+    if db.scalar(select(Server.id).where(Server.host == ip)) is not None:
+        return None
+    return ip
+
+
 def touch(db: OrmSession, session: Session, ip: str | None = None) -> None:
     now = utcnow()
     session.last_seen_at = now
+    real = _real_ip(db, ip)
+    if real and real != session.ip:
+        session.ip = real
 
     full = dt.timedelta(days=settings().client_token_days)
     if session.expires_at - now < full / 2:

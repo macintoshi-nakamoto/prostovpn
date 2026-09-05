@@ -25,6 +25,8 @@ import org.json.JSONObject
 class XrayTunnel(private val context: Context) {
 
     data class Access(
+        // Резолвер без рекламы — адрес узла; пусто — обычный 1.1.1.1.
+        val dns: String? = null,
         val host: String,
         val port: Int,
         val id: String,

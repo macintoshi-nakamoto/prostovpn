@@ -231,6 +231,7 @@ export const api = {
     }),
 
   freeze: () => request("/api/v1/account/freeze", { method: "POST", auth: true }),
+  setAdblock: (on) => request("/api/v1/account/adblock", { method: "POST", auth: true, body: { on } }),
 
   resume: () => request("/api/v1/account/resume", { method: "POST", auth: true }),
 

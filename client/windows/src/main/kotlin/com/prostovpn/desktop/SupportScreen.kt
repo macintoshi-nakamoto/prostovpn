@@ -77,8 +77,8 @@ fun SupportScreen(
                 LinkRow(
                     icon = Icons.telegram,
                     title = s.tgTitle,
-                    subtitle = "@prostovpnn_bot",
-                ) { open("https://t.me/prostovpnn_bot") }
+                    subtitle = "@temnoz",
+                ) { open("https://t.me/temnoz") }
                 CardDivider()
                 LinkRow(
                     icon = Icons.globe,

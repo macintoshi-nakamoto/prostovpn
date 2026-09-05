@@ -263,7 +263,7 @@ export const faqEn = {
       items: [
         [
           "Where do I write?",
-          "Telegram: @prostovpnn_bot — we answer within minutes on average. Or support@prostovpn.cc if messengers are inconvenient.",
+          "Telegram: @temnoz — we answer within minutes on average. Or support@prostovpn.cc if messengers are inconvenient.",
         ],
         [
           "What to attach so it's fixed faster?",

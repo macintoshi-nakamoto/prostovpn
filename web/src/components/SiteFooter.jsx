@@ -8,8 +8,9 @@ import {
   NEWS_TELEGRAM,
   SUPPORT_EMAIL,
   SUPPORT_MAILTO,
+  SUPPORT_CHAT,
+  SUPPORT_CHAT_NAME,
   SUPPORT_TELEGRAM,
-  SUPPORT_TELEGRAM_NAME,
 } from "../lib/contacts.js";
 import "./site-footer.css";
 
@@ -52,8 +53,8 @@ export function SiteFooter() {
         </div>
 
         <div className="sf-contact">
-          <a href={SUPPORT_TELEGRAM} target="_blank" rel="noreferrer">
-            {SUPPORT_TELEGRAM_NAME}
+          <a href={SUPPORT_CHAT} target="_blank" rel="noreferrer">
+            {SUPPORT_CHAT_NAME}
           </a>
           <a href={SUPPORT_MAILTO}>{SUPPORT_EMAIL}</a>
           <span>{t("footer.supportNote")}</span>

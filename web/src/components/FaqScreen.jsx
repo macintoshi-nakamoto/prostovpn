@@ -2,7 +2,7 @@ import { ScreenShell } from "./ScreenShell.jsx";
 import { FaqList } from "./FaqList.jsx";
 import { isTma } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
-import { SUPPORT_TELEGRAM } from "../lib/contacts.js";
+import { SUPPORT_CHAT } from "../lib/contacts.js";
 
 /**
  * «Вопросы и ответы» внутри кабинета — полноэкранная страница поверх
@@ -19,7 +19,7 @@ export function FaqScreen({ open, onClose }) {
         <FaqList compact />
         <div className="fq-screen-cta">
           <span>{t("faq.notFound")}</span>
-          <a className="ap-cta" href={SUPPORT_TELEGRAM} target="_blank" rel="noreferrer">
+          <a className="ap-cta" href={SUPPORT_CHAT} target="_blank" rel="noreferrer">
             {t("faq.write")}
           </a>
         </div>

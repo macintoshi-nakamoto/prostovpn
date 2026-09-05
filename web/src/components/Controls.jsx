@@ -1,9 +1,10 @@
 import { useI18n } from "../lib/i18n/index.jsx";
 import { useTheme } from "../lib/theme.jsx";
 import { isTma, tmaHaptic, tmaOpenTg } from "../lib/telegram.js";
+import { SUPPORT_CHAT } from "../lib/contacts.js";
 import "./controls.css";
 
-const SUPPORT_TG = "https://t.me/temnoz";
+const SUPPORT_TG = SUPPORT_CHAT;
 
 function PlaneIcon() {
   return (

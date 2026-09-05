@@ -42,8 +42,8 @@ android {
             }
         }
 
-        versionCode = 34
-        versionName = "1.3.0"
+        versionCode = 35
+        versionName = "1.3.1"
 
         val explicitPanelUrl = (project.findProperty("panelUrl") as String?)
             ?: System.getenv("PANEL_URL")

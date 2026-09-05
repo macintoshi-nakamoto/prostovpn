@@ -6,7 +6,7 @@ import { Reveal } from "../components/Reveal.jsx";
 import { Flag } from "../components/Flags.jsx";
 import { OK_MARK, BAD_MARK } from "../components/ServerStatus.jsx";
 import { api } from "../lib/api";
-import { SUPPORT_TELEGRAM } from "../lib/contacts.js";
+import { SUPPORT_CHAT } from "../lib/contacts.js";
 import { useI18n } from "../lib/i18n/index.jsx";
 import "./status.css";
 
@@ -134,7 +134,7 @@ export function Status() {
               <Link to="/guide" className="btn btn-primary">
                 {t("status.ctaGuide")}
               </Link>
-              <a className="sp-cta-link" href={SUPPORT_TELEGRAM} target="_blank" rel="noreferrer">
+              <a className="sp-cta-link" href={SUPPORT_CHAT} target="_blank" rel="noreferrer">
                 {t("status.ctaSupport")}
               </a>
             </div>

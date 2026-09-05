@@ -1204,7 +1204,7 @@ export const en = {
         {
           h: "Where to write",
           items: [
-            ["Telegram", "@prostovpnn_bot — the main support channel, we reply quickly."],
+            ["Telegram", "@temnoz — the main support channel, we reply quickly. The bot @prostovpnn_bot is for purchases and the dashboard."],
             ["Email", "support@prostovpn.cc — when a messenger is inconvenient; the reply lands on the same address."],
             ["What to include", "Your login or the public ID from your account, the device, and whatever the app shows on screen."],
           ],

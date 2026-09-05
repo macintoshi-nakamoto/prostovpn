@@ -10,6 +10,7 @@ import { useI18n } from "../lib/i18n/index.jsx";
 import { useTheme } from "../lib/theme.jsx";
 import { isTma, tmaHaptic, tmaOpenTg } from "../lib/telegram.js";
 import { LEGAL_DOCS, LEGAL_NAV } from "../lib/legal/index.js";
+import { SUPPORT_CHAT } from "../lib/contacts.js";
 import {
   ensureConnected,
   shortAddress,
@@ -22,7 +23,7 @@ import "./profile.css";
 
 const COMMUNITY_TG = "https://t.me/+wqjcQayNFes1Yzcx";
 const NEWS_TG = "https://t.me/myprostovpn";
-const SUPPORT_TG = "https://t.me/temnoz";
+const SUPPORT_TG = SUPPORT_CHAT;
 
 const STROKE = {
   fill: "none",

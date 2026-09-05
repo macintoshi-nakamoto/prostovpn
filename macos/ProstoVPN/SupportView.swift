@@ -3,7 +3,7 @@ import SwiftUI
 enum Site {
     static let address = "https://prostovpn.cc"
 
-    static let telegram = "https://t.me/prostovpnn_bot"
+    static let telegram = "https://t.me/temnoz"
 }
 
 struct SupportView: View {
@@ -38,7 +38,7 @@ struct SupportView: View {
                         LinkRow(
                             icon: "paperplane.fill",
                             title: t.tgTitle,
-                            subtitle: "@prostovpnn_bot",
+                            subtitle: "@temnoz",
                             url: Site.telegram
                         )
                         CardDivider()

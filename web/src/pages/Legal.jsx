@@ -3,6 +3,7 @@ import { SiteHeader } from "../components/SiteHeader.jsx";
 import { SiteFooter } from "../components/SiteFooter.jsx";
 import { Reveal } from "../components/Reveal.jsx";
 import { useI18n } from "../lib/i18n/index.jsx";
+import { SUPPORT_CHAT } from "../lib/contacts.js";
 import "./legal.css";
 
 const DOC_KEYS = ["faq", "terms", "privacy", "contacts"];
@@ -50,7 +51,7 @@ export function Legal({ doc }) {
             <span>{t("legal.notFoundAnswer")}</span>
             <a
               className="btn btn-primary"
-              href="https://t.me/prostovpnn_bot"
+              href={SUPPORT_CHAT}
               target="_blank"
               rel="noreferrer"
             >

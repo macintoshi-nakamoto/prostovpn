@@ -195,7 +195,7 @@ private fun HeroCard(state: AppState) {
             PrimaryPill(
                 text = s.writeTelegram,
                 icon = Icons.telegram,
-                onClick = { openUrl(context, "https://t.me/prostovpnn_bot") },
+                onClick = { openUrl(context, "https://t.me/temnoz") },
             )
         }
     }

@@ -17,5 +17,5 @@ Prosto VPN для macOS
 переписать маршруты и подменить DNS. Пароль уходит только системному
 диалогу macOS — приложение его не видит.
 
-Поддержка: https://t.me/prostovpnn_bot
+Поддержка: https://t.me/temnoz
 Сайт: https://prostovpn.cc

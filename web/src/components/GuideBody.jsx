@@ -6,7 +6,7 @@ import { Reveal } from "./Reveal.jsx";
 import { GuideTip } from "./GuideTip.jsx";
 import { api } from "../lib/api";
 import { useI18n } from "../lib/i18n/index.jsx";
-import { SUPPORT_EMAIL, SUPPORT_MAILTO, SUPPORT_TELEGRAM } from "../lib/contacts.js";
+import { SUPPORT_CHAT, SUPPORT_EMAIL, SUPPORT_MAILTO, SUPPORT_TELEGRAM } from "../lib/contacts.js";
 import "../pages/guide.css";
 
 const PLATFORMS = ["android", "ios", "mac", "win", "tv"];
@@ -347,7 +347,7 @@ export function GuideBody({ login, embedded = false }) {
               <span className="gd-ask-sub">{t("guide.help.askText")}</span>
             </div>
             <div className="gd-ask-actions">
-              <a className="btn btn-primary" href={SUPPORT_TELEGRAM} target="_blank" rel="noreferrer">
+              <a className="btn btn-primary" href={SUPPORT_CHAT} target="_blank" rel="noreferrer">
                 {t("guide.help.askBot")}
               </a>
               <Link to="/faq" className="btn btn-dark">

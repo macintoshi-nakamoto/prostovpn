@@ -21,15 +21,28 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from ..config import settings
-from ..models import Provisioning, Server, utcnow
+from ..models import Provisioning, Server, User, utcnow
 from . import telegram
 
 log = logging.getLogger("panel.alerts")
+
+# Перевод строки для сообщений: в них его удобнее складывать, чем прятать
+# в экранированные последовательности внутри длинных f-строк.
+BR = chr(10)
 
 # Сколько узел должен молчать, прежде чем будить админа. Одиночный отказ
 # бывает от сетевой икоты по дороге, и будить из-за него — верный способ
 # приучить не читать эти сообщения.
 DOWN_AFTER = dt.timedelta(minutes=3)
+
+# Один ключ на много устройств. Запас в один адрес — не щедрость: телефон
+# на ходу переключается между Wi-Fi и сотовой сетью, и в один обход попадают
+# оба адреса. Серия из трёх обходов подряд отсекает и это.
+SHARE_GRACE = 1
+SHARE_STRIKES = 3
+# Второй раз про того же человека — не раньше чем через сутки: иначе
+# сообщение о нём приходило бы каждую минуту, пока он не отключится.
+SHARE_REPEAT = dt.timedelta(hours=24)
 
 
 def admin_chats() -> list[int]:
@@ -168,3 +181,66 @@ def public_status(db: OrmSession) -> dict[str, object]:
         "checked_at": checked,
         "servers": rows,
     }
+
+
+def check_sharing(db: OrmSession, ips_by_user: dict[int, set[str]]) -> list[str]:
+    """
+    Один ключ, воткнутый в десяток устройств.
+
+    Считаем не соединения, а разные адреса, с которых сидит учётка: телефон
+    держит соединения пачками, и по ним не понять, сколько за ключом людей.
+    Адреса даёт сам Xray (`statsonlineiplist`), обход за трафиком забирает
+    их тем же заходом по SSH.
+
+    Здесь только счёт и сообщение админам. Резать доступ автоматически
+    нельзя, пока не видно, как часто это ложная тревога: семья за двумя
+    провайдерами и общий выход у оператора выглядят так же, а цена ошибки —
+    отрезанный платящий человек.
+    """
+    now = utcnow()
+    chats = admin_chats()
+    sent: list[str] = []
+    touched = False
+
+    users = db.scalars(select(User).where(User.id.in_(ips_by_user.keys()))) if ips_by_user else []
+    for user in users:
+        count = len(ips_by_user.get(user.id) or ())
+        allowed = user.device_limit(now) + SHARE_GRACE
+
+        user.shared_ips = count
+        user.shared_ips_at = now
+        touched = True
+
+        if count > allowed:
+            user.shared_strikes += 1
+        else:
+            user.shared_strikes = 0
+            continue
+
+        if user.shared_strikes < SHARE_STRIKES:
+            continue
+        if user.shared_alert_at and now - user.shared_alert_at < SHARE_REPEAT:
+            continue
+        if not chats:
+            log.warning(
+                "ключ %s виден с %s адресов при лимите %s, но сказать некому",
+                user.public_id,
+                count,
+                allowed,
+            )
+            continue
+
+        text = (
+            f"⚠️ <b>Ключ на нескольких устройствах</b>" + BR + BR
+            + f"{user.login} ({user.public_id})" + BR
+            + f"Адресов сейчас: <b>{count}</b>, по тарифу мест: "
+            f"{user.device_limit(now)}." + BR
+            + f"Держится {user.shared_strikes} обхода подряд."
+        )
+        if _notify(chats, text):
+            user.shared_alert_at = now
+            sent.append(f"share:{user.public_id}")
+
+    if touched:
+        db.commit()
+    return sent

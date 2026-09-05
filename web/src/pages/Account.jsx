@@ -1135,12 +1135,15 @@ function TmaHome({ data, used, onManage, onSetup, onKeys, onFriends, onPassword,
               <span className="ap-title">Prosto VPN</span>
               {data.plan_title && <span className="ap-chip">{data.plan_title}</span>}
             </span>
-            <span className="ap-status">
-              <span
-                className={`ap-dot${frozen ? " is-frozen" : data.active ? " is-on" : " is-off"}`}
-              />
-              {status}
-            </span>
+            {/* Когда всё в порядке, строка «работает» не несёт ничего:
+                крупная цифра дней ниже говорит то же самое и точнее. Пауза
+                и закончившаяся подписка — другое дело, их видно словом. */}
+            {(frozen || !data.active) && (
+              <span className="ap-status">
+                <span className={`ap-dot${frozen ? " is-frozen" : " is-off"}`} />
+                {status}
+              </span>
+            )}
           </span>
         </div>
         {(data.active || frozen) && data.days_left != null ? (

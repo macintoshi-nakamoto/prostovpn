@@ -21,6 +21,30 @@ import { useI18n } from "../lib/i18n/index.jsx";
 
 const REFRESH_MS = 60_000;
 
+/* Всё работает — зелёная галочка в кружке: живее плоской точки и сразу
+   читается как «в порядке». Что-то легло — красный восклицательный знак,
+   он ловит взгляд первым. */
+const OK_MARK = (
+  <svg viewBox="0 0 20 20" aria-hidden="true">
+    <circle cx="10" cy="10" r="9" fill="#34c759" />
+    <path
+      d="M5.8 10.3l2.7 2.7 5.7-6"
+      fill="none"
+      stroke="#fff"
+      strokeWidth="2.1"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
+const BAD_MARK = (
+  <svg viewBox="0 0 20 20" aria-hidden="true">
+    <circle cx="10" cy="10" r="9" fill="#ff453a" />
+    <path d="M10 5.2v6" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
+    <circle cx="10" cy="14.4" r="1.2" fill="#fff" />
+  </svg>
+);
+
 const CHEV = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M9.6 6.4 15.2 12l-5.6 5.6" />
@@ -59,14 +83,16 @@ export function ServerStatus() {
   if (!status || !status.total) return null;
 
   const bad = status.down > 0;
-  const label = bad
+  // Что именно легло, говорим прямо в строке: иначе за этим придётся
+  // открывать лист, а плохую новость прячут в последнюю очередь.
+  const trouble = bad
     ? status.down === 1
       ? t("status.oneDown", {
           country:
             (status.servers.find((one) => !one.up) || {}).country || t("status.node"),
         })
       : t("status.manyDown", { n: status.down })
-    : t("status.allUp");
+    : "";
 
   return (
     <>
@@ -78,8 +104,9 @@ export function ServerStatus() {
           setOpen(true);
         }}
       >
-        <span className="st-dot" />
-        <span className="st-label">{label}</span>
+        <span className="st-mark">{bad ? BAD_MARK : OK_MARK}</span>
+        <span className="st-label">{t("status.title")}</span>
+        {bad && <span className="st-trouble">{trouble}</span>}
         <span className="st-chev">{CHEV}</span>
       </button>
 

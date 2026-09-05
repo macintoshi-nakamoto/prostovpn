@@ -3180,18 +3180,22 @@ html.app .st-strip {
   cursor: pointer;
 }
 html.app .st-strip.is-bad {
-  background: color-mix(in srgb, #ffa326 16%, var(--tma-card));
+  background: color-mix(in srgb, #ff453a 14%, var(--tma-card));
   color: var(--text);
 }
-html.app .st-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #34c759;
+html.app .st-mark {
+  display: grid;
+  place-items: center;
   flex: none;
 }
-html.app .st-strip.is-bad .st-dot {
-  background: #ffa326;
+html.app .st-mark svg {
+  width: 17px;
+  height: 17px;
+}
+html.app .st-trouble {
+  flex: none;
+  font-size: 13px;
+  color: #ff6b60;
 }
 html.app .st-label {
   flex: 1 1 auto;

@@ -487,6 +487,15 @@ class User(Base):
     traffic_limit_bytes: Mapped[int | None] = mapped_column(BigInteger, default=None)
     traffic_unlimited: Mapped[bool] = mapped_column(Boolean, default=False)
     traffic_used_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    # Сколько разных адресов сидело под одним ключом в последний обход и
+    # сколько обходов подряд их больше, чем позволяет тариф. Одиночный
+    # всплеск бывает от переключения телефона между Wi-Fi и сотовой сетью,
+    # поэтому решает не он, а серия.
+    shared_ips: Mapped[int] = mapped_column(Integer, default=0)
+    shared_ips_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    shared_strikes: Mapped[int] = mapped_column(Integer, default=0)
+    shared_alert_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
     traffic_reset_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
 
     ios_access: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")

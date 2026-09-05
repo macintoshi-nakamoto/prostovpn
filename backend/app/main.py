@@ -50,7 +50,14 @@ def _sync_once() -> None:
     from .services.traffic import enforce_access, reconcile_peers
 
     with SessionLocal() as db:
-        services.sync_all_traffic(db)
+        rounds = services.sync_all_traffic(db)
+
+        # Адреса, с которых сидят учётки VLESS, собирает тот же обход —
+        # склеиваем их по узлам: один человек может сидеть сразу на двух.
+        ips_by_user: dict[int, set[str]] = {}
+        for item in rounds or []:
+            for user_id, ips in (item.get("ips") or {}).items():
+                ips_by_user.setdefault(int(user_id), set()).update(ips)
 
         closed = enforce_access(db)
         if closed:
@@ -73,6 +80,13 @@ def _sync_once() -> None:
                 log.info("оповещения о узлах: %s", ", ".join(sent))
         except Exception:
             log.exception("оповещение о состоянии узлов не удалось")
+
+        try:
+            shared = services.alerts.check_sharing(db, ips_by_user)
+            if shared:
+                log.info("ключ на нескольких устройствах: %s", ", ".join(shared))
+        except Exception:
+            log.exception("проверка общего ключа не удалась")
 
 
 async def _delivery_loop(seconds: int) -> None:

@@ -753,6 +753,44 @@ def _parse_online(raw: str) -> set[str]:
     return online
 
 
+IPS_MARK = "@@IPS@@"
+
+
+def _parse_ips(raw: str) -> dict[str, set[str]]:
+    """
+    С каких адресов сидит каждая учётка прямо сейчас.
+
+    Ответ `xray api statsonlineiplist` — `{"ips": {"1.2.3.4": <время>}, …}`,
+    перед каждым идёт метка `@@U@@<учётка>`. Считаем именно адреса, а не
+    соединения: телефон держит их пачками, и по ним не понять, сколько
+    человек за ключом.
+    """
+    out: dict[str, set[str]] = {}
+    label = ""
+    chunk: list[str] = []
+
+    def flush() -> None:
+        if not label or not chunk:
+            return
+        try:
+            data = json.loads("".join(chunk))
+        except json.JSONDecodeError:
+            return
+        ips = data.get("ips") if isinstance(data, dict) else None
+        if isinstance(ips, dict) and ips:
+            out.setdefault(label, set()).update(str(ip) for ip in ips)
+
+    for line in (raw or "").splitlines():
+        if line.startswith("@@U@@"):
+            flush()
+            label = line[len("@@U@@") :].strip()
+            chunk = []
+            continue
+        chunk.append(line)
+    flush()
+    return out
+
+
 def _split_stats(raw: str) -> tuple[str, str]:
     """Две выдачи одной командой: счётчики трафика и список онлайна."""
     if ONLINE_MARK not in (raw or ""):
@@ -777,18 +815,29 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
         return {"server_id": server.id, "skipped": "нет точек входа VLESS"}
 
     try:
+        # Третьим куском — адреса, с которых сидит каждая живая учётка.
+        # Цикл крутится на узле, чтобы не делать по заходу SSH на человека.
         raw = provisioning.run_over_ssh(
             server,
             f"{XRAY_BIN} api statsquery --server=127.0.0.1:{API_PORT} "
             f"-pattern 'user>>>' -reset=false; echo '{ONLINE_MARK}'; "
-            f"{XRAY_BIN} api statsgetallonlineusers --server=127.0.0.1:{API_PORT} 2>/dev/null",
+            f"{XRAY_BIN} api statsgetallonlineusers --server=127.0.0.1:{API_PORT} 2>/dev/null; "
+            f"echo '{IPS_MARK}'; "
+            f"for u in $({XRAY_BIN} api statsgetallonlineusers --server=127.0.0.1:{API_PORT} "
+            f"2>/dev/null | grep -o 'user>>>[^>]*' | cut -d'>' -f4 | sort -u); do "
+            f"echo \"@@U@@$u\"; {XRAY_BIN} api statsonlineiplist "
+            f"--server=127.0.0.1:{API_PORT} -email \"$u\" 2>/dev/null; done",
         )
     except Exception as exc:
         log.warning("узел %s: счётчики VLESS не сняты: %s", server.name, exc)
         return {"server_id": server.id, "error": str(exc)}
 
     stats_raw, online_raw = _split_stats(raw)
+    online_raw, ips_raw = (
+        online_raw.split(IPS_MARK, 1) if IPS_MARK in online_raw else (online_raw, "")
+    )
     counters = _parse_stats(stats_raw)
+    addresses = _parse_ips(ips_raw)
     # Живые соединения — тем же заходом по SSH. Трафик за минуту может быть
     # нулевым (открытая вкладка, ничего не грузится), а соединение при
     # этом есть — раньше такой человек через три минуты «отключался».
@@ -806,10 +855,13 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
             UserEndpointCred.revoked_at.is_(None),
         )
     )
+    seen_ips: dict[int, set[str]] = {}
     for cred in creds:
         if cred.label and cred.label in online:
             cred.last_seen_at = now
             live_now += 1
+        if cred.label and addresses.get(cred.label):
+            seen_ips.setdefault(cred.user_id, set()).update(addresses[cred.label])
         pair = counters.get(cred.label or "")
         if pair is None:
             continue
@@ -848,6 +900,7 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
         "peers": updated,
         "added_bytes": added_bytes,
         "online": live_now,
+        "ips": {user_id: sorted(ips) for user_id, ips in seen_ips.items()},
     }
 
 

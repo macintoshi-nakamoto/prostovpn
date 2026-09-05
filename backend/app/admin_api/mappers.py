@@ -109,6 +109,9 @@ def user_row(user: User, now: dt.datetime | None = None) -> schemas.UserRow:
         # одному на device_id плюс iPhone с ключами, которыми пользовались.
         devices_used=user.devices_used(moment),
         device_limit=user.device_limit(moment),
+        shared_ips=user.shared_ips or 0,
+        shared_strikes=user.shared_strikes or 0,
+        shared_ips_at=user.shared_ips_at,
         servers_count=sum(1 for k in user.keys if k.revoked_at is None),
         ios_access=user.ios_access,
         ios_blocked=user.ios_blocked,

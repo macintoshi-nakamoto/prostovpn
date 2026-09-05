@@ -117,6 +117,11 @@ class UserRow(Schema):
     sessions_count: int
     devices_used: int = 0
     device_limit: int = 1
+    # С какого числа адресов сидели под одним ключом в последний обход и
+    # сколько обходов подряд их больше нормы.
+    shared_ips: int = 0
+    shared_strikes: int = 0
+    shared_ips_at: dt.datetime | None = None
     servers_count: int
     ios_access: bool = False
     ios_blocked: bool = False

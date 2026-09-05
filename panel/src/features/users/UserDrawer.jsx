@@ -266,6 +266,22 @@ function Overview({ user }) {
       <KV k="Устройств">
         {user.devicesUsed} из {user.deviceLimit}
       </KV>
+      {/* Адреса, с которых сидят под ключом. Больше лимита — либо человек
+          раздал ключ, либо у него честно два провайдера: цифра показывается
+          как есть, решение за живым человеком. */}
+      {user.sharedIpsAt && (
+        <KV k="Адресов под ключом">
+          <span
+            style={{
+              color:
+                user.sharedIps > user.deviceLimit + 1 ? "var(--gd-warn)" : "var(--gd-dim)",
+            }}
+          >
+            {user.sharedIps}
+            {user.sharedStrikes > 0 ? ` · подряд обходов: ${user.sharedStrikes}` : ""}
+          </span>
+        </KV>
+      )}
       <KV k="Серверов выдано">{user.serversCount}</KV>
       <KV k="Оплачено всего">{money(user.paidTotal, user.currency)}</KV>
       {user.blockedReason && (

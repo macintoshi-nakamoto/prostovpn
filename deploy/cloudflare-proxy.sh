@@ -42,25 +42,29 @@ set_proxied() {  # zone id, record id, true|false
         --data "{\"proxied\":$3}" | python3 -c 'import sys,json; r=json.load(sys.stdin); print("ok" if r.get("success") else r.get("errors"))'
 }
 
-probe_ssl_mode() {  # печатает full | flexible | unknown
-    local zid="$1" name="cf-probe-$RANDOM" rid host
-    rid=$(curl -s -X POST -H "$H" -H "Content-Type: application/json" "$API/zones/$zid/dns_records" \
-        --data "{\"type\":\"A\",\"name\":\"$name\",\"content\":\"$ORIGIN\",\"proxied\":true,\"ttl\":1}" \
-        | python3 -c 'import sys,json; r=json.load(sys.stdin); print(r["result"]["id"] if r.get("success") else "")')
-    [[ -n "$rid" ]] || { echo unknown; return; }
-    host="$name.$ZONE"
-    sleep 12
+probe_ssl_mode() {  # печатает full | flexible | cert | unknown(<код>)
+    # Пробуем на настоящем www: у него есть сертификат и на нашей стороне, и
+    # у Cloudflare. Выдуманное имя не годится — nginx отдаёт на него чужой
+    # сертификат, и Full (strict) честно отвечает 526, как будто всё плохо.
+    # Ходим на известный адрес края Cloudflare, чтобы не ждать кэшей DNS.
+    local zid="$1" host="www.$ZONE" rid was edge
+    read -r rid was < <(records "$zid" | awk -v h="$host" '$2==h {print $1, $4}') || true
+    [[ -n "${rid:-}" ]] || { echo "unknown(record)"; return; }
+    [[ "$was" == "False" ]] && set_proxied "$zid" "$rid" true >/dev/null
+    sleep 20
+    edge=$(dig +short "$host" @1.1.1.1 | head -1)
     local code location
-    code=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "https://$host/api/health" || true)
-    location=$(curl -s -D - -o /dev/null -m 20 "https://$host/api/health" 2>/dev/null | grep -i '^location:' | tr -d '\r' | sed 's/^[Ll]ocation: *//')
-    curl -s -X DELETE -H "$H" "$API/zones/$zid/dns_records/$rid" >/dev/null
-    # Редирект на самого себя (тот же хост) — Cloudflare пришёл на порт 80.
-    if [[ "$code" == "301" || "$code" == "302" ]] && [[ "$location" == "https://$host/"* ]]; then
+    code=$(curl -s -o /dev/null -m 25 --resolve "$host:443:$edge" "https://$host/api/health" || echo 000)
+    location=$(curl -s -D - -o /dev/null -m 25 --resolve "$host:443:$edge" "https://$host/api/health" 2>/dev/null | grep -i '^location:' | tr -d "" | sed 's/^[Ll]ocation: *//' || true)
+    [[ "$was" == "False" ]] && set_proxied "$zid" "$rid" false >/dev/null
+    if [[ "$code" == "526" || "$code" == "525" ]]; then
+        echo cert
+    elif [[ "$code" == "301" || "$code" == "302" ]] && [[ "$location" == "https://$host/"* ]]; then
         echo flexible
     elif [[ "$code" =~ ^(200|301|302|404)$ ]]; then
         echo full
     else
-        echo unknown
+        echo "unknown($code)"
     fi
 }
 
@@ -75,7 +79,10 @@ case "${1:-status}" in
         echo "== проба режима SSL"
         mode=$(probe_ssl_mode "$ZID")
         echo "  режим: $mode"
-        if [[ "$mode" != "full" ]]; then
+        if [[ "$mode" == "cert" ]]; then
+            echo "  Cloudflare не принял наш сертификат (526): проверить, что vhost www отдаёт годный."
+            exit 1
+        elif [[ "$mode" != "full" ]]; then
             echo "  Не включаю. В панели Cloudflare: SSL/TLS → Overview → Full (strict), потом снова."
             exit 1
         fi

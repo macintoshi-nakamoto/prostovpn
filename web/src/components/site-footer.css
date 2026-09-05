@@ -109,3 +109,57 @@
     margin-left: 16px;
   }
 }
+
+/* Живая строка состояния над нижней линией подвала. */
+.sf-live {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 18px 22px;
+  border-radius: 18px;
+  background: var(--bg-soft);
+  color: var(--ink);
+  text-decoration: none;
+  transition: background 0.2s ease;
+}
+.sf-live:hover {
+  background: var(--bg-softer);
+}
+.sf-live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #34c759;
+  box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.18);
+  flex: 0 0 auto;
+}
+.sf-live.is-bad .sf-live-dot {
+  background: #ff453a;
+  box-shadow: 0 0 0 4px rgba(255, 69, 58, 0.18);
+}
+.sf-live.is-wait .sf-live-dot {
+  background: var(--text-faint);
+  box-shadow: none;
+}
+.sf-live-title {
+  font-weight: 700;
+}
+.sf-live-text {
+  color: var(--text-muted);
+}
+.sf-live-more {
+  margin-left: auto;
+  font-weight: 600;
+  color: var(--accent);
+}
+@media (max-width: 720px) {
+  .sf-live {
+    padding: 16px 18px;
+    gap: 10px;
+  }
+  .sf-live-more {
+    margin-left: 0;
+    width: 100%;
+  }
+}

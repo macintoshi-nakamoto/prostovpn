@@ -4,6 +4,7 @@ import { Flag } from "./Flags.jsx";
 import { api } from "../lib/api";
 import { tmaHaptic } from "../lib/telegram.js";
 import { useI18n } from "../lib/i18n/index.jsx";
+import { BRAND } from "../lib/brand.js";
 
 /**
  * Состояние узлов — полоска над содержимым кабинета.
@@ -123,6 +124,14 @@ export function ServerStatus() {
               </div>
             ))}
           </div>
+          {/* Тихая подпись: страница доступна и без входа — пригодится,
+              когда в кабинет зайти не выходит. */}
+          <p className="st-note">
+            {t("status.cabinetNote")}{" "}
+            <a href={`${BRAND.siteUrl}/status`} target="_blank" rel="noreferrer">
+              {BRAND.domain}/status
+            </a>
+          </p>
         </Sheet>
       )}
     </>

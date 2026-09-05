@@ -1,3 +1,6 @@
+import { faqEn } from "./faq.en.js";
+import { guideEn } from "./guide.en.js";
+
 export const en = {
   units: {
     days: { one: "{count} day", other: "{count} days" },
@@ -55,6 +58,7 @@ export const en = {
         "Servers run entirely in RAM: a reboot leaves nothing behind. The policy is " +
         "confirmed by an independent audit.",
       button: "Get Prosto VPN",
+      statusButton: "Check the servers",
     },
 
     app: {
@@ -185,6 +189,12 @@ export const en = {
     licenses: "Licenses",
     supportNote: "Telegram support replies fast — a few minutes on average",
     email: "Email",
+    liveTitle: "Server status",
+    liveUp: "All servers are up",
+    liveDown: "Not responding: {n}",
+    liveOne: "{country} is not responding",
+    liveCheck: "Details",
+    liveWait: "Checking…",
   },
 
   guide: {
@@ -259,79 +269,6 @@ export const en = {
     soon: "Soon",
     downloadFallback: "Download",
 
-    os: {
-      android: {
-        title: "Connecting on Android",
-        appTitle: "Prosto VPN for Android",
-        appText: "A single file from the site: no Google Play needed, updates come from the app itself.",
-        download: "Download APK",
-        steps: [
-          ["Download the APK", "Our Android app comes as one file from the site — Google Play is not involved."],
-          ["Allow the install", "Android will ask about installing from this source — confirm. The file is signed by us."],
-          ["Sign in", "Open the app and enter the login and password from your account."],
-          ["Confirm the system prompt", "Android will ask to create a VPN connection — tap OK."],
-          ["Press connect", "Split tunneling is already inside: Russian services go direct, everything else through the tunnel."],
-        ],
-      },
-      ios: {
-        title: "Connecting on iPhone and iPad",
-        appTitle: "AmneziaVPN for iPhone and iPad",
-        appText: "We don't have our own iPhone app yet, so you connect with a key through the free AmneziaVPN.",
-        download: "Open the App Store",
-        steps: [
-          ["Install AmneziaVPN", "Find AmneziaVPN in the App Store or open the link above right on the device. The app is free."],
-          ["Get your Prosto key", "We issue the key — it waits in your account and in the Telegram bot."],
-          ["Paste the key into the app", "On the Connection screen paste the string into Insert key and tap Insert. The config is recognised on its own."],
-          ["Tap Connect", "On the New connection screen confirm it. iOS will ask to allow the VPN profile — agree."],
-          ["Check the status", "The circle turns orange and says Connected, with the Prosto VPN server below."],
-        ],
-        shots: [
-          "Paste the key into Insert key and tap Insert",
-          "The app recognises the config — tap Connect",
-          "Done: Connected and the Prosto VPN server",
-        ],
-      },
-      mac: {
-        title: "Connecting on macOS",
-        appTitle: "Prosto VPN for macOS",
-        appText: "One image, works on Apple Silicon and Intel. Updates come from the app itself.",
-        download: "Download DMG",
-        steps: [
-          ["Download the image", "The .dmg works on both Apple Silicon and Intel."],
-          ["Move it to Applications", "Open the image and drag Prosto VPN into the Applications folder."],
-          ["Sign in", "Open the app and enter the login and password from your account."],
-          ["Allow the connection service", "On the first connect macOS asks for the administrator password once: a tunnel cannot be raised without root."],
-          ["Press connect", "Split tunneling is already inside: Russian services go direct, everything else through the tunnel."],
-        ],
-      },
-      win: {
-        title: "Connecting on Windows",
-        appTitle: "Prosto VPN for Windows",
-        appText: "One installer, Windows 10 and 11. The tunnel driver installs itself.",
-        download: "Download the installer",
-        steps: [
-          ["Download the installer", "Windows 10 and 11 are supported, no separate VPN client needed."],
-          ["Run the setup", "The tunnel driver installs automatically, no reboot required."],
-          ["Sign in", "Open the app and enter the login and password from your account."],
-          ["Confirm the system prompt", "Windows will ask permission to create a VPN connection — agree."],
-          ["Press connect", "Split tunneling is already inside: Russian services go direct, everything else through the tunnel."],
-        ],
-      },
-      tv: {
-        title: "Connecting on a TV",
-        appTitle: "Prosto VPN for Android TV",
-        appText: "The same file as for Android: no separate TV build needed.",
-        download: "Download APK",
-        steps: [
-          ["Download the APK on a computer", "The button above. It's the same file as for the phone."],
-          ["Copy it to a USB stick", "Put the APK on a regular USB stick and plug it into the TV."],
-          ["Install from the stick", "Open the file manager on the TV, find the APK and start the install. Allow unknown sources if asked."],
-          ["Sign in with login and password", "The same ones as in your account. The on-screen keyboard works from the remote; case matters."],
-          ["Confirm and connect", "The TV will ask permission for the VPN connection — confirm and press connect. A nearby server usually gives the best speed."],
-        ],
-      },
-    },
-
     shotsTitle: "How it looks in the app",
     done: "Done. The connection icon turns orange — traffic goes through the encrypted tunnel.",
     toAccount: "Account",
@@ -345,39 +282,7 @@ export const en = {
     asideNeedText: "A Prosto VPN account, an internet connection and a minute. No card required.",
     asideCreate: "Create an account",
 
-    split: {
-      eyebrow: "SPLIT TUNNELING",
-      title: "Familiar services keep working",
-      lead1: "Split tunneling sends through the VPN only the addresses that need it. The rest goes direct, so banks, state portals, marketplaces and delivery keep working: they see a normal local address and keep working as usual.",
-      lead2: "In our apps the list is already inside and on by default — nothing to set up. The steps below are for AmneziaVPN on iPhone, where the list is imported by hand.",
-      fileButton: "Get the list in your account",
-      botButton: "Get it from the bot",
-      steps: [
-        ["Download the address list", "In your account or in the bot — a file with Russian ranges."],
-        ["Open split tunneling", "In AmneziaVPN the section lives in the connection settings."],
-        ["Choose the list mode", "«Addresses from the list should not open through the VPN» — Russian networks go direct, the rest stays in the tunnel."],
-        ["Import the file", "Advanced settings → Import → replace the site list. Done."],
-      ],
-      shots: [
-        "The section in connection settings",
-        "Mode: list goes around the VPN",
-        "Advanced settings → Import",
-        "Replace the site list",
-      ],
-    },
-
-    help: {
-      title: "If something doesn't work",
-      lead: "Three reasons that close almost every request",
-      cards: [
-        ["It won't connect", "Switch the country in the server list and try again. Mobile data instead of Wi-Fi often helps too: networks block VPN differently."],
-        ["Slow speed", "Pick another country — the closest one isn't always the fastest. Speed depends on node load more than on distance."],
-        ["Banking apps fail", "Turn on split tunneling: local addresses go direct, and the apps stop seeing a foreign address."],
-      ],
-      askTitle: "Still have questions?",
-      askText: "Write to Telegram or email — we answer in both",
-      askBot: "Support in Telegram",
-    },
+    ...guideEn,
   },
 
   login: {
@@ -991,6 +896,7 @@ export const en = {
     channel: "Telegram channel",
     community: "Community chat",
     support: "Contact support",
+    faq: "Questions & answers",
     appearance: "Appearance",
     themeLight: "Light",
     themeDark: "Dark",
@@ -1094,6 +1000,7 @@ export const en = {
     ctaText: "Switch the country in the app or try another network. Still stuck — message us, we answer fast.",
     ctaGuide: "Guide",
     ctaSupport: "Message support",
+    cabinetNote: "You can check the status any time, even without signing in:",
   },
 
   su: {
@@ -1150,6 +1057,8 @@ export const en = {
     home: "Go home",
     account: "Go to my account",
   },
+
+  faq: faqEn,
 
   legal: {
     notFoundAnswer: "Didn't find an answer?",

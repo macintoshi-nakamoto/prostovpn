@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { BrandLogo } from "./BrandLogo.jsx";
+import { api } from "../lib/api";
 import { BRAND } from "../lib/brand.js";
 import { Link } from "react-router-dom";
 import { useT } from "../lib/i18n/index.jsx";
@@ -57,6 +59,8 @@ export function SiteFooter() {
           <span>{t("footer.supportNote")}</span>
         </div>
 
+        <FooterStatus t={t} />
+
         <div className="sf-bottom">
           <span>© {new Date().getFullYear()} {BRAND.name}</span>
           <div>
@@ -66,5 +70,47 @@ export function SiteFooter() {
         </div>
       </div>
     </footer>
+  );
+}
+
+/**
+ * Состояние серверов одной строкой. Спрашиваем один раз при появлении
+ * подвала: сюда доскролливают редко, а держать опрос на каждой странице
+ * ни к чему. Точка зелёная — всё работает, красная — что-то легло и
+ * написано, что именно.
+ */
+function FooterStatus({ t }) {
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    api
+      .status()
+      .then((r) => alive && setStatus(r))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (status && !status.total) return null;
+  const bad = Boolean(status && status.down > 0);
+  let text = t("footer.liveWait");
+  if (status && bad) {
+    text =
+      status.down === 1
+        ? t("footer.liveOne", {
+            country: (status.servers.find((one) => !one.up) || {}).country || "",
+          })
+        : t("footer.liveDown", { n: status.down });
+  } else if (status) text = t("footer.liveUp");
+
+  return (
+    <Link to="/status" className={"sf-live" + (bad ? " is-bad" : "") + (status ? "" : " is-wait")}>
+      <i className="sf-live-dot" aria-hidden="true" />
+      <span className="sf-live-title">{t("footer.liveTitle")}</span>
+      <span className="sf-live-text">{text}</span>
+      <span className="sf-live-more">{t("footer.liveCheck")} →</span>
+    </Link>
   );
 }

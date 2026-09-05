@@ -14,6 +14,7 @@ import { Legal } from "./pages/Legal.jsx";
 import { LegalDoc } from "./pages/LegalDoc.jsx";
 import { NotFound } from "./pages/NotFound.jsx";
 import { Status } from "./pages/Status.jsx";
+import { Faq } from "./pages/Faq.jsx";
 
 // Формат приложения: класс app на корне — в Telegram всегда, на сайте на
 // маршрутах кабинета. useLayoutEffect — до отрисовки, чтобы вид не мигал.
@@ -144,7 +145,7 @@ export function App() {
         <Route path="/aup" element={<LegalDoc doc="aup" />} />
         <Route path="/refund" element={<LegalDoc doc="refund" />} />
         <Route path="/licenses" element={<LegalDoc doc="licenses" />} />
-        <Route path="/faq" element={<Legal doc="faq" />} />
+        <Route path="/faq" element={<Faq />} />
         <Route path="/contacts" element={<Legal doc="contacts" />} />
         <Route path="*" element={<NotFound />} />
       </Routes>

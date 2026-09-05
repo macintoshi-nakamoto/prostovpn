@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
@@ -692,6 +693,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
         refreshPanelServers()
         startAccountWatch()
         loadAvatar()
+        watchPhaseForVibes()
 
         updates.check()
     }
@@ -747,6 +749,28 @@ class AppState(application: Application) : AndroidViewModel(application) {
         val fresh = java.util.UUID.randomUUID().toString()
         prefs.edit().putString("installId", fresh).apply()
         return fresh
+    }
+
+    /**
+     * Вибрация на смену состояния: поднялся туннель — «поехали», снят
+     * рукой — «выдох». Смотрим на переходы, а не на вызовы: путей к
+     * «подключено» несколько, а момент один. Восстановление уже живого
+     * туннеля при старте (OFF → ON без CONNECTING) не считается: это не
+     * событие, а продолжение.
+     */
+    private fun watchPhaseForVibes() {
+        viewModelScope.launch {
+            var previous = phase
+            snapshotFlow { phase }.collect { now ->
+                when {
+                    now == Phase.ON && previous == Phase.CONNECTING ->
+                        Vibes.connected(getApplication())
+                    now == Phase.OFF && previous == Phase.DISCONNECTING ->
+                        Vibes.disconnected(getApplication())
+                }
+                previous = now
+            }
+        }
     }
 
     private fun avatarFile(): File = File(getApplication<Application>().filesDir, "avatar.jpg")
@@ -1211,6 +1235,11 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
 
     private fun startTimer() {
+        // Ровно один счётчик. Подключение сообщало о себе дважды — из
+        // наблюдателя туннеля и из самой корутины подключения, — и два
+        // счётчика с разными точками отсчёта писали в одно поле по очереди:
+        // на экране цифры прыгали между настоящим временем и чужим.
+        timerJob?.cancel()
         seconds = 0
         sessionRx = -1L
         sessionTx = -1L

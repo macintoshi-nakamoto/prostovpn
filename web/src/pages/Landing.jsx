@@ -246,9 +246,16 @@ export function Landing() {
             <span>{t("landing.zero.subtitle")}</span>
           </h2>
           <p>{t("landing.zero.text")}</p>
-          <a href="#plans" className="btn btn-primary ld-zero-btn">
-            {t("landing.zero.button")}
-          </a>
+          <div className="ld-zero-acts">
+            <a href="#plans" className="btn btn-primary ld-zero-btn">
+              {t("landing.zero.button")}
+            </a>
+            {/* Состояние серверов — тем, кто пришёл выяснить, «у вас или у меня». */}
+            <Link to="/status" className="btn btn-outline ld-zero-btn ld-zero-status">
+              <i className="ld-zero-dot" aria-hidden="true" />
+              {t("landing.zero.statusButton")}
+            </Link>
+          </div>
         </Reveal>
       </section>
 

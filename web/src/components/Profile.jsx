@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { Sheet } from "./Sheet.jsx";
 import WebLoginSheet from "./WebLoginSheet.jsx";
+import { FaqScreen } from "./FaqScreen.jsx";
 import { useI18n } from "../lib/i18n/index.jsx";
 import { useTheme } from "../lib/theme.jsx";
 import { isTma, tmaHaptic, tmaOpenTg } from "../lib/telegram.js";
@@ -328,6 +329,7 @@ export function ProfileTab({ data, tgPhoto, onPassword, onSignOut, onOpenWallet 
   const [doc, setDoc] = useState(null);
   const [payOpen, setPayOpen] = useState(false);
   const [webLogin, setWebLogin] = useState(false);
+  const [faqOpen, setFaqOpen] = useState(false);
 
   const address = tonAddress(wallet);
   const active = Boolean(data?.active);
@@ -383,6 +385,7 @@ export function ProfileTab({ data, tgPhoto, onPassword, onSignOut, onOpenWallet 
         <Row icon="channel" label={t("profile.channel")} onClick={() => openTg(NEWS_TG)} />
         <Row icon="community" label={t("profile.community")} onClick={() => openTg(COMMUNITY_TG)} />
         <Row icon="support" label={t("profile.support")} onClick={() => openTg(SUPPORT_TG)} />
+        <Row icon="support" label={t("profile.faq")} onClick={() => setFaqOpen(true)} />
       </section>
 
       <section className="pf-card">
@@ -464,6 +467,7 @@ export function ProfileTab({ data, tgPhoto, onPassword, onSignOut, onOpenWallet 
         onClose={() => setPayOpen(false)}
       />
       <DocSheet doc={doc} onClose={() => setDoc(null)} />
+      <FaqScreen open={faqOpen} onClose={() => setFaqOpen(false)} />
     </div>
   );
 }

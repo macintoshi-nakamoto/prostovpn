@@ -213,10 +213,31 @@
   line-height: 1.5;
   color: var(--text-muted);
 }
-.ld-zero-btn {
+.ld-zero-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
   margin-top: 10px;
+}
+.ld-zero-btn {
   font-size: 17px;
   padding: 19px 42px;
+}
+.ld-zero-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 30px;
+  padding-right: 34px;
+}
+.ld-zero-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #34c759;
+  box-shadow: 0 0 0 4px rgba(52, 199, 89, 0.18);
 }
 
 .ld-app {

@@ -1,0 +1,231 @@
+/* Список вопросов — один и тот же на сайте и в кабинете. На сайте живёт в
+   карточке на мягком фоне, в кабинете — на канве приложения (переопределения
+   под html.app внизу). */
+
+.fq {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.fq-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 56px;
+  padding: 0 18px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  color: var(--text-muted);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.fq-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-tint);
+}
+.fq-search svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+.fq-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  outline: none;
+}
+.fq-search input::placeholder {
+  color: var(--text-faint);
+}
+.fq-search input::-webkit-search-cancel-button {
+  display: none;
+}
+.fq-clear {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--bg-soft);
+  color: var(--text-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fq-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fq-topic {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 9px 15px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+}
+.fq-topic:hover {
+  border-color: var(--accent);
+}
+.fq-topic.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.fq-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fq-block h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 6px 4px 0;
+}
+.fq-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fq-item {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+.fq-item.is-open {
+  border-color: transparent;
+  box-shadow: var(--shadow-soft);
+}
+.fq-q {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.fq-q i {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-soft);
+  position: relative;
+  transition: transform 0.25s ease, background 0.2s ease;
+}
+.fq-q i::before,
+.fq-q i::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  background: var(--ink);
+  transform: translate(-50%, -50%);
+  border-radius: 2px;
+}
+.fq-q i::after {
+  transform: translate(-50%, -50%) rotate(90deg);
+  transition: transform 0.25s ease;
+}
+.fq-item.is-open .fq-q i {
+  background: var(--accent);
+}
+.fq-item.is-open .fq-q i::before,
+.fq-item.is-open .fq-q i::after {
+  background: #fff;
+}
+.fq-item.is-open .fq-q i::after {
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+.fq-a {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s ease;
+}
+.fq-a > p {
+  overflow: hidden;
+  min-height: 0;
+  padding: 0 20px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  transition: padding 0.28s ease;
+}
+.fq-item.is-open .fq-a {
+  grid-template-rows: 1fr;
+}
+.fq-item.is-open .fq-a > p {
+  padding: 0 20px 20px;
+}
+.fq-empty {
+  padding: 24px 6px;
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+  .fq-q {
+    font-size: 16px;
+    padding: 16px 16px;
+  }
+  .fq-a > p {
+    padding: 0 16px;
+    font-size: 15px;
+  }
+  .fq-item.is-open .fq-a > p {
+    padding: 0 16px 16px;
+  }
+  .fq-block h2 {
+    font-size: 19px;
+  }
+}
+
+/* Кабинет: карточки на канве приложения, без рамок. */
+html.app .fq-search,
+html.app .fq-item,
+html.app .fq-topic {
+  background: var(--tma-card, var(--surface));
+  border-color: transparent;
+}
+html.app .fq-topic.is-on {
+  background: var(--accent);
+}
+html.app .fq-q i,
+html.app .fq-clear {
+  background: var(--tma-inset, var(--bg-soft));
+}
+html.app .fq-item.is-open {
+  box-shadow: none;
+}
+html.app .fq-compact {
+  gap: 16px;
+}
+html.app .fq-compact .fq-block h2 {
+  font-size: 18px;
+}

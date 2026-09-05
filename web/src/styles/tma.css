@@ -3722,3 +3722,38 @@ html.app .kx-link-k {
   font-size: 13px;
   color: var(--text-faint);
 }
+
+/* Подпись под списком узлов в листе состояния — заметна, но не спорит со списком. */
+html.app .st-note {
+  margin: 14px 4px 2px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+html.app .st-note a {
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Экран «Вопросы и ответы» в кабинете. */
+html.app .fq-screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 24px;
+}
+html.app .fq-screen-lead {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+html.app .fq-screen-cta {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: var(--tma-card);
+  font-weight: 600;
+}

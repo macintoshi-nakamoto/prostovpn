@@ -65,6 +65,7 @@ export function GuideBody({ login, embedded = false }) {
   const splitShots = raw("guide.split.shots") || [];
   const splitSteps = raw("guide.split.steps") || [];
   const helpCards = raw("guide.help.cards") || [];
+  const features = raw("guide.features") || null;
 
   return (
     <div className={embedded ? "gd-embedded" : undefined}>
@@ -256,6 +257,27 @@ export function GuideBody({ login, embedded = false }) {
         </div>
       </section>
 
+      {features && (
+        <section className="gd-feat" id="features">
+          <div className="wrap gd-feat-in">
+            <div className="gd-feat-head">
+              <span className="gd-eyebrow">{features.eyebrow}</span>
+              <h2>{features.title}</h2>
+              <p>{features.lead}</p>
+            </div>
+            <div className="gd-feat-grid">
+              {(features.cards || []).map(([title, text], index) => (
+                <Reveal className="gd-feat-card" key={title} delay={index * 50}>
+                  <span className="gd-feat-n">{String(index + 1).padStart(2, "0")}</span>
+                  <span className="gd-feat-title">{title}</span>
+                  <span className="gd-feat-text">{text}</span>
+                </Reveal>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="gd-split" id="split">
         <div className="wrap gd-split-in">
           <div className="gd-split-top">
@@ -328,6 +350,9 @@ export function GuideBody({ login, embedded = false }) {
               <a className="btn btn-primary" href={SUPPORT_TELEGRAM} target="_blank" rel="noreferrer">
                 {t("guide.help.askBot")}
               </a>
+              <Link to="/faq" className="btn btn-dark">
+                {t("guide.help.askFaq")}
+              </Link>
               <a className="btn btn-dark" href={SUPPORT_MAILTO}>
                 {SUPPORT_EMAIL}
               </a>

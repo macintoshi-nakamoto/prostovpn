@@ -38,7 +38,10 @@ object ConnectConfig {
     }
 
     fun build(context: Context, base: String): String {
-        val withDns = SplitTunnel.ensureMtu(SplitTunnel.ensureDns(base))
+        val withDns = SplitTunnel.ensureExcludedApps(
+            SplitTunnel.ensureMtu(SplitTunnel.ensureDns(base)),
+            AppExclusions.installed(context),
+        )
         if (!prefs(context).getBoolean("split.enabled", false)) {
             return SplitTunnel.applyToConfig(withDns, FULL_TUNNEL)
         }

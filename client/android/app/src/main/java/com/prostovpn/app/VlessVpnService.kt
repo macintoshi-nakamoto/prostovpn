@@ -67,6 +67,13 @@ class VlessVpnService : VpnService() {
         runCatching { builder.addDisallowedApplication(packageName) }
             .onFailure { Log.w(TAG, "не вышло исключить себя из туннеля: ${it.message}") }
 
+        // Приложения, которые человек пустил мимо VPN, — те же, что у
+        // AmneziaWG, только там их применяет библиотека из конфига.
+        for (pkg in AppExclusions.installed(applicationContext)) {
+            runCatching { builder.addDisallowedApplication(pkg) }
+                .onFailure { Log.w(TAG, "не вышло исключить $pkg: ${it.message}") }
+        }
+
         val descriptor = runCatching { builder.establish() }.getOrNull()
         if (descriptor == null) {
             Log.w(TAG, "система не выдала туннель")

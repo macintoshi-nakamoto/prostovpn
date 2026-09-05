@@ -13,6 +13,7 @@ import { Guide } from "./pages/Guide.jsx";
 import { Legal } from "./pages/Legal.jsx";
 import { LegalDoc } from "./pages/LegalDoc.jsx";
 import { NotFound } from "./pages/NotFound.jsx";
+import { Status } from "./pages/Status.jsx";
 
 // Формат приложения: класс app на корне — в Telegram всегда, на сайте на
 // маршрутах кабинета. useLayoutEffect — до отрисовки, чтобы вид не мигал.
@@ -136,6 +137,8 @@ export function App() {
           }
         />
         <Route path="/guide" element={<Guide />} />
+        {/* Публичная: человеку, у которого не подключается, вход не нужен. */}
+        <Route path="/status" element={<Status />} />
         <Route path="/terms" element={<LegalDoc doc="terms" />} />
         <Route path="/privacy" element={<LegalDoc doc="privacy" />} />
         <Route path="/aup" element={<LegalDoc doc="aup" />} />

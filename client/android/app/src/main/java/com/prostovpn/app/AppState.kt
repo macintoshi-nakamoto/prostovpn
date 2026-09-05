@@ -1,12 +1,15 @@
 package com.prostovpn.app
 
 import android.app.Application
+import android.graphics.BitmapFactory
 import android.util.Base64
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +22,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
@@ -203,6 +207,14 @@ class AppState(application: Application) : AndroidViewModel(application) {
     var accountName by mutableStateOf(prefs.getString("accountName", "").orEmpty())
         private set
     var accountPublicId by mutableStateOf(prefs.getString("accountPublicId", "").orEmpty())
+        private set
+
+    // Фото профиля из Telegram. Адрес даёт панель при входе — только
+    // привязанным учёткам; картинка живёт на диске сутки и подгружается
+    // при запуске, а на экране её показывают шапка и профиль.
+    var avatarUrl by mutableStateOf(prefs.getString("avatarUrl", "").orEmpty())
+        private set
+    var avatar by mutableStateOf<ImageBitmap?>(null)
         private set
     var subscriptionDaysLeft by mutableIntStateOf(prefs.getInt("daysLeft", 0))
         private set
@@ -414,6 +426,21 @@ class AppState(application: Application) : AndroidViewModel(application) {
         reconnectIfActive()
     }
 
+    // Приложения мимо VPN (см. AppExclusions). Здесь — чтобы экран настроек
+    // перерисовывался; применяют список оба туннеля сами при подъёме.
+    var excludedApps by mutableStateOf(AppExclusions.load(application))
+        private set
+
+    fun changeExcludedApps(packages: Set<String>) {
+        // Снесённые приложения из списка выкидываем сразу: иначе счётчик в
+        // настройках врал бы, а библиотека AmneziaWG спотыкалась бы о них.
+        val kept = AppExclusions.installed(getApplication(), packages).toSet()
+        if (kept == excludedApps) return
+        excludedApps = kept
+        AppExclusions.save(getApplication(), kept)
+        reconnectIfActive()
+    }
+
     fun changeAutoConnect(enabled: Boolean) {
         autoConnect = enabled
         prefs.edit().putBoolean("autoConnect", enabled).apply()
@@ -551,7 +578,10 @@ class AppState(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun buildConfigForConnect(base: String): String {
-        val withDns = SplitTunnel.ensureMtu(SplitTunnel.ensureDns(base))
+        val withDns = SplitTunnel.ensureExcludedApps(
+            SplitTunnel.ensureMtu(SplitTunnel.ensureDns(base)),
+            withContext(Dispatchers.Default) { AppExclusions.installed(getApplication(), excludedApps) },
+        )
         if (!splitTunnelEnabled) {
             return SplitTunnel.applyToConfig(withDns, "0.0.0.0/0, ::/0")
         }
@@ -661,6 +691,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
 
         refreshPanelServers()
         startAccountWatch()
+        loadAvatar()
 
         updates.check()
     }
@@ -718,6 +749,59 @@ class AppState(application: Application) : AndroidViewModel(application) {
         return fresh
     }
 
+    private fun avatarFile(): File = File(getApplication<Application>().filesDir, "avatar.jpg")
+
+    /**
+     * Фото профиля: с диска, если свежее суток, иначе с панели по токену.
+     *
+     * Панель ответила «нет фото» — файл стираем и остаёмся с буквой. Сеть
+     * не ответила — оставляем прежнюю картинку: устаревшее фото лучше
+     * пустого круга, а в следующий запуск попробуем снова.
+     */
+    private fun loadAvatar(force: Boolean = false) {
+        val url = avatarUrl
+        val token = panelToken
+        viewModelScope.launch(Dispatchers.IO) {
+            val file = avatarFile()
+            if (url.isEmpty() || token.isEmpty()) {
+                runCatching { file.delete() }
+                withContext(Dispatchers.Main) { avatar = null }
+                return@launch
+            }
+            val fresh = file.exists() &&
+                System.currentTimeMillis() - file.lastModified() < AVATAR_KEEP_MS
+            if (force || !fresh) {
+                try {
+                    val bytes = PanelApi.downloadImage(url, token)
+                    if (bytes == null) runCatching { file.delete() }
+                    else runCatching { file.writeBytes(bytes) }
+                } catch (_: IOException) {
+                    // оставляем то, что было
+                }
+            }
+            val bitmap = decodeAvatar(file)
+            withContext(Dispatchers.Main) { avatar = bitmap }
+        }
+    }
+
+    /** Декодируем с уменьшением: на экране круг в 44 dp, полный кадр ни к чему. */
+    private fun decodeAvatar(file: File): ImageBitmap? {
+        if (!file.exists()) return null
+        return runCatching {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(file.path, bounds)
+            var sample = 1
+            while (bounds.outWidth / (sample * 2) >= AVATAR_SIDE_PX &&
+                bounds.outHeight / (sample * 2) >= AVATAR_SIDE_PX
+            ) sample *= 2
+            val options = BitmapFactory.Options().apply { inSampleSize = sample }
+            BitmapFactory.decodeFile(file.path, options)?.asImageBitmap()
+        }.getOrNull()
+    }
+
+    private val AVATAR_KEEP_MS = 24 * 60 * 60 * 1000L
+    private val AVATAR_SIDE_PX = 256
+
     private fun deviceName(): String {
         val manufacturer = android.os.Build.MANUFACTURER.orEmpty()
             .replaceFirstChar { it.uppercase() }
@@ -729,12 +813,16 @@ class AppState(application: Application) : AndroidViewModel(application) {
         panelToken = session.token
         accountName = session.name ?: session.login
         accountPublicId = session.publicId
+        avatarUrl = session.avatarUrl.orEmpty()
 
         prefs.edit()
             .putString("panelToken", session.token)
             .putString("accountName", accountName)
             .putString("accountPublicId", accountPublicId)
+            .putString("avatarUrl", avatarUrl)
             .apply()
+
+        loadAvatar(force = true)
 
         applySubscription(session.subscription, session.notice)
         applyPanelServers(session.servers.map { it.toServerInfo() })
@@ -855,10 +943,16 @@ class AppState(application: Application) : AndroidViewModel(application) {
         renewUrl = ""
         panelNotice = ""
         selectedServerIndex = 0
+        avatarUrl = ""
+        avatar = null
+        runCatching { avatarFile().delete() }
         val language = lang
         // Идентификатор установки живёт дольше сессии: иначе каждый новый
-        // вход плодит в кабинете новое «устройство».
+        // вход плодит в кабинете новое «устройство». Список приложений мимо
+        // VPN — тоже про устройство, а не про учётку: банк остаётся банком,
+        // под кем бы ни вошли.
         val keepInstallId = prefs.getString("installId", null)
+        val keepApps = excludedApps
         prefs.edit().clear().apply()
 
         prefs.edit()
@@ -867,6 +961,7 @@ class AppState(application: Application) : AndroidViewModel(application) {
             .putBoolean("split.enabled", false)
             .apply()
         keepInstallId?.let { prefs.edit().putString("installId", it).apply() }
+        AppExclusions.save(getApplication(), keepApps)
         // Реестр файлов стёрт clear()-ом — подчистим и сами файлы.
         runCatching { tunnelDir().listFiles()?.forEach { it.delete() } }
         cachedAllowedIps = null

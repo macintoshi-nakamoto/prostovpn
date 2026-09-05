@@ -21,6 +21,10 @@ object PanelApi {
         val servers: List<PanelServer>,
 
         val notice: String?,
+
+        // Фото профиля из Telegram. Панель даёт адрес только привязанным
+        // учёткам; остальным — буква, как и раньше.
+        val avatarUrl: String? = null,
     )
 
     data class Subscription(
@@ -143,7 +147,41 @@ object PanelApi {
             subscription = parseSubscription(body.optJSONObject("subscription").orEmpty()),
             servers = parseServers(body),
             notice = body.optStringOrNull("notice"),
+            avatarUrl = account.optStringOrNull("avatar_url"),
         )
+    }
+
+    /**
+     * Картинка по адресу с токеном. `null` — фото нет (404); сбой сети —
+     * IOException, чтобы вызывающий оставил прежнюю картинку с диска.
+     */
+    fun downloadImage(url: String, token: String, maxBytes: Int = 2 * 1024 * 1024): ByteArray? {
+        val connection = runCatching { URL(url).openConnection() as HttpURLConnection }.getOrNull()
+            ?: return null
+        return try {
+            connection.requestMethod = "GET"
+            connection.connectTimeout = TIMEOUT_MS
+            connection.readTimeout = TIMEOUT_MS
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            // 404 — фото нет, это ответ. Всё остальное — не ответ, а сбой:
+            // наверх, чтобы прежняя картинка с диска не стиралась зря.
+            val code = connection.responseCode
+            if (code == 404) return null
+            if (code != 200) throw IOException("Ошибка $code")
+            connection.inputStream.use { stream ->
+                val out = java.io.ByteArrayOutputStream()
+                val buffer = ByteArray(16 * 1024)
+                while (true) {
+                    val read = stream.read(buffer)
+                    if (read < 0) break
+                    out.write(buffer, 0, read)
+                    if (out.size() > maxBytes) return null
+                }
+                out.toByteArray()
+            }
+        } finally {
+            connection.disconnect()
+        }
     }
 
     private fun parseSubscription(subscription: JSONObject): Subscription = Subscription(

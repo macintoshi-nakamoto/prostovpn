@@ -20,6 +20,23 @@
          «неизвестные источники», мы лишь имеем право туда отправить. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!--
+    Список приложений для исключения из VPN. С Android 11 чужие пакеты
+    невидимы без объявления, чем именно интересуемся: нам нужны только те,
+    у кого есть значок на рабочем столе или в ТВ-лаунчере. QUERY_ALL_PACKAGES
+    не просим — для выбора «банк мимо VPN» этого достаточно.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+        </intent>
+    </queries>
+
     <!-- Приложению не нужны ни экран-тачскрин, ни телефония: пусть ставится
          на ТВ-приставки, планшеты и устройства без SIM. -->
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

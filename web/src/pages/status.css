@@ -1,0 +1,235 @@
+/* Публичная страница состояния — та же архитектура, что у правовых
+   страниц (legal.css): цветная шапка со скруглённым низом, тело на мягком
+   фоне, карточки. Шапка краснеет, когда что-то легло: плохую новость
+   человек должен увидеть раньше, чем прочитает. */
+
+.sp {
+  background: var(--bg);
+}
+
+.sp-hero {
+  background: linear-gradient(118deg, #ff7a3d 0%, #fa4c16 46%, #d93a05 100%);
+  color: #fff;
+  border-bottom-left-radius: 44px;
+  border-bottom-right-radius: 44px;
+  padding: 150px 0 76px;
+  transition: background 0.4s ease;
+}
+.sp-hero.is-bad {
+  background: linear-gradient(118deg, #ff5a4a 0%, #e63b2e 48%, #b8281d 100%);
+}
+.sp-hero-in {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 760px;
+}
+.sp-eyebrow {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.82);
+}
+.sp-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 54px;
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.sp-head-mark {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  display: inline-flex;
+}
+.sp-head-mark svg {
+  width: 100%;
+  height: 100%;
+  /* Красный на красном не читается — на плохой шапке знак белый с красным
+     восклицанием, на оранжевой галочка остаётся зелёной. */
+}
+.sp-hero.is-bad .sp-head-mark circle:first-child {
+  fill: #fff;
+}
+.sp-hero.is-bad .sp-head-mark path,
+.sp-hero.is-bad .sp-head-mark circle:not(:first-child) {
+  stroke: #e63b2e;
+  fill: #e63b2e;
+}
+.sp-hero.is-bad .sp-head-mark path {
+  fill: none;
+}
+.sp-hero p {
+  font-size: 18px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.sp-body {
+  background: var(--bg-soft);
+  padding: 56px 0 96px;
+}
+.sp-body-in {
+  max-width: 900px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.sp-card {
+  background: var(--surface);
+  border-radius: 24px;
+  padding: 14px 16px;
+}
+.sp-list {
+  display: flex;
+  flex-direction: column;
+}
+.sp-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.sp-row:last-child {
+  border-bottom: 0;
+}
+.sp-flag {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-soft);
+}
+.sp-flag svg,
+.sp-flag img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.sp-name {
+  flex: 1 1 auto;
+  font-size: 17px;
+  font-weight: 600;
+}
+.sp-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1f9d4b;
+  white-space: nowrap;
+}
+.sp-state i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 0 4px rgba(31, 157, 75, 0.14);
+}
+.sp-state.is-bad {
+  color: #d92d20;
+}
+.sp-state.is-bad i {
+  box-shadow: 0 0 0 4px rgba(217, 45, 32, 0.14);
+}
+.sp-state small {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.sp-quiet {
+  padding: 18px 12px;
+  font-size: 16px;
+  color: var(--text-muted);
+}
+.sp-meta {
+  padding: 12px 12px 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.sp-cta {
+  background: var(--invert-bg);
+  color: var(--invert-fg);
+  border-radius: 24px;
+  padding: 30px 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.sp-cta h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+.sp-cta p {
+  font-size: 15px;
+  line-height: 1.5;
+  opacity: 0.8;
+  max-width: 520px;
+}
+.sp-cta-acts {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.sp-cta-link {
+  font-size: 15px;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  opacity: 0.85;
+}
+.sp-cta-link:hover {
+  opacity: 1;
+}
+
+@media (max-width: 720px) {
+  .sp-hero {
+    padding: 120px 0 52px;
+    border-bottom-left-radius: 28px;
+    border-bottom-right-radius: 28px;
+  }
+  .sp-head {
+    font-size: 34px;
+    gap: 12px;
+  }
+  .sp-head-mark {
+    width: 36px;
+    height: 36px;
+  }
+  .sp-hero p {
+    font-size: 16px;
+  }
+  .sp-body {
+    padding: 32px 0 64px;
+  }
+  .sp-row {
+    padding: 14px 6px;
+    gap: 12px;
+  }
+  .sp-name {
+    font-size: 16px;
+  }
+  .sp-state {
+    font-size: 14px;
+  }
+  .sp-cta {
+    padding: 24px 22px;
+  }
+}

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from . import (
     alerts,
+    avatars,
     billing_webhook,
     compat,
     credentials,

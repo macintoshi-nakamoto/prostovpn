@@ -132,6 +132,9 @@ class Settings(BaseSettings):
     cloudflare_api_token: str = ""
 
     telegram_bot_token: str = ""
+    # Кэш фото профиля из Telegram для приложения (services/avatars.py).
+    # Относительно рабочего каталога панели, как и panel.db; пусто — без кэша.
+    avatar_cache_dir: str = "./avatars"
 
     # Кому писать про упавший узел: chat_id через запятую, обычно те же,
     # что ADMIN_IDS у бота. Пусто — оповещений нет вовсе. Списка

@@ -173,6 +173,7 @@ export const en = {
     security: "Security",
     faq: "FAQ",
     guide: "Setup",
+    status: "Server status",
     support: "Support",
     bot: "Telegram bot",
     channel: "Telegram channel",
@@ -1080,6 +1081,19 @@ export const en = {
     node: "One of the servers",
     up: "up",
     down: "not responding",
+    // Public /status page.
+    pageLead:
+      "Every node is checked once a minute — the same picture the administrator sees. If you can't connect while everything here is fine, it's usually your carrier's network: try another country or mobile data.",
+    checked: "Checked at {time}",
+    refresh: "refreshes every minute",
+    since: "since {time}",
+    loading: "Checking…",
+    unreachable: "Couldn't load the status",
+    empty: "No nodes yet",
+    ctaTitle: "Can't connect while everything is fine here?",
+    ctaText: "Switch the country in the app or try another network. Still stuck — message us, we answer fast.",
+    ctaGuide: "Guide",
+    ctaSupport: "Message support",
   },
 
   su: {

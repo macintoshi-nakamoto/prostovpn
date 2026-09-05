@@ -231,6 +231,24 @@ object SplitTunnel {
             configText.substring(match.range.last + 1)
     }
 
+    /**
+     * Приложения мимо туннеля — строкой `ExcludedApplications` в [Interface].
+     * Библиотека AmneziaWG сама переводит её в addDisallowedApplication при
+     * подъёме службы. Пустой список — строку убираем: конфиг от панели её
+     * не содержит, а старая от прошлого подключения не должна пережить
+     * очистку списка.
+     */
+    fun ensureExcludedApps(configText: String, packages: List<String>): String {
+        val stripped = Regex("(?im)^[ \\t]*ExcludedApplications[ \\t]*=.*(?:\\r?\\n)?")
+            .replace(configText, "")
+        if (packages.isEmpty()) return stripped
+        val header = Regex("(?im)^[ \\t]*\\[Interface\\][ \\t]*$")
+        val match = header.find(stripped) ?: return stripped
+        return stripped.substring(0, match.range.last + 1) +
+            "\nExcludedApplications = " + packages.joinToString(", ") +
+            stripped.substring(match.range.last + 1)
+    }
+
     fun applyToConfig(configText: String, allowedIps: String): String {
         val regex = Regex("(?im)^[ \\t]*AllowedIPs[ \\t]*=.*(?:\\r?\\n)?")
         var replaced = false

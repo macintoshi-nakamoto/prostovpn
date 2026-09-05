@@ -24,7 +24,7 @@ const REFRESH_MS = 60_000;
 /* Всё работает — зелёная галочка в кружке: живее плоской точки и сразу
    читается как «в порядке». Что-то легло — красный восклицательный знак,
    он ловит взгляд первым. */
-const OK_MARK = (
+export const OK_MARK = (
   <svg viewBox="0 0 20 20" aria-hidden="true">
     <circle cx="10" cy="10" r="9" fill="#34c759" />
     <path
@@ -37,7 +37,7 @@ const OK_MARK = (
     />
   </svg>
 );
-const BAD_MARK = (
+export const BAD_MARK = (
   <svg viewBox="0 0 20 20" aria-hidden="true">
     <circle cx="10" cy="10" r="9" fill="#ff453a" />
     <path d="M10 5.2v6" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />

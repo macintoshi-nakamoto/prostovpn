@@ -4,7 +4,7 @@ import datetime as dt
 import logging
 import time
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
@@ -111,6 +111,23 @@ class AccountOut(BaseModel):
     # пароль придумали за человека. Витрина обязана показать его сразу —
     # второй раз узнать пароль будет неоткуда.
     password: str | None = None
+    # Фото профиля из Telegram — есть только у привязанных учёток. Само
+    # фото отдаёт /account/avatar, здесь лишь адрес, чтобы приложение не
+    # ходило за картинкой к тем, у кого её заведомо нет.
+    avatar_url: str | None = None
+
+
+def _account_out(user: User, password: str | None = None) -> AccountOut:
+    avatar = None
+    if user.telegram_id is not None:
+        avatar = f"{settings().site_url.rstrip('/')}/api/v1/account/avatar"
+    return AccountOut(
+        public_id=user.public_id,
+        login=user.login,
+        name=user.name,
+        password=password,
+        avatar_url=avatar,
+    )
 
 
 class LoginResponse(BaseModel):
@@ -622,7 +639,7 @@ def login(
     return LoginResponse(
         token=token,
         expires_at=session.expires_at,
-        account=AccountOut(public_id=user.public_id, login=user.login, name=user.name),
+        account=_account_out(user),
         subscription=_subscription_out(user),
         servers=servers,
         notice=_notice_for(db, user, servers),
@@ -801,7 +818,7 @@ def login_telegram(
     return LoginResponse(
         token=token,
         expires_at=session.expires_at,
-        account=AccountOut(public_id=user.public_id, login=user.login, name=user.name),
+        account=_account_out(user),
         subscription=_subscription_out(user),
         servers=servers,
         notice=_notice_for(db, user, servers),
@@ -891,7 +908,7 @@ def register(
     return LoginResponse(
         token=token,
         expires_at=session.expires_at,
-        account=AccountOut(public_id=user.public_id, login=user.login, name=user.name),
+        account=_account_out(user),
         subscription=_subscription_out(user),
         servers=servers,
         notice=_notice_for(db, user, servers),
@@ -913,6 +930,28 @@ def servers(
         subscription=_subscription_out(user),
         servers=servers,
         notice=_notice_for(db, user, servers),
+    )
+
+
+@router.get("/account/avatar", include_in_schema=False)
+def account_avatar(session: Session = Depends(current_session)) -> Response:
+    """
+    Фото профиля из Telegram для приложения.
+
+    404 — нет привязки, нет фото или Telegram не ответил: для приложения
+    это одно и то же «покажи букву». Кэш браузеру приватный: картинка
+    выдаётся по токену, и общий кэш по дороге её хранить не должен.
+    """
+    user = session.user
+    if user.telegram_id is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "нет привязки к Telegram")
+    data = services.avatars.fetch(user.telegram_id)
+    if not data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "фото профиля нет")
+    return Response(
+        content=data,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=86400"},
     )
 
 

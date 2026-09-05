@@ -73,18 +73,12 @@ fun ProfilePage(state: AppState, onOpenSettings: () -> Unit, onOpenSupport: () -
 
             GlassCard(modifier = Modifier.fadeUp(), padding = 16.dp) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(Theme.brandGradient),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = state.accountName.take(1).uppercase().ifEmpty { "P" },
-                            style = pro(18.sp, W.bold, Color.White, display = true),
-                        )
-                    }
+                    Avatar(
+                        bitmap = state.avatar,
+                        letter = state.accountName.take(1).uppercase().ifEmpty { "P" },
+                        size = 44.dp,
+                        fontSize = 18.sp,
+                    )
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(s.yourLogin, style = pro(13.sp, W.regular, Theme.textFaint))

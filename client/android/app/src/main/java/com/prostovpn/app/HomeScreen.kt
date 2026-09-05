@@ -165,18 +165,12 @@ private fun AccountHeader(
             .height(56.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(CircleShape)
-                .background(Theme.brandGradient),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = name.take(1).uppercase(),
-                style = pro(16.sp, W.bold, Color.White, display = true),
-            )
-        }
+        Avatar(
+            bitmap = state.avatar,
+            letter = name.take(1).uppercase(),
+            size = 36.dp,
+            fontSize = 16.sp,
+        )
         Spacer(Modifier.width(12.dp))
         Text(
             text = name,

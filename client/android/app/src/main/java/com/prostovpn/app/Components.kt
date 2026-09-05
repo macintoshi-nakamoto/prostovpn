@@ -60,6 +60,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asImageBitmap
@@ -78,6 +80,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.flow.collectLatest
@@ -1040,6 +1043,33 @@ fun SheetShell(
             }
             Spacer(Modifier.height(16.dp))
             content()
+        }
+    }
+}
+
+/**
+ * Аватар: фото из Telegram, если есть, иначе первая буква на фирменном
+ * градиенте. Круг один и тот же — меняется только содержимое, поэтому
+ * появление фото после входа ничего не сдвигает.
+ */
+@Composable
+fun Avatar(bitmap: ImageBitmap?, letter: String, size: Dp, fontSize: TextUnit) {
+    Box(
+        modifier = Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Theme.brandGradient),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(text = letter, style = pro(fontSize, W.bold, Color.White, display = true))
         }
     }
 }

@@ -52,6 +52,7 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
     val context = LocalContext.current
     var showLogoutConfirm by remember { mutableStateOf(false) }
     var showFileSheet by remember { mutableStateOf(false) }
+    var showAppsSheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { state.updates.check(silent = true) }
 
@@ -105,6 +106,13 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
                                 state.changeSplitTunnel(it)
                             }
                         },
+                    )
+                    HairLine()
+                    MenuRow(
+                        title = s.appsTitle,
+                        subtitle = appsSubtitle(state, s),
+                        height = 70.dp,
+                        onClick = { showAppsSheet = true },
                     )
                     HairLine()
                     BackgroundWorkRow(state)
@@ -193,6 +201,10 @@ fun SettingsScreen(state: AppState, onBack: () -> Unit) {
     if (showFileSheet) {
         TunnelFileSheet(state = state, onDismiss = { showFileSheet = false })
     }
+
+    if (showAppsSheet) {
+        AppsSheet(state = state, onDismiss = { showAppsSheet = false })
+    }
 }
 
 @Composable
@@ -202,6 +214,11 @@ private fun Overline(text: String) {
         style = pro(12.sp, W.bold, Theme.textFaint, tracking = em(12.sp, 0.08f)),
         modifier = Modifier.padding(start = 6.dp, top = 6.dp),
     )
+}
+
+private fun appsSubtitle(state: AppState, s: Strings): String {
+    val count = state.excludedApps.size
+    return if (count == 0) s.appsNone else s.appsCount.format(count)
 }
 
 private fun fileSubtitle(state: AppState, s: Strings): String {

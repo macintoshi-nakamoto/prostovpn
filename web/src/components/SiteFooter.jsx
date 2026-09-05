@@ -28,6 +28,7 @@ export function SiteFooter() {
           </div>
           <div>
             <Link to="/guide">{t("footer.guide")}</Link>
+            <Link to="/status">{t("footer.status")}</Link>
             <Link to="/faq">{t("footer.faq")}</Link>
             <Link to="/contacts">{t("footer.support")}</Link>
             <a href={SUPPORT_TELEGRAM} target="_blank" rel="noreferrer">

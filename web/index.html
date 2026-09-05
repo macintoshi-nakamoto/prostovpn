@@ -30,25 +30,22 @@
       Скрипт синхронный и стоит в <head> намеренно: React грузится отдельным
       файлом, и пока он идёт по сети, страница уже нарисована. Поставь атрибут
       в компоненте — человеку с тёмной темой сначала мигнёт белый лист. Здесь
-      же считается ровно то, что потом посчитает readTheme()/readLang(): для
-      темы — «сохранённая, иначе светлая» (системную не читаем — сайт по
-      умолчанию светлый), для языка — «сохранённый → язык браузера → русский».
-      Разойдись эти правила — первый кадр спорил бы со вторым.
+      же считается ровно то, что потом посчитает lib/theme.jsx и readLang():
+      для темы — «сохранённая для этой половины сайта, иначе тёмная в кабинете
+      и светлая на витрине», для языка — «сохранённый → язык браузера →
+      русский». Разойдись эти правила — первый кадр спорил бы со вторым.
     -->
     <script>
       (function () {
         var root = document.documentElement;
-        var stored = null;
         var lang = null;
         try {
-          stored = localStorage.getItem("prosto_theme");
           lang = localStorage.getItem("prosto_lang");
         } catch (e) {
           // Приватный режим запрещает хранилище — остаются значения по умолчанию.
         }
         // Внутри Telegram признак приходит в хеше адреса раньше любого
-        // скрипта: класс tma прячет сайтовую обвязку с первого кадра, а
-        // тема, пока свою не выбрали, берётся из темы Telegram (по фону).
+        // скрипта: класс tma прячет сайтовую обвязку с первого кадра.
         var tma = false;
         try {
           tma =
@@ -57,8 +54,12 @@
         } catch (e) {}
         // Формат приложения: в Telegram — всегда, на сайте — в кабинете.
         // Ставится до рендера, чтобы вид не мигал; дальше синхронизирует
-        // Account.jsx при SPA-переходах.
-        if (tma || location.pathname === "/account" || location.pathname.indexOf("/account/") === 0) {
+        // App.jsx при SPA-переходах.
+        var app =
+          tma ||
+          location.pathname === "/account" ||
+          location.pathname.indexOf("/account/") === 0;
+        if (app) {
           root.classList.add("app");
         }
         if (tma) {
@@ -84,23 +85,26 @@
               vp.getAttribute("content") +
                 ", viewport-fit=cover, maximum-scale=1, user-scalable=no"
             );
-          if (stored !== "light" && stored !== "dark") {
-            var m = location.hash.match(/tgWebAppThemeParams=([^&]+)/);
-            if (m) {
-              try {
-                var bg = (JSON.parse(decodeURIComponent(m[1])).bg_color || "").replace("#", "");
-                if (bg.length === 6) {
-                  var lum =
-                    parseInt(bg.slice(0, 2), 16) * 0.299 +
-                    parseInt(bg.slice(2, 4), 16) * 0.587 +
-                    parseInt(bg.slice(4, 6), 16) * 0.114;
-                  stored = lum < 128 ? "dark" : "light";
-                }
-              } catch (e) {}
-            }
-          }
         }
-        var dark = stored === "dark";
+        // Тема. В кабинете и в Telegram — тёмная, на витрине — светлая.
+        // Значения по умолчанию разные, поэтому и выбранное руками хранится
+        // отдельно для каждой половины: с одним общим ключом нажатие
+        // переключателя в любом месте красило обе половины одинаково.
+        // Тему Telegram намеренно не читаем: мини-приложение тёмное всегда,
+        // пока человек сам не решит иначе.
+        //
+        // У бренда без витрины (Rus VPN) светлой половины нет вовсе: корень
+        // и так ведёт в кабинет, и без этой оговорки на нём мигал бы белый
+        // лист ровно до редиректа.
+        var night = app || "%VITE_NO_LANDING%" === "1";
+        var pick = null;
+        try {
+          pick = localStorage.getItem(night ? "prosto_theme_app" : "prosto_theme_site");
+          // Общий ключ прежних времён. Переносить его некуда: по нему не
+          // понять, о какой половине шла речь, когда его записывали.
+          localStorage.removeItem("prosto_theme");
+        } catch (e) {}
+        var dark = pick === "dark" || (pick !== "light" && night);
         root.setAttribute("data-theme", dark ? "dark" : "light");
         if (dark) {
           var meta = document.querySelector('meta[name="theme-color"]');

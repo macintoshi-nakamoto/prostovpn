@@ -4,6 +4,7 @@ import { tmaSignedOut, useSession } from "./lib/session.jsx";
 import { initTma, isTma, tmaStartParam } from "./lib/telegram.js";
 import { rememberRef } from "./lib/referral.js";
 import { BRAND } from "./lib/brand.js";
+import { useTheme } from "./lib/theme.jsx";
 import { Landing } from "./pages/Landing.jsx";
 import { Login } from "./pages/Login.jsx";
 import { Reset } from "./pages/Reset.jsx";
@@ -17,12 +18,19 @@ import { NotFound } from "./pages/NotFound.jsx";
 // маршрутах кабинета. useLayoutEffect — до отрисовки, чтобы вид не мигал.
 // Первичную установку до рендера делает скрипт в index.html, но снять
 // класс (например, редирект /account -> /login без токена) может только он.
+//
+// Здесь же тема: она идёт за той же границей — кабинет тёмный, витрина
+// светлая (см. lib/theme.jsx). Считать «где мы» дважды в разных местах
+// незачем, а разойдись эти два расчёта — вид и цвет спорили бы друг с другом.
 function AppFormat() {
   const { pathname } = useLocation();
+  const { follow } = useTheme();
   useLayoutEffect(() => {
     const app = isTma() || pathname === "/account" || pathname.startsWith("/account/");
     document.documentElement.classList.toggle("app", app);
-  }, [pathname]);
+    // У бренда без витрины светлой половины нет вовсе: там кабинет — всё.
+    follow(app || !BRAND.landing);
+  }, [pathname, follow]);
   return null;
 }
 

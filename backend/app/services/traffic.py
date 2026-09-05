@@ -91,8 +91,13 @@ def _sync_server_traffic_locked(db: OrmSession, server: Server) -> dict[str, obj
     try:
         dumps = provisioning.dumps_over_ssh(server, interfaces)
     except Exception as exc:
+        now = utcnow()
         server.traffic_error = str(exc)
-        server.traffic_synced_at = utcnow()
+        server.traffic_synced_at = now
+        # Узел не ответил по SSH. Момент первого отказа не перетираем:
+        # по нему считается, сколько он уже лежит.
+        if server.down_since is None:
+            server.down_since = now
         db.commit()
         return {"server_id": server.id, "error": str(exc)}
 
@@ -153,6 +158,10 @@ def _sync_server_traffic_locked(db: OrmSession, server: Server) -> dict[str, obj
     server.traffic_error = (
         None if not empty else "не отвечают интерфейсы: " + ", ".join(empty)
     )
+    # Узел ответил. Молчащий интерфейс — повод для предупреждения, но не
+    # для «узел лежит»: остальные точки на нём продолжают работать.
+    server.last_ok_at = now
+    server.down_since = None
     db.commit()
     return {
         "server_id": server.id,

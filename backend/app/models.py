@@ -243,6 +243,17 @@ class Server(Base):
     traffic_synced_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
     traffic_error: Mapped[str | None] = mapped_column(Text, default=None)
 
+    # Живость узла. Заполняет обход за трафиком: он и так ходит на каждый
+    # сервер по SSH раз в интервал, отдельная проверка была бы вторым
+    # источником правды.
+    #
+    #   last_ok_at    — когда узел последний раз ответил;
+    #   down_since    — когда начались отказы (пусто, если отвечает);
+    #   alert_sent_at — когда об этом сказали админам, чтобы не повторяться.
+    last_ok_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    down_since: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    alert_sent_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+
     health_ok: Mapped[bool | None] = mapped_column(Boolean, default=None)
     health_summary: Mapped[str | None] = mapped_column(Text, default=None)
     health_checked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)

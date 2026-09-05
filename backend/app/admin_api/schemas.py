@@ -367,6 +367,9 @@ class ServerOut(Schema):
     keys_active: int
     traffic_synced_at: dt.datetime | None
     traffic_error: str | None
+    last_ok_at: dt.datetime | None = None
+    down_since: dt.datetime | None = None
+    alert_sent_at: dt.datetime | None = None
     created_at: dt.datetime
 
     ssh_host: str | None = None

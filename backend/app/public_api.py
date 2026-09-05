@@ -1653,3 +1653,34 @@ def downloads(db: OrmSession = Depends(get_db)) -> list[DownloadOut]:
             )
         )
     return out
+
+
+class StatusServerOut(BaseModel):
+    name: str
+    country: str | None = None
+    country_code: str | None = None
+    up: bool
+    down_since: dt.datetime | None = None
+
+
+class StatusOut(BaseModel):
+    ok: bool
+    total: int
+    down: int
+    checked_at: dt.datetime | None = None
+    servers: list[StatusServerOut]
+
+
+# Имя функции не «status» намеренно: в этом модуле так называется
+# fastapi.status, и обработчик перебил бы его на весь файл — все ответы с
+# кодами ошибок посыпались бы AttributeError.
+@router.get("/status", response_model=StatusOut)
+def service_status(db: OrmSession = Depends(get_db)) -> StatusOut:
+    """
+    Состояние узлов для сайта и мини-приложения.
+
+    Открыто без входа: человек, у которого не подключается, должен увидеть
+    причину раньше, чем напишет в поддержку. Адресов узлов здесь нет —
+    только страна и название.
+    """
+    return StatusOut(**services.alerts.public_status(db))

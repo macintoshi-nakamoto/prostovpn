@@ -378,5 +378,8 @@ def server_out(db: OrmSession, server: Server) -> schemas.ServerOut:
         keys_active=sum(1 for k in keys if k.revoked_at is None),
         traffic_synced_at=server.traffic_synced_at,
         traffic_error=server.traffic_error,
+        last_ok_at=server.last_ok_at,
+        down_since=server.down_since,
+        alert_sent_at=server.alert_sent_at,
         created_at=server.created_at,
     )

@@ -64,6 +64,16 @@ def _sync_once() -> None:
                     public_key[:16],
                 )
 
+        # Отметки живости только что обновил обход выше — сразу и смотрим,
+        # не пора ли сказать админам. Отдельный цикл ходил бы к базе за тем
+        # же самым.
+        try:
+            sent = services.alerts.check_nodes(db)
+            if sent:
+                log.info("оповещения о узлах: %s", ", ".join(sent))
+        except Exception:
+            log.exception("оповещение о состоянии узлов не удалось")
+
 
 async def _delivery_loop(seconds: int) -> None:
     tick = 0

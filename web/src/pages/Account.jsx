@@ -11,6 +11,7 @@ import { starsPayUrl } from "../lib/contacts.js";
 import { TgsEmoji } from "../components/TgsEmoji.jsx";
 import { SetupGuide } from "../components/SetupGuide.jsx";
 import { AppsScreen } from "../components/AppsScreen.jsx";
+import { ServerStatus } from "../components/ServerStatus.jsx";
 import { TmaExternalKeys } from "../components/TmaExternalKeys.jsx";
 import { TmaDevicesSheet } from "../components/TmaDevicesSheet.jsx";
 import { AppStoreSheet, appStoreAutoAllowed, markAppStoreShown } from "../components/AppStoreSheet.jsx";
@@ -260,6 +261,11 @@ export function Account() {
       </header>
 
       <main className="wrap ac-main">
+        {/* Состояние узлов — первое, что видно под шапкой: человек, у
+            которого не подключается, должен увидеть причину до того, как
+            пойдёт искать её в поддержке. */}
+        <ServerStatus />
+
         {/* key по вкладке: контент каждый раз входит мягким подъёмом,
             а не подменяется скачком. */}
         <div className="ac-view" key={shownTab}>

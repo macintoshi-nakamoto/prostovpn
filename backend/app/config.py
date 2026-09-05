@@ -133,6 +133,11 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = ""
 
+    # Кому писать про упавший узел: chat_id через запятую, обычно те же,
+    # что ADMIN_IDS у бота. Пусто — оповещений нет вовсе. Списка
+    # пользователей здесь нет и быть не может: адресаты только отсюда.
+    alert_chat_ids: str = ""
+
     delivery_poll_seconds: int = 15
     delivery_max_attempts: int = 8
 

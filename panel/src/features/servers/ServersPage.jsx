@@ -60,6 +60,25 @@ function healthState(server) {
   return { ok: false, color: "var(--gd-info)", label: "Не проверялся" };
 }
 
+/**
+ * Живость узла — не то же самое, что диагностика по кнопке «Проверить».
+ * Её отмечает обход за трафиком: ходит по SSH раз в интервал и пишет в базу,
+ * ответил узел или нет. Отсюда и берём: у панели и у оповещений в боте один
+ * источник правды, иначе они рассказывали бы разное.
+ */
+function liveState(server) {
+  if (server.provisioning !== "ssh") {
+    return { color: "var(--gd-faint)", label: "Живость не отслеживается" };
+  }
+  if (server.downSince) {
+    return { color: "var(--gd-neg)", label: `Не отвечает ${ago(server.downSince)}` };
+  }
+  if (!server.lastOkAt) {
+    return { color: "var(--gd-info)", label: "Ещё не заходили" };
+  }
+  return { color: "var(--gd-pos)", label: "Отвечает" };
+}
+
 const FACTS_OPEN_KEY = "panel.serverFacts.open";
 
 function factsOpenDefault() {
@@ -205,6 +224,9 @@ export function ServersPage() {
 
   const usable = rows.filter((s) => s.isActive && s.canServe && s.healthOk !== false).length;
   const keys = rows.reduce((sum, s) => sum + s.keysActive, 0);
+  // Молчащие узлы — то, ради чего сюда заходят в плохой день, поэтому они
+  // выносятся плашкой наверх, а не прячутся в карточке пятым полем.
+  const down = rows.filter((s) => s.isActive && s.provisioning === "ssh" && s.downSince);
 
   const toggle = async (server) => {
     setBusy(server.id);
@@ -291,6 +313,19 @@ export function ServersPage() {
         <Tile label="Выдано ключей" value={num(keys)} />
       </div>
 
+      {down.length > 0 && (
+        <div
+          className="gd-error"
+          style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}
+        >
+          <Dot color="var(--gd-neg)" />
+          <span>
+            {plural(down.length, "Узел", "Узла", "Узлов")} не {down.length === 1 ? "отвечает" : "отвечают"}:{" "}
+            {down.map((one) => one.country || one.name).join(", ")}. Админам в бот уже сообщено.
+          </span>
+        </div>
+      )}
+
       {notice && (
         <div className="gd-error" style={{ marginBottom: 12, background: "var(--gd-card)", color: "var(--gd-dim)" }}>
           {notice}
@@ -326,6 +361,10 @@ export function ServersPage() {
                   label={server.isActive ? "Включён" : "Выключен"}
                 />
 
+                {server.isActive && (
+                  <StatusDot color={liveState(server).color} label={liveState(server).label} />
+                )}
+
                 <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <Toggle on={server.isActive} disabled={busy === server.id} onChange={() => toggle(server)} />
                   <Button size="sm" onClick={() => setEditing(server)}>
@@ -359,6 +398,20 @@ export function ServersPage() {
                 </KV>
                 <KV k="Шаблон конфига">
                   {server.hasTemplate ? "задан" : <span style={{ color: "var(--gd-warn)" }}>не задан</span>}
+                </KV>
+                <KV k="Последний ответ узла">
+                  {server.provisioning !== "ssh" ? (
+                    "не отслеживается"
+                  ) : server.downSince ? (
+                    <span style={{ color: "var(--gd-neg)" }}>
+                      молчит с {ago(server.downSince)}
+                      {server.lastOkAt ? `, до этого отвечал ${ago(server.lastOkAt)}` : ""}
+                    </span>
+                  ) : server.lastOkAt ? (
+                    ago(server.lastOkAt)
+                  ) : (
+                    "ещё не заходили"
+                  )}
                 </KV>
                 <KV k="Счётчики трафика">
                   {server.trafficError ? (

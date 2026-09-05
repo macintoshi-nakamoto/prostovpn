@@ -1071,6 +1071,17 @@ export const en = {
     gone: "This link was issued long ago and is no longer shown — issue a new one.",
     failed: "Could not issue the key. Try again.",
   },
+  status: {
+    title: "Server status",
+    lead: "Refreshed every minute from the node sweep",
+    allUp: "All servers are up",
+    oneDown: "{country} is not responding",
+    manyDown: "Servers not responding: {n}",
+    node: "One of the servers",
+    up: "up",
+    down: "not responding",
+  },
+
   su: {
     title: "Download app",
     heroTitle: "Download app",

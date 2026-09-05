@@ -271,4 +271,6 @@ export const api = {
   plans: () => request("/api/v1/plans"),
 
   downloads: () => request("/api/v1/downloads"),
+
+  status: () => request("/api/v1/status"),
 };

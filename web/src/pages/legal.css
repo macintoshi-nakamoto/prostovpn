@@ -2,7 +2,7 @@
   background: var(--bg);
 }
 .lgl-hero {
-  background: linear-gradient(118deg, #ff7a3d 0%, #fa4c16 46%, #d93a05 100%);
+  background: var(--brand-gradient);
   color: #fff;
   border-bottom-left-radius: 44px;
   border-bottom-right-radius: 44px;

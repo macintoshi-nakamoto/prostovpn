@@ -59,8 +59,14 @@ export function ThemeProvider({ children }) {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
 
+    // Цвет строки состояния браузера — из токенов бренда, а не цифрами:
+    // тёмная тема — канва, светлая — акцент (шапка сайта).
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute("content", theme === "dark" ? "#1a1a1c" : "#FA4C16");
+    if (meta) {
+      const styles = getComputedStyle(document.documentElement);
+      const color = styles.getPropertyValue(theme === "dark" ? "--bg" : "--accent").trim();
+      meta.setAttribute("content", color || (theme === "dark" ? "#1a1a1c" : "#FA4C16"));
+    }
   }, [theme]);
 
   // Переход между витриной и кабинетом. Тему, выбранную здесь руками, не

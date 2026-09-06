@@ -24,6 +24,7 @@ html.brand-rusvpn[data-theme="dark"] {
   --accent-dark: #8fb0ff;
   --accent-soft: #6a8dff;
   --accent-tint: #16215a;
+  --accent-rgb: 61, 107, 255;
   --tint-fg: #9db6ff;
   --brand-tint: #16215a;
   --brand-gradient: var(--rv-gradient);
@@ -76,6 +77,7 @@ html.brand-rusvpn[data-theme="light"] {
   --accent-dark: #1a44d6;
   --accent-soft: #5a80ff;
   --accent-tint: #e9eeff;
+  --accent-rgb: 43, 92, 255;
   --tint-fg: #1a44d6;
   --brand-tint: #e9eeff;
 

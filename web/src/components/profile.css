@@ -80,7 +80,7 @@
   font-size: 20px;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(135deg, #ff7a3d, #d93a05);
+  background: var(--brand-gradient);
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--line);
   overflow: hidden;
 }

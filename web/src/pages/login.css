@@ -1,5 +1,5 @@
 .lg-page {
-  background: #ff7a3d;
+  background: var(--accent-soft);
   overscroll-behavior-y: none;
 }
 .lg-page body {
@@ -18,7 +18,7 @@
 
   overflow: hidden;
   overflow: clip;
-  background: linear-gradient(118deg, #ff7a3d 0%, #fa4c16 46%, #d93a05 100%);
+  background: var(--brand-gradient);
   color: #fff;
 
   color-scheme: light;
@@ -279,7 +279,7 @@
   border: none;
   cursor: pointer;
   background: #fff;
-  color: #d93a05;
+  color: var(--accent-deep);
   font-size: 18px;
   font-weight: 600;
   padding: 18px 40px;
@@ -401,7 +401,7 @@
 
 @media (max-width: 900px) {
   .lg-page {
-    background: linear-gradient(180deg, #ff7a3d 0 52%, #fff 52%);
+    background: linear-gradient(180deg, var(--accent-soft) 0 52%, #fff 52%);
   }
 
   .lg-in {
@@ -479,7 +479,7 @@
   }
   .lg-field input:focus-visible {
     border-color: var(--accent);
-    box-shadow: 0 0 0 4px rgba(250, 76, 22, 0.14);
+    box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.14);
   }
   .lg-pass input {
     padding-right: 96px;
@@ -510,7 +510,7 @@
     color: var(--accent);
   }
   .lg-error {
-    background: #fff1ea;
+    background: var(--accent-tint);
     box-shadow: none;
   }
 
@@ -669,8 +669,8 @@
 [data-theme="dark"] .lg-glow {
   background: radial-gradient(
     58% 68% at 74% 44%,
-    rgba(250, 76, 22, 0.26) 0%,
-    rgba(250, 76, 22, 0) 62%
+    rgba(var(--accent-rgb), 0.26) 0%,
+    rgba(var(--accent-rgb), 0) 62%
   );
 }
 /* Диагональная тень поверх градиента на тёмном только грязнит — снимаем. */
@@ -710,7 +710,7 @@
 [data-theme="dark"] .lg-field input:focus-visible {
   background: var(--field);
   border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(250, 76, 22, 0.2);
+  box-shadow: 0 0 0 4px rgba(var(--accent-rgb), 0.2);
 }
 
 [data-theme="dark"] .lg-pass button {
@@ -765,11 +765,11 @@
 [data-theme="dark"] .lg-submit {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 12px 28px rgba(250, 76, 22, 0.28);
+  box-shadow: 0 12px 28px rgba(var(--accent-rgb), 0.28);
 }
 [data-theme="dark"] .lg-submit:hover {
   background: var(--accent-hover);
-  box-shadow: 0 16px 34px rgba(250, 76, 22, 0.34);
+  box-shadow: 0 16px 34px rgba(var(--accent-rgb), 0.34);
 }
 [data-theme="dark"] .lg-submit:disabled {
   background: #5a3527;

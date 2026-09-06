@@ -39,7 +39,7 @@
 /* ───────── шапка */
 
 .bk-hero {
-  background: linear-gradient(118deg, #ff7a3d 0%, #fa4c16 46%, #d93a05 100%);
+  background: var(--brand-gradient);
   color: #fff;
   border-bottom-left-radius: 44px;
   border-bottom-right-radius: 44px;
@@ -89,7 +89,7 @@
 /* Значок в шапке белый, а его внутренний штрих — цветом шапки. */
 .bk-head-mark svg path[stroke="#fff"],
 .bk-head-mark svg circle[stroke="#fff"] {
-  stroke: #d93a05;
+  stroke: var(--accent-deep);
 }
 .bk-hero.is-warn .bk-head-mark svg path[stroke="#fff"] {
   stroke: #c46f05;

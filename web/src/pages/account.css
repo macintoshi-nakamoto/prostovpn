@@ -282,7 +282,7 @@
 }
 
 .ac-hero {
-  background: linear-gradient(130deg, #ff7a3d 0%, #fa4c16 48%, #d93a05 100%);
+  background: var(--brand-gradient);
   color: #fff;
   border-radius: 28px;
   padding: 34px 36px;

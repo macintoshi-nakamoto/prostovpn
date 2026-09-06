@@ -14,6 +14,10 @@
   --accent-dark: #c93607;
   --accent-soft: #ff6a2b;
   --accent-tint: #fff1ea;
+  /* Акцент числами — для полупрозрачных свечений и теней (rgba(var(--accent-rgb), .2)).
+     Второй бренд переопределяет вместе с --accent, иначе у синего кабинета
+     свечения остались бы оранжевыми. */
+  --accent-rgb: 250, 76, 22;
 
   --ink: #0a0a0a;
   --ink-2: #262626;
@@ -402,7 +406,7 @@ img {
   transition: opacity 0.35s ease;
   background: radial-gradient(
     circle at var(--glow-x, 50%) var(--glow-y, 50%),
-    rgba(250, 76, 22, 0.16),
+    rgba(var(--accent-rgb), 0.16),
     transparent 62%
   );
 }

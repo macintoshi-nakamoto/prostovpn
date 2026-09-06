@@ -134,6 +134,9 @@ export function Status() {
               <Link to="/guide" className="btn btn-primary">
                 {t("status.ctaGuide")}
               </Link>
+              <Link to="/blocks" className="sp-cta-link">
+                {t("status.ctaBlocks")}
+              </Link>
               <a className="sp-cta-link" href={SUPPORT_CHAT} target="_blank" rel="noreferrer">
                 {t("status.ctaSupport")}
               </a>

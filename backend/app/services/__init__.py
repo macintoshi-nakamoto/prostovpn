@@ -7,6 +7,7 @@ from . import (
     avatars,
     billing_webhook,
     compat,
+    connectivity,
     credentials,
     delivery,
     devices,

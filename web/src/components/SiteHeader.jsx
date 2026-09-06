@@ -37,6 +37,7 @@ export function SiteHeader() {
           <a href={section("plans")}>{t("nav.plans")}</a>
           <a href={section("security")}>{t("nav.security")}</a>
           <Link to="/guide">{t("nav.guide")}</Link>
+          <Link to="/blocks">{t("nav.blocks")}</Link>
           <Link to="/faq">{t("nav.faq")}</Link>
         </nav>
         )}

@@ -66,6 +66,10 @@ export const faqEn = {
       h: "Connecting",
       items: [
         [
+          "Where can I see what's being blocked right now?",
+          "On the blocking map: prostovpn.cc/blocks. For every carrier — MTS, Beeline, MegaFon, Tele2, home providers — it shows which connection methods work right now and what changed in the last 24 hours. Live data from our own apps, no addresses or personal data. If one method is down on your carrier and another works, switch to it in the app.",
+        ],
+        [
           "It won't connect. What do I do?",
           "In order: close other VPNs; try another country; switch between Wi-Fi and mobile data — networks block VPN differently. Our app cycles ports and the backup path on its own, give it half a minute. If everything is green on prostovpn.cc/status and only you can't connect, it's your carrier's network — message us and we'll say what to pick.",
         ],

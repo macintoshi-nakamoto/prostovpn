@@ -278,4 +278,6 @@ export const api = {
   downloads: () => request("/api/v1/downloads"),
 
   status: () => request("/api/v1/status"),
+  // Карта блокировок: сводка телеметрии по операторам, без входа.
+  blocks: () => request("/api/v1/blocks"),
 };

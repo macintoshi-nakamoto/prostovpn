@@ -1747,6 +1747,19 @@ def downloads(db: OrmSession = Depends(get_db)) -> list[DownloadOut]:
     return out
 
 
+@router.get("/blocks")
+def blocks_map(response: Response, db: OrmSession = Depends(get_db)) -> dict:
+    """
+    Карта блокировок для сайта (prostovpn.cc/blocks): сводка телеметрии по
+    операторам и протоколам, без входа. Только суммы — ни адресов, ни
+    устройств, ни отдельных попыток. Считается раз в минуту и кэшируется
+    (services/connectivity.py): открытую страницу нельзя превратить в
+    нагрузку на базу.
+    """
+    response.headers["Cache-Control"] = "public, max-age=60"
+    return services.connectivity.overview(db)
+
+
 class StatusServerOut(BaseModel):
     name: str
     country: str | None = None

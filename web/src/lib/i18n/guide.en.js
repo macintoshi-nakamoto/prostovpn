@@ -46,6 +46,7 @@ export const guideEn = {
       steps: [
         ["Download the image", "The .dmg works on both Apple Silicon and Intel."],
         ["Move it to Applications", "Open the image and drag Prosto VPN into the Applications folder."],
+        ["Allow the first launch", "macOS will say the developer cannot be verified — the build isn't notarized by Apple, it's not malware. Click OK, open System Settings → Privacy & Security, scroll down and click “Open Anyway”. If it asks about both the .dmg and the app, do it twice. On macOS 14 and older, right-click → Open is enough. Updates install without questions afterwards."],
         ["Sign in", "The same login and password as in the dashboard."],
         ["Allow the connection service", "On the first connection macOS asks for the administrator password once: a tunnel can't be raised without it. The password stays on your computer."],
         ["Press connect", "Split tunneling is built in: Russian services go direct, everything else through the tunnel."],

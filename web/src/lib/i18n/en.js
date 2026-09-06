@@ -568,7 +568,7 @@ export const en = {
         ["Download the image", "Button below — a .dmg file will download."],
         [
           "Install",
-          "Open the image and drag Prosto VPN into Applications. First launch — right-click → Open.",
+          "Open the image and drag Prosto VPN into Applications. macOS will say the developer cannot be verified — that's expected: click OK, then System Settings → Privacy & Security → “Open Anyway” at the bottom. If it asks about both the image and the app, repeat. On macOS 14 and older, right-click → Open is enough.",
         ],
         [
           "Sign in",

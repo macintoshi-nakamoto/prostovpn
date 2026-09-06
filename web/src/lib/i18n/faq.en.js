@@ -228,6 +228,10 @@ export const faqEn = {
       h: "Apps",
       items: [
         [
+          "Mac: “the developer cannot be verified”",
+          "That's how macOS greets any app outside the App Store without Apple notarization — it's not malware and nothing is broken. Click OK, open System Settings → Privacy & Security, scroll down: there's a line about ProstoVPN with an “Open Anyway” button — click it and confirm with your password. On macOS 15 it may ask twice: first about the .dmg, then about the app itself. On macOS 14 and older, right-click the app → Open is enough. Terminal fans: xattr -dr com.apple.quarantine /Applications/ProstoVPN.app. It's a one-time thing; updates install without questions afterwards.",
+        ],
+        [
           "How do I update the app?",
           "It updates itself. When a new version is out, an “Update” button appears in settings — the app downloads the file, checks the signature and restarts as the new one. Android asks for install permission once.",
         ],

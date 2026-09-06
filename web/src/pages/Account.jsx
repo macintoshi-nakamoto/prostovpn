@@ -458,6 +458,12 @@ const AP_ICONS = {
       <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </svg>
   ),
+  telegram: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20.5 4.5 3.8 11.2c-.9.4-.9 1.1 0 1.4l4.2 1.3 1.6 4.9c.2.6.9.7 1.3.3l2.3-2.1 4.4 3.2c.6.4 1.3.1 1.5-.7l3-14.1c.2-1-.5-1.4-1.6-.9Z" />
+      <path d="M8 13.9 17.5 8" />
+    </svg>
+  ),
 };
 
 function ApRow({ icon, title, sub, value, disabled, onClick, href, download }) {
@@ -1100,6 +1106,9 @@ function TmaHome({ data, used, onManage, onSetup, onKeys, onFriends, onPassword,
   const [bypassOpen, setBypassOpen] = useState(false);
   const [bypassGuide, setBypassGuide] = useState(false);
   const [devicesOpen, setDevicesOpen] = useState(false);
+  const [tgBusy, setTgBusy] = useState(false);
+  const { signOut } = useSession();
+  const navigate = useNavigate();
   // Подсказка про регион App Store: сама показывается один раз за заход
   // и уходит, если её не трогать; «Больше не показывать» гасит навсегда.
   const [storeOpen, setStoreOpen] = useState(false);
@@ -1128,6 +1137,43 @@ function TmaHome({ data, used, onManage, onSetup, onKeys, onFriends, onPassword,
       setCopied(key);
       setTimeout(() => setCopied((cur) => (cur === key ? null : cur)), 1400);
     } catch {}
+  };
+
+  // Привязка Telegram: строка показывается, только когда панель уже отдаёт
+  // поле telegram_linked — со старым бэкендом её просто нет, чтобы не
+  // писать «не привязан» тому, у кого привязка есть. Отвязка — сужение
+  // доступа, пароль не спрашиваем; если текущая сессия сама выдана по
+  // Telegram, панель просит перевойти — выходим на форму входа.
+  const tgKnown = data.telegram_linked != null;
+  const tgLinked = Boolean(data.telegram_linked);
+  const tgValue = tgLinked
+    ? data.telegram_username
+      ? `@${data.telegram_username}`
+      : t("account.telegramLinked")
+    : t("account.telegramNone");
+  const askUnlinkTelegram = () => {
+    if (!tgLinked || tgBusy) return;
+    // В вопрос подставляем только @username: без него строка «привязан»
+    // читалась бы как «Отвязать Telegram привязан?».
+    const name = data.telegram_username ? ` @${data.telegram_username}` : "";
+    tmaConfirm(t("account.telegramUnlinkConfirm", { name }), async () => {
+      setTgBusy(true);
+      try {
+        const result = await api.unlinkTelegram();
+        if (result?.relogin_required) {
+          await signOut();
+          navigate("/login", { replace: true });
+          return;
+        }
+        tmaHaptic("medium");
+        onChanged();
+      } catch (err) {
+        if (err instanceof ApiError && err.code === "tg_not_linked") onChanged();
+        else tmaAlert(err?.message || t("account.telegramUnlinkFailed"));
+      } finally {
+        setTgBusy(false);
+      }
+    });
   };
 
   return (
@@ -1236,6 +1282,16 @@ function TmaHome({ data, used, onManage, onSetup, onKeys, onFriends, onPassword,
           value={data.email || t("account.emailEmpty")}
           onClick={() => setEmailOpen(true)}
         />
+        {tgKnown && (
+          <ApRow
+            icon="telegram"
+            title={t("account.fieldTelegram")}
+            sub={tgLinked ? t("account.telegramUnlink") : undefined}
+            value={tgBusy ? "…" : tgValue}
+            disabled={!tgLinked || tgBusy}
+            onClick={askUnlinkTelegram}
+          />
+        )}
         <ApRow icon="lock" title={t("account.changePassword")} onClick={onPassword} />
         <ApRow
           icon="file"

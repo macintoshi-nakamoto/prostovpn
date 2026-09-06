@@ -6,7 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from . import crypto, payments, services
@@ -150,8 +150,12 @@ def create_order(
     body: OrderIn, request: Request, db: OrmSession = Depends(get_db)
 ) -> OrderOut:
     ip = client_ip(request)
+    # Адрес узла делят все из-под VPN — лимит на него в разы мягче.
     verdict = services.ratelimit.hit(
-        db, f"order:{ip_tag(ip)}", limit=settings().order_max_per_hour, window_minutes=60
+        db,
+        f"order:{ip_tag(ip)}",
+        limit=settings().order_max_per_hour * services.shared_address_factor(db, ip),
+        window_minutes=60,
     )
     if not verdict.allowed:
         raise HTTPException(
@@ -466,6 +470,11 @@ class AccountOut(BaseModel):
     tunnel_file: TunnelFileOut = TunnelFileOut()
     freeze: FreezeOut = FreezeOut()
     adblock: bool = False
+    # Привязка Telegram — вход без пароля; владелец должен её видеть и
+    # мочь снять (DELETE /account/telegram). Только для веб-кабинета:
+    # приложения ходят в api_client._account_out.
+    telegram_linked: bool = False
+    telegram_username: str | None = None
 
 
 def _device_connected(user: User, device_id: str, now: dt.datetime) -> bool:
@@ -696,6 +705,8 @@ def _account_out(db: OrmSession, user: User, current: Session) -> AccountOut:
 
     return AccountOut(
         adblock=bool(user.adblock_dns),
+        telegram_linked=user.telegram_id is not None,
+        telegram_username=user.telegram_username if user.telegram_id is not None else None,
         login=user.login,
         email=user.email_plain,
         public_id=user.public_id,
@@ -1008,8 +1019,14 @@ def password_forgot(
     body: ForgotIn, request: Request, db: OrmSession = Depends(get_db)
 ) -> dict[str, object]:
     ip = client_ip(request)
+    # Адрес узла делят все из-под VPN: шесть запросов оттуда не должны
+    # запирать восстановление пароля всему узлу на час.
     verdict = services.ratelimit.hit(
-        db, f"forgot:{ip_tag(ip)}", limit=5, window_minutes=60, lock_minutes=60
+        db,
+        f"forgot:{ip_tag(ip)}",
+        limit=5 * services.shared_address_factor(db, ip),
+        window_minutes=60,
+        lock_minutes=60,
     )
     if not verdict.allowed:
         raise HTTPException(
@@ -1324,7 +1341,19 @@ def account_credentials_set(
                 "в логине допустимы латинские буквы, цифры, дефис, точка и подчёркивание",
                 headers={"X-Error-Code": "login_invalid"},
             )
-        taken = db.scalar(select(User).where(User.login == login, User.id != user.id).limit(1))
+        if services.login_reserved(login):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "логин не может начинаться с «PV-» — так выглядят ID аккаунтов",
+                headers={"X-Error-Code": "login_invalid"},
+            )
+        # Без учёта регистра (бот ищет учётку по логину, не различая
+        # регистр); свой логин в другом написании — можно.
+        taken = db.scalar(
+            select(User)
+            .where(func.lower(User.login) == login.lower(), User.id != user.id)
+            .limit(1)
+        )
         if taken is not None:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
@@ -1336,7 +1365,12 @@ def account_credentials_set(
     if body.password:
         # set_password гасит остальные сессии; текущую оставляем — человек
         # только что был здесь, выкидывать его из приложения незачем.
-        services.set_password(db, user, body.password)
+        # Первое задание пароля (учётка из Telegram, пароля ещё не было) не
+        # закрывает вход по Telegram: чужого пароля тут не было. Смена уже
+        # существующего — закрывает, как и /account/password.
+        services.set_password(
+            db, user, body.password, relink_telegram=user.credentials_set_at is not None
+        )
         user.credentials_set_at = utcnow()
 
     db.commit()
@@ -1361,8 +1395,19 @@ def change_password(
     db: OrmSession = Depends(get_db),
 ) -> dict[str, object]:
     user, session = who
+    # Каждая проверка — argon2 на 64 МиБ; без счётчика пробная учётка гоняет
+    # их пачками и душит панель. 5 промахов за 15 минут — замок на 15.
+    key = f"pwchange:{user.id}"
+    verdict = services.ratelimit.hit(db, key, limit=5, window_minutes=15, lock_minutes=15)
+    if not verdict.allowed:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            "слишком много попыток — попробуйте позже",
+            headers={"Retry-After": str(verdict.retry_after)},
+        )
     if not verify_password(body.current_password, user.password_hash):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "текущий пароль неверен")
+    services.ratelimit.clear(db, key)
 
     services.set_password(db, user, body.new_password)
     return {"ok": True, "relogin_required": True}
@@ -1417,6 +1462,27 @@ def unlink_device(
     if problems is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "устройство не найдено")
     return {"ok": True, "problems": problems}
+
+
+@router.delete("/account/telegram")
+def unlink_telegram(
+    who: tuple[User, Session] = Depends(current_user),
+    db: OrmSession = Depends(get_db),
+) -> dict[str, object]:
+    """
+    Снять Telegram с учётки. Пароль не спрашиваем: отвязка только сужает
+    доступ. Сессии мини-приложения отзываются внутри detach_telegram — если
+    человек пришёл из него, кабинет попросит войти заново.
+    """
+    user, session = who
+    if user.telegram_id is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Telegram не привязан",
+            headers={"X-Error-Code": "tg_not_linked"},
+        )
+    services.detach_telegram(db, user, reason="по запросу владельца из кабинета")
+    return {"ok": True, "relogin_required": session.platform == "telegram"}
 
 
 class RenewIn(BaseModel):

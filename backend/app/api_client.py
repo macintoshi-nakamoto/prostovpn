@@ -224,6 +224,26 @@ def _subscription_url(db: OrmSession, session: Session) -> str | None:
     return services.subscription.url_for(services.subscription.mint_for_session(db, session))
 
 
+# Не чаще раза в PROVISION_RETRY_SECONDS на пару (учётка, устройство) ставим
+# фоновую выдачу ключей. Пока узел лежит, каждая попытка — это SSH на 6–18 с
+# в общем пуле потоков, а /servers и /s/ дёргают часто; без паузы десяток
+# запросов подписки оставлял бы за собой десяток висящих SSH.
+PROVISION_RETRY_SECONDS = 90
+_provision_attempts: dict[tuple[int, str], float] = {}
+
+
+def _provision_due(user_id: int, device_id: str) -> bool:
+    now = time.monotonic()
+    last = _provision_attempts.get((user_id, device_id))
+    if last is not None and now - last < PROVISION_RETRY_SECONDS:
+        return False
+    if len(_provision_attempts) > 5000:
+        for stale in [k for k, at in _provision_attempts.items() if now - at >= PROVISION_RETRY_SECONDS]:
+            _provision_attempts.pop(stale, None)
+    _provision_attempts[(user_id, device_id)] = now
+    return True
+
+
 def _provision_missing_keys(user_id: int, device_id: str, awg_level: int = 1) -> None:
     from .db import SessionLocal
 
@@ -300,11 +320,12 @@ def _serve_targets(
             server.id not in by_server and server.provisioning != Provisioning.SHARED
             for server in services.active_servers(db)
         )
-        if missing:
+        target = "" if external else device_id
+        if missing and _provision_due(user.id, target):
             background.add_task(
                 _provision_missing_keys,
                 user.id,
-                "" if external else device_id,
+                target,
                 services.compat.CLIENT_AWG_LEVEL.get(),
             )
 
@@ -584,18 +605,24 @@ def _link_telegram(db: OrmSession, user: User, init_data: str | None) -> None:
         # Уже привязан — но юзернейм человек мог сменить, и в админке
         # должен быть нынешний. Пустой не затирает: Telegram присылает его
         # не всегда, а потерять единственную зацепку хуже, чем показать
-        # чуть устаревшую.
+        # чуть устаревшую. Пароль только что сошёлся — вход по подписи,
+        # закрытый сменой пароля, снова открыт.
         if username and user.telegram_username != username:
             user.telegram_username = username
-            db.commit()
+        if user.telegram_relink_at is not None:
+            user.telegram_relink_at = None
+            log.info("Telegram %s снова входит в %s без пароля", telegram_id, user.login)
+        db.commit()
         return
 
-    if user.telegram_id:
+    if user.telegram_id and user.telegram_relink_at is None:
         # К учётке уже привязан другой Telegram. Молча переписать его — значит
         # отдать вход без пароля тому, кто один раз узнал пароль. Перепривязка
         # — только через поддержку.
         log.info("привязка Telegram %s: у %s уже другой аккаунт, не трогаем", telegram_id, user.login)
         return
+    # Прежняя привязка закрыта сменой пароля, а новый пароль сошёлся у этого
+    # Telegram — значит, хозяин здесь; старый id уступает место.
     taken = db.scalar(
         select(User).where(User.telegram_id == telegram_id, User.id != user.id).limit(1)
     )
@@ -603,11 +630,7 @@ def _link_telegram(db: OrmSession, user: User, init_data: str | None) -> None:
         log.info("привязка Telegram %s: уже за учёткой %s", telegram_id, taken.login)
         return
 
-    user.telegram_id = telegram_id
-    if username:
-        user.telegram_username = username
-    db.commit()
-    log.info("Telegram %s привязан к %s", telegram_id, user.login)
+    services.link_telegram(db, user, telegram_id, username)
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -719,10 +742,13 @@ def login_telegram(
             headers={"X-Error-Code": "tg_disabled"},
         )
 
+    # Из-под VPN все приходят адресом узла — лимит на адрес там во много
+    # раз мягче, иначе один человек запирал бы вход всему узлу.
+    tg_ip = client_ip(request)
     verdict = services.ratelimit.hit(
         db,
-        f"tg-login:{ip_tag(client_ip(request))}",
-        limit=30,
+        f"tg-login:{ip_tag(tg_ip)}",
+        limit=30 * services.shared_address_factor(db, tg_ip),
         window_minutes=5,
         lock_minutes=5,
     )
@@ -749,6 +775,28 @@ def login_telegram(
         if telegram_id
         else None
     )
+    if user is not None and user.telegram_relink_at is not None:
+        # Пароль сменили после привязки — возможно, как раз чтобы выгнать
+        # того, кто привязался чужим паролем. Мини-приложение покажет форму
+        # входа; один вход с новым паролем снимет замок (_link_telegram).
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            "после смены пароля войдите один раз с логином и паролем",
+            headers={"X-Error-Code": "tg_relink"},
+        )
+    if user is None and telegram_id:
+        detached = db.scalar(
+            select(User).where(User.telegram_detached_id == telegram_id).limit(1)
+        )
+        if detached is not None:
+            # Владелец сам снял этот Telegram с учётки. Новую не заводим и по
+            # заказам не подхватываем: вход — только с логином и паролем,
+            # после него привязка вернётся на прежнюю учётку (_link_telegram).
+            raise HTTPException(
+                status.HTTP_401_UNAUTHORIZED,
+                "вход по Telegram отключён — войдите с логином и паролем",
+                headers={"X-Error-Code": "tg_detached"},
+            )
     created = False
     if user is None and telegram_id:
         # Учётка могла остаться от покупки через бота: заказ помнит telegram_id,
@@ -850,10 +898,12 @@ def register(
         )
 
     ip = client_ip(request)
+    # Адрес узла делят все, кто регистрируется из-под VPN, — лимит для него
+    # умножаем, а не отменяем: перебор с одного узла всё ещё ограничен.
     verdict = services.ratelimit.hit(
         db,
         f"signup:{ip_tag(ip)}",
-        limit=config.signup_max_per_ip,
+        limit=config.signup_max_per_ip * services.shared_address_factor(db, ip),
         window_minutes=config.signup_window_minutes,
         lock_minutes=config.signup_window_minutes,
     )

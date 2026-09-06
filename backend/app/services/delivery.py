@@ -213,6 +213,8 @@ def _letter(db: OrmSession, job: DeliveryJob, user: User):
         return _receipt_letter(db, job, user)
     if job.template == "email_attached":
         return letters.email_attached(email=job.target)
+    if job.template == "telegram_attached":
+        return letters.telegram_attached(login=user.login, handle=job.payload or "")
     if job.template == "reminder":
         return _reminder_letter(user)
     if job.template == "password_reset":

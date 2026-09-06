@@ -18,6 +18,32 @@ ADDRESS_ATTEMPTS = 5
 # Сколько ключ должен молчать, чтобы его можно было перевыпустить на другой точке.
 MIGRATE_IDLE = dt.timedelta(minutes=5)
 
+# Пауза по узлу после отказа SSH: 60, 120, 240, 300 с. Каждая попытка к
+# мёртвому узлу — до трёх подключений по 6 с в общем пуле потоков, и без
+# паузы один лежащий узел съедал бы пул на каждом /servers и /s/. Состояние в
+# памяти процесса: после рестарта панели узел пробуется заново — так и надо.
+NODE_QUIET_BASE = 60
+NODE_QUIET_MAX = 300
+_node_failures: dict[int, tuple[int, float]] = {}   # server_id -> (отказов подряд, конец паузы)
+
+
+def node_quiet(server: Server) -> bool:
+    """Узел сейчас не трогаем: пауза после отказа не истекла или обход по трафику уже отметил его лежащим."""
+    if server.down_since is not None:
+        return True
+    entry = _node_failures.get(server.id)
+    return entry is not None and time.monotonic() < entry[1]
+
+
+def _note_node_failure(server: Server) -> None:
+    count = _node_failures.get(server.id, (0, 0.0))[0] + 1
+    quiet = min(NODE_QUIET_MAX, NODE_QUIET_BASE * 2 ** (count - 1))
+    _node_failures[server.id] = (count, time.monotonic() + quiet)
+
+
+def _note_node_ok(server: Server) -> None:
+    _node_failures.pop(server.id, None)
+
 
 def active_servers(db: OrmSession) -> list[Server]:
     return list(
@@ -68,6 +94,9 @@ def ensure_keys(
         return target is not None and server_id == target
 
     for server in servers:
+        if node_quiet(server):
+            warnings.append(f"{server.name}: узел не отвечает по SSH, ключ будет создан позже")
+            continue
         for device_id in sorted(wanted):
             if (server.id, device_id) in existing:
                 continue
@@ -80,8 +109,16 @@ def ensure_keys(
                 return warnings
             try:
                 issue_key(db, user, server, device_id=device_id)
+                _note_node_ok(server)
+            except PanelError as exc:
+                # Ошибка настройки (шаблон, адреса) — узел не виноват.
+                warnings.append(f"{server.name}: {exc}")
             except Exception as exc:
                 warnings.append(f"{server.name}: {exc}")
+                _note_node_failure(server)
+                # Второе устройство на том же мёртвом узле в этом вызове не
+                # пробуем: это ещё 6–18 с ожидания с тем же исходом.
+                break
     return warnings
 
 
@@ -265,9 +302,17 @@ def migrate_awg(db: OrmSession, user: User, server: Server, key: UserKey | None)
     target = pick_endpoint(db, user, server, key.device_id)
     if target is None or awg_level_of(target) == current_level:
         return key
+    # Перевыпуск — это SSH прямо в обработчике запроса; к лежащему узлу не
+    # ходим, старый ключ и так рабочий.
+    if node_quiet(server):
+        return key
     try:
         return issue_key(db, user, server, rotate=True, device_id=key.device_id)
+    except PanelError as exc:
+        log_migrate(server, key, exc)
+        return key
     except Exception as exc:
+        _note_node_failure(server)
         log_migrate(server, key, exc)
         return key
 

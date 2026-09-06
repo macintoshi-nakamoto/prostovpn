@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import secrets
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from .. import crypto, provisioning
-from ..models import Plan, Provisioning, User, normalize_email, utcnow
+from ..models import DeliveryJob, Plan, Provisioning, User, normalize_email, utcnow
 from ..security import hash_password
 from . import credentials
 from .billing import grant_subscription
@@ -16,8 +17,19 @@ from . import keys as keys_service
 from .keys import ensure_keys
 from .translit import slugify
 
+log = logging.getLogger("panel.users")
+
 _LOGIN_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
 _PASS_ALPHABET = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+
+def login_reserved(login: str) -> bool:
+    """
+    Логин, похожий на ID аккаунта. Переводы дней ищут получателя и по
+    логину, и по public_id вида PV-XXXX-XXXX — логин «PV-…» перехватывал бы
+    дни, отправленные на чужой ID.
+    """
+    return login.lower().startswith("pv-")
 
 
 def generate_credentials(db: OrmSession, prefix: str = "user") -> tuple[str, str]:
@@ -112,7 +124,14 @@ def create_user(
                 "в логине допустимы латинские буквы, цифры, дефис, точка и подчёркивание",
                 "login_invalid",
             )
-        if db.scalar(select(User).where(User.login == login)):
+        if login_reserved(login):
+            raise PanelError(
+                "логин не может начинаться с «PV-» — так выглядят ID аккаунтов",
+                "login_invalid",
+            )
+        # Без учёта регистра: бот и поддержка ищут учётку по логину, не
+        # различая «alice» и «Alice», — двойник получал бы чужие оплаты.
+        if db.scalar(select(User).where(func.lower(User.login) == login.lower())):
             raise PanelError(f"пользователь «{login}» уже есть", "login_taken")
         password = password or generate_password()
     else:
@@ -155,7 +174,15 @@ def find_by_email(db: OrmSession, address: str | None) -> User | None:
     return user
 
 
-def set_password(db: OrmSession, user: User, password: str | None = None) -> str:
+def set_password(
+    db: OrmSession, user: User, password: str | None = None, *, relink_telegram: bool = True
+) -> str:
+    """
+    relink_telegram=False — когда пароль задаётся впервые из самого
+    мини-приложения: человек только что вошёл по подписи Telegram и придумал
+    пароль; закрывать ему вход по Telegram нечем оправдать, чужой пароль
+    здесь не фигурировал.
+    """
     generated = password is None
     value = password or generate_password()
     if len(value) < 4:
@@ -168,6 +195,11 @@ def set_password(db: OrmSession, user: User, password: str | None = None) -> str
     for session in user.sessions:
         if session.revoked_at is None:
             session.revoked_at = utcnow()
+    # Привязка Telegram — тоже вход без пароля: её мог сделать тот, кто
+    # пароль однажды узнал. Не отвязываем (id нужен боту и заказам), а
+    # закрываем вход по подписи до первого входа с новым паролем.
+    if user.telegram_id is not None and relink_telegram:
+        user.telegram_relink_at = utcnow()
     db.commit()
     # Ссылки-подписки сторонних приложений — тоже вход в учётку: тот, кто
     # успел их выпустить чужим паролем, после смены пароля должен отвалиться.
@@ -175,6 +207,60 @@ def set_password(db: OrmSession, user: User, password: str | None = None) -> str
 
     subscription_service.revoke_all(db, user.id)
     return value
+
+
+def detach_telegram(db: OrmSession, user: User, *, reason: str) -> int | None:
+    """
+    Снимает Telegram с учётки по воле владельца. Id не теряем, а
+    перекладываем в telegram_detached_id: по нему /login/telegram откажет,
+    а не заведёт человеку пустой дубль. Сессии мини-приложения — вход без
+    пароля этим же Telegram — отзываем тут же.
+    """
+    old = user.telegram_id
+    if old is None:
+        return None
+    user.telegram_detached_id = old
+    user.telegram_id = None
+    user.telegram_username = None
+    user.telegram_relink_at = None
+    now = utcnow()
+    for session in user.sessions:
+        if session.revoked_at is None and session.platform == "telegram":
+            session.revoked_at = now
+    db.commit()
+    log.info("Telegram %s отвязан от %s: %s", old, user.login, reason)
+    return old
+
+
+def link_telegram(
+    db: OrmSession, user: User, telegram_id: int, username: str | None = None
+) -> None:
+    """
+    Привязывает Telegram к учётке, у которой привязки нет (или её место
+    уступила прежняя — это решает зовущий). Один путь для мини-приложения
+    и бота. Новый Telegram у учётки с почтой — повод для письма: привязка
+    даёт вход без пароля, и хозяин должен узнать о ней, если это не он.
+    Возврат своего же Telegram после «Отвязать» — не новость, письма нет.
+    """
+    fresh = user.telegram_detached_id != telegram_id
+    user.telegram_detached_id = None
+    user.telegram_id = telegram_id
+    user.telegram_relink_at = None
+    if username:
+        user.telegram_username = username
+    address = user.email_plain
+    if fresh and address:
+        db.add(
+            DeliveryJob(
+                channel="email",
+                template="telegram_attached",
+                target=address,
+                user_id=user.id,
+                payload=f"@{username}" if username else str(telegram_id),
+            )
+        )
+    db.commit()
+    log.info("Telegram %s привязан к %s", telegram_id, user.login)
 
 
 def set_user_active(db: OrmSession, user: User, active: bool) -> list[str]:

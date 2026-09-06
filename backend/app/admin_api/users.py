@@ -115,6 +115,29 @@ def create_user(
     db: OrmSession = Depends(get_db),
     admin: Admin = Depends(current_admin),
 ) -> schemas.UserCreated:
+    if body.telegram_id:
+        # Сначала «уже есть учётка», потом счётчик: отказ не должен съедать
+        # общий на весь бот часовой лимит — иначе один человек, жмущий
+        # «Регистрация» по кругу, запирал бы регистрацию всем остальным.
+        existing = db.scalar(
+            select(User).where(User.telegram_id == body.telegram_id).order_by(User.id).limit(1)
+        )
+        if existing is not None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"у этого Telegram уже есть учётка «{existing.login}»",
+                headers={"X-Error-Code": "telegram_taken"},
+            )
+        # Страховка от скрипта: служебная учётка бота заводит не больше
+        # 30 пробных в час. Ручное создание из админки (без telegram_id)
+        # не считается.
+        verdict = services.ratelimit.hit(db, f"bot-signup:{admin.id}", 30, 60)
+        if not verdict:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "слишком много регистраций, попробуйте позже",
+                headers={"Retry-After": str(verdict.retry_after), "X-Error-Code": "throttled"},
+            )
     try:
         user, password, warnings = services.create_user(
             db,
@@ -130,7 +153,17 @@ def create_user(
             price=float(body.price) if body.price is not None else None,
         )
     except services.PanelError as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+        code = getattr(exc, "code", "")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, str(exc), headers={"X-Error-Code": code} if code else None
+        ) from exc
+
+    if body.telegram_id:
+        # Сразу, как делает мини-приложение: две параллельные регистрации с
+        # одного Telegram не должны проскочить обе; attach_user потом
+        # увидит непустое поле и ничего не перепишет.
+        user.telegram_id = body.telegram_id
+        db.commit()
 
     audit(db, admin, "user.create", user.public_id, f"логин {user.login}")
     return schemas.UserCreated(

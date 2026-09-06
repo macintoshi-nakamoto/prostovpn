@@ -800,6 +800,13 @@ export const ru = {
     cancel: "Отмена",
     emailTaken: "Эта почта уже привязана к другой учётке",
     emailFailed: "Не удалось сохранить почту",
+    fieldTelegram: "Telegram",
+    telegramLinked: "привязан",
+    telegramNone: "не привязан",
+    telegramUnlink: "Нажмите, чтобы отвязать",
+    telegramUnlinkConfirm:
+      "Отвязать Telegram{name}? Вход по Telegram закроется, пока вы снова не войдёте с логином и паролем в мини-приложении или боте.",
+    telegramUnlinkFailed: "Не удалось отвязать Telegram",
 
     planTitle: "Тариф",
     planTerm: "Срок",

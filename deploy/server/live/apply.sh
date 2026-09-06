@@ -72,6 +72,14 @@ for rel in "${changed[@]}"; do
 done
 echo "бэкап: $BK"
 
+# Файл deny для действия fail2ban nginx-deny: nginx включает conf.d/*.conf,
+# и файл должен существовать (пусть пустой) раньше первого бана и раньше
+# nginx -t ниже. actionstart у действия делает то же, но при старте fail2ban.
+DENY=/etc/nginx/conf.d/f2b-deny.conf
+if [[ -f "$HERE/fail2ban/action.d/nginx-deny.conf" && ! -f "$DENY" ]]; then
+    install -m 0644 /dev/null "$DENY" && echo "создан пустой $DENY"
+fi
+
 restore() {
     echo "ОТКАТ: возвращаю файлы из $BK"
     for rel in "${changed[@]}"; do
@@ -85,7 +93,19 @@ restore() {
 
 if [[ $touch_nginx -eq 1 ]]; then
     if nginx -t 2>&1 | tail -2; then
-        systemctl reload nginx && echo "nginx: перезагружен"
+        # reload молча не срабатывает, если у зоны limit_req/limit_conn
+        # сменился ключ (06.09.2026: nginx -t прошёл, а воркеры остались
+        # старые, и узлы ещё час ловили 429 по прежней зоне). Признак —
+        # воркеры с прежними pid; тогда нужен restart (сотня миллисекунд).
+        before=$(pgrep -P "$(cat /run/nginx.pid)" | sort | tr '\n' ' ')
+        systemctl reload nginx; sleep 2
+        after=$(pgrep -P "$(cat /run/nginx.pid)" | sort | tr '\n' ' ')
+        if [[ "$before" == "$after" ]]; then
+            echo "nginx: reload не сменил воркеры (смена ключа зоны?) — делаю restart"
+            grep "\[emerg\]" /var/log/nginx/error.log | tail -2
+            systemctl restart nginx
+        fi
+        echo "nginx: $(systemctl is-active nginx), воркеры: $(pgrep -cP "$(cat /run/nginx.pid)")"
     else
         restore; nginx -t; exit 1
     fi

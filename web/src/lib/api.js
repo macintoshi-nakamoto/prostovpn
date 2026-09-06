@@ -153,6 +153,10 @@ export const api = {
   unlinkDevice: (deviceId) =>
     request(`/api/v1/account/devices/${deviceId}`, { method: "DELETE", auth: true }),
 
+  // Снять привязку Telegram с учётки: вход по подписи Telegram закрывается,
+  // пока человек снова не войдёт с логином и паролем из мини-аппа/бота.
+  unlinkTelegram: () => request("/api/v1/account/telegram", { method: "DELETE", auth: true }),
+
   setEmail: (email) =>
     request("/api/v1/account/email", { method: "POST", auth: true, body: { email } }),
 

@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import html
 import logging
 
 from sqlalchemy import select
@@ -29,6 +30,17 @@ log = logging.getLogger("panel.alerts")
 # Перевод строки для сообщений: в них его удобнее складывать, чем прятать
 # в экранированные последовательности внутри длинных f-строк.
 BR = chr(10)
+
+
+def esc(value: object) -> str:
+    """
+    Чужая строка в сообщении с parse_mode=HTML. Имя оператора и текст
+    ошибки приходят из приложения, ошибки служб — с узла: угловая скобка
+    в них либо превращается в ссылку от имени бота, либо роняет отправку
+    («can't parse entities»), и оповещение теряется. Кавычки Telegram не
+    требует экранировать — только <, > и &.
+    """
+    return html.escape(str(value or ""), quote=False)
 
 # Сколько узел должен молчать, прежде чем будить админа. Одиночный отказ
 # бывает от сетевой икоты по дороге, и будить из-за него — верный способ
@@ -82,7 +94,7 @@ def _human(delta: dt.timedelta) -> str:
 
 def _where(server: Server) -> str:
     place = server.country or server.name
-    return f"{place} ({server.name})" if place != server.name else server.name
+    return esc(f"{place} ({server.name})" if place != server.name else server.name)
 
 
 def check_nodes(db: OrmSession) -> list[str]:
@@ -119,7 +131,7 @@ def check_nodes(db: OrmSession) -> list[str]:
                 f"🔴 <b>Узел не отвечает</b>\n\n"
                 f"{_where(server)}\n"
                 f"Молчит {_human(now - server.down_since)}.\n\n"
-                f"{server.traffic_error or 'SSH не отвечает'}"
+                f"{esc(server.traffic_error or 'SSH не отвечает')}"
             )
             if _notify(chats, text):
                 server.alert_sent_at = now

@@ -24,6 +24,7 @@
 """
 
 import asyncio
+import datetime as dt
 from collections import Counter
 from datetime import timedelta
 from pathlib import Path
@@ -72,6 +73,11 @@ SEND_PAUSE = 0.3
 SIGNUP = "signup"
 IDLE = "idle"
 RENEW = "renew"
+
+# Учётка «новая», если создана не раньше обещания. Час запаса — на
+# округление секунд в базе бота и на то, что человек мог завести аккаунт
+# в мини-аппе за минуту до того, как дошёл до ссылки.
+NEW_ACCOUNT_SLACK = timedelta(hours=1)
 
 
 # --------------------------------------------------------------------------
@@ -146,6 +152,22 @@ async def sweep(bot: Bot | None, dry: bool = False) -> Counter:
     return done
 
 
+def _born_after(account: panel.AdminUser, moment: dt.datetime) -> bool:
+    """
+    Учётка появилась после этого момента.
+
+    Панель отдаёт время в наивном UTC, бот живёт по местному наивному
+    (timeutils.now()): `.astimezone()` у наивного времени берёт системный
+    пояс, так что сравнение верно на любом сервере.
+    """
+    if account.created_at is None:
+        return True  # старая панель без createdAt — ведём себя как раньше
+
+    moment_utc = moment.astimezone(dt.timezone.utc).replace(tzinfo=None)
+
+    return account.created_at >= moment_utc - NEW_ACCOUNT_SLACK
+
+
 async def _promo_claim(
     bot: Bot | None,
     person: models.Candidate,
@@ -162,7 +184,40 @@ async def _promo_claim(
     получивший письмо и перешедший по чужой ссылке, унёс бы оба подарка.
     """
     promo = await models.pending_promo(person.user_id)
-    promised = await models.promised_days(person.user_id, "signup")
+    nudge = await models.get_nudge(person.user_id, SIGNUP)
+    promised = nudge.promised_days if nudge and nudge.open else 0
+
+    # Подарок только новому аккаунту (см. handlers/promo.py). Учётка старше
+    # обещания — это давний клиент, переславший ссылку самому себе (или
+    # клиент с сайта, которого мини-апп привязал к Telegram уже после
+    # письма): переход закрываем без дней, чтобы обходчик не возвращался
+    # к нему каждые полчаса.
+    stale_promo = (
+        promo is not None
+        and promo.visited_at is not None
+        and not _born_after(account, promo.visited_at)
+    )
+    stale_signup = bool(promised) and nudge is not None and not _born_after(account, nudge.sent_at)
+
+    if stale_promo or stale_signup:
+        if dry:
+            logger.info("подарок: %s старше обещания, не дарим (dry)", account.login)
+        else:
+            if stale_promo:
+                await models.claim_promo(person.user_id, account.login, 0)
+                logger.info(
+                    "промо %s: учётка %s старше перехода, дни не начислены",
+                    promo.code,
+                    account.login,
+                )
+            if stale_signup:
+                await models.claim_nudge(person.user_id, SIGNUP, 0)
+                logger.info("дожим: учётка %s старше письма, дни не начислены", account.login)
+        if stale_promo:
+            promo = None
+        if stale_signup:
+            promised = 0
+
     days = max(promo.days if promo else 0, promised)
 
     if not days:

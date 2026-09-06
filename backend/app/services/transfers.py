@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import threading
 
 from sqlalchemy import func, or_, select
@@ -22,6 +23,9 @@ log = logging.getLogger("panel.transfers")
 
 MAX_DAYS = 3650
 
+# Вид ID аккаунта (models.new_public_id): PV-XXXX-XXXX.
+PUBLIC_ID_RE = re.compile(r"PV-[A-Z0-9]{4}-[A-Z0-9]{4}")
+
 
 class TransferError(PanelError):
     pass
@@ -32,11 +36,17 @@ def find_recipient(db: OrmSession, key: str) -> User | None:
     if not needle:
         return None
 
+    # То, что выглядит как ID, ищем только по ID: логин из тех же символов
+    # (create_user такие больше не пропускает, но старые могли остаться)
+    # не должен перехватывать дни, отправленные на чужой ID.
+    upper = needle.upper()
+    if PUBLIC_ID_RE.fullmatch(upper):
+        return db.scalar(select(User).where(User.public_id == upper))
+
     user = db.scalar(select(User).where(User.login == needle))
     if user is not None:
         return user
 
-    upper = needle.upper()
     user = db.scalar(select(User).where(User.public_id == upper))
     if user is not None:
         return user

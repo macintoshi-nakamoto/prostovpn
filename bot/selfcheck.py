@@ -449,6 +449,11 @@ async def check_panel() -> None:
     for plan in plans:
         assert plan.stars > 0
 
+        # Без токена бот вводную цену не признаёт: панель отвечает как
+        # незнакомцу «действует», а проверить, что это первая покупка,
+        # без токена нечем (см. panel.plans).
+        assert not plan.intro_applies, f"{plan.code}: вводная цена без токена"
+
         # Вводная цена должна действовать одинаково на все способы: рубли и
         # звёзды считаются от одной суммы. Расхождение здесь означает, что
         # человеку показали одну цену, а списали другую.
@@ -457,12 +462,17 @@ async def check_panel() -> None:
         )
 
         if plan.intro_price_kopecks:
-            # Правило панели: вводная цена только за одну штуку.
-            assert plan.rub_for(1) == plan.intro_price_kopecks // 100, (
+            # Правило панели: вводная цена только за одну штуку. Проверяем на
+            # копии «с токеном»: у plans(None) она уже погашена.
+            intro_plan = replace(plan, intro_applies=True)
+            assert intro_plan.rub_for(1) == plan.intro_price_kopecks // 100, (
                 f"{plan.code}: за одну штуку берём не вводную цену"
             )
-            assert plan.rub_for(2) == plan.rub * 2, (
+            assert intro_plan.rub_for(2) == plan.rub * 2, (
                 f"{plan.code}: вводная цена утекла на вторую штуку"
+            )
+            assert plan.rub_for(1) == plan.rub, (
+                f"{plan.code}: без токена берём вводную цену"
             )
 
         intro = f"  вводная {plan.rub_for(1)} ₽/{plan.stars_for(1)} ★" if plan.intro_now(1) else ""

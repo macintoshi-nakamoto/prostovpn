@@ -31,3 +31,20 @@ os.environ.update(
         "PANEL_SIGNUP_MAX_PER_IP": "500",
     }
 )
+
+import pytest  # noqa: E402 — после переменных окружения, до импорта app
+
+
+@pytest.fixture(autouse=True)
+def _forget_node_backoff():
+    # Паузы «узел не отвечает» и «ключ уже заказывали» живут в памяти
+    # процесса; тесты роняют и поднимают узлы в одном модуле подряд, и
+    # чужая пауза не должна доезжать до следующего теста.
+    from app import api_client
+    from app.services import keys
+
+    api_client._provision_attempts.clear()
+    keys._node_failures.clear()
+    yield
+    api_client._provision_attempts.clear()
+    keys._node_failures.clear()

@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session as OrmSession
 
 from ..models import EndpointKind, EndpointState, NodeEndpoint, Provisioning, Server, UserKey, utcnow
 from ..security import new_token, token_hash
-from .alerts import BR, _human, _notify, _where, admin_chats
+from .alerts import BR, _human, _notify, _where, admin_chats, esc
 
 log = logging.getLogger("panel.agent")
 
@@ -265,7 +265,7 @@ def check_agents(db: OrmSession) -> list[str]:
             text = (
                 "🟠 <b>На узле не работает часть служб</b>" + BR + BR
                 + _where(server) + BR
-                + (summary.get("trouble") or "неизвестно что") + BR + BR
+                + esc(summary.get("trouble") or "неизвестно что") + BR + BR
                 + f"Держится {_human(now - since)}. Узел при этом по SSH отвечает."
             )
             if _notify(chats, text):

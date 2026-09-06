@@ -215,3 +215,41 @@ def test_снимок_не_json_объект(client, node):
         headers={"Authorization": f"Bearer {token}", "X-Forwarded-For": NODE_IP, "Content-Type": "application/json"},
     )
     assert r.status_code == 422
+
+
+def test_перебор_из_под_vpn_не_запирает_сам_узел(client, node):
+    """Люди из-под VPN приходят адресом узла. Их промахи входа не должны
+    ни запирать адрес узла, ни мешать снимкам агента и авторизации Hysteria2."""
+    _, token = node
+    for i in range(60):
+        r = client.post(
+            "/api/v1/login",
+            json={"login": f"vpn-guess-{i}", "password": "wrong"},
+            headers={"X-Forwarded-For": NODE_IP},
+        )
+        assert r.status_code != 429, f"адрес узла заперт на {i}-м промахе"
+
+    assert _post(client, token, snapshot()).status_code == 200
+    r = client.post(
+        "/api/v1/hy2/auth",
+        json={"addr": "x", "auth": "nope-nope-nope-1"},
+        headers={"X-Forwarded-For": NODE_IP},
+    )
+    assert r.status_code == 200 and r.json() == {"ok": False}
+
+
+def test_ошибка_с_узла_в_оповещении_экранируется(client, node, monkeypatch):
+    server_id, token = node
+    monkeypatch.setattr(settings(), "alert_chat_ids", "111")
+    sent: list[tuple[int, str]] = []
+    monkeypatch.setattr(alerts.telegram, "send", lambda chat_id, text: sent.append((chat_id, text)))
+
+    body = snapshot(xray_ok=False)
+    body["xray"]["error"] = "<i>x</i>"
+    assert _post(client, token, body).status_code == 200
+    with SessionLocal() as db:
+        server = db.get(Server, server_id)
+        server.agent_trouble_since = utcnow() - dt.timedelta(minutes=4)
+        db.commit()
+        assert agent.check_agents(db) == ["trouble:agent-lt"]
+    assert "&lt;i&gt;x&lt;/i&gt;" in sent[0][1] and "<i>x</i>" not in sent[0][1]

@@ -205,3 +205,17 @@ def email_attached(*, email: str) -> tuple[str, str, str]:
     )
     html = _render("email-verified.html", email=email)
     return subject, text, html
+
+
+def telegram_attached(*, login: str, handle: str) -> tuple[str, str, str]:
+    subject = "К учётной записи подключён Telegram — Prosto VPN"
+    text = (
+        f"К учётной записи {login} подключён Telegram {handle}.\n\n"
+        "Теперь с этого Telegram можно входить в кабинет без пароля.\n\n"
+        "Если это не вы — смените пароль по ссылке «Забыли пароль» на сайте: "
+        "после смены вход по Telegram закроется до входа с новым паролем, "
+        "а все входы будут отозваны. Отвязать Telegram можно в личном кабинете.\n\n"
+        f"Личный кабинет: {_common()['account_url']}\n"
+    )
+    html = _render("telegram-attached.html", login=login, handle=handle)
+    return subject, text, html

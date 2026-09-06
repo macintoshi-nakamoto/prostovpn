@@ -408,6 +408,9 @@ class Promo:
     days: int
     expires_at: datetime
     note: str | None = None
+    # Когда этот человек перешёл по ссылке. Заполняет только pending_promo:
+    # у ссылки самой по себе перехода нет.
+    visited_at: datetime | None = None
 
     @property
     def alive(self) -> bool:
@@ -507,13 +510,12 @@ async def pending_promo(user_id: int) -> Promo | None:
         return None
 
     promo = _promo(row)
+    promo.visited_at = timeutils.from_db(row["visited_at"])
 
     if promo.alive:
         return promo
 
-    visited = timeutils.from_db(row["visited_at"])
-
-    return promo if timeutils.now() - visited < timedelta(days=1) else None
+    return promo if timeutils.now() - promo.visited_at < timedelta(days=1) else None
 
 
 async def claim_promo(user_id: int, panel_login: str, days: int) -> None:

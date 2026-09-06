@@ -725,3 +725,92 @@ def test_exhausted_traffic_revokes_keys_and_closes_access(client, auth, shared_s
 
     after = client.post("/api/v1/login", json={"login": login, "password": password})
     assert after.json()["servers"] == []
+
+
+def test_register_rejects_login_differing_only_by_case(client, auth):
+    """Бот и поддержка ищут учётку по логину без учёта регистра — двойник
+    «Alice» получал бы оплаты и подарки «alice»."""
+    r = client.post("/api/admin/users", json={"login": "casetest_a", "password": "12345678"}, headers=auth)
+    assert r.status_code == 201, r.text
+    r = client.post("/api/v1/register", json={"login": "CaseTest_A", "password": "dovolno-dlinnyi"})
+    assert r.status_code == 400, r.text
+    assert r.headers.get("X-Error-Code") == "login_taken"
+    r = client.post("/api/admin/users", json={"login": "CASETEST_A", "password": "12345678"}, headers=auth)
+    assert r.status_code == 400 and r.headers.get("X-Error-Code") == "login_taken"
+
+
+def test_credentials_rejects_case_twin_but_allows_own_case_change(client, auth):
+    r = client.post("/api/admin/users", json={"login": "casetest_b", "password": "12345678"}, headers=auth)
+    assert r.status_code == 201, r.text
+    token = client.post("/api/v1/login", json={"login": "casetest_b", "password": "12345678"}).json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    r = client.post("/api/v1/account/credentials", json={"login": "CASETEST_A"}, headers=headers)
+    assert r.status_code == 400 and r.headers.get("X-Error-Code") == "login_taken"
+
+    r = client.post("/api/v1/account/credentials", json={"login": "CaseTest_B"}, headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["login"] == "CaseTest_B"
+
+
+def _clear_bot_signup_limit():
+    from app.models import Admin
+    from app.services import ratelimit
+
+    with SessionLocal() as db:
+        for admin in db.query(Admin).all():
+            ratelimit.clear(db, f"bot-signup:{admin.id}")
+
+
+def test_bot_signup_refuses_a_second_account_for_the_same_telegram(client, auth):
+    _clear_bot_signup_limit()
+    r = client.post(
+        "/api/admin/users",
+        json={"login": "tg-one", "password": "12345678", "planCode": "trial", "telegramId": 424242},
+        headers=auth,
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["user"]["telegramId"] == 424242
+
+    r = client.post(
+        "/api/admin/users",
+        json={"login": "tg-two", "password": "12345678", "planCode": "trial", "telegramId": 424242},
+        headers=auth,
+    )
+    assert r.status_code == 400, r.text
+    assert r.headers.get("X-Error-Code") == "telegram_taken"
+    assert "tg-one" in r.json()["detail"]
+
+    # Занятый логин — с кодом, чтобы бот показал свой текст.
+    r = client.post(
+        "/api/admin/users",
+        json={"login": "tg-one", "password": "12345678", "planCode": "trial", "telegramId": 424243},
+        headers=auth,
+    )
+    assert r.status_code == 400 and r.headers.get("X-Error-Code") == "login_taken"
+
+    # Админка telegramId не шлёт — ей ничего не ограничивается.
+    for name in ("Руками Раз", "Руками Два"):
+        r = client.post("/api/admin/users", json={"name": name, "planCode": "trial"}, headers=auth)
+        assert r.status_code == 201, r.text
+
+
+def test_bot_signup_is_throttled_per_service_account(client, auth):
+    _clear_bot_signup_limit()
+    try:
+        codes = []
+        for i in range(31):
+            r = client.post(
+                "/api/admin/users",
+                json={"login": f"tg-bulk-{i}", "password": "12345678", "planCode": "trial", "telegramId": 5000 + i},
+                headers=auth,
+            )
+            codes.append(r.status_code)
+            if r.status_code == 429:
+                assert r.headers.get("X-Error-Code") == "throttled"
+                assert r.headers.get("Retry-After")
+                break
+        assert codes[:30] == [201] * 30, codes
+        assert codes[30] == 429, codes
+    finally:
+        _clear_bot_signup_limit()

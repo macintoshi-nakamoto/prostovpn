@@ -228,8 +228,11 @@ def attach_user(
         db.commit()
 
     if not user.telegram_id:
-        user.telegram_id = telegram_id
-        db.commit()
+        # Тот же путь, что у мини-приложения: снимает отметку «отвязан» и
+        # пишет хозяину почты о новом Telegram с входом без пароля.
+        from .users import link_telegram
+
+        link_telegram(db, user, telegram_id, clean)
 
     invited = db.scalar(
         select(Referral).where(

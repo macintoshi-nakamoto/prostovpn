@@ -6,6 +6,7 @@ import hmac
 import ipaddress
 import logging
 import secrets
+import threading
 
 from fastapi import Request
 
@@ -28,6 +29,11 @@ except Exception:
         "Поставьте пакет из requirements.txt на боевом сервере."
     )
 
+# argon2 отпускает GIL и берёт 64 МиБ на вызов; пул Starlette — 40 потоков,
+# без калитки 40 проверок пароля разом = 2,5 ГиБ и оба ядра. Четыре слота —
+# потолок 256 МиБ, остальные ждут своей очереди (~0,12 с на проверку).
+_HASH_GATE = threading.BoundedSemaphore(4)
+
 _N = 2 ** 15
 _R = 8
 _P = 1
@@ -38,9 +44,10 @@ _MAXMEM = 128 * 1024 * 1024
 
 
 def hash_password(password: str) -> str:
-    if _ARGON2 is not None:
-        return _ARGON2.hash(password)
-    return _hash_scrypt(password)
+    with _HASH_GATE:
+        if _ARGON2 is not None:
+            return _ARGON2.hash(password)
+        return _hash_scrypt(password)
 
 
 def _hash_scrypt(password: str) -> str:
@@ -54,15 +61,16 @@ def _hash_scrypt(password: str) -> str:
 
 
 def verify_password(password: str, stored: str) -> bool:
-    if stored.startswith("$argon2"):
-        if _ARGON2 is None:
-            log.error("в базе argon2-хэш, но argon2-cffi не установлен")
-            return False
-        try:
-            return _ARGON2.verify(stored, password)
-        except (VerificationError, InvalidHashError):
-            return False
-    return _verify_scrypt(password, stored)
+    with _HASH_GATE:
+        if stored.startswith("$argon2"):
+            if _ARGON2 is None:
+                log.error("в базе argon2-хэш, но argon2-cffi не установлен")
+                return False
+            try:
+                return _ARGON2.verify(stored, password)
+            except (VerificationError, InvalidHashError):
+                return False
+        return _verify_scrypt(password, stored)
 
 
 def _verify_scrypt(password: str, stored: str) -> bool:

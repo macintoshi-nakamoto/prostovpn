@@ -403,3 +403,50 @@ def test_admin_transfers_filter_by_user(client, auth):
 
     both = client.get(f"/api/admin/transfers?user_id={b_id}", headers=auth).json()
     assert len(both) >= 2
+
+
+def test_login_cannot_impersonate_public_id(client, auth):
+    victim_id = _make_user(client, auth, "tr_pv_victim")
+    _make_user(client, auth, "tr_pv_attacker")
+    with SessionLocal() as db:
+        victim_public_id = db.get(User, victim_id).public_id
+
+    headers = {"Authorization": f"Bearer {_token(client, 'tr_pv_attacker')}"}
+    for login in (victim_public_id, victim_public_id.lower(), "pv-something"):
+        r = client.post("/api/v1/account/credentials", json={"login": login}, headers=headers)
+        assert r.status_code == 400, (login, r.text)
+        assert r.headers.get("X-Error-Code") == "login_invalid"
+
+
+def test_transfer_by_id_ignores_matching_login(client, auth):
+    """Логин-подделка уже в базе (до запрета): дни по ID всё равно уходят
+    настоящему владельцу ID."""
+    victim_id = _make_user(client, auth, "tr_id_victim")
+    attacker_id = _make_user(client, auth, "tr_id_attacker")
+    _make_user(client, auth, "tr_id_sender")
+    with SessionLocal() as db:
+        victim_public_id = db.get(User, victim_id).public_id
+        db.get(User, attacker_id).login = victim_public_id
+        db.commit()
+
+    token = _token(client, "tr_id_sender")
+    for needle in (victim_public_id, victim_public_id.lower()):
+        before_victim, before_attacker = _days_left(victim_id), _days_left(attacker_id)
+        r = client.post(
+            "/api/v1/account/transfers",
+            json={"recipient": needle, "days": 2},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 201, r.text
+        assert _days_left(victim_id) == before_victim + 2
+        assert _days_left(attacker_id) == before_attacker
+
+
+def test_admin_cannot_create_pv_login(client, auth):
+    r = client.post(
+        "/api/admin/users",
+        json={"login": "PV-ABCD-EFGH", "password": "secret-123", "planCode": "basic"},
+        headers=auth,
+    )
+    assert r.status_code == 400, r.text
+    assert r.headers.get("X-Error-Code") == "login_invalid"

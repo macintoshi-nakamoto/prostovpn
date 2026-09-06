@@ -72,3 +72,23 @@ def test_ip_tag_is_not_reversible_without_salt():
     assert a != b
     assert "198.51.100.7" not in a and "203.0.113.9" not in b
     assert ip_tag("198.51.100.7") == a
+
+
+def test_session_remembers_isp_but_not_ip(client, monkeypatch):
+    # Телеметрии связи нужен провайдер человека (через туннель запрос
+    # приходит адресом узла) — но именно провайдер, а не адрес.
+    from app.services import asn
+
+    monkeypatch.setattr(asn, "isp_name", lambda ip: "MTS PJSC" if ip == "198.51.100.7" else None)
+    h = _admin(client)
+    u = client.post("/api/admin/users", json={"name": "Провайдер", "planCode": "3months"}, headers=h).json()
+    client.post("/api/v1/login", json={
+        "login": u["user"]["login"], "password": u["password"],
+        "platform": "android", "device_id": "priv-isp",
+    }, headers={"X-Forwarded-For": "198.51.100.7"})
+
+    with SessionLocal() as db:
+        s = db.query(Sess).filter(Sess.device_id == "priv-isp").order_by(Sess.id.desc()).first()
+        assert s is not None
+        assert s.ip is None, "адрес не храним"
+        assert s.isp == "МТС", "а провайдера — да, в нормализованном виде"

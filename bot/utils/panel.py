@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import aiohttp
 
@@ -58,6 +58,7 @@ class Plan:
     # Цена первой покупки. `intro_applies` считает панель и считает её НА
     # ЧЕЛОВЕКА, поэтому тарифы надо запрашивать с его токеном: без токена
     # панель ответит «действует» кому угодно, включая тех, кто уже покупал.
+    # Поэтому без токена бот сам гасит вводную цену, см. plans().
     intro_price_kopecks: int = 0
     intro_applies: bool = False
 
@@ -358,11 +359,21 @@ async def plans(token: str | None = None) -> list[Plan]:
     Тарифы витрины — те же, что на сайте.
 
     С токеном панель отвечает про конкретного человека: действует ли ему
-    вводная цена. Без токена — как незнакомцу, то есть «действует».
+    вводная цена. Без токена она отвечает как незнакомцу — «действует», —
+    но бот незнакомцам не продаёт (без логина стоит гейт), а у тех, кто
+    доходит до счёта без токена, сессия просто протухла (см.
+    models.get_session). Считать им вводную цену нельзя: она положена
+    только первой покупке, а проверить это без токена нечем — и человек
+    платил бы вводную цену раз за разом. Поэтому без токена вводная цена
+    не действует. Это одна точка для счёта, предчека и суммы в extend.
     """
     rows = await _request("GET", f"{CLIENT}/plans", token=token)
+    result = [_plan(row) for row in rows if row.get("purchasable")]
 
-    return [_plan(row) for row in rows if row.get("purchasable")]
+    if token is None:
+        result = [replace(plan, intro_applies=False) for plan in result]
+
+    return result
 
 
 async def plan_by_code(code: str, token: str | None = None) -> Plan | None:
@@ -616,22 +627,30 @@ async def _admin_request(
         return await _request(method, path, payload=payload, token=await _admin())
 
 
-async def create_account(user_login: str, password: str) -> None:
+async def create_account(
+    user_login: str, password: str, telegram_id: int | None = None
+) -> None:
     """Заводит учётку в панели — тем же путём, что и панель у администратора.
 
     Через админский API, а не через регистрацию с сайта: та ограничена по
     IP-адресу, а у бота адрес один на всех.
+
+    `telegram_id` — чей это Telegram. По нему панель отказывает второй
+    регистрации с того же аккаунта (400, X-Error-Code telegram_taken):
+    иначе «выйти → зарегистрироваться» давало пробный период без конца.
+    Старая панель поле просто не замечает.
     """
-    await _admin_request(
-        "POST",
-        f"{ADMIN}/users",
-        payload={
-            "login": user_login,
-            "password": password,
-            "plan_code": config.signup_plan,
-            "note": "регистрация в Telegram-боте",
-        },
-    )
+    payload = {
+        "login": user_login,
+        "password": password,
+        "plan_code": config.signup_plan,
+        "note": "регистрация в Telegram-боте",
+    }
+
+    if telegram_id:
+        payload["telegram_id"] = telegram_id
+
+    await _admin_request("POST", f"{ADMIN}/users", payload=payload)
 
 
 @dataclass(frozen=True)
@@ -655,6 +674,9 @@ class AdminUser:
     traffic_used_bytes: int
     is_free: bool
     is_frozen: bool = False
+    # Когда учётка появилась (UTC). По этому времени рассылка отличает
+    # новичка от давнего клиента, переславшего промо-ссылку самому себе.
+    created_at: dt.datetime | None = None
 
     @property
     def never_connected(self) -> bool:
@@ -690,16 +712,27 @@ async def admin_users() -> list[AdminUser]:
             traffic_used_bytes=pick(row, "trafficUsedBytes", "traffic_used_bytes") or 0,
             is_free=bool(pick(row, "isFree", "is_free")),
             is_frozen=bool(pick(row, "isFrozen", "is_frozen")),
+            created_at=_parse_time(pick(row, "createdAt", "created_at")),
         )
         for row in rows
     ]
 
 
 async def find_user_id(user_login: str) -> int | None:
+    """
+    Номер учётки по логину — для продления, подарков и переводов.
+
+    Сравниваем точно, а не без учёта регистра: панель считает «alice» и
+    «Alice» разными учётками, а список отдаёт новые первыми — при поиске
+    без регистра оплата и подарки «alice» уходили бы тому, кто позже
+    завёл «Alice». Логин у бота всегда тот, что вернула панель при входе,
+    поэтому точное совпадение ничего не ломает.
+    """
+    user_login = user_login.strip()
     rows = await _admin_request("GET", f"{ADMIN}/users?q={user_login}")
 
     for row in rows:
-        if row["login"].lower() == user_login.lower():
+        if row["login"] == user_login:
             return row["id"]
 
     return None

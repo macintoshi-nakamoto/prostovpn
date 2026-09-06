@@ -131,6 +131,34 @@ def test_мало_попыток_не_тревога(clean, monkeypatch):
     assert sent == []
 
 
+def test_разметка_из_отчёта_не_попадает_в_оповещение(clean, monkeypatch):
+    """Оператор и текст ошибки приходят из приложения: угловые скобки в них
+    должны уйти в Telegram текстом, а не ссылкой и не ошибкой разметки."""
+    monkeypatch.setattr(settings(), "alert_chat_ids", "111")
+    sent: list[tuple[int, str]] = []
+    monkeypatch.setattr(alerts.telegram, "send", lambda chat_id, text: sent.append((chat_id, text)))
+    evil = '<a href="https://evil.example/login">Orange RU</a>'
+    with SessionLocal() as db:
+        _fill(db, operator=evil, protocol="awg", hours_ago=10, ok=28, fail=2)
+        _fill(db, operator=evil, protocol="awg", hours_ago=1, ok=3, fail=12)
+        assert len(telemetry.check_drops(db)) == 1
+    assert "&lt;a href=" in sent[0][1] and "<a href" not in sent[0][1]
+
+    with SessionLocal() as db:
+        at = utcnow() - dt.timedelta(hours=1)
+        for _ in range(15):
+            db.add(
+                ConnectReport(
+                    platform="android", app_version="1.4.0", network_kind="wifi", operator="",
+                    protocol="awg", ok=False, stage="handshake", duration_ms=10, attempts=1,
+                    error="<b Wi-Fi", created_at=at,
+                )
+            )
+        db.commit()
+        text = telemetry.digest_text(db, "https://prostovpn.cc")
+    assert "&lt;b Wi-Fi ×15" in text and "<b Wi-Fi" not in text
+
+
 def test_провайдер_по_адресу_без_базы():
     # Базы в тестах нет — просто None, без исключений и без сети.
     assert asn.isp_name("8.8.8.8") is None

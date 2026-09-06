@@ -22,7 +22,14 @@ def _all_letters():
             expires_at=EXPIRES, days_left=3,
         ),
         "почта": letters.email_attached(email="user@example.com"),
+        "telegram": letters.telegram_attached(login="prosto_user", handle="@evil"),
     }
+
+
+def test_telegram_handle_is_escaped():
+    _, text, html = letters.telegram_attached(login="prosto_user", handle="<b>")
+    assert "<b>" not in html and "&lt;b&gt;" in html
+    assert "prosto_user" in html and "prosto_user" in text
 
 
 def test_moscow_time_not_utc():

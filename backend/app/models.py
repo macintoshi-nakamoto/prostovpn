@@ -469,6 +469,19 @@ class User(Base):
     # без «@» и может быть пустым: юзернейм в Telegram не обязателен, и его
     # меняют — на связку учётки с Telegram опираться нельзя, для этого есть id.
     telegram_username: Mapped[str | None] = mapped_column(String(32), default=None)
+    # Поставлено при смене или сбросе пароля: вход по одной подписи Telegram
+    # закрыт, пока владелец Telegram не войдёт раз с новым паролем. Привязку
+    # мог сделать тот, кто один раз узнал старый пароль, — смена пароля
+    # должна отрывать и его, как отрывает сессии и ссылки-подписки. Сам
+    # telegram_id при этом остаётся: по нему бот шлёт уведомления, а заказы
+    # и админка находят человека.
+    telegram_relink_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    # Telegram, снятый с учётки по кнопке «Отвязать» в кабинете. Голый NULL
+    # в telegram_id нельзя: /login/telegram для неизвестного id сам заводит
+    # новую учётку, и человек после отвязки получил бы пустой дубль. Поэтому
+    # id помним здесь: вход по нему закрыт, пока он не войдёт с паролем —
+    # тогда привязка возвращается на прежнюю учётку.
+    telegram_detached_id: Mapped[int | None] = mapped_column(BigInteger, index=True, default=None)
 
     last_login_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
     # Когда человек сам задал логин/пароль. Пусто — данные выданы автоматически
@@ -1004,7 +1017,14 @@ class Session(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     platform: Mapped[str | None] = mapped_column(String(32), default=None)
     app_version: Mapped[str | None] = mapped_column(String(32), default=None)
+    # Адрес входа не храним — политика «без логов» и test_privacy. Колонка
+    # осталась от старой схемы и всегда пуста.
     ip: Mapped[str | None] = mapped_column(String(64), default=None)
+    # Провайдер («МТС», «Ростелеком»…), определённый по адресу в момент
+    # запроса и тут же забытый вместе с адресом. Нужен телеметрии связи:
+    # через туннель приложение приходит адресом узла, и провайдера по нему
+    # уже не узнать.
+    isp: Mapped[str | None] = mapped_column(String(64), default=None)
     device_id: Mapped[str | None] = mapped_column(String(64), index=True, default=None)
     device_name: Mapped[str | None] = mapped_column(String(96), default=None)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)

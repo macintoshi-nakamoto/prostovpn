@@ -46,11 +46,29 @@
         }
         // Внутри Telegram признак приходит в хеше адреса раньше любого
         // скрипта: класс tma прячет сайтовую обвязку с первого кадра.
+        // Но одного хеша мало — его подсунет любая чужая ссылка. Режим
+        // мини-аппа включаем только в контейнере Telegram: те же три
+        // канала, по которым telegram-web-app.js шлёт события клиенту
+        // (см. lib/telegram.js). Нативные клиенты внедряют
+        // TelegramWebviewProxy до любого скрипта страницы, iframe виден
+        // сразу. В dev-сборке хеш разрешён — так мини-апп эмулируется локально.
+        var container = "%DEV%" === "true";
+        try {
+          container =
+            container ||
+            !!window.TelegramWebviewProxy ||
+            !!(window.external && "notify" in window.external) ||
+            window.parent !== window;
+        } catch (e) {
+          // доступ к parent бросил — мы точно в чужом фрейме
+          container = true;
+        }
         var tma = false;
         try {
           tma =
-            location.hash.indexOf("tgWebAppData=") !== -1 ||
-            sessionStorage.getItem("prosto_tma") === "1";
+            container &&
+            (location.hash.indexOf("tgWebAppData=") !== -1 ||
+              sessionStorage.getItem("prosto_tma") === "1");
         } catch (e) {}
         // Формат приложения: в Telegram — всегда, на сайте — в кабинете.
         // Ставится до рендера, чтобы вид не мигал; дальше синхронизирует

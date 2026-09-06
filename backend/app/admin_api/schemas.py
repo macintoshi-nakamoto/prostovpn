@@ -277,6 +277,10 @@ class UserCreate(Schema):
     days: int | None = None
     price: Decimal | None = None
     traffic_limit_bytes: int | None = None
+    # Регистрация из бота: чей это Telegram. Панель откажет, если у него
+    # уже есть учётка, — иначе «выйти → зарегистрироваться» давало бы
+    # бесконечные пробные периоды. Админка поле не шлёт.
+    telegram_id: int | None = None
 
 
 class UserCreated(Schema):

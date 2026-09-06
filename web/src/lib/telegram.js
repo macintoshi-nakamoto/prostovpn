@@ -16,6 +16,27 @@ function webApp() {
   return typeof window !== "undefined" ? window.Telegram?.WebApp : undefined;
 }
 
+// Мы действительно внутри контейнера Telegram, а не в обычном браузере с
+// подделанным хешем. Ровно три канала, по которым telegram-web-app.js
+// отправляет события клиенту — вне их мини-апп физически не работает:
+// TelegramWebviewProxy (Android, iOS, Desktop, macOS), external.notify
+// (старые клиенты) и iframe (web.telegram.org). Один хеш доверия не
+// заслуживает: ссылка prostovpn.cc/account#tgWebAppData=<чужой initData>
+// иначе включала бы режим мини-аппа в чужом браузере и логинила человека
+// в аккаунт автора ссылки. В dev-сборке хеш разрешён — так эмулируется
+// мини-апп локально.
+function inTelegramContainer() {
+  if (import.meta.env.DEV) return true;
+  try {
+    if (window.TelegramWebviewProxy) return true;
+    if (window.external && "notify" in window.external) return true;
+    return window.parent !== window;
+  } catch {
+    // доступ к parent бросил — мы точно в чужом фрейме
+    return true;
+  }
+}
+
 function markedInHash() {
   try {
     return window.location.hash.includes("tgWebAppData=");
@@ -25,6 +46,13 @@ function markedInHash() {
 }
 
 export function isTma() {
+  if (!inTelegramContainer()) {
+    // Залипший флаг из старой вкладки тоже сбрасываем.
+    try {
+      sessionStorage.removeItem(KEY);
+    } catch {}
+    return false;
+  }
   try {
     if (sessionStorage.getItem(KEY) === "1") return true;
   } catch {
@@ -41,7 +69,13 @@ export function isTma() {
   return inside;
 }
 
+// initData отдаём только внутри Telegram: её потребляют авто-вход
+// (signInTelegram), привязка Telegram при обычном входе/регистрации
+// (api.login/register) и перевход после смены пароля — в чужом браузере
+// все они должны видеть пустоту. Скрипт telegram-web-app.js разбирает хеш и
+// в обычном браузере, поэтому проверка стоит раньше чтения wa.initData.
 export function tmaInitData() {
+  if (!inTelegramContainer()) return "";
   const wa = webApp();
   if (wa?.initData) return wa.initData;
   try {
@@ -60,6 +94,9 @@ export function tmaColorScheme() {
 // Пользователь Telegram — для витрины (аватар, имя). Доверять этим полям
 // нельзя (подпись проверяет сервер при входе), показывать — можно.
 export function tmaUser() {
+  // Вне Telegram — никого: иначе аватар и имя из чужого хеша рисовались бы
+  // в обычном браузере.
+  if (!inTelegramContainer()) return null;
   const wa = webApp();
   if (wa?.initDataUnsafe?.user) return wa.initDataUnsafe.user;
   try {

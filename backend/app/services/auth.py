@@ -40,6 +40,25 @@ class LoginThrottled(PanelError):
 BY_NAME_FACTOR = 4
 BY_IP_FACTOR = 10
 
+# Во сколько раз мягче лимиты «на адрес» для адреса узла: из-под VPN все
+# пользователи узла приходят одним адресом (MASQUERADE на выходе), и
+# лимит, рассчитанный на одного человека, запирал бы их всех разом.
+NODE_SHARED_FACTOR = 20
+
+
+def is_node_address(db: OrmSession, ip: str | None) -> bool:
+    """Адрес одного из наших узлов — то есть общий адрес всех, кто сидит в VPN."""
+    if not ip:
+        return False
+    from ..models import Server
+
+    return db.scalar(select(Server.id).where(Server.host == ip)) is not None
+
+
+def shared_address_factor(db: OrmSession, ip: str | None) -> int:
+    """Множитель для лимитов, где ключ — только адрес: 20 для узла, иначе 1."""
+    return NODE_SHARED_FACTOR if is_node_address(db, ip) else 1
+
 
 def _norm_login(login: str) -> str:
     return login.strip().lower()[:64]
@@ -76,6 +95,10 @@ def authenticate(
     key = _login_key(login, ip)
     name_key = _login_name_key(login)
     ip_key = _login_ip_key(ip)
+    # Адрес узла — не адрес человека: за ним все, кто сидит в VPN. Замок
+    # «на адрес» запирал бы вход в кабинет всему узлу из-за одного
+    # переборщика; остаются замки на пару (адрес, логин) и на имя.
+    from_node = is_node_address(db, ip)
 
     verdict = ratelimit.hit(
         db,
@@ -88,7 +111,7 @@ def authenticate(
     # иначе чужие попытки с пары адресов запирали бы хозяина с верным
     # паролем. Верный пароль проходит всегда, промах под замком — нет.
     name_verdict = ratelimit.check(db, name_key)
-    if verdict.allowed:
+    if verdict.allowed and not from_node:
         verdict = ratelimit.check(db, ip_key)
     if not verdict.allowed:
         log.warning("вход заперт по частоте")
@@ -100,13 +123,14 @@ def authenticate(
     if not user or not ok:
         if user is not None:
             user.failed_logins += 1
-        ratelimit.hit(
-            db,
-            ip_key,
-            limit=config.login_max_attempts * BY_IP_FACTOR,
-            window_minutes=config.login_window_minutes,
-            lock_minutes=config.login_lock_minutes,
-        )
+        if not from_node:
+            ratelimit.hit(
+                db,
+                ip_key,
+                limit=config.login_max_attempts * BY_IP_FACTOR,
+                window_minutes=config.login_window_minutes,
+                lock_minutes=config.login_lock_minutes,
+            )
         ratelimit.hit(
             db,
             name_key,
@@ -159,7 +183,7 @@ def open_session(
             token_hash=token_hash(token),
             platform=platform,
             app_version=app_version,
-            ip=_real_ip(db, ip),
+            isp=_isp_of(db, ip),
             device_id=sanitize_device_id(device_id),
             device_name=None,
             expires_at=utcnow() + dt.timedelta(days=settings().client_token_days),
@@ -233,21 +257,32 @@ def _real_ip(db: OrmSession, ip: str | None) -> str | None:
     приходит с адреса узла, и провайдера по нему не узнать. Такой адрес
     не запоминаем: прежний, настоящий, полезнее.
     """
-    if not ip:
-        return None
-    from ..models import Server
-
-    if db.scalar(select(Server.id).where(Server.host == ip)) is not None:
+    if not ip or is_node_address(db, ip):
         return None
     return ip
+
+
+def _isp_of(db: OrmSession, ip: str | None) -> str | None:
+    """
+    Провайдер по адресу запроса — и только он. Сам адрес в базу не попадает:
+    мы обещали не хранить адреса входов (test_privacy), а телеметрии связи
+    хватает имени провайдера, чтобы понять, у кого что перестало работать.
+    """
+    real = _real_ip(db, ip)
+    if not real:
+        return None
+    from . import asn
+    from .telemetry import normalize_operator
+
+    return normalize_operator(asn.isp_name(real)) or None
 
 
 def touch(db: OrmSession, session: Session, ip: str | None = None) -> None:
     now = utcnow()
     session.last_seen_at = now
-    real = _real_ip(db, ip)
-    if real and real != session.ip:
-        session.ip = real
+    isp = _isp_of(db, ip)
+    if isp and isp != session.isp:
+        session.isp = isp
 
     full = dt.timedelta(days=settings().client_token_days)
     if session.expires_at - now < full / 2:
@@ -277,6 +312,9 @@ def authenticate_admin(
     key = _admin_key(login, ip)
     name_key = _admin_name_key(login)
     ip_key = _admin_ip_key(ip)
+    # Как в authenticate: адрес узла общий для всех из-под VPN, замок
+    # «на адрес» для него не ведём.
+    from_node = is_node_address(db, ip)
 
     verdict = ratelimit.hit(
         db,
@@ -288,7 +326,7 @@ def authenticate_admin(
     # Как и у клиентов: замок по имени — только для промахов, хозяина с
     # верным паролем чужой перебор не запирает.
     name_verdict = ratelimit.check(db, name_key)
-    if verdict.allowed:
+    if verdict.allowed and not from_node:
         verdict = ratelimit.check(db, ip_key)
     if not verdict.allowed:
         log.warning("вход в панель заперт по частоте")
@@ -298,13 +336,14 @@ def authenticate_admin(
     stored = admin.password_hash if admin else _DUMMY_HASH
     ok = verify_password(password, stored)
     if not admin or not ok:
-        ratelimit.hit(
-            db,
-            ip_key,
-            limit=config.login_max_attempts * BY_IP_FACTOR,
-            window_minutes=config.login_window_minutes,
-            lock_minutes=config.login_lock_minutes,
-        )
+        if not from_node:
+            ratelimit.hit(
+                db,
+                ip_key,
+                limit=config.login_max_attempts * BY_IP_FACTOR,
+                window_minutes=config.login_window_minutes,
+                lock_minutes=config.login_lock_minutes,
+            )
         ratelimit.hit(
             db,
             name_key,
@@ -333,13 +372,14 @@ def authenticate_admin(
             raise PanelError("нужен код из приложения-аутентификатора", "totp_required")
         step = totp.verify(crypto.decrypt(admin.totp_secret_enc), code)
         if step is None or step <= (admin.totp_last_step or 0):
-            ratelimit.hit(
-                db,
-                ip_key,
-                limit=config.login_max_attempts * BY_IP_FACTOR,
-                window_minutes=config.login_window_minutes,
-                lock_minutes=config.login_lock_minutes,
-            )
+            if not from_node:
+                ratelimit.hit(
+                    db,
+                    ip_key,
+                    limit=config.login_max_attempts * BY_IP_FACTOR,
+                    window_minutes=config.login_window_minutes,
+                    lock_minutes=config.login_lock_minutes,
+                )
             db.commit()
             raise PanelError("неверный код", "totp_invalid")
         admin.totp_last_step = step

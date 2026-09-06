@@ -249,3 +249,143 @@ def test_login_by_name_survives_a_changing_address(client, auth):
 
     with SessionLocal() as db:
         ratelimit.clear(db, auth_service._login_name_key(login))
+
+
+def test_change_password_is_throttled_per_user(client):
+    r = client.post("/api/v1/register", json={"login": "pwchange-probe", "password": "probe-pass-123"})
+    assert r.status_code == 201, r.text
+    headers = {"Authorization": f"Bearer {r.json()['token']}"}
+
+    codes = []
+    for _ in range(6):
+        r = client.post(
+            "/api/v1/account/password",
+            json={"current_password": "ne-tot", "new_password": "novyi-parol-12"},
+            headers=headers,
+        )
+        codes.append(r.status_code)
+    assert codes == [400] * 5 + [429], codes
+    assert r.headers.get("Retry-After")
+
+    # Под замком и верный пароль не проходит — как у замка входа.
+    r = client.post(
+        "/api/v1/account/password",
+        json={"current_password": "probe-pass-123", "new_password": "novyi-parol-12"},
+        headers=headers,
+    )
+    assert r.status_code == 429
+
+
+def test_password_hashing_is_gated():
+    import threading
+    import time
+
+    from app import security
+
+    lock = threading.Lock()
+    state = {"now": 0, "peak": 0}
+
+    class Stub:
+        def verify(self, stored, password):
+            with lock:
+                state["now"] += 1
+                state["peak"] = max(state["peak"], state["now"])
+            time.sleep(0.05)
+            with lock:
+                state["now"] -= 1
+            return True
+
+    original = security._ARGON2
+    security._ARGON2 = Stub()
+    try:
+        threads = [
+            threading.Thread(target=security.verify_password, args=("x", "$argon2id$stub"))
+            for _ in range(12)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        security._ARGON2 = original
+    assert 1 <= state["peak"] <= 4, state
+
+
+NODE_HOST = "10.66.66.6"
+
+
+@pytest.fixture()
+def node_server():
+    from app.models import Provisioning, Server
+
+    with SessionLocal() as db:
+        server = Server(name="shared-exit", country="X", country_code="XX", host=NODE_HOST,
+                        provisioning=Provisioning.SSH, is_active=True)
+        db.add(server)
+        db.commit()
+        server_id = server.id
+    yield NODE_HOST
+    with SessionLocal() as db:
+        row = db.get(Server, server_id)
+        if row is not None:
+            db.delete(row)
+            db.commit()
+
+
+def _misses(client, address: str, count: int) -> list[int]:
+    return [
+        client.post(
+            "/api/v1/login",
+            json={"login": f"nobody-{address}-{i}", "password": "wrong"},
+            headers={"X-Forwarded-For": address},
+        ).status_code
+        for i in range(count)
+    ]
+
+
+def test_node_address_is_not_locked_by_someone_elses_misses(client, auth, node_server):
+    """Из-под VPN все приходят адресом узла: перебор одного не должен
+    запирать вход в кабинет остальным. Для адреса человека замок остаётся."""
+    created = client.post(
+        "/api/admin/users", json={"name": "За Узлом", "planCode": "3months"}, headers=auth
+    ).json()
+    login, password = created["user"]["login"], created["password"]
+
+    assert 429 not in _misses(client, node_server, 60)
+    r = client.post(
+        "/api/v1/login", json={"login": login, "password": password},
+        headers={"X-Forwarded-For": node_server},
+    )
+    assert r.status_code == 200, r.text
+
+    human = "198.51.100.209"
+    try:
+        codes = _misses(client, human, 60)
+        assert 429 in codes, codes
+        r = client.post(
+            "/api/v1/login", json={"login": login, "password": password},
+            headers={"X-Forwarded-For": human},
+        )
+        assert r.status_code == 429
+    finally:
+        with SessionLocal() as db:
+            ratelimit.clear(db, auth_service._login_ip_key(human))
+
+
+def test_forgot_password_limit_is_softer_for_the_node_address(client, node_server):
+    for i in range(6):
+        r = client.post(
+            "/api/v1/password/forgot", json={"email": f"vpn-user-{i}@example.test"},
+            headers={"X-Forwarded-For": node_server},
+        )
+        assert r.status_code == 200, (i, r.text)
+
+    human = "198.51.100.210"
+    codes = [
+        client.post(
+            "/api/v1/password/forgot", json={"email": f"home-user-{i}@example.test"},
+            headers={"X-Forwarded-For": human},
+        ).status_code
+        for i in range(6)
+    ]
+    assert codes == [200] * 5 + [429], codes

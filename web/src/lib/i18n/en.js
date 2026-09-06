@@ -787,6 +787,13 @@ export const en = {
     cancel: "Cancel",
     emailTaken: "That email is already linked to another account",
     emailFailed: "Couldn't save the email",
+    fieldTelegram: "Telegram",
+    telegramLinked: "linked",
+    telegramNone: "not linked",
+    telegramUnlink: "Tap to unlink",
+    telegramUnlinkConfirm:
+      "Unlink Telegram{name}? Signing in via Telegram will be off until you sign in with your login and password again in the mini app or the bot.",
+    telegramUnlinkFailed: "Couldn't unlink Telegram",
 
     planTitle: "Plan",
     planTerm: "Term",

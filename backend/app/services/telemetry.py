@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session as OrmSession
 from ..config import settings
 from ..models import ConnectReport, Server, Session, utcnow
 from . import asn
-from .alerts import BR, _notify, admin_chats
+from .alerts import BR, _notify, admin_chats, esc
 
 PROTOCOLS = ("awg", "vless", "hy2")
 KINDS = ("wifi", "cellular", "ethernet", "other", "unknown", "none")
@@ -107,9 +107,13 @@ def store(db: OrmSession, session: Session, reports: list[dict], ip: str | None 
         row.host: row.id
         for row in db.execute(select(Server.host, Server.id)).all()
     }
-    real_ip = ip if ip and ip not in hosts else session.ip
-    isp: str | None = None
-    isp_known = False
+    # Провайдер на Wi-Fi: по адресу этого запроса, если он не с нашего узла
+    # (через туннель приложение приходит адресом узла). Иначе — то, что
+    # сессия запомнила при входе. Сам адрес нигде не хранится: в сессии
+    # лежит только имя провайдера (auth.touch), см. test_privacy.
+    real_ip = ip if ip and ip not in hosts else None
+    isp: str | None = None if real_ip else session.isp
+    isp_known = not real_ip
     accepted = 0
     for raw in reports[:MAX_PER_REQUEST]:
         if accepted >= room:
@@ -443,7 +447,7 @@ def digest_text(db: OrmSession, site: str) -> str:
         lines.append("<b>Просело:</b>")
         for i in drops[:6]:
             lines.append(
-                f"• {i['operator']} · {PROTOCOL_TITLES.get(i['protocol'], i['protocol'])}: "
+                f"• {esc(i['operator'])} · {PROTOCOL_TITLES.get(i['protocol'], i['protocol'])}: "
                 f"{i['ok_pct']}% (было {i['prev_ok_pct']}%), попыток {i['attempts']}"
             )
     else:
@@ -454,11 +458,11 @@ def digest_text(db: OrmSession, site: str) -> str:
         lines.append("")
         lines.append("<b>Плохо и вчера, и сегодня:</b>")
         for i in bad[:4]:
-            lines.append(f"• {i['operator']} · {PROTOCOL_TITLES.get(i['protocol'], i['protocol'])}: {i['ok_pct']}% из {i['attempts']}")
+            lines.append(f"• {esc(i['operator'])} · {PROTOCOL_TITLES.get(i['protocol'], i['protocol'])}: {i['ok_pct']}% из {i['attempts']}")
 
     if data["errors"]:
         lines.append("")
-        lines.append("Ошибки: " + ", ".join(f"{e['error']} ×{e['count']}" for e in data["errors"][:4]))
+        lines.append("Ошибки: " + ", ".join(f"{esc(e['error'])} ×{e['count']}" for e in data["errors"][:4]))
 
     lines.append("")
     lines.append(f"Подробнее: {site.rstrip('/')}/admin/telemetry")
@@ -536,7 +540,7 @@ def check_drops(db: OrmSession) -> list[str]:
         ]
         text = (
             "🔻 <b>Похоже на блокировку</b>" + BR + BR
-            + f"{operator} · {PROTOCOL_TITLES.get(proto, proto)}: за {DROP_WINDOW_HOURS} ч удачных "
+            + f"{esc(operator)} · {PROTOCOL_TITLES.get(proto, proto)}: за {DROP_WINDOW_HOURS} ч удачных "
             + f"{_pct(c)}% из {c['attempts']}, сутки до этого — {_pct(p)}%."
             + (BR + "Там же: " + ", ".join(others) + "." if others else "")
         )

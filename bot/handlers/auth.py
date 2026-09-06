@@ -147,9 +147,21 @@ async def register_confirm(message: Message, state: FSMContext) -> None:
     password = data["password"]
 
     try:
-        await panel.create_account(login, password)
+        await panel.create_account(login, password, message.from_user.id)
         session = await panel.login(login, password)
     except panel.PanelError as error:
+        if error.code == "telegram_taken":
+            # У этого Telegram учётка уже есть — панель назвала её логин.
+            # Вторую не заводим: «выйти → зарегистрироваться» иначе даёт
+            # пробный период без конца. Человеку — вход, не новый логин.
+            await state.clear()
+            await _warn(
+                message,
+                f"{texts.panel_error(error)} Нажмите «Войти» — пароль можно сбросить на сайте.",
+            )
+            await show_gate(message, message.from_user.id)
+            return
+
         await state.set_state(Register.login)
         await _warn(message, f"{texts.panel_error(error)}\n\nПридумайте другой логин.")
         return

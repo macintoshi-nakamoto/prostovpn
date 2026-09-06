@@ -15,6 +15,7 @@ from . import (
     funnel,
     ios,
     letters,
+    node_tasks,
     orders,
     passwords,
     ratelimit,

@@ -299,6 +299,25 @@ def build_config(db: OrmSession, server: Server) -> dict:
 
 def apply_config(db: OrmSession, server: Server, *, restart: bool = True) -> None:
     payload = json.dumps(build_config(db, server), ensure_ascii=False, indent=2)
+    # Сначала агент узла: он пишет файл так же (замок, проверка JSON, права,
+    # атомарная подмена) и перезапускает демон, если просили. Не подтвердил —
+    # по SSH, как раньше.
+    from . import node_tasks
+
+    done = node_tasks.run(
+        server,
+        "xray_write",
+        {
+            "path": XRAY_CONFIG,
+            "content": payload,
+            "mode": "0640",
+            "owner": f"root:{SERVICE_USER}",
+            "lock": XRAY_LOCK,
+            "restart": XRAY_UNIT if restart else "",
+        },
+    )
+    if done is not None and done.ok:
+        return
     script = f"""set -e
 exec 9>>{XRAY_LOCK}
 flock 9
@@ -433,14 +452,20 @@ def hot_add(server: Server, endpoint: NodeEndpoint, clients: list[dict]) -> bool
         },
         ensure_ascii=False,
     )
-    script = f"""set -e
+    from . import node_tasks
+
+    done = node_tasks.run(server, "xray_adu", {"api": _api_addr(endpoint), "payload": payload})
+    if done is not None and done.ok:
+        out = done.out or ""
+    else:
+        script = f"""set -e
 umask 077
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT
 cat > "$tmp"
 {XRAY_BIN} api adu -s {_api_addr(endpoint)} -t 5 "$tmp" 2>&1 || true
 """
-    out = provisioning.run_over_ssh_with_input(server, script, payload)
+        out = provisioning.run_over_ssh_with_input(server, script, payload)
     added = _count(out, "Added")
     present = (out or "").count("already exists")
     ok = added >= 0 and added + present >= len(clients) * len(specs)
@@ -456,13 +481,27 @@ def hot_remove(server: Server, endpoint: NodeEndpoint, emails: list[str]) -> boo
     emails = [e for e in emails if e]
     if not emails:
         return True
-    args = " ".join(provisioning._quote(e) for e in emails)
-    command = " ; ".join(
-        f"{XRAY_BIN} api rmu -s {_api_addr(endpoint)} -t 5 "
-        f"-tag={provisioning._quote(spec['tag'])} {args} 2>&1"
-        for spec in inbound_specs(endpoint)
-    ) + " ; true"
-    out = provisioning.run_over_ssh(server, command)
+    from . import node_tasks
+
+    done = node_tasks.run(
+        server,
+        "xray_rmu",
+        {
+            "api": _api_addr(endpoint),
+            "tags": [spec["tag"] for spec in inbound_specs(endpoint)],
+            "emails": emails,
+        },
+    )
+    if done is not None and done.ok:
+        out = done.out or ""
+    else:
+        args = " ".join(provisioning._quote(e) for e in emails)
+        command = " ; ".join(
+            f"{XRAY_BIN} api rmu -s {_api_addr(endpoint)} -t 5 "
+            f"-tag={provisioning._quote(spec['tag'])} {args} 2>&1"
+            for spec in inbound_specs(endpoint)
+        ) + " ; true"
+        out = provisioning.run_over_ssh(server, command)
     removed = sum(int(m.group(2)) for m in _TOTAL.finditer(out or "") if m.group(1) == "Removed")
     missing = (out or "").count("not found")
     ok = removed + missing >= len(emails) * len(inbound_specs(endpoint))
@@ -519,7 +558,11 @@ def push_to_node(
             live = False
         if not live:
             try:
-                provisioning.run_over_ssh(server, f"systemctl restart {XRAY_UNIT}")
+                from . import node_tasks
+
+                done = node_tasks.run(server, "restart", {"unit": XRAY_UNIT})
+                if done is None or not done.ok:
+                    provisioning.run_over_ssh(server, f"systemctl restart {XRAY_UNIT}")
             except Exception as exc:
                 log.warning("узел %s: xray не перезапущен (%s), починим обходом", server.name, exc)
                 return False

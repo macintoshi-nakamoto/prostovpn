@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import threading
+import time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -21,6 +23,7 @@ from app.models import (
     EndpointKind,
     EndpointState,
     NodeEndpoint,
+    NodeTask,
     Provisioning,
     Server,
     User,
@@ -355,3 +358,71 @@ def test_ошибка_с_узла_в_оповещении_экранируетс
         db.commit()
         assert agent.check_agents(db) == ["trouble:agent-lt"]
     assert "&lt;i&gt;x&lt;/i&gt;" in sent[0][1] and "<i>x</i>" not in sent[0][1]
+
+
+def test_задания_агенту_и_откат_на_ssh(client, node, monkeypatch):
+    """
+    Третий шаг агента: задание уезжает в ответе на снимок, подтверждается в
+    следующем; постановка пира идёт через агента без SSH, а без
+    подтверждения — по SSH, как раньше. Старому агенту заданий не даём.
+    """
+    from app import provisioning
+    from app.services import node_tasks
+
+    server_id, token = node
+    monkeypatch.setattr(node_tasks, "HOLD_SECONDS", 0.2)
+    body = snapshot()
+    body["agent"] = "0.3.0"
+
+    r = _post(client, token, body)
+    assert r.status_code == 200 and r.json()["tasks"] == []
+
+    task_id = node_tasks.submit(
+        server_id, "awg_add", {"iface": "awg0", "public_key": PEER_B, "address": "10.8.3.3/32"}
+    )
+    tasks = _post(client, token, body).json()["tasks"]
+    assert [t["id"] for t in tasks] == [task_id]
+    assert tasks[0]["kind"] == "awg_add" and tasks[0]["payload"]["public_key"] == PEER_B
+    assert _post(client, token, body).json()["tasks"] == [], "второй раз задание не отдаётся"
+
+    acked = dict(body)
+    acked["acks"] = [{"id": task_id, "ok": True, "out": "ok"}]
+    assert _post(client, token, acked).status_code == 200
+    with SessionLocal() as db:
+        task = db.get(NodeTask, task_id)
+        assert task.ok is True and task.acked_at is not None and task.out == "ok"
+
+    # Пир через агента: SSH не трогаем. «Агент» — поток, который забирает
+    # задание и подтверждает его следующим снимком.
+    def no_ssh(server):
+        raise RuntimeError("SSH не должен вызываться")
+
+    monkeypatch.setattr(provisioning, "_ssh_connect", no_ssh)
+
+    def agent_thread():
+        time.sleep(0.3)
+        got = _post(client, token, body).json()["tasks"]
+        confirm = dict(body)
+        confirm["acks"] = [{"id": t["id"], "ok": True, "out": "done"} for t in got]
+        _post(client, token, confirm)
+
+    worker = threading.Thread(target=agent_thread)
+    worker.start()
+    with SessionLocal() as db:
+        server = db.get(Server, server_id)
+        provisioning.add_peer_over_ssh(server, PEER_B, "10.8.3.3/32", interface="awg0")
+    worker.join()
+
+    # Без подтверждения — откат на SSH.
+    monkeypatch.setattr(node_tasks, "WAIT_SECONDS", 0.3)
+    with SessionLocal() as db:
+        server = db.get(Server, server_id)
+        with pytest.raises(RuntimeError, match="SSH не должен"):
+            provisioning.remove_peer_over_ssh(server, PEER_B, interface="awg0")
+
+    # Старый агент — заданий нет, run() сразу None.
+    assert _post(client, token, snapshot()).status_code == 200
+    with SessionLocal() as db:
+        server = db.get(Server, server_id)
+        assert node_tasks.run(server, "awg_add", {}) is None
+        assert node_tasks.expire_stale(db) >= 0

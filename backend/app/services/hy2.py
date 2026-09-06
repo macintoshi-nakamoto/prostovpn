@@ -72,8 +72,15 @@ def kick(server: Server, labels: list[str]) -> bool:
     from ..db import SessionLocal
 
     with SessionLocal() as db:
-        endpoint = endpoint_for(db, db.get(Server, server.id) or server)
-    if endpoint is None:
+        fresh = db.get(Server, server.id) or server
+        endpoint = endpoint_for(db, fresh)
+        if endpoint is None:
+            return True
+        # Агент узла бьёт в тот же локальный API без SSH; не подтвердил — SSH.
+        from . import node_tasks
+
+        done = node_tasks.run(fresh, "hy2_kick", {"labels": labels})
+    if done is not None and done.ok:
         return True
     try:
         _api(server, endpoint, "/kick", body=labels)

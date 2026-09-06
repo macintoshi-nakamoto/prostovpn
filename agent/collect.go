@@ -35,6 +35,8 @@ type Snapshot struct {
 	Hy2        Hy2State            `json:"hy2"`
 	Services   map[string]string   `json:"services"`
 	TookMS     int64               `json:"took_ms"`
+	// Подтверждения заданий из прошлого ответа панели (tasks.go).
+	Acks []Ack `json:"acks,omitempty"`
 }
 
 type AWGIface struct {

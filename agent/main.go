@@ -7,10 +7,14 @@
 // трафик и считает узел живым; обход по SSH остаётся запасным путём на
 // случай, если агент замолчит.
 //
-// Единственное, что агент меняет на узле, — обнуляет счётчики Hysteria2
-// (/traffic?clear=1), и только когда панель ответила account=true: иначе
-// байты между двумя читателями терялись бы. Команд с панели сюда не
-// приходит; откат — просто выключить службу, обход по SSH продолжит сам.
+// На узле агент меняет ровно то, что раньше панель делала по SSH, и ровно
+// по её заданиям (tasks.go): ставит и снимает пиры AmneziaWG, дописывает
+// учётки в xray, пишет его конфиг, выкидывает сессии Hysteria2. Задание
+// приезжает в ответе на снимок (панель держит ответ, пока задания нет),
+// исполняется сразу и подтверждается следующим снимком без ожидания
+// интервала. Ещё агент обнуляет счётчики Hysteria2 (/traffic?clear=1),
+// когда панель ответила account=true. Откат — выключить службу: панель
+// вернётся к SSH сама.
 //
 // Только стандартная библиотека: бинарник должен быть таким, чтобы его
 // можно было прочитать целиком и понять, что он делает на узле от root.
@@ -28,7 +32,7 @@ import (
 	"time"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 func main() {
 	confPath := flag.String("config", "/etc/prosto-node/agent.conf", "файл настроек")
@@ -81,17 +85,24 @@ func run(ctx context.Context, cfg *Config) {
 	// принятые: пока она молчит, копим и шлём накопленное, чтобы не терять.
 	account := false
 	pending := hy2Deltas{}
+	// acks — подтверждения выполненных заданий, ещё не доставленные панели.
+	var acks []Ack
 
 	for {
+		// Следующий снимок отсчитываем от начала этого: панель держит ответ
+		// до появления задания, и это ожидание не должно сдвигать ритм.
+		next := time.Now().Add(interval)
 		cycleCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 		snap := collect(cycleCtx, cfg, account)
 		if snap.Hy2.Cleared {
 			pending.add(snap.Hy2.Traffic)
 			snap.Hy2.Traffic = pending.json()
 		}
+		snap.Acks = acks
 		answer, err := send(cycleCtx, cfg, snap)
 		cancel()
 
+		ranTasks := false
 		if err != nil {
 			failures++
 			// Первую ошибку и каждую десятую — в журнал; остальные молча,
@@ -106,6 +117,20 @@ func run(ctx context.Context, cfg *Config) {
 			}
 			if snap.Hy2.Cleared {
 				pending = hy2Deltas{}
+			}
+			acks = nil
+			if len(answer.Tasks) > 0 {
+				taskCtx, cancelTasks := context.WithTimeout(ctx, 60*time.Second)
+				acks = runTasks(taskCtx, cfg, answer.Tasks)
+				cancelTasks()
+				ranTasks = true
+				failed := 0
+				for _, a := range acks {
+					if !a.OK {
+						failed++
+					}
+				}
+				log.Printf("заданий панели: %d, с ошибкой: %d", len(acks), failed)
 			}
 			if answer.Account != account {
 				account = answer.Account
@@ -128,10 +153,18 @@ func run(ctx context.Context, cfg *Config) {
 			log.Print(summary(snap))
 		}
 
+		// Выполнили задания — подтверждаем сразу, следующим снимком.
+		if ranTasks {
+			continue
+		}
+		wait := time.Until(next)
+		if wait < 0 {
+			wait = 0
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(interval):
+		case <-time.After(wait):
 		}
 	}
 }

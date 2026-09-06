@@ -85,6 +85,14 @@ def _sync_once() -> None:
         except Exception:
             log.exception("оповещение о состоянии узлов не удалось")
 
+        # Задания агентам без подтверждения — закрыть, старые — почистить.
+        try:
+            expired = services.node_tasks.expire_stale(db)
+            if expired:
+                log.warning("заданий агентам без подтверждения: %d (сделано по SSH)", expired)
+        except Exception:
+            log.exception("чистка заданий агентам не удалась")
+
         # Живость по протоколам — из снимков агентов, где они стоят.
         try:
             troubled = services.agent.check_agents(db)
@@ -186,6 +194,10 @@ async def lifespan(_app: FastAPI):
             config.traffic_sync_minutes,
             config.traffic_sync_seconds,
         )
+
+    # Задания агентам узлов будят ответы на снимки из потоков обработчиков —
+    # им нужен цикл событий панели.
+    services.node_tasks.bind_loop(asyncio.get_running_loop())
 
     tasks: list[asyncio.Task] = []
     if config.traffic_interval_seconds > 0:

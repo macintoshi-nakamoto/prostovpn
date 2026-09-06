@@ -531,10 +531,28 @@ AllowedIPs = {address}
 """
 
 
+def _via_agent(server: Server, kind: str, payload: dict) -> bool:
+    """
+    Задание агенту узла (services/node_tasks.py): подтвердил — сделано,
+    иначе вызывающий идёт по SSH, как раньше. Имена *_over_ssh ниже
+    исторические: их знают все вызывающие, а путь теперь двойной.
+    """
+    from .services import node_tasks
+
+    done = node_tasks.run(server, kind, payload)
+    return done is not None and bool(done.ok)
+
+
 def add_peer_over_ssh(server: Server, public_key: str, address: str, *, interface: str) -> None:
     interface = iface_name(interface)
     path = config_path(interface)
     lock = lock_path(interface)
+    if _via_agent(
+        server,
+        "awg_add",
+        {"iface": interface, "public_key": public_key, "address": address, "conf": path, "lock": lock},
+    ):
+        return
     client = _ssh_connect(server)
     try:
         block = _PEER_BLOCK.format(public_key=public_key, address=address)
@@ -552,6 +570,12 @@ def remove_peer_over_ssh(server: Server, public_key: str, *, interface: str) -> 
     interface = iface_name(interface)
     conf = config_path(interface)
     lock_file = lock_path(interface)
+    if _via_agent(
+        server,
+        "awg_remove",
+        {"iface": interface, "public_key": public_key, "conf": conf, "lock": lock_file},
+    ):
+        return
     client = _ssh_connect(server)
     try:
         escaped = re.escape(public_key)

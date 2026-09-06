@@ -18,6 +18,7 @@ type reply struct {
 	OK       bool   `json:"ok"`
 	Interval int    `json:"interval"`
 	Account  bool   `json:"account"`
+	Tasks    []Task `json:"tasks"`
 	Error    string `json:"error,omitempty"`
 }
 

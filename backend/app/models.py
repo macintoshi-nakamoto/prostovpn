@@ -321,6 +321,28 @@ class EndpointState(str, enum.Enum):
     RETIRED = "retired"
 
 
+class NodeTask(Base):
+    """
+    Задание агенту узла (services/node_tasks.py): поставить или снять пир
+    AmneziaWG, дослать учётку xray, записать конфиг, выкинуть сессию
+    Hysteria2. Агент забирает его в ответе на снимок и подтверждает в
+    следующем; без подтверждения панель делает то же по SSH.
+    """
+
+    __tablename__ = "node_tasks"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    server_id: Mapped[int] = mapped_column(ForeignKey("servers.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    payload: Mapped[dict | None] = mapped_column(JSON, default=None)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    sent_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    acked_at: Mapped[dt.datetime | None] = mapped_column(DateTime, default=None)
+    ok: Mapped[bool | None] = mapped_column(Boolean, default=None)
+    out: Mapped[str | None] = mapped_column(Text, default=None)
+    error: Mapped[str | None] = mapped_column(Text, default=None)
+
+
 class NodeEndpoint(Base):
 
     __tablename__ = "node_endpoints"

@@ -11,8 +11,11 @@ RestartSec=5
 
 # От root: `awg show` и секрет Hysteria2 доступны только ему. Всё остальное
 # зажато: файловая система только для чтения, дом закрыт, новых прав нет.
+# Писать можно ровно туда, куда панель раньше писала по SSH: конфиги
+# интерфейсов AmneziaWG (пиры) и конфиг xray — это задания панели (tasks.go).
 NoNewPrivileges=yes
 ProtectSystem=full
+ReadWritePaths=/etc/amnezia/amneziawg /opt/prosto-xray
 ProtectHome=yes
 PrivateTmp=yes
 ProtectKernelTunables=yes

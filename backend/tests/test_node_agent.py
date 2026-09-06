@@ -17,7 +17,17 @@ from sqlalchemy import select
 from app.config import settings
 from app.db import SessionLocal, init_db
 from app.main import app
-from app.models import EndpointKind, EndpointState, NodeEndpoint, Provisioning, Server, User, UserKey, utcnow
+from app.models import (
+    EndpointKind,
+    EndpointState,
+    NodeEndpoint,
+    Provisioning,
+    Server,
+    User,
+    UserEndpointCred,
+    UserKey,
+    utcnow,
+)
 from app.security import hash_password
 from app.services import agent, alerts
 
@@ -147,25 +157,117 @@ def test_снимок_принят_и_виден_в_админке(client, node)
         assert out.agent is not None and out.agent.peers == 2 and out.agent.xray_ok is True
 
 
-def test_сверка_с_ключами_не_падает(client, node, caplog):
-    server_id, token = node
+def _keyholder(server_id: int) -> int:
+    """Человек с ключом AmneziaWG (PEER_A) и учёткой xray/Hysteria2 (u1) на узле."""
     with SessionLocal() as db:
         user = User(login="agent-keyholder", password_hash=hash_password("x"))
         db.add(user)
         db.flush()
-        db.add(UserKey(user_id=user.id, server_id=server_id, device_id="test-device", config="[Interface]", public_key=PEER_A, address="10.8.3.2/32", rx_bytes=900, tx_bytes=1900))
+        db.add(
+            UserKey(
+                user_id=user.id, server_id=server_id, device_id="test-device", config="[Interface]",
+                public_key=PEER_A, address="10.8.3.2/32", rx_bytes=900, tx_bytes=1900,
+            )
+        )
+        endpoint = db.scalar(select(NodeEndpoint).where(NodeEndpoint.server_id == server_id))
+        db.add(UserEndpointCred(user_id=user.id, server_id=server_id, endpoint_id=endpoint.id, label="u1"))
+        db.commit()
+        return user.id
+
+
+def _drop_keyholder() -> None:
+    with SessionLocal() as db:
+        holder = db.scalar(select(User).where(User.login == "agent-keyholder"))
+        if holder is not None:
+            db.delete(holder)
+            db.commit()
+
+
+def test_снимок_зачисляет_трафик_и_живость(client, node):
+    """
+    Второй шаг агента: снимок — источник счётчиков и живости. Байты awg и
+    xray абсолютные (дельта от базы), Hysteria2 — дельты с пометкой cleared.
+    """
+    server_id, token = node
+    user_id = _keyholder(server_id)
+    with SessionLocal() as db:
+        server = db.get(Server, server_id)
+        server.down_since = utcnow() - dt.timedelta(minutes=10)
         db.commit()
     try:
-        agent._compare_tick.pop(server_id, None)
-        with caplog.at_level("INFO", logger="panel.agent"):
-            assert _post(client, token, snapshot()).status_code == 200
-        assert any("агент vs SSH" in rec.getMessage() and "совпало 1" in rec.getMessage() for rec in caplog.records)
-    finally:
+        body = snapshot()
+        body["hy2"]["cleared"] = True
+        assert _post(client, token, body).status_code == 200
         with SessionLocal() as db:
-            holder = db.scalar(select(User).where(User.login == "agent-keyholder"))
-            if holder is not None:
-                db.delete(holder)
-                db.commit()
+            # awg: (1000+2000) − (900+1900) = 200; xray uplink 10; hy2 1+2 = 3
+            assert db.get(User, user_id).traffic_used_bytes == 213
+            key = db.scalar(select(UserKey).where(UserKey.public_key == PEER_A))
+            assert key.rx_bytes == 1000 and key.tx_bytes == 2000
+            assert key.last_handshake_at is not None
+            cred = db.scalar(
+                select(UserEndpointCred).where(UserEndpointCred.server_id == server_id, UserEndpointCred.label == "u1")
+            )
+            assert cred.rx_bytes == 10 and cred.last_seen_at is not None
+            server = db.get(Server, server_id)
+            assert server.down_since is None and server.last_ok_at is not None
+            assert server.traffic_error is None and server.traffic_synced_at is not None
+            assert agent.covered(server) == {"awg", "xray", "hy2"}
+            assert agent.awg_dumps(server) == {"awg0": DUMP}
+            assert agent.recent_ips() == {user_id: {"5.6.7.8"}}
+
+        # Тот же снимок ещё раз: абсолютные счётчики не изменились, дельт нет.
+        body["hy2"]["traffic"] = {}
+        assert _post(client, token, body).status_code == 200
+        with SessionLocal() as db:
+            assert db.get(User, user_id).traffic_used_bytes == 213
+
+        # Без пометки cleared байты Hysteria2 абсолютные — не наши: их
+        # снимает обход по SSH, а снимок только отмечает онлайн.
+        body["hy2"]["cleared"] = False
+        body["hy2"]["traffic"] = {"u1": {"tx": 100, "rx": 100}}
+        assert _post(client, token, body).status_code == 200
+        with SessionLocal() as db:
+            assert db.get(User, user_id).traffic_used_bytes == 213
+            assert agent.covered(db.get(Server, server_id)) == {"awg", "xray"}
+    finally:
+        _drop_keyholder()
+
+
+def test_обход_по_ssh_молчит_пока_снимок_свежий(client, node, monkeypatch):
+    """Свежий снимок — по SSH за счётчиками не ходим; агент замолчал —
+    обход возвращается и честно видит, что узел не отвечает."""
+    server_id, token = node
+    from app import provisioning
+    from app.services import traffic, xray
+
+    calls: list[str] = []
+
+    def no_ssh(*args, **kwargs):
+        calls.append("ssh")
+        raise RuntimeError("SSH недоступен")
+
+    monkeypatch.setattr(provisioning, "dumps_over_ssh", no_ssh)
+    monkeypatch.setattr(provisioning, "run_over_ssh", no_ssh)
+    monkeypatch.setattr(xray, "sync_pending", lambda db, server: False)
+
+    body = snapshot()
+    body["hy2"]["cleared"] = True
+    assert _post(client, token, body).status_code == 200
+    with SessionLocal() as db:
+        server = db.get(Server, server_id)
+        rounds = traffic.sweep_server(db, server)
+        assert all("skipped" in r for r in rounds), rounds
+        assert calls == []
+        db.refresh(server)
+        assert server.down_since is None
+
+        server.agent_seen_at = utcnow() - dt.timedelta(minutes=5)
+        db.commit()
+        assert agent.covered(server) == set()
+        traffic.sweep_server(db, server)
+        assert calls, "без свежего снимка обход должен сходить по SSH"
+        db.refresh(server)
+        assert server.down_since is not None
 
 
 def test_служба_легла_оповещение_только_админам(client, node, monkeypatch):

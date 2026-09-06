@@ -1,12 +1,16 @@
 // prosto-node — агент на узле Prosto VPN.
 //
-// Первый шаг: агент только смотрит. Раз в несколько секунд он снимает с узла
-// то же, за чем панель ходила по SSH, — пиры AmneziaWG, счётчики и онлайн
-// xray, счётчики Hysteria2, живость каждой службы — и сам отправляет снимок
-// панели по HTTPS с токеном. Панель ни на что на узле не влияет: ни одной
-// команды сюда не приходит, ни один счётчик не обнуляется. Поэтому агент
-// можно поставить рядом с обходом по SSH и сверять цифры, а откат — это
-// просто выключить службу.
+// Агент смотрит на узел и рассказывает панели. Раз в несколько секунд он
+// снимает то же, за чем панель раньше ходила по SSH, — пиры AmneziaWG,
+// счётчики и онлайн xray, счётчики Hysteria2, живость каждой службы — и
+// отправляет снимок панели по HTTPS с токеном. По снимкам панель зачисляет
+// трафик и считает узел живым; обход по SSH остаётся запасным путём на
+// случай, если агент замолчит.
+//
+// Единственное, что агент меняет на узле, — обнуляет счётчики Hysteria2
+// (/traffic?clear=1), и только когда панель ответила account=true: иначе
+// байты между двумя читателями терялись бы. Команд с панели сюда не
+// приходит; откат — просто выключить службу, обход по SSH продолжит сам.
 //
 // Только стандартная библиотека: бинарник должен быть таким, чтобы его
 // можно было прочитать целиком и понять, что он делает на узле от root.
@@ -24,7 +28,7 @@ import (
 	"time"
 )
 
-const version = "0.1.0"
+const version = "0.2.0"
 
 func main() {
 	confPath := flag.String("config", "/etc/prosto-node/agent.conf", "файл настроек")
@@ -45,7 +49,7 @@ func main() {
 	}
 
 	if *once {
-		snap := collect(context.Background(), cfg)
+		snap := collect(context.Background(), cfg, false)
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(snap); err != nil {
@@ -72,11 +76,20 @@ func run(ctx context.Context, cfg *Config) {
 	interval := time.Duration(cfg.Interval) * time.Second
 	failures := 0
 	lastSummary := time.Time{}
+	// account — панель зачисляет по нашим снимкам (её последний ответ).
+	// pending — дельты Hysteria2, уже снятые с обнулением, но панелью ещё не
+	// принятые: пока она молчит, копим и шлём накопленное, чтобы не терять.
+	account := false
+	pending := hy2Deltas{}
 
 	for {
 		cycleCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-		snap := collect(cycleCtx, cfg)
-		got, err := send(cycleCtx, cfg, snap)
+		snap := collect(cycleCtx, cfg, account)
+		if snap.Hy2.Cleared {
+			pending.add(snap.Hy2.Traffic)
+			snap.Hy2.Traffic = pending.json()
+		}
+		answer, err := send(cycleCtx, cfg, snap)
 		cancel()
 
 		if err != nil {
@@ -91,6 +104,19 @@ func run(ctx context.Context, cfg *Config) {
 				log.Printf("панель снова принимает снимки (после %d сбоев)", failures)
 				failures = 0
 			}
+			if snap.Hy2.Cleared {
+				pending = hy2Deltas{}
+			}
+			if answer.Account != account {
+				account = answer.Account
+				if account {
+					log.Print("панель зачисляет трафик по снимкам: счётчики Hysteria2 обнуляем сами")
+				} else {
+					log.Print("панель больше не зачисляет по снимкам: счётчики Hysteria2 только читаем")
+					pending = hy2Deltas{}
+				}
+			}
+			got := answer.Interval
 			if got >= 5 && got <= 300 && time.Duration(got)*time.Second != interval {
 				interval = time.Duration(got) * time.Second
 				log.Printf("панель просит интервал %ds", got)
@@ -127,4 +153,39 @@ func okWord(ok bool) string {
 		return "ok"
 	}
 	return "ПРОБЛЕМА"
+}
+
+// hy2Deltas — накопленные дельты Hysteria2 по учёткам: ответ /traffic —
+// {"<label>": {"tx": N, "rx": M}, …}. Складываем, пока панель не приняла.
+type hy2Deltas map[string]map[string]int64
+
+func (d hy2Deltas) add(raw json.RawMessage) {
+	if len(raw) == 0 {
+		return
+	}
+	var fresh map[string]map[string]int64
+	if err := json.Unmarshal(raw, &fresh); err != nil {
+		return
+	}
+	for label, pair := range fresh {
+		sum := d[label]
+		if sum == nil {
+			sum = map[string]int64{}
+			d[label] = sum
+		}
+		for key, value := range pair {
+			sum[key] += value
+		}
+	}
+}
+
+func (d hy2Deltas) json() json.RawMessage {
+	if len(d) == 0 {
+		return json.RawMessage("{}")
+	}
+	raw, err := json.Marshal(d)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+	return raw
 }

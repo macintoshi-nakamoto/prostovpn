@@ -106,16 +106,37 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
         data = {}
 
     # Кто подключён прямо сейчас: /online отдаёт label → число соединений.
-    # Отдельно от трафика: сессия QUIC может висеть без единого байта, и
-    # человек при этом подключён — раньше он через три минуты «пропадал».
-    online: set[str] = set()
+    online: dict = {}
     try:
         raw_online = _api(server, endpoint, "/online")
-        for label, count in (json.loads(raw_online or "{}") or {}).items():
-            if int(count or 0) > 0:
-                online.add(str(label))
+        online = json.loads(raw_online or "{}") or {}
     except Exception as exc:
         log.warning("узел %s: онлайн Hysteria2 не снят: %s", server.name, exc)
+
+    return apply_traffic(db, server, data, online)
+
+
+def apply_traffic(db: OrmSession, server: Server, data: dict, online: dict) -> dict[str, object]:
+    """
+    Зачисляет дельты Hysteria2 (`/traffic?clear=1`) и отмечает онлайн.
+
+    Байты здесь — с прошлого обнуления, поэтому источник должен быть один:
+    либо обход по SSH, либо агент узла, который сам обнуляет счётчики и
+    присылает их с пометкой cleared (services/agent.py). Абсолютные
+    значения без обнуления сюда попадать не должны — зачислились бы дважды.
+
+    Онлайн — отдельно от трафика: сессия QUIC может висеть без единого
+    байта, и человек при этом подключён — раньше он через три минуты
+    «пропадал».
+    """
+    labels: set[str] = set()
+    for label, count in (online or {}).items():
+        try:
+            if int(count or 0) > 0:
+                labels.add(str(label))
+        except (TypeError, ValueError):
+            continue
+    online = labels
 
     now = utcnow()
     live_now = 0

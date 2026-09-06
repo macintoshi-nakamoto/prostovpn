@@ -57,8 +57,12 @@ type XrayState struct {
 }
 
 type Hy2State struct {
-	OK      bool            `json:"ok"`
-	Port    int             `json:"port"`
+	OK   bool `json:"ok"`
+	Port int  `json:"port"`
+	// Cleared — счётчики сняты с обнулением (/traffic?clear=1), то есть это
+	// дельты с прошлого раза, и панель их зачисляет. Без пометки — абсолютные
+	// значения, только для глаз: их зачисляет обход по SSH.
+	Cleared bool            `json:"cleared"`
 	Traffic json.RawMessage `json:"traffic,omitempty"`
 	Online  json.RawMessage `json:"online,omitempty"`
 	Error   string          `json:"error,omitempty"`
@@ -66,7 +70,10 @@ type Hy2State struct {
 
 const execTimeout = 10 * time.Second
 
-func collect(ctx context.Context, cfg *Config) *Snapshot {
+// collect снимает узел. clearHy2 — обнулять ли счётчики Hysteria2: только
+// когда панель подтвердила, что зачисляет наши дельты (ответ account=true),
+// иначе байты пропали бы между двумя читателями.
+func collect(ctx context.Context, cfg *Config, clearHy2 bool) *Snapshot {
 	started := time.Now()
 	snap := &Snapshot{
 		Agent:    version,
@@ -82,7 +89,7 @@ func collect(ctx context.Context, cfg *Config) *Snapshot {
 		snap.AWG[name] = collectAWG(ctx, name)
 	}
 	snap.Xray = collectXray(ctx, cfg)
-	snap.Hy2 = collectHy2(ctx, cfg)
+	snap.Hy2 = collectHy2(ctx, cfg, clearHy2)
 
 	units := []string{"prosto-xray", "prosto-hy2", "prosto-extra-ports", "prosto-node-watchdog.timer"}
 	for _, name := range ifaces {
@@ -225,7 +232,7 @@ func collectXray(ctx context.Context, cfg *Config) XrayState {
 
 // ───────────────────────── Hysteria2
 
-func collectHy2(ctx context.Context, cfg *Config) Hy2State {
+func collectHy2(ctx context.Context, cfg *Config, clear bool) Hy2State {
 	state := Hy2State{Port: 10086}
 	secretRaw, err := os.ReadFile(cfg.Hy2Dir + "/stats.secret")
 	if err != nil {
@@ -263,10 +270,15 @@ func collectHy2(ctx context.Context, cfg *Config) Hy2State {
 		return json.RawMessage(body), nil
 	}
 
-	// Без clear=1: счётчики только читаем. Обнулять их — работа обхода,
-	// пока он ещё ходит по SSH; два обнуляющих читателя разворовали бы
-	// друг у друга трафик людей.
-	traffic, err := get("/traffic")
+	// Обнуляем только с разрешения панели (clear): счётчик, снятый с
+	// обнулением, существует потом лишь в нашем снимке, и второй читатель —
+	// обход по SSH — на это время должен молчать. Панель так и делает:
+	// пока снимки свежие, по SSH за Hysteria2 она не ходит.
+	path := "/traffic"
+	if clear {
+		path = "/traffic?clear=1"
+	}
+	traffic, err := get(path)
 	if err != nil {
 		state.Error = err.Error()
 		return state
@@ -278,6 +290,7 @@ func collectHy2(ctx context.Context, cfg *Config) Hy2State {
 	}
 	state.Traffic = traffic
 	state.Online = online
+	state.Cleared = clear
 	state.OK = true
 	return state
 }

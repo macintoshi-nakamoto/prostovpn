@@ -29,6 +29,9 @@ router = APIRouter(prefix="/api/v1/node", tags=["node"])
 class ReportOut(BaseModel):
     ok: bool
     interval: int
+    # Панель зачисляет трафик по снимкам: агент может обнулять счётчики
+    # Hysteria2 (/traffic?clear=1) и слать дельты с пометкой cleared.
+    account: bool = True
 
 
 def _bearer(authorization: str | None) -> str:

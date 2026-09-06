@@ -58,13 +58,17 @@ def _sync_once() -> None:
         for item in rounds or []:
             for user_id, ips in (item.get("ips") or {}).items():
                 ips_by_user.setdefault(int(user_id), set()).update(ips)
+        # Узлы с агентом обход пропустил — их адреса берём из снимков.
+        for user_id, ips in services.agent.recent_ips().items():
+            ips_by_user.setdefault(user_id, set()).update(ips)
 
         closed = enforce_access(db)
         if closed:
             log.info("доступ закрыт по лимиту или сроку: %s", closed)
 
         for server in services.active_servers(db):
-            for public_key in reconcile_peers(db, server):
+            # Выдачи awg из свежего снимка агента — без SSH; иначе обход сам сходит.
+            for public_key in reconcile_peers(db, server, dumps=services.agent.awg_dumps(server)):
                 log.warning(
                     "сняли лишний пир с «%s»: %s… — в базе живого ключа нет",
                     server.name,

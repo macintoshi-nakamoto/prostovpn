@@ -7,10 +7,12 @@
 сам, раз в несколько секунд, и в нём видно каждый протокол отдельно:
 интерфейсы AmneziaWG, xray (Reality), Hysteria2 и службы systemd.
 
-Первый шаг — агент только читает, а панель только смотрит. Счётчики
-трафика по-прежнему зачисляет обход по SSH; здесь снимок кладётся рядом,
-показывается в админке и сравнивается с тем, что снял SSH, — чтобы перед
-переключением источника было видно, что цифры совпадают.
+Второй шаг (06.09.2026, после суток сверки с разницей 0,00–0,02 %):
+снимок — источник счётчиков и живости. Выдачи из снимка зачисляются тем
+же кодом, что и снятые по SSH (traffic.apply_dumps, xray.apply_stats,
+hy2.apply_traffic), а обход по SSH пропускает узел, пока снимок свежий,
+и возвращается сам, когда агент замолчал. Писать на узел агент пока не
+умеет: ключи и конфиги по-прежнему уезжают по SSH.
 
 Оповещения — тем же адресатам и тем же способом, что и про падение узла
 (services/alerts.py): только `PANEL_ALERT_CHAT_IDS`, выборок из таблицы
@@ -52,11 +54,10 @@ TROUBLE_AFTER = dt.timedelta(minutes=3)
 # Агент шлёт раз в 15 секунд; молчит две минуты — снимок устарел.
 STALE_AFTER = dt.timedelta(minutes=2)
 
-# Сверку с SSH пишем в журнал не на каждый снимок, а раз в столько снимков
-# на узел: при интервале 15 с это примерно раз в десять минут.
-COMPARE_EVERY = 40
-
-_compare_tick: dict[int, int] = {}
+# Адреса, с которых сидят учётки VLESS, по последнему снимку каждого узла:
+# server_id → (когда, {user_id: [ip, …]}). Их читает обход в main._sync_once
+# для проверки «один ключ на много устройств».
+_latest_ips: dict[int, tuple[dt.datetime, dict[int, list[str]]]] = {}
 
 
 def issue_token(db: OrmSession, server: Server) -> str:
@@ -137,60 +138,112 @@ def store_report(db: OrmSession, server: Server, snapshot: dict) -> list[str]:
     db.commit()
 
     try:
-        _compare(db, server, snapshot)
-    except Exception:  # noqa: BLE001 — сверка для журнала, ронять приём нельзя
-        log.exception("сверка снимка с базой не удалась")
+        _account(db, server, snapshot, now)
+    except Exception:  # noqa: BLE001 — приём снимка важнее зачисления: обход по SSH подстрахует
+        log.exception("зачисление снимка узла «%s» не удалось", server.name)
     return problems
 
 
-def _compare(db: OrmSession, server: Server, snapshot: dict) -> None:
+def _account(db: OrmSession, server: Server, snapshot: dict, now: dt.datetime) -> None:
     """
-    Сверка с тем, что зачислил обход по SSH: те же пиры, те же байты?
-
-    База отстаёт от снимка не больше чем на минуту, поэтому небольшая
-    разница нормальна. Большая — повод не переключать источник, пока не
-    понятно, откуда она.
+    Зачисляет снимок: пиры AmneziaWG, учётки xray, дельты Hysteria2 —
+    теми же функциями, что и обход по SSH. Общий ключ (provisioning=shared)
+    счётчиков по людям не имеет — там нечего зачислять.
     """
-    tick = _compare_tick.get(server.id, 0) + 1
-    _compare_tick[server.id] = tick
-    if tick % COMPARE_EVERY != 1:
+    if server.provisioning != Provisioning.SSH:
         return
-    from .traffic import _parse_dump
+    from . import hy2, traffic, xray
 
-    peers: dict[str, dict] = {}
-    for iface in (snapshot.get("awg") or {}).values():
-        dump = (iface or {}).get("dump") or ""
-        if dump.strip():
-            peers.update(_parse_dump(dump))
+    awg = snapshot.get("awg") or {}
+    dumps = {
+        name: str((iface or {}).get("dump") or "")
+        for name, iface in awg.items()
+        if isinstance(iface, dict) and iface.get("ok")
+    }
+    if dumps:
+        traffic.apply_dumps(db, server, dumps)
 
-    keys = list(
-        db.scalars(
-            select(UserKey).where(UserKey.server_id == server.id, UserKey.revoked_at.is_(None))
+    xray_state = snapshot.get("xray") or {}
+    if isinstance(xray_state, dict) and xray_state.get("api_ok"):
+        result = xray.apply_stats(
+            db,
+            server,
+            str(xray_state.get("stats") or ""),
+            str(xray_state.get("online") or ""),
+            str(xray_state.get("ips") or ""),
         )
-    )
-    matched = 0
-    node_bytes = 0
-    base_bytes = 0
-    for key in keys:
-        peer = peers.get(key.public_key or "")
-        if peer is None:
+        ips = result.get("ips") if isinstance(result, dict) else None
+        _latest_ips[server.id] = (now, {int(k): list(v) for k, v in (ips or {}).items()})
+
+    hy2_state = snapshot.get("hy2") or {}
+    if isinstance(hy2_state, dict) and hy2_state.get("ok"):
+        online = hy2_state.get("online") if isinstance(hy2_state.get("online"), dict) else {}
+        data = hy2_state.get("traffic") if isinstance(hy2_state.get("traffic"), dict) else {}
+        # Байты зачисляем только с пометкой cleared: агент 0.2+ сам обнуляет
+        # счётчики и шлёт дельты. Без пометки цифры абсолютные (старый агент
+        # или панель ещё не разрешила) — их по-прежнему снимает обход по SSH.
+        hy2.apply_traffic(db, server, data if hy2_state.get("cleared") else {}, online)
+
+
+def _fresh_snapshot(server: Server) -> dict | None:
+    if not server.agent_snapshot or server.agent_seen_at is None:
+        return None
+    if utcnow() - server.agent_seen_at > STALE_AFTER:
+        return None
+    try:
+        snap = json.loads(server.agent_snapshot)
+    except ValueError:
+        return None
+    return snap if isinstance(snap, dict) else None
+
+
+def covered(server: Server) -> set[str]:
+    """
+    Что из обхода уже зачислено по свежему снимку агента — эти части обход
+    по SSH пропускает: "awg", "xray", "hy2". Пустое множество — агент
+    молчит, обход работает как раньше.
+    """
+    snap = _fresh_snapshot(server)
+    if snap is None:
+        return set()
+    parts: set[str] = set()
+    awg = snap.get("awg") or {}
+    if isinstance(awg, dict) and any(
+        isinstance(i, dict) and i.get("ok") and i.get("dump") for i in awg.values()
+    ):
+        parts.add("awg")
+    xray = snap.get("xray") or {}
+    if isinstance(xray, dict) and xray.get("api_ok"):
+        parts.add("xray")
+    hy2 = snap.get("hy2") or {}
+    if isinstance(hy2, dict) and hy2.get("ok") and hy2.get("cleared"):
+        parts.add("hy2")
+    return parts
+
+
+def awg_dumps(server: Server) -> dict[str, str] | None:
+    """Выдачи `awg show dump` из свежего снимка — для сверки пиров без SSH."""
+    snap = _fresh_snapshot(server)
+    if snap is None or "awg" not in covered(server):
+        return None
+    return {
+        name: str((iface or {}).get("dump") or "")
+        for name, iface in (snap.get("awg") or {}).items()
+        if isinstance(iface, dict) and iface.get("ok")
+    }
+
+
+def recent_ips() -> dict[int, set[str]]:
+    """Адреса учёток VLESS по свежим снимкам всех узлов: user_id → адреса."""
+    now = utcnow()
+    out: dict[int, set[str]] = {}
+    for server_id, (at, ips) in list(_latest_ips.items()):
+        if now - at > STALE_AFTER:
+            _latest_ips.pop(server_id, None)
             continue
-        matched += 1
-        node_bytes += int(peer["rx"]) + int(peer["tx"])
-        base_bytes += int(key.rx_bytes or 0) + int(key.tx_bytes or 0)
-    diff = abs(node_bytes - base_bytes)
-    share = (diff / node_bytes * 100) if node_bytes else 0.0
-    log.info(
-        "агент vs SSH, узел %s: пиров на узле %d, ключей в базе %d, совпало %d; "
-        "байт по агенту %.2f ГБ, по базе %.2f ГБ, разница %.2f%%",
-        server.name,
-        len(peers),
-        len(keys),
-        matched,
-        node_bytes / 1024**3,
-        base_bytes / 1024**3,
-        share,
-    )
+        for user_id, addresses in ips.items():
+            out.setdefault(user_id, set()).update(addresses)
+    return out
 
 
 def health(server: Server) -> dict | None:

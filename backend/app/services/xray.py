@@ -836,6 +836,21 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
     online_raw, ips_raw = (
         online_raw.split(IPS_MARK, 1) if IPS_MARK in online_raw else (online_raw, "")
     )
+    return apply_stats(db, server, stats_raw, online_raw, ips_raw)
+
+
+def apply_stats(
+    db: OrmSession, server: Server, stats_raw: str, online_raw: str, ips_raw: str
+) -> dict[str, object]:
+    """
+    Зачисляет выдачи `xray api statsquery / statsgetallonlineusers /
+    statsonlineiplist` — снятые по SSH или присланные агентом узла. Счётчики
+    абсолютные, дельта считается от базы, поэтому источник можно менять.
+    """
+    from sqlalchemy import update as sql_update
+
+    from ..models import TrafficSample
+
     counters = _parse_stats(stats_raw)
     addresses = _parse_ips(ips_raw)
     # Живые соединения — тем же заходом по SSH. Трафик за минуту может быть
@@ -866,6 +881,10 @@ def sync_traffic(db: OrmSession, server: Server) -> dict[str, object]:
         if pair is None:
             continue
         rx, tx = pair
+        if rx == cred.rx_bytes and tx == cred.tx_bytes:
+            # Без изменений — без записи (агент присылает снимок каждые 15 с).
+            updated += 1
+            continue
         delta_rx = rx - cred.rx_bytes if rx >= cred.rx_bytes else rx
         delta_tx = tx - cred.tx_bytes if tx >= cred.tx_bytes else tx
         delta = max(0, delta_rx + delta_tx)

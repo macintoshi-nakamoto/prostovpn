@@ -59,7 +59,9 @@ def _lock_for_server(server_id: int) -> "threading.Lock":
     with _server_locks_guard:
         lock = _server_locks.get(server_id)
         if lock is None:
-            lock = threading.Lock()
+            # RLock: обход по SSH берёт замок сам и затем зовёт apply_dumps,
+            # который берёт его ещё раз — так же, как снимок агента.
+            lock = threading.RLock()
             _server_locks[server_id] = lock
         return lock
 
@@ -100,7 +102,31 @@ def _sync_server_traffic_locked(db: OrmSession, server: Server) -> dict[str, obj
             server.down_since = now
         db.commit()
         return {"server_id": server.id, "error": str(exc)}
+    return apply_dumps(db, server, dumps, interfaces)
 
+
+def apply_dumps(
+    db: OrmSession,
+    server: Server,
+    dumps: dict[str, str],
+    interfaces: list[str] | None = None,
+) -> dict[str, object]:
+    """
+    Зачисляет счётчики пиров из выдач `awg show <if> dump` — откуда бы они ни
+    пришли: обход снял их по SSH или узел прислал в снимке агента. Счётчики
+    у awg абсолютные, поэтому источник можно менять на ходу: дельта всегда
+    считается от того, что лежит в базе, и дважды один байт не зачислится.
+
+    Узел, приславший выдачу, жив — здесь же снимается отметка «лежит».
+    """
+    interfaces = interfaces or server_interfaces(server)
+    with _lock_for_server(server.id):
+        return _apply_dumps_locked(db, server, dumps, interfaces)
+
+
+def _apply_dumps_locked(
+    db: OrmSession, server: Server, dumps: dict[str, str], interfaces: list[str]
+) -> dict[str, object]:
     peers: dict[str, dict] = {}
     empty: list[str] = []
     for name in interfaces:
@@ -124,6 +150,17 @@ def _sync_server_traffic_locked(db: OrmSession, server: Server) -> dict[str, obj
             continue
 
         rx, tx = peer["rx"], peer["tx"]
+        handshake_at = (
+            dt.datetime.utcfromtimestamp(peer["handshake"]) if peer["handshake"] > 0 else None
+        )
+        if rx == key.rx_bytes and tx == key.tx_bytes:
+            # Ничего не изменилось — в базу не пишем: агент шлёт снимки
+            # каждые 15 секунд, а ключей на узле сотни, и переписывать все
+            # строки четыре раза в минуту ради тех же чисел незачем.
+            if handshake_at is not None and key.last_handshake_at != handshake_at:
+                key.last_handshake_at = handshake_at
+            updated += 1
+            continue
         delta_rx = rx - key.rx_bytes if rx >= key.rx_bytes else rx
         delta_tx = tx - key.tx_bytes if tx >= key.tx_bytes else tx
         delta = max(0, delta_rx + delta_tx)
@@ -131,8 +168,8 @@ def _sync_server_traffic_locked(db: OrmSession, server: Server) -> dict[str, obj
         key.rx_bytes = rx
         key.tx_bytes = tx
         key.traffic_synced_at = now
-        if peer["handshake"] > 0:
-            key.last_handshake_at = dt.datetime.utcfromtimestamp(peer["handshake"])
+        if handshake_at is not None:
+            key.last_handshake_at = handshake_at
 
         if delta > 0:
             db.execute(
@@ -172,6 +209,40 @@ def _sync_server_traffic_locked(db: OrmSession, server: Server) -> dict[str, obj
     }
 
 
+def sweep_server(db: OrmSession, server: Server) -> list[dict[str, object]]:
+    """
+    Обход одного узла. Где стоит агент и снимок свежий, по SSH за счётчиками
+    не ходим: их уже зачислил снимок (services/agent.py). SSH остаётся на
+    случай, когда агент замолчал, — тогда обход возвращается сам, и «узел
+    лежит» по-прежнему означает «не ответил ни агент, ни SSH».
+    """
+    from . import agent as agent_service
+    from . import hy2, xray
+
+    covered = agent_service.covered(server)
+    out: list[dict[str, object]] = []
+    if "awg" in covered:
+        out.append({"server_id": server.id, "name": server.name, "skipped": "по снимку агента"})
+    else:
+        out.append(sync_server_traffic(db, server))
+
+    try:
+        # Отложенные конфиги xray по-прежнему уезжают по SSH: агент пока
+        # только читает узел.
+        xray.sync_pending(db, server)
+        if "xray" not in covered:
+            out.append(xray.sync_traffic(db, server))
+    except Exception as exc:
+        log.warning("узел %s: обход VLESS не удался: %s", server.name, exc)
+
+    try:
+        if "hy2" not in covered:
+            out.append(hy2.sync_traffic(db, server))
+    except Exception as exc:
+        log.warning("узел %s: обход Hysteria2 не удался: %s", server.name, exc)
+    return out
+
+
 def sync_all_traffic(db: OrmSession) -> list[dict[str, object]]:
     servers = list(
         db.scalars(
@@ -182,32 +253,27 @@ def sync_all_traffic(db: OrmSession) -> list[dict[str, object]]:
     )
     out = []
     for server in servers:
-        out.append(sync_server_traffic(db, server))
-        from . import xray
-
-        try:
-            xray.sync_pending(db, server)
-            out.append(xray.sync_traffic(db, server))
-        except Exception as exc:
-            log.warning("узел %s: обход VLESS не удался: %s", server.name, exc)
-        from . import hy2
-
-        try:
-            out.append(hy2.sync_traffic(db, server))
-        except Exception as exc:
-            log.warning("узел %s: обход Hysteria2 не удался: %s", server.name, exc)
+        out.extend(sweep_server(db, server))
     return out
 
 
-def reconcile_peers(db: OrmSession, server: Server) -> list[str]:
+def reconcile_peers(
+    db: OrmSession, server: Server, dumps: dict[str, str] | None = None
+) -> list[str]:
+    """
+    Снимает с узла пиры, которых нет в базе. Выдачи `awg show dump` можно
+    отдать готовыми (из снимка агента) — тогда SSH нужен только на само
+    удаление, а оно случается редко.
+    """
     if server.provisioning != Provisioning.SSH:
         return []
 
     interfaces = server_interfaces(server)
-    try:
-        dumps = provisioning.dumps_over_ssh(server, interfaces)
-    except Exception:
-        return []
+    if dumps is None:
+        try:
+            dumps = provisioning.dumps_over_ssh(server, interfaces)
+        except Exception:
+            return []
 
     def live_placement() -> dict[str, str | None]:
         from ..db import SessionLocal
